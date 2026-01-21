@@ -9,6 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 @plugins/CREATING_PLUGINS.md
 @plugins/PLUGIN_REFERENCE.md
 
+## Schemas
+
+@.claude-plugin/marketplace.schema.json
+@plugins/example-plugin/.claude-plugin/plugin.schema.json
+@plugins/example-plugin/.mcp.schema.json
+
 ## Templates
 
 @plugins/example-plugin/.claude-plugin/plugin.template.json

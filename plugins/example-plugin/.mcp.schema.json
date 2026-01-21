@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mcp.schema.json",
+  "title": "Claude Code MCP Server Configuration",
+  "type": "object",
+  "required": ["mcpServers"],
+  "additionalProperties": false,
+  "properties": {
+    "mcpServers": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/mcpServerEntry"
+      },
+      "description": "Map of server names to configurations"
+    }
+  },
+  "$defs": {
+    "mcpServerEntry": {
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "stdio server",
+          "required": ["command"],
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Executable to run. Use ${CLAUDE_PLUGIN_ROOT} for plugin-relative paths."
+            },
+            "args": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Command-line arguments. Supports ${VAR} expansion."
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Environment variables. Supports ${VAR} and ${VAR:-default} expansion."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Working directory. Supports ${CLAUDE_PLUGIN_ROOT}."
+            }
+          }
+        },
+        {
+          "title": "HTTP server",
+          "required": ["type", "url"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "http",
+              "description": "HTTP transport type"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "Server URL. Supports ${VAR} expansion."
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "HTTP headers. Supports ${VAR} expansion for auth tokens."
+            }
+          }
+        },
+        {
+          "title": "SSE server (deprecated)",
+          "required": ["type", "url"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "sse",
+              "description": "SSE transport type (deprecated, use HTTP)"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "Server URL"
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "HTTP headers"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

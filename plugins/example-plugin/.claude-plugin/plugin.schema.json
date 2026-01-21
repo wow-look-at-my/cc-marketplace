@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin.schema.json",
+  "title": "Claude Code Plugin",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Unique plugin identifier (kebab-case, no spaces)"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+",
+      "description": "Semantic version (e.g., '1.0.0')"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief explanation of plugin purpose"
+    },
+    "author": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Author name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Author email"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Author website"
+        }
+      }
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "Documentation URL"
+    },
+    "repository": {
+      "type": "string",
+      "format": "uri",
+      "description": "Source code URL"
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier (e.g., 'MIT', 'Apache-2.0')"
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tags for discovery"
+    },
+    "commands": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Custom command file/directory paths (relative, must start with './')"
+    },
+    "agents": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Custom agent file paths (relative, must start with './')"
+    },
+    "skills": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Custom skill directory paths (relative, must start with './')"
+    },
+    "hooks": {
+      "oneOf": [
+        { "type": "string" },
+        { "$ref": "#/$defs/hooksConfig" }
+      ],
+      "description": "Hook config path or inline config"
+    },
+    "mcpServers": {
+      "oneOf": [
+        { "type": "string" },
+        { "$ref": "#/$defs/mcpServersConfig" }
+      ],
+      "description": "MCP config path or inline config"
+    },
+    "outputStyles": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Custom output style file/directory paths"
+    },
+    "lspServers": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "object" }
+      ],
+      "description": "LSP server configuration"
+    }
+  },
+  "$defs": {
+    "hooksConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SessionStart": { "$ref": "#/$defs/hookEventArray" },
+        "PreToolUse": { "$ref": "#/$defs/hookEventArray" },
+        "PostToolUse": { "$ref": "#/$defs/hookEventArray" },
+        "Stop": { "$ref": "#/$defs/hookEventArray" }
+      }
+    },
+    "hookEventArray": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["matcher", "hooks"],
+        "additionalProperties": false,
+        "properties": {
+          "matcher": {
+            "type": "string",
+            "description": "Tool name pattern (e.g., 'Write', 'Bash(npm:*)', '*')"
+          },
+          "hooks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type", "command"],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "command"
+                },
+                "command": {
+                  "type": "string",
+                  "description": "Shell command to run"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mcpServersConfig": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/mcpServerEntry"
+      }
+    },
+    "mcpServerEntry": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": ["command"],
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Executable to run"
+            },
+            "args": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Command-line arguments"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Environment variables"
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Working directory"
+            }
+          }
+        },
+        {
+          "required": ["type", "url"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["http", "sse"]
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "Server URL"
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "HTTP headers"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

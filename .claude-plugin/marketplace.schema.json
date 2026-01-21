@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "marketplace.schema.json",
+  "title": "Claude Code Marketplace",
+  "type": "object",
+  "required": ["name", "owner", "plugins"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Marketplace identifier (kebab-case, no spaces)"
+    },
+    "owner": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Maintainer name or team name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Contact email"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Brief marketplace description"
+        },
+        "version": {
+          "type": "string",
+          "description": "Marketplace version"
+        },
+        "pluginRoot": {
+          "type": "string",
+          "description": "Base directory for relative plugin paths (e.g., './plugins')"
+        }
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$",
+            "description": "Plugin identifier (kebab-case)"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Relative path to plugin directory"
+              },
+              {
+                "type": "object",
+                "required": ["source"],
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": ["github", "git", "npm", "url", "file", "directory"]
+                  },
+                  "repo": {
+                    "type": "string",
+                    "description": "GitHub repo (owner/repo format)"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Git URL or HTTP URL"
+                  },
+                  "package": {
+                    "type": "string",
+                    "description": "NPM package name"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "File or directory path"
+                  },
+                  "ref": {
+                    "type": "string",
+                    "description": "Git ref (branch, tag, or SHA)"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "HTTP headers for URL sources"
+                  }
+                }
+              }
+            ]
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief plugin description"
+          },
+          "version": {
+            "type": "string",
+            "description": "Plugin version"
+          },
+          "author": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "email": { "type": "string", "format": "email" },
+              "url": { "type": "string", "format": "uri" }
+            }
+          },
+          "homepage": {
+            "type": "string",
+            "format": "uri",
+            "description": "Documentation URL"
+          },
+          "repository": {
+            "type": "string",
+            "format": "uri",
+            "description": "Source code URL"
+          },
+          "license": {
+            "type": "string",
+            "description": "SPDX license identifier"
+          },
+          "keywords": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Tags for discovery"
+          },
+          "category": {
+            "type": "string",
+            "description": "Plugin category"
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Tags for searchability"
+          },
+          "strict": {
+            "type": "boolean",
+            "default": true,
+            "description": "If true, plugin source must contain plugin.json"
+          },
+          "commands": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ],
+            "description": "Custom command paths"
+          },
+          "agents": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ],
+            "description": "Custom agent paths"
+          },
+          "skills": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ],
+            "description": "Custom skill paths"
+          },
+          "hooks": {
+            "oneOf": [
+              { "type": "string" },
+              { "$ref": "#/$defs/hooksConfig" }
+            ],
+            "description": "Hooks config path or inline config"
+          },
+          "mcpServers": {
+            "oneOf": [
+              { "type": "string" },
+              { "$ref": "#/$defs/mcpServersConfig" }
+            ],
+            "description": "MCP config path or inline config"
+          },
+          "outputStyles": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ],
+            "description": "Custom output style paths"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hooksConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SessionStart": { "$ref": "#/$defs/hookEventArray" },
+        "PreToolUse": { "$ref": "#/$defs/hookEventArray" },
+        "PostToolUse": { "$ref": "#/$defs/hookEventArray" },
+        "Stop": { "$ref": "#/$defs/hookEventArray" }
+      }
+    },
+    "hookEventArray": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["matcher", "hooks"],
+        "additionalProperties": false,
+        "properties": {
+          "matcher": { "type": "string" },
+          "hooks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type", "command"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "type": "string", "const": "command" },
+                "command": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mcpServersConfig": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/mcpServerEntry"
+      }
+    },
+    "mcpServerEntry": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": ["command"],
+          "properties": {
+            "command": { "type": "string" },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "env": { "type": "object", "additionalProperties": { "type": "string" } },
+            "cwd": { "type": "string" }
+          }
+        },
+        {
+          "required": ["type", "url"],
+          "properties": {
+            "type": { "type": "string", "enum": ["http", "sse"] },
+            "url": { "type": "string", "format": "uri" },
+            "headers": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        }
+      ]
+    }
+  }
+}
