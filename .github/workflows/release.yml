@@ -33,6 +33,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - run: git fetch --tags
+
       - uses: ./.github/actions/setup-marketplace-build
 
       - id: matrix
