@@ -131,14 +131,15 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 
 	fmt.Fprintf(f, "## Marketplace Updated\n\n")
 	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)
-	fmt.Fprintf(f, "| Plugin | Version | Tag |\n")
-	fmt.Fprintf(f, "|--------|---------|-----|\n")
+	fmt.Fprintf(f, "| Plugin | Version |\n")
+	fmt.Fprintf(f, "|--------|--------|\n")
 
 	for plugin, tag := range pluginRefs {
 		// Extract version from tag (plugin/vN -> vN)
 		parts := strings.Split(tag, "/")
 		version := parts[len(parts)-1]
-		fmt.Fprintf(f, "| %s | %s | `%s` |\n", plugin, version, tag)
+		tagURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s", owner, repo, tag)
+		fmt.Fprintf(f, "| %s | [%s](%s) |\n", plugin, version, tagURL)
 	}
 }
 
