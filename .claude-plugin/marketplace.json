@@ -1,11 +1,10 @@
 {
-  "name": "your-marketplace-name",
+  "name": "wow-cc-marketplace",
   "owner": {
-    "name": "Your Name",
-    "email": "your@email.com"
+    "name": "wow-look-at-my-code"
   },
   "metadata": {
-    "description": "Description of your marketplace",
+    "description": "Claude Code plugins by wow-look-at-my-code",
     "pluginRoot": "./plugins"
   },
   "plugins": []
