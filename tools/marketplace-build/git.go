@@ -234,6 +234,37 @@ func DeleteLocalTags(tags ...string) error {
 	return nil
 }
 
+// ReadFileFromTag reads a file's content from a git tag
+func ReadFileFromTag(tag, path string) (string, error) {
+	out, err := runGit("show", fmt.Sprintf("%s:%s", tag, path))
+	if err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+// ListFilesInTag lists files in a directory at a git tag
+// Returns slice of filenames (not full paths)
+func ListFilesInTag(tag, dirPath string) ([]string, error) {
+	// Use ls-tree to list directory contents
+	out, err := runGit("ls-tree", "--name-only", tag, dirPath+"/")
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(out) == "" {
+		return nil, nil
+	}
+
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		// ls-tree returns full paths, extract just the filename
+		name := filepath.Base(line)
+		files = append(files, name)
+	}
+	return files, nil
+}
+
 // ListTagsWithPrefix lists all tags matching a prefix (empty prefix = all tags)
 func ListTagsWithPrefix(prefix string) ([]string, error) {
 	var out string
