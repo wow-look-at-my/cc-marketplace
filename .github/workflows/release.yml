@@ -28,6 +28,7 @@ jobs:
     outputs:
       plugins: ${{ steps.matrix.outputs.plugins }}
       has_changes: ${{ steps.matrix.outputs.has_changes }}
+      needs_marketplace: ${{ steps.matrix.outputs.needs_marketplace }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,7 +72,7 @@ jobs:
 
   update:
     needs: [prepare, build]
-    if: needs.prepare.outputs.has_changes == 'true'
+    if: ${{ !cancelled() && !failure() && needs.prepare.outputs.needs_marketplace == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
