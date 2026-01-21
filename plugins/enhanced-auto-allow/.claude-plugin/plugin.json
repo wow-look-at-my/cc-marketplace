@@ -16,6 +16,15 @@
 						"command": "${CLAUDE_PLUGIN_ROOT}/hook"
 					}
 				]
+			},
+			{
+				"matcher": "Read",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/hook"
+					}
+				]
 			}
 		]
 	},
