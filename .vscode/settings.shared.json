@@ -1,0 +1,16 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": [".claude-plugin/marketplace.json"],
+      "url": "./.claude-plugin/marketplace.schema.json"
+    },
+    {
+      "fileMatch": ["plugins/*/.claude-plugin/plugin.json"],
+      "url": "./plugins/example-plugin/.claude-plugin/plugin.schema.json"
+    },
+    {
+      "fileMatch": ["plugins/*/.mcp.json"],
+      "url": "./plugins/example-plugin/.mcp.schema.json"
+    }
+  ]
+}
