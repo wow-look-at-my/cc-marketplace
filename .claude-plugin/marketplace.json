@@ -1,0 +1,12 @@
+{
+  "name": "your-marketplace-name",
+  "owner": {
+    "name": "Your Name",
+    "email": "your@email.com"
+  },
+  "metadata": {
+    "description": "Description of your marketplace",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": []
+}
