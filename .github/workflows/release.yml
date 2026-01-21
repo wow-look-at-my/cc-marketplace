@@ -19,8 +19,7 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Delete branch tags
-        run: marketplace-build cleanup-branch ${{ github.event.ref }}
+      - run: marketplace-build cleanup-branch ${{ github.event.ref }}
 
   prepare:
     if: github.event_name == 'push'
@@ -36,8 +35,7 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Prepare matrix
-        id: matrix
+      - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
   build:
@@ -54,15 +52,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch tags
-        run: git fetch --tags
+      - run: git fetch --tags
 
       - uses: ./.github/actions/setup-marketplace-build
 
       - uses: extractions/setup-just@v2
 
-      - name: Build and release plugin
-        run: marketplace-build build-plugin ${{ matrix.plugin }}
+      - run: marketplace-build build-plugin ${{ matrix.plugin }}
 
   update:
     needs: [prepare, build]
@@ -78,5 +74,4 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Update marketplace
-        run: marketplace-build update-marketplace
+      - run: marketplace-build update-marketplace
