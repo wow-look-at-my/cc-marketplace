@@ -7,7 +7,7 @@ A marketplace of Claude Code plugins.
 ### Add This Marketplace
 
 ```bash
-claude plugin marketplace add wow-look-at-my-code/cc-marketplace-template
+claude plugin marketplace add wow-look-at-my-code/cc-marketplace-template@latest
 ```
 
 ### Install Plugins
