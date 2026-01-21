@@ -1,0 +1,16 @@
+#!/usr/bin/env -S just --justfile
+
+default: build
+
+build:
+    go mod tidy >&2
+    go build -o crawl4ai-mcp . >&2
+
+run: build
+    ./crawl4ai-mcp
+
+test: build
+    go test -v
+
+clean:
+    rm -f crawl4ai-mcp
