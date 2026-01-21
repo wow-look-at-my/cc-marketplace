@@ -52,6 +52,15 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	plugins := buildPluginsArray(pluginRefs, marketplace)
 	marketplace["plugins"] = plugins
 
+	// Bump marketplace version
+	newVersion := bumpMarketplaceVersion(branch)
+	metadata, ok := marketplace["metadata"].(map[string]interface{})
+	if !ok {
+		metadata = make(map[string]interface{})
+	}
+	metadata["version"] = newVersion
+	marketplace["metadata"] = metadata
+
 	// Cook marketplace.json (remove $schema, mh.*)
 	delete(marketplace, "$schema")
 	delete(marketplace, "mh")
@@ -341,6 +350,40 @@ func readMCPFromTag(tag string) map[string]interface{} {
 		}
 	}
 	return nil
+}
+
+// bumpMarketplaceVersion reads current version from marketplace tag and increments it
+func bumpMarketplaceVersion(branch string) int {
+	tag := fmt.Sprintf("marketplace/%s", branch)
+
+	// Try to read current marketplace.json from tag
+	content, err := ReadFileFromTag(tag, ".claude-plugin/marketplace.json")
+	if err != nil {
+		return 1 // First version
+	}
+
+	var marketplace map[string]interface{}
+	if err := json.Unmarshal([]byte(content), &marketplace); err != nil {
+		return 1
+	}
+
+	metadata, ok := marketplace["metadata"].(map[string]interface{})
+	if !ok {
+		return 1
+	}
+
+	switch v := metadata["version"].(type) {
+	case float64:
+		return int(v) + 1
+	case int:
+		return v + 1
+	case string:
+		var ver int
+		fmt.Sscanf(v, "%d", &ver)
+		return ver + 1
+	}
+
+	return 1
 }
 
 // cleanupStaleBranchTags removes marketplace/{branch} tags for branches that no longer exist
