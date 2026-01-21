@@ -63,7 +63,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: go-${{ hashFiles('plugins/**/go.sum') }}
+          key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
 
       - run: marketplace-build build-plugin ${{ matrix.plugin }}
 
