@@ -42,46 +42,43 @@ func GetRepoInfo() (owner, repo string, err error) {
 }
 
 // GetLatestTagVersion gets the version from {branch}/{plugin}/latest tag
-// Returns "0.0.0" if no tag exists
-func GetLatestTagVersion(branch, plugin string) (string, error) {
+// Returns 0 if no tag exists
+func GetLatestTagVersion(branch, plugin string) (int, error) {
 	tagName := fmt.Sprintf("%s/%s/latest", branch, plugin)
 
 	// Check if tag exists
 	_, err := runGit("rev-parse", "--verify", fmt.Sprintf("refs/tags/%s", tagName))
 	if err != nil {
-		// Tag doesn't exist, return 0.0.0
-		return "0.0.0", nil
+		return 0, nil
 	}
 
-	// Get the version tag that latest points to by looking at sibling tags
-	// We need to find the highest version tag for this branch/plugin
+	// Find highest version tag for this branch/plugin
 	out, err := runGit("tag", "-l", fmt.Sprintf("%s/%s/v*", branch, plugin))
 	if err != nil {
-		return "0.0.0", nil
+		return 0, nil
 	}
 
 	tags := strings.Split(strings.TrimSpace(out), "\n")
 	if len(tags) == 0 || tags[0] == "" {
-		return "0.0.0", nil
+		return 0, nil
 	}
 
 	// Find highest version
-	var highestVersion string
+	highest := 0
 	for _, tag := range tags {
-		// Extract version from tag like "master/my-plugin/v1.2.3"
+		// Extract version from tag like "master/my-plugin/v3"
 		parts := strings.Split(tag, "/")
 		if len(parts) >= 3 {
-			version := strings.TrimPrefix(parts[len(parts)-1], "v")
-			if highestVersion == "" || compareVersions(version, highestVersion) > 0 {
-				highestVersion = version
+			vStr := strings.TrimPrefix(parts[len(parts)-1], "v")
+			var v int
+			fmt.Sscanf(vStr, "%d", &v)
+			if v > highest {
+				highest = v
 			}
 		}
 	}
 
-	if highestVersion == "" {
-		return "0.0.0", nil
-	}
-	return highestVersion, nil
+	return highest, nil
 }
 
 // HasCommitsAfterTag checks if there are commits to pluginPath after the latest tag
@@ -282,37 +279,3 @@ func runGitNoOutput(args ...string) error {
 	return cmd.Run()
 }
 
-// compareVersions compares two semver strings, returns >0 if a > b, <0 if a < b, 0 if equal
-func compareVersions(a, b string) int {
-	aParts := strings.Split(a, ".")
-	bParts := strings.Split(b, ".")
-
-	for i := 0; i < 3; i++ {
-		var aNum, bNum int
-		if i < len(aParts) {
-			fmt.Sscanf(aParts[i], "%d", &aNum)
-		}
-		if i < len(bParts) {
-			fmt.Sscanf(bParts[i], "%d", &bNum)
-		}
-		if aNum != bNum {
-			return aNum - bNum
-		}
-	}
-	return 0
-}
-
-// BumpPatchVersion increments the patch version
-func BumpPatchVersion(version string) string {
-	parts := strings.Split(version, ".")
-	if len(parts) != 3 {
-		return "0.0.1"
-	}
-
-	var major, minor, patch int
-	fmt.Sscanf(parts[0], "%d", &major)
-	fmt.Sscanf(parts[1], "%d", &minor)
-	fmt.Sscanf(parts[2], "%d", &patch)
-
-	return fmt.Sprintf("%d.%d.%d", major, minor, patch+1)
-}

@@ -123,7 +123,7 @@ func getPluginRefs(branch, owner, repo string) (map[string]string, error) {
 	}
 
 	// Find latest version for each plugin
-	pluginVersions := make(map[string]string) // plugin -> highest version
+	pluginVersions := make(map[string]int) // plugin -> highest version
 
 	for _, tag := range tags {
 		// Skip marketplace and latest tags
@@ -131,17 +131,19 @@ func getPluginRefs(branch, owner, repo string) (map[string]string, error) {
 			continue
 		}
 
-		// Parse tag: branch/plugin-name/vX.Y.Z
+		// Parse tag: branch/plugin-name/vN
 		parts := strings.Split(tag, "/")
 		if len(parts) != 3 {
 			continue
 		}
 
 		pluginName := parts[1]
-		versionStr := strings.TrimPrefix(parts[2], "v")
+		vStr := strings.TrimPrefix(parts[2], "v")
+		var v int
+		fmt.Sscanf(vStr, "%d", &v)
 
-		if existing, ok := pluginVersions[pluginName]; !ok || compareVersions(versionStr, existing) > 0 {
-			pluginVersions[pluginName] = versionStr
+		if existing, ok := pluginVersions[pluginName]; !ok || v > existing {
+			pluginVersions[pluginName] = v
 			refs[pluginName] = tag
 		}
 	}

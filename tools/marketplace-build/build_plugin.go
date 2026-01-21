@@ -31,9 +31,9 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get current version: %w", err)
 	}
-	newVersion := BumpPatchVersion(currentVersion)
+	newVersion := currentVersion + 1
 
-	fmt.Printf("Building %s: %s -> %s\n", pluginName, currentVersion, newVersion)
+	fmt.Printf("Building %s: v%d -> v%d\n", pluginName, currentVersion, newVersion)
 
 	// Run just build in plugin directory
 	if err := runJustBuild(pluginPath); err != nil {
@@ -53,7 +53,7 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create orphan commit
-	commitMsg := fmt.Sprintf("Release %s v%s", pluginName, newVersion)
+	commitMsg := fmt.Sprintf("Release %s v%d", pluginName, newVersion)
 	commitSHA, err := CreateOrphanCommit(tmpDir, commitMsg)
 	if err != nil {
 		return fmt.Errorf("failed to create orphan commit: %w", err)
@@ -62,7 +62,7 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Created orphan commit: %s\n", commitSHA)
 
 	// Create version tag
-	versionTag := fmt.Sprintf("%s/%s/v%s", branch, pluginName, newVersion)
+	versionTag := fmt.Sprintf("%s/%s/v%d", branch, pluginName, newVersion)
 	if err := CreateTag(versionTag, commitSHA); err != nil {
 		return fmt.Errorf("failed to create version tag: %w", err)
 	}
@@ -78,7 +78,7 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to push tags: %w", err)
 	}
 
-	fmt.Printf("Released %s v%s (tag: %s)\n", pluginName, newVersion, versionTag)
+	fmt.Printf("Released %s v%d (tag: %s)\n", pluginName, newVersion, versionTag)
 	return nil
 }
 
@@ -98,7 +98,7 @@ func runJustBuild(pluginPath string) error {
 	return cmd.Run()
 }
 
-func cookPluginContents(srcDir, dstDir, version string) error {
+func cookPluginContents(srcDir, dstDir string, version int) error {
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -147,7 +147,7 @@ func containsTemplate(filename string) bool {
 	return len(filename) > 10 && filename[len(filename)-10:] == ".template."
 }
 
-func cookJSON(data []byte, version, relPath string) ([]byte, error) {
+func cookJSON(data []byte, version int, relPath string) ([]byte, error) {
 	var obj map[string]interface{}
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return data, err // Return original if not valid JSON
@@ -161,7 +161,7 @@ func cookJSON(data []byte, version, relPath string) ([]byte, error) {
 
 	// Add version to plugin.json
 	if filepath.Base(relPath) == "plugin.json" {
-		obj["version"] = version
+		obj["version"] = fmt.Sprintf("%d", version)
 	}
 
 	return json.MarshalIndent(obj, "", "  ")
