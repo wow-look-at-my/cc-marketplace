@@ -1,0 +1,105 @@
+{
+	"commands": [
+		{
+			"name": ["ls", "cat", "head", "tail", "file", "wc", "stat"],
+			"description": "Auto-approve readonly file inspection commands",
+			"allowedFlags": "*"
+		},
+		{
+			"name": "git",
+			"description": "Auto-approve readonly git commands",
+			"subcommands": [
+				{
+					"name": ["status", "diff", "log", "show", "fetch", "ls-files", "ls-tree", "ls-remote", "rev-parse", "rev-list", "describe", "blame", "shortlog", "whatchanged", "reflog", "count-objects", "fsck", "verify-pack", "cat-file", "for-each-ref", "name-rev", "merge-base"],
+					"allowedFlags": "*"
+				},
+				{
+					"name": "branch",
+					"allowedFlags": ["-a", "-r", "-v", "-vv", "--list", "--all", "--remotes", "--verbose"]
+				},
+				{
+					"name": "tag",
+					"allowedFlags": ["-l", "-n", "--list", "--sort"]
+				},
+				{
+					"name": "remote",
+					"allowedFlags": ["-v", "--verbose"],
+					"subcommands": [
+						{ "name": ["show", "get-url"], "allowedFlags": "*" }
+					]
+				},
+				{
+					"name": "config",
+					"requiredFlags": ["--get", "--list", "--get-all", "--get-regexp", "-l"]
+				}
+			]
+		},
+		{
+			"name": "gh",
+			"description": "Auto-approve readonly GitHub CLI commands",
+			"subcommands": [
+				{
+					"name": "repo",
+					"subcommands": [
+						{ "name": ["view", "list"], "allowedFlags": "*" }
+					]
+				},
+				{
+					"name": "issue",
+					"subcommands": [
+						{ "name": ["list", "view", "status"], "allowedFlags": "*" }
+					]
+				},
+				{
+					"name": "pr",
+					"subcommands": [
+						{ "name": ["list", "view", "status", "diff", "checks"], "allowedFlags": "*" }
+					]
+				},
+				{
+					"name": ["release", "workflow"],
+					"subcommands": [
+						{ "name": ["list", "view"], "allowedFlags": "*" }
+					]
+				},
+				{
+					"name": "run",
+					"subcommands": [
+						{ "name": "list", "allowedFlags": "*" },
+						{ "name": ["view", "watch"], "denyWithMessage": "Use 'gh wait-ci' instead for checking CI status" }
+					]
+				},
+				{
+					"name": "search",
+					"subcommands": [
+						{ "name": ["repos", "issues", "prs", "commits", "code"], "allowedFlags": "*" }
+					]
+				},
+				{
+					"name": "browse",
+					"allowedFlags": "*"
+				},
+				{
+					"name": ["label", "cache"],
+					"subcommands": [
+						{ "name": "list", "allowedFlags": "*" }
+					]
+				},
+				{
+					"name": "gist",
+					"subcommands": [
+						{ "name": ["list", "view"], "allowedFlags": "*" }
+					]
+				},
+				{
+					"name": "api",
+					"requireFlagValue": {
+						"flags": ["-X", "--method"],
+						"default": "GET",
+						"allowed": ["GET"]
+					}
+				}
+			]
+		}
+	]
+}

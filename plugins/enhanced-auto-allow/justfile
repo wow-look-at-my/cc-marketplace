@@ -1,0 +1,9 @@
+[private]
+help:
+    @just --list
+
+build:
+    cd cmd && go build -o ../hook .
+
+test:
+    cd cmd && go test -v ./...
