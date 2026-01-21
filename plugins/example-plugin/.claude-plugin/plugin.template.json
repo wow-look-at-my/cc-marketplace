@@ -1,10 +1,12 @@
 {
   "name": "your-plugin-name",
-  "version": "1.0.0",
   "description": "Brief description of what your plugin does",
   "author": {
     "name": "Your Name",
     "email": "your@email.com"
   },
-  "keywords": ["keyword1", "keyword2"]
+  "keywords": ["keyword1", "keyword2"],
+  "mh": {
+    "include_in_marketplace": true
+  }
 }

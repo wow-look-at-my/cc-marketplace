@@ -1,6 +1,9 @@
 # Claude Code local settings
 .claude/
 
+# Build outputs
+bin/
+
 # Node
 node_modules/
 

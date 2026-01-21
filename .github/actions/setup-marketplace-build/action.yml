@@ -1,0 +1,16 @@
+name: Setup marketplace-build
+description: Build or restore cached marketplace-build CLI
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+        cache: true
+        cache-dependency-path: tools/marketplace-build/go.sum
+
+    - name: Build CLI
+      shell: bash
+      run: |
+        go build -o /usr/local/bin/marketplace-build ./tools/marketplace-build

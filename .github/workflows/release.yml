@@ -1,0 +1,75 @@
+name: Release Plugins
+
+on:
+  push:
+  delete:
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  cleanup:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - name: Delete branch tags
+        run: marketplace-build cleanup-branch ${{ github.event.ref }}
+
+  prepare:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      plugins: ${{ steps.matrix.outputs.plugins }}
+      has_changes: ${{ steps.matrix.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - name: Prepare matrix
+        id: matrix
+        run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJson(needs.prepare.outputs.plugins) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - uses: extractions/setup-just@v2
+
+      - name: Build and release plugin
+        run: marketplace-build build-plugin ${{ matrix.plugin }}
+
+  update:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - name: Update marketplace
+        run: marketplace-build update-marketplace
