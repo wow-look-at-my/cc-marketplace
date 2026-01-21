@@ -129,8 +129,12 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 	}
 	defer f.Close()
 
+	marketplaceTag := fmt.Sprintf("%s/marketplace", branch)
+	marketplaceURL := fmt.Sprintf("https://github.com/%s/%s/blob/%s/.claude-plugin/marketplace.json", owner, repo, marketplaceTag)
+
 	fmt.Fprintf(f, "## Marketplace Updated\n\n")
 	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)
+	fmt.Fprintf(f, "**Marketplace:** [marketplace.json](%s)\n\n", marketplaceURL)
 	fmt.Fprintf(f, "| Plugin | Version |\n")
 	fmt.Fprintf(f, "|--------|--------|\n")
 
