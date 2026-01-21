@@ -163,8 +163,8 @@ Ensure your `plugin.json` has `mh.include_in_marketplace: true`:
 
 When you push to any branch, CI will:
 1. Detect plugins with `mh.include_in_marketplace: true`
-2. Run `just build` if a `justfile` exists
-3. Create an orphan tag with the built plugin: `{branch}/{plugin}/v{version}`
+2. Run `just test` (which must build and test the plugin)
+3. Create an orphan tag with the built plugin: `plugin/{plugin}/v{version}`
 4. Update `marketplace.json` with the new version
 
 **You don't need to manually edit marketplace.json** - CI handles it automatically.

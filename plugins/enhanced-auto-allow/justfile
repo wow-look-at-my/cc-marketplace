@@ -5,5 +5,5 @@ help:
 build:
     cd cmd && go build -o ../hook .
 
-test:
-    cd cmd && go test -v ./...
+test: build
+    cd cmd && go test -v -cover ./...

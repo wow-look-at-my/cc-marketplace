@@ -32,9 +32,9 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Building %s: v%d -> v%d\n", pluginName, currentVersion, newVersion)
 
-	// Run just build in plugin directory
-	if err := runJustBuild(pluginPath); err != nil {
-		return fmt.Errorf("build failed: %w", err)
+	// Run just test in plugin directory (builds and tests)
+	if err := runJustTest(pluginPath); err != nil {
+		return fmt.Errorf("test failed: %w", err)
 	}
 
 	// Get source commit SHA for change detection
@@ -92,15 +92,13 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runJustBuild(pluginPath string) error {
-	// Check if justfile exists
+func runJustTest(pluginPath string) error {
 	justfilePath := filepath.Join(pluginPath, "justfile")
 	if _, err := os.Stat(justfilePath); os.IsNotExist(err) {
-		fmt.Printf("No justfile found, skipping build step\n")
-		return nil
+		return fmt.Errorf("no justfile found in %s", pluginPath)
 	}
 
-	cmd := exec.Command("just", "build")
+	cmd := exec.Command("just", "test")
 	cmd.Dir = pluginPath
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

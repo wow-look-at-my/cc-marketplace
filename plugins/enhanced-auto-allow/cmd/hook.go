@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // Hook input from Claude Code
@@ -26,13 +27,13 @@ type Rules struct {
 }
 
 type CommandNode struct {
-	Name             interface{}       `json:"name"` // string or []string
-	Description      string            `json:"description,omitempty"`
-	AllowedFlags     interface{}       `json:"allowedFlags,omitempty"` // "*" or []string
-	RequiredFlags    []string          `json:"requiredFlags,omitempty"`
-	RequireFlagValue *RequireFlagRule  `json:"requireFlagValue,omitempty"`
-	DenyWithMessage  string            `json:"denyWithMessage,omitempty"`
-	Subcommands      []CommandNode     `json:"subcommands,omitempty"`
+	Name             interface{}      `json:"name"` // string or []string
+	Description      string           `json:"description,omitempty"`
+	AllowedFlags     interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
+	RequiredFlags    []string         `json:"requiredFlags,omitempty"`
+	RequireFlagValue *RequireFlagRule `json:"requireFlagValue,omitempty"`
+	DenyWithMessage  string           `json:"denyWithMessage,omitempty"`
+	Subcommands      []CommandNode    `json:"subcommands,omitempty"`
 }
 
 type RequireFlagRule struct {
@@ -50,30 +51,6 @@ type PermissionResponse struct {
 			Message  string `json:"message,omitempty"`
 		} `json:"decision"`
 	} `json:"hookSpecificOutput"`
-}
-
-// Parsed command from shfmt
-type ShfmtFile struct {
-	Type  string      `json:"Type"`
-	Stmts []ShfmtStmt `json:"Stmts"`
-}
-
-type ShfmtStmt struct {
-	Cmd ShfmtCmd `json:"Cmd"`
-}
-
-type ShfmtCmd struct {
-	Type string      `json:"Type"`
-	Args []ShfmtWord `json:"Args"`
-}
-
-type ShfmtWord struct {
-	Parts []ShfmtPart `json:"Parts"`
-}
-
-type ShfmtPart struct {
-	Type  string `json:"Type"`
-	Value string `json:"Value"`
 }
 
 var rules Rules
@@ -213,34 +190,32 @@ func checkAllowedFlags(args []string, allowedFlags interface{}) bool {
 }
 
 func parseCommand(command string) []string {
-	cmd := exec.Command("shfmt", "--to-json")
-	cmd.Stdin = strings.NewReader(command)
-	output, err := cmd.Output()
+	parser := syntax.NewParser()
+	file, err := parser.Parse(strings.NewReader(command), "")
 	if err != nil {
 		return nil
 	}
 
-	var ast ShfmtFile
-	if err := json.Unmarshal(output, &ast); err != nil {
+	// Must have exactly one statement
+	if len(file.Stmts) != 1 {
 		return nil
 	}
 
-	if len(ast.Stmts) != 1 {
+	stmt := file.Stmts[0]
+
+	// Check for dangerous constructs anywhere in the AST
+	if hasDangerousConstruct(stmt) {
 		return nil
 	}
 
-	stmt := ast.Stmts[0]
-	if stmt.Cmd.Type != "CallExpr" {
-		return nil
-	}
-
-	// Check for dangerous constructs
-	if hasDangerousConstruct(output) {
+	// Must be a simple call expression
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok {
 		return nil
 	}
 
 	var args []string
-	for _, word := range stmt.Cmd.Args {
+	for _, word := range call.Args {
 		arg := extractWord(word)
 		if arg == "" {
 			return nil
@@ -251,28 +226,41 @@ func parseCommand(command string) []string {
 	return args
 }
 
-func extractWord(word ShfmtWord) string {
+func extractWord(word *syntax.Word) string {
 	var parts []string
 	for _, part := range word.Parts {
-		switch part.Type {
-		case "Lit", "SglQuoted":
-			parts = append(parts, part.Value)
+		switch p := part.(type) {
+		case *syntax.Lit:
+			parts = append(parts, p.Value)
+		case *syntax.SglQuoted:
+			parts = append(parts, p.Value)
+		case *syntax.DblQuoted:
+			// Double quotes are OK if they only contain literals
+			for _, qpart := range p.Parts {
+				if lit, ok := qpart.(*syntax.Lit); ok {
+					parts = append(parts, lit.Value)
+				} else {
+					return "" // Contains variable expansion or similar
+				}
+			}
 		default:
-			return ""
+			return "" // Unknown part type
 		}
 	}
 	return strings.Join(parts, "")
 }
 
-func hasDangerousConstruct(data []byte) bool {
-	dangerous := []string{`"Type":"CmdSubst"`, `"Type":"ParamExp"`, `"Type":"ArithExp"`, `"Type":"ProcSubst"`}
-	s := string(data)
-	for _, d := range dangerous {
-		if strings.Contains(s, d) {
-			return true
+func hasDangerousConstruct(node syntax.Node) bool {
+	dangerous := false
+	syntax.Walk(node, func(n syntax.Node) bool {
+		switch n.(type) {
+		case *syntax.CmdSubst, *syntax.ParamExp, *syntax.ArithmExp, *syntax.ProcSubst:
+			dangerous = true
+			return false
 		}
-	}
-	return false
+		return true
+	})
+	return dangerous
 }
 
 func hasAnyFlag(args []string, flags []string) bool {
