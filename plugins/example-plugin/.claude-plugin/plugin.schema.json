@@ -11,11 +11,6 @@
       "pattern": "^[a-z0-9-]+$",
       "description": "Unique plugin identifier (kebab-case, no spaces)"
     },
-    "version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+",
-      "description": "Semantic version (e.g., '1.0.0')"
-    },
     "description": {
       "type": "string",
       "description": "Brief explanation of plugin purpose"
@@ -107,6 +102,17 @@
         { "type": "object" }
       ],
       "description": "LSP server configuration"
+    },
+    "mh": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Marketplace helper metadata (stripped during build)",
+      "properties": {
+        "include_in_marketplace": {
+          "type": "boolean",
+          "description": "If true, plugin will be built and published to marketplace"
+        }
+      }
     }
   },
   "$defs": {

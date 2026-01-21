@@ -34,27 +34,31 @@ Every plugin needs a `.claude-plugin/plugin.json` file:
 ```json
 {
   "name": "my-plugin",
-  "version": "1.0.0",
   "description": "What this plugin does",
   "author": {
     "name": "Your Name",
     "email": "you@example.com"
   },
-  "keywords": ["tag1", "tag2"]
+  "keywords": ["tag1", "tag2"],
+  "mh": {
+    "include_in_marketplace": true
+  }
 }
 ```
 
 **Required fields:**
 - `name` - Unique identifier (kebab-case, no spaces)
+- `mh.include_in_marketplace` - Must be `true` for CI to build this plugin
 
 **Optional fields:**
-- `version` - Semantic version
 - `description` - Brief explanation
 - `author` - Object with `name`, `email`, `url`
 - `keywords` - Tags for discovery
 - `homepage` - Documentation URL
 - `repository` - Source code URL
 - `license` - SPDX identifier (e.g., `"MIT"`)
+
+**Note:** Version is NOT specified in plugin.json. CI automatically assigns and bumps versions based on release tags.
 
 ## Step 2: Add Components
 
@@ -126,37 +130,94 @@ External tools and data sources:
 
 See `example-plugin/.mcp.template.json` for a full example.
 
-## Step 3: Add to Marketplace
+### Build Script (`justfile`)
 
-Edit `../.claude-plugin/marketplace.json` and add your plugin to the `plugins` array:
+If your plugin needs a build step (compiling TypeScript, bundling, etc.), create a `justfile`:
+
+```just
+[private]
+help:
+    @just --list
+
+build:
+    npm install
+    npm run build
+
+test:
+    npm test
+```
+
+See `example-plugin/justfile.template` for a starting point. The `build` recipe runs automatically during CI.
+
+## Step 3: Enable Marketplace Inclusion
+
+Ensure your `plugin.json` has `mh.include_in_marketplace: true`:
 
 ```json
 {
-  "plugins": [
-    {
-      "name": "your-plugin",
-      "source": "./your-plugin",
-      "description": "What your plugin does"
-    }
-  ]
+  "mh": {
+    "include_in_marketplace": true
+  }
 }
+```
+
+When you push to any branch, CI will:
+1. Detect plugins with `mh.include_in_marketplace: true`
+2. Run `just build` if a `justfile` exists
+3. Create an orphan tag with the built plugin: `{branch}/{plugin}/v{version}`
+4. Update `marketplace.json` with the new version
+
+**You don't need to manually edit marketplace.json** - CI handles it automatically.
+
+## Build & Release Process
+
+Plugins are built and released automatically on push:
+
+- **Tag naming:** `{branch}/{plugin}/v{version}` (e.g., `master/my-plugin/v1.2.3`)
+- **Version bumping:** Patch version auto-increments (1.0.0 → 1.0.1)
+- **Branch isolation:** Each branch has independent version series
+- **Cleanup:** When a branch is deleted, all its tags are removed
+
+To test locally without pushing:
+```bash
+just release prepare-matrix     # See which plugins would build
+just release build-plugin my-plugin  # Dry-run build
 ```
 
 ## Testing Your Plugin
 
-1. Add this marketplace to Claude Code:
+### Local Development
+
+For local development before pushing:
+
+1. Add the local repo as a marketplace:
    ```
-   /plugin marketplace add /path/to/this/repo
+   claude plugin marketplace add /path/to/this/repo
    ```
 
-2. Install your plugin:
+2. Install your plugin directly from source:
    ```
-   /plugin install your-plugin
+   claude plugin install your-plugin
    ```
 
 3. Test your commands/agents/skills
 
 4. Make changes and reinstall to test updates
+
+### After Pushing
+
+Once pushed, CI builds and releases your plugin. Users can install via:
+
+```bash
+# Add the marketplace (uses 'latest' tag = master branch)
+claude plugin marketplace add github:owner/repo
+
+# Or specify a branch
+claude plugin marketplace add github:owner/repo@feature-x/marketplace
+
+# Install plugins from the marketplace
+claude plugin install your-plugin
+```
 
 ## Tips
 

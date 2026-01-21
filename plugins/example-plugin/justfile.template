@@ -1,0 +1,10 @@
+[private]
+help:
+    @just --list
+
+build:
+    # Add your build commands here
+    echo "No build step configured"
+
+test:
+    echo "No tests configured"
