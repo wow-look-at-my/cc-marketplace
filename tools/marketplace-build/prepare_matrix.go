@@ -11,10 +11,6 @@ import (
 
 func runPrepareMatrix(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
-	branch, err := GetCurrentBranch()
-	if err != nil {
-		return err
-	}
 
 	repoRoot := getRepoRoot()
 	pluginsDir := filepath.Join(repoRoot, "plugins")
@@ -60,7 +56,7 @@ func runPrepareMatrix(cmd *cobra.Command, args []string) error {
 		}
 
 		// Check if there are commits after the latest tag
-		hasChanges, err := HasCommitsAfterTag(branch, pluginName, pluginPath)
+		hasChanges, err := HasCommitsAfterTag(pluginName, pluginPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to check changes for %s: %v\n", pluginName, err)
 			continue

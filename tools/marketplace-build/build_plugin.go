@@ -14,11 +14,6 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 	pluginName := args[0]
 
-	branch, err := GetCurrentBranch()
-	if err != nil {
-		return err
-	}
-
 	repoRoot := getRepoRoot()
 	pluginPath := filepath.Join(repoRoot, "plugins", pluginName)
 
@@ -28,7 +23,7 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get current version and bump it
-	currentVersion, err := GetLatestTagVersion(branch, pluginName)
+	currentVersion, err := GetLatestTagVersion(pluginName)
 	if err != nil {
 		return fmt.Errorf("failed to get current version: %w", err)
 	}
@@ -63,13 +58,13 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Created orphan commit: %s\n", commitSHA)
 
 	// Create version tag
-	versionTag := fmt.Sprintf("%s/%s/v%d", branch, pluginName, newVersion)
+	versionTag := fmt.Sprintf("%s/v%d", pluginName, newVersion)
 	if err := CreateTag(versionTag, commitSHA); err != nil {
 		return fmt.Errorf("failed to create version tag: %w", err)
 	}
 
 	// Create/update latest tag
-	latestTag := fmt.Sprintf("%s/%s/latest", branch, pluginName)
+	latestTag := fmt.Sprintf("%s/latest", pluginName)
 	if err := CreateTag(latestTag, commitSHA); err != nil {
 		return fmt.Errorf("failed to create latest tag: %w", err)
 	}

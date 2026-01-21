@@ -41,10 +41,10 @@ func GetRepoInfo() (owner, repo string, err error) {
 	return "", "", fmt.Errorf("could not parse github repo from origin URL: %s", url)
 }
 
-// GetLatestTagVersion gets the version from {branch}/{plugin}/latest tag
+// GetLatestTagVersion gets the version from {plugin}/latest tag
 // Returns 0 if no tag exists
-func GetLatestTagVersion(branch, plugin string) (int, error) {
-	tagName := fmt.Sprintf("%s/%s/latest", branch, plugin)
+func GetLatestTagVersion(plugin string) (int, error) {
+	tagName := fmt.Sprintf("%s/latest", plugin)
 
 	// Check if tag exists
 	_, err := runGit("rev-parse", "--verify", fmt.Sprintf("refs/tags/%s", tagName))
@@ -52,8 +52,8 @@ func GetLatestTagVersion(branch, plugin string) (int, error) {
 		return 0, nil
 	}
 
-	// Find highest version tag for this branch/plugin
-	out, err := runGit("tag", "-l", fmt.Sprintf("%s/%s/v*", branch, plugin))
+	// Find highest version tag for this plugin
+	out, err := runGit("tag", "-l", fmt.Sprintf("%s/v*", plugin))
 	if err != nil {
 		return 0, nil
 	}
@@ -66,9 +66,9 @@ func GetLatestTagVersion(branch, plugin string) (int, error) {
 	// Find highest version
 	highest := 0
 	for _, tag := range tags {
-		// Extract version from tag like "master/my-plugin/v3"
+		// Extract version from tag like "my-plugin/v3"
 		parts := strings.Split(tag, "/")
-		if len(parts) >= 3 {
+		if len(parts) >= 2 {
 			vStr := strings.TrimPrefix(parts[len(parts)-1], "v")
 			var v int
 			fmt.Sscanf(vStr, "%d", &v)
@@ -82,8 +82,8 @@ func GetLatestTagVersion(branch, plugin string) (int, error) {
 }
 
 // HasCommitsAfterTag checks if there are commits to pluginPath after the latest tag
-func HasCommitsAfterTag(branch, plugin, pluginPath string) (bool, error) {
-	tagName := fmt.Sprintf("%s/%s/latest", branch, plugin)
+func HasCommitsAfterTag(plugin, pluginPath string) (bool, error) {
+	tagName := fmt.Sprintf("%s/latest", plugin)
 
 	// Check if tag exists
 	_, err := runGit("rev-parse", "--verify", fmt.Sprintf("refs/tags/%s", tagName))
@@ -218,9 +218,15 @@ func DeleteLocalTags(tags ...string) error {
 	return nil
 }
 
-// ListTagsWithPrefix lists all tags matching a prefix
+// ListTagsWithPrefix lists all tags matching a prefix (empty prefix = all tags)
 func ListTagsWithPrefix(prefix string) ([]string, error) {
-	out, err := runGit("tag", "-l", prefix+"*")
+	var out string
+	var err error
+	if prefix == "" {
+		out, err = runGit("tag", "-l")
+	} else {
+		out, err = runGit("tag", "-l", prefix+"*")
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -36,8 +36,8 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to parse marketplace.json: %w", err)
 	}
 
-	// Get all plugins with their latest tags for this branch
-	pluginRefs, err := getPluginRefs(branch, owner, repo)
+	// Get all plugins with their latest tags (global)
+	pluginRefs, err := getPluginRefs(owner, repo)
 	if err != nil {
 		return fmt.Errorf("failed to get plugin refs: %w", err)
 	}
@@ -110,12 +110,12 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// getPluginRefs returns a map of plugin name -> latest version tag for the branch
-func getPluginRefs(branch, owner, repo string) (map[string]string, error) {
+// getPluginRefs returns a map of plugin name -> latest version tag (global)
+func getPluginRefs(owner, repo string) (map[string]string, error) {
 	refs := make(map[string]string)
 
-	// List all tags for this branch
-	tags, err := ListTagsWithPrefix(branch + "/")
+	// List all plugin tags (format: plugin-name/vN)
+	tags, err := ListTagsWithPrefix("")
 	if err != nil {
 		return nil, err
 	}
@@ -125,18 +125,18 @@ func getPluginRefs(branch, owner, repo string) (map[string]string, error) {
 
 	for _, tag := range tags {
 		// Skip marketplace and latest tags
-		if strings.HasSuffix(tag, "/marketplace") || strings.HasSuffix(tag, "/latest") {
+		if strings.HasSuffix(tag, "/marketplace") || strings.HasSuffix(tag, "/latest") || tag == "latest" {
 			continue
 		}
 
-		// Parse tag: branch/plugin-name/vN
+		// Parse tag: plugin-name/vN
 		parts := strings.Split(tag, "/")
-		if len(parts) != 3 {
+		if len(parts) != 2 {
 			continue
 		}
 
-		pluginName := parts[1]
-		vStr := strings.TrimPrefix(parts[2], "v")
+		pluginName := parts[0]
+		vStr := strings.TrimPrefix(parts[1], "v")
 		var v int
 		fmt.Sscanf(vStr, "%d", &v)
 
