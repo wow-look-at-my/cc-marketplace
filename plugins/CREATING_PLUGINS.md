@@ -210,10 +210,10 @@ Once pushed, CI builds and releases your plugin. Users can install via:
 
 ```bash
 # Add the marketplace (uses 'latest' tag = master branch)
-claude plugin marketplace add github:owner/repo
+claude plugin marketplace add owner/repo#latest
 
 # Or specify a branch
-claude plugin marketplace add github:owner/repo@feature-x/marketplace
+claude plugin marketplace add owner/repo#feature-x/marketplace
 
 # Install plugins from the marketplace
 claude plugin install your-plugin
