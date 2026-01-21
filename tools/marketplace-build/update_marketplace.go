@@ -124,8 +124,12 @@ func getPluginRefs(owner, repo string) (map[string]string, error) {
 	pluginVersions := make(map[string]int) // plugin -> highest version
 
 	for _, tag := range tags {
-		// Skip marketplace and latest tags
+		// Skip marketplace, latest, and branch-prefixed tags (legacy)
 		if strings.HasSuffix(tag, "/marketplace") || strings.HasSuffix(tag, "/latest") || tag == "latest" {
+			continue
+		}
+		// Skip tags with more than 2 parts (branch/plugin/version format is legacy)
+		if strings.Count(tag, "/") > 1 {
 			continue
 		}
 

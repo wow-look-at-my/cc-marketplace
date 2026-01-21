@@ -41,18 +41,9 @@ func GetRepoInfo() (owner, repo string, err error) {
 	return "", "", fmt.Errorf("could not parse github repo from origin URL: %s", url)
 }
 
-// GetLatestTagVersion gets the version from {plugin}/latest tag
-// Returns 0 if no tag exists
+// GetLatestTagVersion finds the highest version from {plugin}/v* tags
+// Returns 0 if no tags exist
 func GetLatestTagVersion(plugin string) (int, error) {
-	tagName := fmt.Sprintf("%s/latest", plugin)
-
-	// Check if tag exists
-	_, err := runGit("rev-parse", "--verify", fmt.Sprintf("refs/tags/%s", tagName))
-	if err != nil {
-		return 0, nil
-	}
-
-	// Find highest version tag for this plugin
 	out, err := runGit("tag", "-l", fmt.Sprintf("%s/v*", plugin))
 	if err != nil {
 		return 0, nil
@@ -81,16 +72,16 @@ func GetLatestTagVersion(plugin string) (int, error) {
 	return highest, nil
 }
 
-// HasCommitsAfterTag checks if there are commits to pluginPath after the latest tag
+// HasCommitsAfterTag checks if there are commits to pluginPath after the latest version tag
 func HasCommitsAfterTag(plugin, pluginPath string) (bool, error) {
-	tagName := fmt.Sprintf("%s/latest", plugin)
-
-	// Check if tag exists
-	_, err := runGit("rev-parse", "--verify", fmt.Sprintf("refs/tags/%s", tagName))
-	if err != nil {
-		// No tag exists, so definitely has changes (first build)
+	// Find highest version tag for this plugin
+	version, err := GetLatestTagVersion(plugin)
+	if err != nil || version == 0 {
+		// No tags exist, so definitely has changes (first build)
 		return true, nil
 	}
+
+	tagName := fmt.Sprintf("%s/v%d", plugin, version)
 
 	// Count commits to plugin path since the tag
 	out, err := runGit("rev-list", "--count", fmt.Sprintf("%s..HEAD", tagName), "--", pluginPath)

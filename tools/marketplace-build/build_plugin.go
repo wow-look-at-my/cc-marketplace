@@ -57,26 +57,14 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Created orphan commit: %s\n", commitSHA)
 
-	// Create version tag
+	// Create and push version tag
 	versionTag := fmt.Sprintf("%s/v%d", pluginName, newVersion)
 	if err := CreateTag(versionTag, commitSHA); err != nil {
 		return fmt.Errorf("failed to create version tag: %w", err)
 	}
 
-	// Create/update latest tag
-	latestTag := fmt.Sprintf("%s/latest", pluginName)
-	if err := CreateTag(latestTag, commitSHA); err != nil {
-		return fmt.Errorf("failed to create latest tag: %w", err)
-	}
-
-	// Push version tag (new)
 	if err := PushTags(versionTag); err != nil {
 		return fmt.Errorf("failed to push version tag: %w", err)
-	}
-
-	// Force push latest tag (updates existing)
-	if err := ForcePushTag(latestTag); err != nil {
-		return fmt.Errorf("failed to push latest tag: %w", err)
 	}
 
 	fmt.Printf("Released %s v%d (tag: %s)\n", pluginName, newVersion, versionTag)
