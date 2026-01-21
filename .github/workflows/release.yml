@@ -17,6 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - run: git fetch --tags
+
       - uses: ./.github/actions/setup-marketplace-build
 
       - run: marketplace-build cleanup-branch ${{ github.event.ref }}
@@ -28,7 +30,6 @@ jobs:
     outputs:
       plugins: ${{ steps.matrix.outputs.plugins }}
       has_changes: ${{ steps.matrix.outputs.has_changes }}
-      needs_marketplace: ${{ steps.matrix.outputs.needs_marketplace }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,7 +73,7 @@ jobs:
 
   update:
     needs: [prepare, build]
-    if: ${{ !cancelled() && !failure() && needs.prepare.outputs.needs_marketplace == 'true' }}
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
