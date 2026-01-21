@@ -88,26 +88,58 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	if err := CreateTag(marketplaceTag, commitSHA); err != nil {
 		return fmt.Errorf("failed to create marketplace tag: %w", err)
 	}
-
-	// Force push marketplace tag (updates existing)
 	if err := ForcePushTag(marketplaceTag); err != nil {
 		return fmt.Errorf("failed to push marketplace tag: %w", err)
 	}
 	fmt.Printf("Updated marketplace tag: %s\n", marketplaceTag)
 
-	// If master branch, also update latest tag
+	// Create/update branch-specific latest tag
+	branchLatestTag := fmt.Sprintf("%s/latest", branch)
+	if err := CreateTag(branchLatestTag, commitSHA); err != nil {
+		return fmt.Errorf("failed to create branch latest tag: %w", err)
+	}
+	if err := ForcePushTag(branchLatestTag); err != nil {
+		return fmt.Errorf("failed to push branch latest tag: %w", err)
+	}
+	fmt.Printf("Updated branch latest tag: %s\n", branchLatestTag)
+
+	// If master branch, also update top-level latest tag
 	if branch == "master" {
-		latestTag := "latest"
-		if err := CreateTag(latestTag, commitSHA); err != nil {
+		if err := CreateTag("latest", commitSHA); err != nil {
 			return fmt.Errorf("failed to create latest tag: %w", err)
 		}
-		if err := ForcePushTag(latestTag); err != nil {
+		if err := ForcePushTag("latest"); err != nil {
 			return fmt.Errorf("failed to push latest tag: %w", err)
 		}
 		fmt.Printf("Updated latest tag\n")
 	}
 
+	// Write step summary if GITHUB_STEP_SUMMARY is set
+	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
+		writeSummary(summaryPath, pluginRefs, owner, repo, branch)
+	}
+
 	return nil
+}
+
+func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch string) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	fmt.Fprintf(f, "## Marketplace Updated\n\n")
+	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)
+	fmt.Fprintf(f, "| Plugin | Version | Tag |\n")
+	fmt.Fprintf(f, "|--------|---------|-----|\n")
+
+	for plugin, tag := range pluginRefs {
+		// Extract version from tag (plugin/vN -> vN)
+		parts := strings.Split(tag, "/")
+		version := parts[len(parts)-1]
+		fmt.Fprintf(f, "| %s | %s | `%s` |\n", plugin, version, tag)
+	}
 }
 
 // getPluginRefs returns a map of plugin name -> latest version tag (global)

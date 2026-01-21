@@ -11,6 +11,7 @@ jobs:
   cleanup:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
@@ -24,6 +25,7 @@ jobs:
   prepare:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       plugins: ${{ steps.matrix.outputs.plugins }}
       has_changes: ${{ steps.matrix.outputs.has_changes }}
@@ -42,6 +44,7 @@ jobs:
     needs: prepare
     if: needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     strategy:
@@ -65,6 +68,7 @@ jobs:
     needs: [prepare, build]
     if: needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
