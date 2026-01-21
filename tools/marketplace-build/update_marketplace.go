@@ -83,25 +83,15 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Created marketplace commit: %s\n", commitSHA)
 
-	// Create/update marketplace tag for this branch
-	marketplaceTag := fmt.Sprintf("%s/marketplace", branch)
-	if err := CreateTag(marketplaceTag, commitSHA); err != nil {
-		return fmt.Errorf("failed to create marketplace tag: %w", err)
-	}
-	if err := ForcePushTag(marketplaceTag); err != nil {
-		return fmt.Errorf("failed to push marketplace tag: %w", err)
-	}
-	fmt.Printf("Updated marketplace tag: %s\n", marketplaceTag)
-
 	// Create/update branch-specific latest tag
 	branchLatestTag := fmt.Sprintf("%s/latest", branch)
 	if err := CreateTag(branchLatestTag, commitSHA); err != nil {
-		return fmt.Errorf("failed to create branch latest tag: %w", err)
+		return fmt.Errorf("failed to create latest tag: %w", err)
 	}
 	if err := ForcePushTag(branchLatestTag); err != nil {
-		return fmt.Errorf("failed to push branch latest tag: %w", err)
+		return fmt.Errorf("failed to push latest tag: %w", err)
 	}
-	fmt.Printf("Updated branch latest tag: %s\n", branchLatestTag)
+	fmt.Printf("Updated tag: %s\n", branchLatestTag)
 
 	// If master branch, also update top-level latest tag
 	if branch == "master" {
@@ -129,8 +119,8 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 	}
 	defer f.Close()
 
-	marketplaceTag := fmt.Sprintf("%s/marketplace", branch)
-	marketplaceURL := fmt.Sprintf("https://github.com/%s/%s/blob/%s/.claude-plugin/marketplace.json", owner, repo, marketplaceTag)
+	latestTag := fmt.Sprintf("%s/latest", branch)
+	marketplaceURL := fmt.Sprintf("https://github.com/%s/%s/blob/%s/.claude-plugin/marketplace.json", owner, repo, latestTag)
 
 	fmt.Fprintf(f, "## Marketplace Updated\n\n")
 	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)

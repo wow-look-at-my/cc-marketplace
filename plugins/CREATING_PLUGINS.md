@@ -213,7 +213,7 @@ Once pushed, CI builds and releases your plugin. Users can install via:
 claude plugin marketplace add owner/repo#latest
 
 # Or specify a branch
-claude plugin marketplace add owner/repo#feature-x/marketplace
+claude plugin marketplace add owner/repo#feature-x/latest
 
 # Install plugins from the marketplace
 claude plugin install your-plugin
