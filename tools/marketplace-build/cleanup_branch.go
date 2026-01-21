@@ -10,33 +10,40 @@ func runCleanupBranch(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 	branchName := args[0]
 
-	// List branch-specific tags (marketplace tags: {branch}/marketplace)
-	prefix := branchName + "/"
-	tags, err := ListTagsWithPrefix(prefix)
+	// With new naming scheme, branch marketplace tag is marketplace/{branch}
+	marketplaceTag := fmt.Sprintf("marketplace/%s", branchName)
+
+	// Check if the tag exists
+	tags, err := ListTagsWithPrefix("marketplace/")
 	if err != nil {
 		return fmt.Errorf("failed to list tags: %w", err)
 	}
 
-	if len(tags) == 0 {
-		fmt.Printf("No tags found for branch: %s\n", branchName)
+	var toDelete []string
+	for _, tag := range tags {
+		if tag == marketplaceTag {
+			toDelete = append(toDelete, tag)
+			break
+		}
+	}
+
+	if len(toDelete) == 0 {
+		fmt.Printf("No marketplace tag found for branch: %s\n", branchName)
 		return nil
 	}
 
-	fmt.Printf("Found %d tags for branch %s:\n", len(tags), branchName)
-	for _, tag := range tags {
-		fmt.Printf("  - %s\n", tag)
+	fmt.Printf("Deleting marketplace tag for branch %s: %s\n", branchName, marketplaceTag)
+
+	// Delete remote tag first
+	if err := DeleteRemoteTags(toDelete...); err != nil {
+		return fmt.Errorf("failed to delete remote tag: %w", err)
 	}
 
-	// Delete remote tags first
-	if err := DeleteRemoteTags(tags...); err != nil {
-		return fmt.Errorf("failed to delete remote tags: %w", err)
+	// Delete local tag
+	if err := DeleteLocalTags(toDelete...); err != nil {
+		return fmt.Errorf("failed to delete local tag: %w", err)
 	}
 
-	// Delete local tags
-	if err := DeleteLocalTags(tags...); err != nil {
-		return fmt.Errorf("failed to delete local tags: %w", err)
-	}
-
-	fmt.Printf("Deleted %d tags for branch: %s\n", len(tags), branchName)
+	fmt.Printf("Deleted marketplace tag: %s\n", marketplaceTag)
 	return nil
 }
