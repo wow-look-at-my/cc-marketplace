@@ -1,0 +1,25 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "enhanced-auto-allow",
+	"description": "Auto-approve readonly git and gh commands using JSON-driven rules",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["git", "github", "auto-allow", "permissions"],
+	"hooks": {
+		"PermissionRequest": [
+			{
+				"matcher": "Bash",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/hook"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}

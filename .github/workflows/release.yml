@@ -11,6 +11,7 @@ jobs:
   cleanup:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
@@ -18,12 +19,12 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Delete branch tags
-        run: marketplace-build cleanup-branch ${{ github.event.ref }}
+      - run: marketplace-build cleanup-branch ${{ github.event.ref }}
 
   prepare:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       plugins: ${{ steps.matrix.outputs.plugins }}
       has_changes: ${{ steps.matrix.outputs.has_changes }}
@@ -32,16 +33,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - run: git fetch --tags
+
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Prepare matrix
-        id: matrix
+      - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
   build:
     needs: prepare
     if: needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     strategy:
@@ -51,17 +54,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - run: git fetch --tags
+
       - uses: ./.github/actions/setup-marketplace-build
 
       - uses: extractions/setup-just@v2
 
-      - name: Build and release plugin
-        run: marketplace-build build-plugin ${{ matrix.plugin }}
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
+
+      - run: marketplace-build build-plugin ${{ matrix.plugin }}
 
   update:
     needs: [prepare, build]
     if: needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
@@ -71,5 +83,4 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Update marketplace
-        run: marketplace-build update-marketplace
+      - run: marketplace-build update-marketplace

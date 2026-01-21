@@ -7,9 +7,10 @@ import (
 )
 
 func runCleanupBranch(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	branchName := args[0]
 
-	// List all tags for this branch
+	// List branch-specific tags (marketplace tags: {branch}/marketplace)
 	prefix := branchName + "/"
 	tags, err := ListTagsWithPrefix(prefix)
 	if err != nil {

@@ -7,11 +7,7 @@ A marketplace of Claude Code plugins.
 ### Add This Marketplace
 
 ```bash
-# From GitHub
-claude plugin marketplace add owner/repo-name
-
-# From local path
-claude plugin marketplace add /path/to/this/repo
+claude plugin marketplace add wow-look-at-my-code/cc-marketplace-template
 ```
 
 ### Install Plugins
