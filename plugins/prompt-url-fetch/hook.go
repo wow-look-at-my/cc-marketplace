@@ -27,84 +27,105 @@ type HookSpecificOutput struct {
 
 const maxChars = 200000 // ~50k tokens
 
+var urlPattern = regexp.MustCompile(`@(https://[^\s]+|git@[^\s]+)`)
+
+// HTTPClient interface for testing
+type HTTPClient interface {
+	Head(url string) (*http.Response, error)
+	Get(url string) (*http.Response, error)
+}
+
 func main() {
-	input, _ := io.ReadAll(os.Stdin)
+	output := processInput(os.Stdin, &http.Client{Timeout: 10 * time.Second})
+	fmt.Print(output)
+}
+
+func processInput(r io.Reader, client HTTPClient) string {
+	input, _ := io.ReadAll(r)
 	var hi HookInput
 	if err := json.Unmarshal(input, &hi); err != nil {
-		fmt.Println("{}")
-		return
+		return "{}\n"
 	}
 
 	if hi.HookEventName != "UserPromptSubmit" || hi.Prompt == "" {
-		fmt.Println("{}")
-		return
+		return "{}\n"
 	}
 
-	// Find all @https://* and @git@* URLs
-	re := regexp.MustCompile(`@(https://[^\s]+|git@[^\s]+)`)
-	matches := re.FindAllStringSubmatch(hi.Prompt, -1)
-	if len(matches) == 0 {
-		fmt.Println("{}")
-		return
+	urls := extractURLs(hi.Prompt)
+	if len(urls) == 0 {
+		return "{}\n"
 	}
 
-	var context strings.Builder
-	totalChars := 0
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	for _, match := range matches {
-		url := match[1]
-		fetchURL := normalizeURL(url)
-
-		var content string
-
-		// Check content type first
-		resp, err := client.Head(fetchURL)
-		if err != nil {
-			content = fmt.Sprintf("[Error: Could not connect to %s]", url)
-		} else {
-			contentType := resp.Header.Get("Content-Type")
-			resp.Body.Close()
-
-			if contentType == "" {
-				content = fmt.Sprintf("[Error: Could not determine content type for %s]", url)
-			} else if !strings.HasPrefix(contentType, "text/") {
-				content = fmt.Sprintf("[Error: %s has non-text MIME type: %s]", url, strings.Split(contentType, ";")[0])
-			} else {
-				// Fetch the content
-				resp, err := client.Get(fetchURL)
-				if err != nil {
-					content = fmt.Sprintf("[Failed to fetch %s]", fetchURL)
-				} else {
-					body, _ := io.ReadAll(resp.Body)
-					resp.Body.Close()
-					content = string(body)
-
-					// Check if adding this would exceed limit
-					if totalChars+len(content) > maxChars {
-						remaining := maxChars - totalChars
-						if remaining > 1000 {
-							content = content[:remaining] + "\n\n... [truncated, exceeded ~50k token limit]"
-						} else {
-							content = "[Skipped: exceeded ~50k token limit]"
-						}
-					}
-					totalChars += len(content)
-				}
-			}
-		}
-
-		context.WriteString(fmt.Sprintf("\n---\n**Fetched from %s:**\n```\n%s\n```\n", url, content))
-	}
+	context := fetchAllURLs(urls, client)
 
 	output := HookOutput{
 		HookSpecificOutput: &HookSpecificOutput{
 			HookEventName:     "UserPromptSubmit",
-			AdditionalContext: context.String(),
+			AdditionalContext: context,
 		},
 	}
-	json.NewEncoder(os.Stdout).Encode(output)
+	result, _ := json.Marshal(output)
+	return string(result) + "\n"
+}
+
+func extractURLs(prompt string) []string {
+	matches := urlPattern.FindAllStringSubmatch(prompt, -1)
+	urls := make([]string, 0, len(matches))
+	for _, match := range matches {
+		urls = append(urls, match[1])
+	}
+	return urls
+}
+
+func fetchAllURLs(urls []string, client HTTPClient) string {
+	var context strings.Builder
+	totalChars := 0
+
+	for _, url := range urls {
+		content := fetchURL(url, client, &totalChars)
+		context.WriteString(fmt.Sprintf("\n---\n**Fetched from %s:**\n```\n%s\n```\n", url, content))
+	}
+
+	return context.String()
+}
+
+func fetchURL(url string, client HTTPClient, totalChars *int) string {
+	fetchURL := normalizeURL(url)
+
+	resp, err := client.Head(fetchURL)
+	if err != nil {
+		return fmt.Sprintf("[Error: Could not connect to %s]", url)
+	}
+	contentType := resp.Header.Get("Content-Type")
+	resp.Body.Close()
+
+	if contentType == "" {
+		return fmt.Sprintf("[Error: Could not determine content type for %s]", url)
+	}
+	if !strings.HasPrefix(contentType, "text/") {
+		return fmt.Sprintf("[Error: %s has non-text MIME type: %s]", url, strings.Split(contentType, ";")[0])
+	}
+
+	resp, err = client.Get(fetchURL)
+	if err != nil {
+		return fmt.Sprintf("[Failed to fetch %s]", fetchURL)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	content := string(body)
+
+	if *totalChars+len(content) > maxChars {
+		remaining := maxChars - *totalChars
+		if remaining > 1000 {
+			content = content[:remaining] + "\n\n... [truncated, exceeded ~50k token limit]"
+		} else {
+			content = "[Skipped: exceeded ~50k token limit]"
+		}
+	}
+	*totalChars += len(content)
+
+	return content
 }
 
 func normalizeURL(url string) string {
