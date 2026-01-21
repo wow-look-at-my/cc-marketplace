@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Branch Protection
+
+The `master` branch is protected. All changes require a pull request.
+
 ## Documentation
 
 @README.md
