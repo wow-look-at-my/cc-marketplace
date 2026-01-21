@@ -1,0 +1,9 @@
+[private]
+help:
+    @just --list
+
+build:
+    go build -o hook .
+
+test:
+    go test -v ./...
