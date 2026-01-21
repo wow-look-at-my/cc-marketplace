@@ -58,6 +58,13 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ hashFiles('plugins/**/go.sum') }}
+
       - run: marketplace-build build-plugin ${{ matrix.plugin }}
 
   update:

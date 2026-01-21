@@ -16,13 +16,6 @@ runs:
         path: /usr/local/bin/marketplace-build
         key: ${{ steps.cache-key.outputs.key }}
 
-    - name: Setup Go
-      if: steps.cache.outputs.cache-hit != 'true'
-      uses: actions/setup-go@v5
-      with:
-        go-version: 'stable'
-        cache-dependency-path: tools/marketplace-build/go.sum
-
     - name: Build CLI
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
