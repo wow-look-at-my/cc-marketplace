@@ -109,71 +109,75 @@ func HasCommitsAfterTag(branch, plugin, pluginPath string) (bool, error) {
 // CreateOrphanCommit creates an orphan commit with the given directory contents
 // Returns the commit SHA
 func CreateOrphanCommit(sourceDir, message string) (string, error) {
-	// Create a temporary index file
-	tmpIndex, err := os.CreateTemp("", "git-index-*")
+	// Create temp dir with a fresh git repo
+	tmpDir, err := os.MkdirTemp("", "orphan-*")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp index: %w", err)
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	tmpIndex.Close()
-	defer os.Remove(tmpIndex.Name())
+	defer os.RemoveAll(tmpDir)
 
-	// Set GIT_INDEX_FILE to use our temporary index
-	env := append(os.Environ(), fmt.Sprintf("GIT_INDEX_FILE=%s", tmpIndex.Name()))
+	// Init repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tmpDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git init failed: %s: %w", out, err)
+	}
 
-	// Add all files from sourceDir to the temporary index
+	// Copy files
 	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
-			return nil
-		}
-
 		relPath, err := filepath.Rel(sourceDir, path)
 		if err != nil {
 			return err
 		}
-
-		// Add file to index
-		cmd := exec.Command("git", "update-index", "--add", "--cacheinfo",
-			fmt.Sprintf("100644,%s,%s", hashFile(path), relPath))
-		cmd.Env = env
-		cmd.Dir = getRepoRoot()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to add %s to index: %s: %w", relPath, out, err)
+		destPath := filepath.Join(tmpDir, relPath)
+		if info.IsDir() {
+			return os.MkdirAll(destPath, 0755)
 		}
-		return nil
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		os.MkdirAll(filepath.Dir(destPath), 0755)
+		return os.WriteFile(destPath, data, info.Mode())
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to add files to index: %w", err)
+		return "", fmt.Errorf("failed to copy files: %w", err)
 	}
 
-	// Write the tree
-	cmd := exec.Command("git", "write-tree")
-	cmd.Env = env
-	cmd.Dir = getRepoRoot()
-	treeOut, err := cmd.Output()
+	// Add and commit
+	cmd = exec.Command("git", "add", "-A")
+	cmd.Dir = tmpDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git add failed: %s: %w", out, err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", message)
+	cmd.Dir = tmpDir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=CI", "GIT_AUTHOR_EMAIL=ci@localhost",
+		"GIT_COMMITTER_NAME=CI", "GIT_COMMITTER_EMAIL=ci@localhost")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git commit failed: %s: %w", out, err)
+	}
+
+	// Get SHA
+	cmd = exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = tmpDir
+	shaOut, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to write tree: %w", err)
+		return "", fmt.Errorf("failed to get SHA: %w", err)
 	}
-	treeSHA := strings.TrimSpace(string(treeOut))
+	sha := strings.TrimSpace(string(shaOut))
 
-	// Create orphan commit (no parent)
-	commitOut, err := runGit("commit-tree", treeSHA, "-m", message)
-	if err != nil {
-		return "", fmt.Errorf("failed to create commit: %w", err)
+	// Fetch into main repo
+	if _, err := runGit("fetch", tmpDir, sha); err != nil {
+		return "", fmt.Errorf("failed to fetch commit: %w", err)
 	}
 
-	return strings.TrimSpace(commitOut), nil
-}
-
-// hashFile returns the git blob hash of a file
-func hashFile(path string) string {
-	out, err := runGit("hash-object", "-w", path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(out)
+	return sha, nil
 }
 
 // CreateTag creates a git tag pointing to a commit
