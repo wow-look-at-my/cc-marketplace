@@ -11,6 +11,7 @@ import (
 )
 
 func runBuildPlugin(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	pluginName := args[0]
 
 	branch, err := GetCurrentBranch()

@@ -21,6 +21,7 @@ runs:
       uses: actions/setup-go@v5
       with:
         go-version: 'stable'
+        cache-dependency-path: tools/marketplace-build/go.sum
 
     - name: Build CLI
       if: steps.cache.outputs.cache-hit != 'true'

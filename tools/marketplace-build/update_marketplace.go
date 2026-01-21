@@ -11,6 +11,7 @@ import (
 )
 
 func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	branch, err := GetCurrentBranch()
 	if err != nil {
 		return err
@@ -88,7 +89,11 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create marketplace tag: %w", err)
 	}
 
-	tagsToP := []string{marketplaceTag}
+	// Force push marketplace tag (updates existing)
+	if err := ForcePushTag(marketplaceTag); err != nil {
+		return fmt.Errorf("failed to push marketplace tag: %w", err)
+	}
+	fmt.Printf("Updated marketplace tag: %s\n", marketplaceTag)
 
 	// If master branch, also update latest tag
 	if branch == "master" {
@@ -96,16 +101,9 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		if err := CreateTag(latestTag, commitSHA); err != nil {
 			return fmt.Errorf("failed to create latest tag: %w", err)
 		}
-		tagsToP = append(tagsToP, latestTag)
-	}
-
-	// Push tags
-	if err := PushTags(tagsToP...); err != nil {
-		return fmt.Errorf("failed to push tags: %w", err)
-	}
-
-	fmt.Printf("Updated marketplace tag: %s\n", marketplaceTag)
-	if branch == "master" {
+		if err := ForcePushTag(latestTag); err != nil {
+			return fmt.Errorf("failed to push latest tag: %w", err)
+		}
 		fmt.Printf("Updated latest tag\n")
 	}
 

@@ -10,6 +10,7 @@ import (
 )
 
 func runPrepareMatrix(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	branch, err := GetCurrentBranch()
 	if err != nil {
 		return err
