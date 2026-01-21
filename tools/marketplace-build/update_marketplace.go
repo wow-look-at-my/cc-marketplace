@@ -58,7 +58,7 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	if !ok {
 		metadata = make(map[string]interface{})
 	}
-	metadata["version"] = newVersion
+	metadata["version"] = fmt.Sprintf("%d", newVersion) // Must be string per schema
 	marketplace["metadata"] = metadata
 
 	// Cook marketplace.json (remove $schema, mh.*)
