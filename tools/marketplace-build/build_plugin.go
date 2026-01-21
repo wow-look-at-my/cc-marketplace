@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -36,6 +37,22 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("build failed: %w", err)
 	}
 
+	// Get source commit SHA for change detection
+	sourceCommit, err := GetHeadSHA()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD SHA: %w", err)
+	}
+
+	// Get repo info for GitHub URL
+	owner, repo, err := GetRepoInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get repo info: %w", err)
+	}
+
+	versionTag := fmt.Sprintf("%s/v%d", pluginName, newVersion)
+	distURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s", owner, repo, versionTag)
+	srcURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s/plugins/%s", owner, repo, sourceCommit, pluginName)
+
 	// Create temp directory for cooked plugin contents
 	tmpDir, err := os.MkdirTemp("", "plugin-build-*")
 	if err != nil {
@@ -44,7 +61,12 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	defer os.RemoveAll(tmpDir)
 
 	// Copy and cook plugin contents to temp directory
-	if err := cookPluginContents(pluginPath, tmpDir, newVersion); err != nil {
+	meta := buildMetadata{
+		SourceCommit: sourceCommit,
+		SourceURL:    srcURL,
+		DistURL:      distURL,
+	}
+	if err := cookPluginContents(pluginPath, tmpDir, newVersion, meta); err != nil {
 		return fmt.Errorf("failed to cook plugin contents: %w", err)
 	}
 
@@ -58,7 +80,6 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Created orphan commit: %s\n", commitSHA)
 
 	// Create and push version tag
-	versionTag := fmt.Sprintf("%s/v%d", pluginName, newVersion)
 	if err := CreateTag(versionTag, commitSHA); err != nil {
 		return fmt.Errorf("failed to create version tag: %w", err)
 	}
@@ -87,7 +108,20 @@ func runJustBuild(pluginPath string) error {
 	return cmd.Run()
 }
 
-func cookPluginContents(srcDir, dstDir string, version int) error {
+type buildMetadata struct {
+	SourceCommit string `json:"sourceCommit"`
+	SourceURL    string `json:"sourceUrl"`
+	DistURL      string `json:"distUrl"`
+	BuiltAt      string `json:"builtAt"`
+}
+
+func cookPluginContents(srcDir, dstDir string, version int, meta buildMetadata) error {
+	meta.BuiltAt = time.Now().UTC().Format(time.RFC3339)
+	metadataJSON, _ := json.MarshalIndent(meta, "", "  ")
+	if err := os.WriteFile(filepath.Join(dstDir, "mh.plugin.json"), metadataJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write mh.plugin.json: %w", err)
+	}
+
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err

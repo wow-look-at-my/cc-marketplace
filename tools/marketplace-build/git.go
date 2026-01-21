@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,15 @@ func GetCurrentBranch() (string, error) {
 	out, err := runGit("rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// GetHeadSHA returns the SHA of HEAD
+func GetHeadSHA() (string, error) {
+	out, err := runGit("rev-parse", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("failed to get HEAD SHA: %w", err)
 	}
 	return strings.TrimSpace(out), nil
 }
@@ -83,8 +93,23 @@ func HasCommitsAfterTag(plugin, pluginPath string) (bool, error) {
 
 	tagName := fmt.Sprintf("%s/v%d", plugin, version)
 
-	// Count commits to plugin path since the tag
-	out, err := runGit("rev-list", "--count", fmt.Sprintf("%s..HEAD", tagName), "--", pluginPath)
+	// Read mh.plugin.json from the tag to get source commit
+	out, err := runGit("show", fmt.Sprintf("%s:mh.plugin.json", tagName))
+	if err != nil {
+		// Can't read metadata, assume we need to build
+		return true, nil
+	}
+
+	var metadata struct {
+		SourceCommit string `json:"sourceCommit"`
+	}
+	if err := json.Unmarshal([]byte(out), &metadata); err != nil || metadata.SourceCommit == "" {
+		// Invalid metadata, assume we need to build
+		return true, nil
+	}
+
+	// Count commits to plugin path since the source commit
+	out, err = runGit("rev-list", "--count", fmt.Sprintf("%s..HEAD", metadata.SourceCommit), "--", pluginPath)
 	if err != nil {
 		// If this fails, assume we need to build
 		return true, nil
