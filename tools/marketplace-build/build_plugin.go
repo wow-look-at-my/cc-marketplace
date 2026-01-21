@@ -49,7 +49,7 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get repo info: %w", err)
 	}
 
-	versionTag := fmt.Sprintf("%s/v%d", pluginName, newVersion)
+	versionTag := fmt.Sprintf("plugin/%s/v%d", pluginName, newVersion)
 	distURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s", owner, repo, versionTag)
 	srcURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s/plugins/%s", owner, repo, sourceCommit, pluginName)
 

@@ -12,6 +12,12 @@ import (
 
 func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+
+	// Clean up stale branch tags first
+	if err := cleanupStaleBranchTags(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup stale tags: %v\n", err)
+	}
+
 	branch, err := GetCurrentBranch()
 	if err != nil {
 		return err
@@ -83,15 +89,15 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Created marketplace commit: %s\n", commitSHA)
 
-	// Create/update branch-specific latest tag
-	branchLatestTag := fmt.Sprintf("%s/latest", branch)
-	if err := CreateTag(branchLatestTag, commitSHA); err != nil {
-		return fmt.Errorf("failed to create latest tag: %w", err)
+	// Create/update branch marketplace tag
+	marketplaceTag := fmt.Sprintf("marketplace/%s", branch)
+	if err := CreateTag(marketplaceTag, commitSHA); err != nil {
+		return fmt.Errorf("failed to create marketplace tag: %w", err)
 	}
-	if err := ForcePushTag(branchLatestTag); err != nil {
-		return fmt.Errorf("failed to push latest tag: %w", err)
+	if err := ForcePushTag(marketplaceTag); err != nil {
+		return fmt.Errorf("failed to push marketplace tag: %w", err)
 	}
-	fmt.Printf("Updated tag: %s\n", branchLatestTag)
+	fmt.Printf("Updated tag: %s\n", marketplaceTag)
 
 	// If master branch, also update top-level latest tag
 	if branch == "master" {
@@ -119,8 +125,8 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 	}
 	defer f.Close()
 
-	latestTag := fmt.Sprintf("%s/latest", branch)
-	marketplaceURL := fmt.Sprintf("https://github.com/%s/%s/blob/%s/.claude-plugin/marketplace.json", owner, repo, latestTag)
+	marketplaceTag := fmt.Sprintf("marketplace/%s", branch)
+	marketplaceURL := fmt.Sprintf("https://github.com/%s/%s/blob/%s/.claude-plugin/marketplace.json", owner, repo, marketplaceTag)
 
 	fmt.Fprintf(f, "## Marketplace Updated\n\n")
 	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)
@@ -141,8 +147,8 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 func getPluginRefs(owner, repo string) (map[string]string, error) {
 	refs := make(map[string]string)
 
-	// List all plugin tags (format: plugin-name/vN)
-	tags, err := ListTagsWithPrefix("")
+	// List all plugin tags (format: plugin/{plugin-name}/vN)
+	tags, err := ListTagsWithPrefix("plugin/")
 	if err != nil {
 		return nil, err
 	}
@@ -151,23 +157,14 @@ func getPluginRefs(owner, repo string) (map[string]string, error) {
 	pluginVersions := make(map[string]int) // plugin -> highest version
 
 	for _, tag := range tags {
-		// Skip marketplace, latest, and branch-prefixed tags (legacy)
-		if strings.HasSuffix(tag, "/marketplace") || strings.HasSuffix(tag, "/latest") || tag == "latest" {
-			continue
-		}
-		// Skip tags with more than 2 parts (branch/plugin/version format is legacy)
-		if strings.Count(tag, "/") > 1 {
-			continue
-		}
-
-		// Parse tag: plugin-name/vN
+		// Parse tag: plugin/{plugin-name}/vN
 		parts := strings.Split(tag, "/")
-		if len(parts) != 2 {
+		if len(parts) != 3 || parts[0] != "plugin" {
 			continue
 		}
 
-		pluginName := parts[0]
-		vStr := strings.TrimPrefix(parts[1], "v")
+		pluginName := parts[1]
+		vStr := strings.TrimPrefix(parts[2], "v")
 		var v int
 		fmt.Sscanf(vStr, "%d", &v)
 
@@ -343,5 +340,54 @@ func readMCPFromTag(tag string) map[string]interface{} {
 			return serversMap
 		}
 	}
+	return nil
+}
+
+// cleanupStaleBranchTags removes marketplace/{branch} tags for branches that no longer exist
+func cleanupStaleBranchTags() error {
+	// List all marketplace tags
+	tags, err := ListTagsWithPrefix("marketplace/")
+	if err != nil {
+		return err
+	}
+
+	var stale []string
+	for _, tag := range tags {
+		// Extract branch name from marketplace/{branch}
+		parts := strings.Split(tag, "/")
+		if len(parts) != 2 || parts[0] != "marketplace" {
+			continue
+		}
+		branch := parts[1]
+
+		// Check if branch exists on remote
+		exists, err := RemoteBranchExists(branch)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to check branch %s: %v\n", branch, err)
+			continue
+		}
+
+		if !exists {
+			stale = append(stale, tag)
+		}
+	}
+
+	if len(stale) == 0 {
+		return nil
+	}
+
+	fmt.Printf("Cleaning up %d stale marketplace tags:\n", len(stale))
+	for _, tag := range stale {
+		fmt.Printf("  - %s\n", tag)
+	}
+
+	// Delete remote tags
+	if err := DeleteRemoteTags(stale...); err != nil {
+		return fmt.Errorf("failed to delete remote tags: %w", err)
+	}
+
+	// Delete local tags
+	_ = DeleteLocalTags(stale...)
+
 	return nil
 }
