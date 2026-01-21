@@ -16,6 +16,15 @@ runs:
         path: /usr/local/bin/marketplace-build
         key: ${{ steps.cache-key.outputs.key }}
 
+    - name: Restore Go cache
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: go-marketplace-build-${{ hashFiles('tools/marketplace-build/go.sum') }}
+
     - name: Build CLI
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
