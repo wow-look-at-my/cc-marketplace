@@ -51,6 +51,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fetch tags
+        run: git fetch --tags
+
       - uses: ./.github/actions/setup-marketplace-build
 
       - uses: extractions/setup-just@v2

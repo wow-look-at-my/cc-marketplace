@@ -73,9 +73,14 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create latest tag: %w", err)
 	}
 
-	// Push tags
-	if err := PushTags(versionTag, latestTag); err != nil {
-		return fmt.Errorf("failed to push tags: %w", err)
+	// Push version tag (new)
+	if err := PushTags(versionTag); err != nil {
+		return fmt.Errorf("failed to push version tag: %w", err)
+	}
+
+	// Force push latest tag (updates existing)
+	if err := ForcePushTag(latestTag); err != nil {
+		return fmt.Errorf("failed to push latest tag: %w", err)
 	}
 
 	fmt.Printf("Released %s v%d (tag: %s)\n", pluginName, newVersion, versionTag)

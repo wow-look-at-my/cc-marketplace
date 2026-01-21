@@ -188,24 +188,20 @@ func CreateTag(tagName, commitSHA string) error {
 
 // PushTags pushes tags to origin
 func PushTags(tags ...string) error {
-	if dryRun {
-		fmt.Printf("[dry-run] Would push tags: %v\n", tags)
-		return nil
-	}
-
 	args := []string{"push", "origin"}
 	args = append(args, tags...)
 	_, err := runGit(args...)
 	return err
 }
 
+// ForcePushTag force-pushes a single tag (for updating latest)
+func ForcePushTag(tag string) error {
+	_, err := runGit("push", "--force", "origin", tag)
+	return err
+}
+
 // DeleteRemoteTags deletes tags from origin
 func DeleteRemoteTags(tags ...string) error {
-	if dryRun {
-		fmt.Printf("[dry-run] Would delete remote tags: %v\n", tags)
-		return nil
-	}
-
 	for _, tag := range tags {
 		if _, err := runGit("push", "origin", ":refs/tags/"+tag); err != nil {
 			return fmt.Errorf("failed to delete tag %s: %w", tag, err)
@@ -216,11 +212,6 @@ func DeleteRemoteTags(tags ...string) error {
 
 // DeleteLocalTags deletes local tags
 func DeleteLocalTags(tags ...string) error {
-	if dryRun {
-		fmt.Printf("[dry-run] Would delete local tags: %v\n", tags)
-		return nil
-	}
-
 	for _, tag := range tags {
 		_ = runGitNoOutput("tag", "-d", tag)
 	}
@@ -260,6 +251,11 @@ func getRepoRoot() string {
 
 // runGit runs a git command and returns stdout
 func runGit(args ...string) (string, error) {
+	if dryRun && len(args) > 0 && args[0] == "push" {
+		fmt.Printf("[dry-run] git %v\n", args)
+		return "", nil
+	}
+
 	cmd := exec.Command("git", args...)
 	cmd.Dir = getRepoRoot()
 	out, err := cmd.Output()
