@@ -67,14 +67,27 @@ func runPrepareMatrix(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check if branch latest tag exists
+	branch, err := GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	latestTag := fmt.Sprintf("%s/latest", branch)
+	tags, _ := ListTagsWithPrefix(latestTag)
+	hasLatestTag := len(tags) > 0
+
 	// Output in GITHUB_OUTPUT format
 	pluginsJSON, err := json.Marshal(changedPlugins)
 	if err != nil {
 		return fmt.Errorf("failed to marshal plugins: %w", err)
 	}
 
+	hasChanges := len(changedPlugins) > 0
+	needsMarketplace := hasChanges || !hasLatestTag
+
 	fmt.Printf("plugins=%s\n", pluginsJSON)
-	fmt.Printf("has_changes=%t\n", len(changedPlugins) > 0)
+	fmt.Printf("has_changes=%t\n", hasChanges)
+	fmt.Printf("needs_marketplace=%t\n", needsMarketplace)
 
 	return nil
 }
