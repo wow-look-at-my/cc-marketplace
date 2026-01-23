@@ -228,6 +228,9 @@ func buildPluginsArray(pluginRefs map[string]string, existingMarketplace map[str
 			if license, ok := pluginJSON["license"].(string); ok && license != "" {
 				plugin["license"] = license
 			}
+			if version, ok := pluginJSON["version"].(string); ok && version != "" {
+				plugin["version"] = version
+			}
 			// Copy any inline component configs from plugin.json
 			if mcpServers, ok := pluginJSON["mcpServers"]; ok {
 				plugin["mcpServers"] = mcpServers
