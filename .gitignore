@@ -3,7 +3,9 @@
 
 # Build outputs
 bin/
-plugins/*/hook
+plugins/*/bin/
+plugins/*/run
+.go-binary
 
 # Node
 node_modules/

@@ -62,7 +62,17 @@ func main() {
 		os.Exit(0)
 	}
 
-	if hi.HookEventName != "PermissionRequest" || hi.ToolName != "Bash" {
+	if hi.HookEventName != "PermissionRequest" {
+		os.Exit(0)
+	}
+
+	// Allow all Read operations
+	if hi.ToolName == "Read" {
+		outputDecision("allow", "")
+		return
+	}
+
+	if hi.ToolName != "Bash" {
 		os.Exit(0)
 	}
 

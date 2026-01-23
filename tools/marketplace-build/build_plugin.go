@@ -11,6 +11,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// BuildStep represents a single build step from mh.build
+type BuildStep struct {
+	Type    string   `json:"type"`
+	Name    string   `json:"name,omitempty"`
+	Source  string   `json:"source,omitempty"`
+	Command string   `json:"command,omitempty"`
+	Depends []string `json:"depends,omitempty"`
+}
+
+// PluginJSON represents the plugin.json structure we care about
+type PluginJSON struct {
+	MH struct {
+		Build map[string]BuildStep `json:"build,omitempty"`
+	} `json:"mh,omitempty"`
+}
+
 func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 	pluginName := args[0]
@@ -32,9 +48,9 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Building %s: v%d -> v%d\n", pluginName, currentVersion, newVersion)
 
-	// Run just test in plugin directory (builds and tests)
-	if err := runJustTest(pluginPath); err != nil {
-		return fmt.Errorf("test failed: %w", err)
+	// Run build steps
+	if err := runBuildSteps(pluginPath); err != nil {
+		return fmt.Errorf("build failed: %w", err)
 	}
 
 	// Get source commit SHA for change detection
@@ -92,17 +108,197 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runJustTest(pluginPath string) error {
-	justfilePath := filepath.Join(pluginPath, "justfile")
-	if _, err := os.Stat(justfilePath); os.IsNotExist(err) {
-		return fmt.Errorf("no justfile found in %s", pluginPath)
+func runBuildSteps(pluginPath string) error {
+	// Read plugin.json
+	pluginJSONPath := filepath.Join(pluginPath, ".claude-plugin", "plugin.json")
+	data, err := os.ReadFile(pluginJSONPath)
+	if err != nil {
+		return fmt.Errorf("failed to read plugin.json: %w", err)
 	}
 
-	cmd := exec.Command("just", "test")
+	var pj PluginJSON
+	if err := json.Unmarshal(data, &pj); err != nil {
+		return fmt.Errorf("failed to parse plugin.json: %w", err)
+	}
+
+	// If no mh.build, nothing to build
+	if len(pj.MH.Build) == 0 {
+		fmt.Printf("  (no build steps)\n")
+		return nil
+	}
+
+	// Topologically sort build steps
+	order, err := topoSort(pj.MH.Build)
+	if err != nil {
+		return fmt.Errorf("failed to resolve build order: %w", err)
+	}
+
+	// Execute each step
+	for _, stepID := range order {
+		step := pj.MH.Build[stepID]
+		fmt.Printf("  [%s] %s\n", stepID, step.Type)
+		if err := executeStep(pluginPath, stepID, step); err != nil {
+			return fmt.Errorf("step %q failed: %w", stepID, err)
+		}
+	}
+
+	return nil
+}
+
+func topoSort(steps map[string]BuildStep) ([]string, error) {
+	// Build adjacency and in-degree
+	inDegree := make(map[string]int)
+	for id := range steps {
+		inDegree[id] = 0
+	}
+	for _, step := range steps {
+		for _, dep := range step.Depends {
+			if _, ok := steps[dep]; !ok {
+				return nil, fmt.Errorf("unknown dependency: %s", dep)
+			}
+		}
+	}
+	for id, step := range steps {
+		for _, dep := range step.Depends {
+			_ = dep // dep must come before id
+		}
+		inDegree[id] = len(step.Depends)
+	}
+
+	// Kahn's algorithm
+	var queue []string
+	for id, deg := range inDegree {
+		if deg == 0 {
+			queue = append(queue, id)
+		}
+	}
+
+	var result []string
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+		result = append(result, curr)
+
+		// Find steps that depend on curr
+		for id, step := range steps {
+			for _, dep := range step.Depends {
+				if dep == curr {
+					inDegree[id]--
+					if inDegree[id] == 0 {
+						queue = append(queue, id)
+					}
+				}
+			}
+		}
+	}
+
+	if len(result) != len(steps) {
+		return nil, fmt.Errorf("circular dependency detected")
+	}
+
+	return result, nil
+}
+
+func executeStep(pluginPath, stepID string, step BuildStep) error {
+	switch step.Type {
+	case "go_plugin":
+		return executeGoPlugin(pluginPath, stepID, step)
+	case "go_test":
+		return executeGoTest(pluginPath, step)
+	case "exec":
+		return executeExec(pluginPath, step)
+	default:
+		return fmt.Errorf("unknown build step type: %s", step.Type)
+	}
+}
+
+func executeGoPlugin(pluginPath, stepID string, step BuildStep) error {
+	// Determine binary name (use step.Name or stepID)
+	name := step.Name
+	if name == "" {
+		name = stepID
+	}
+
+	// Determine source directory
+	srcDir := pluginPath
+	if step.Source != "" {
+		srcDir = filepath.Join(pluginPath, step.Source)
+	}
+
+	// Create bin directory
+	binDir := filepath.Join(pluginPath, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("failed to create bin dir: %w", err)
+	}
+
+	// Run go mod tidy
+	tidyCmd := exec.Command("go", "mod", "tidy")
+	tidyCmd.Dir = srcDir
+	tidyCmd.Stdout = os.Stdout
+	tidyCmd.Stderr = os.Stderr
+	if err := tidyCmd.Run(); err != nil {
+		return fmt.Errorf("go mod tidy failed: %w", err)
+	}
+
+	// Build for linux-amd64
+	linuxBin := filepath.Join(binDir, fmt.Sprintf("%s-linux-amd64", name))
+	linuxCmd := exec.Command("go", "build", "-o", linuxBin, ".")
+	linuxCmd.Dir = srcDir
+	linuxCmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=0")
+	linuxCmd.Stdout = os.Stdout
+	linuxCmd.Stderr = os.Stderr
+	if err := linuxCmd.Run(); err != nil {
+		return fmt.Errorf("linux build failed: %w", err)
+	}
+
+	// Build for darwin-arm64
+	darwinBin := filepath.Join(binDir, fmt.Sprintf("%s-darwin-arm64", name))
+	darwinCmd := exec.Command("go", "build", "-o", darwinBin, ".")
+	darwinCmd.Dir = srcDir
+	darwinCmd.Env = append(os.Environ(), "GOOS=darwin", "GOARCH=arm64", "CGO_ENABLED=0")
+	darwinCmd.Stdout = os.Stdout
+	darwinCmd.Stderr = os.Stderr
+	if err := darwinCmd.Run(); err != nil {
+		return fmt.Errorf("darwin build failed: %w", err)
+	}
+
+	// Write .go-binary marker
+	markerPath := filepath.Join(pluginPath, ".go-binary")
+	if err := os.WriteFile(markerPath, []byte(name+"\n"), 0644); err != nil {
+		return fmt.Errorf("failed to write .go-binary: %w", err)
+	}
+
+	// Write run script
+	runScript := fmt.Sprintf(runGoPluginScriptTemplate, name)
+	if err := os.WriteFile(filepath.Join(pluginPath, "run"), []byte(runScript), 0755); err != nil {
+		return fmt.Errorf("failed to write run script: %w", err)
+	}
+
+	return nil
+}
+
+func executeGoTest(pluginPath string, step BuildStep) error {
+	srcDir := pluginPath
+	if step.Source != "" {
+		srcDir = filepath.Join(pluginPath, step.Source)
+	}
+
+	cmd := exec.Command("go", "test", "-v", "./...")
+	cmd.Dir = srcDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func executeExec(pluginPath string, step BuildStep) error {
+	if step.Command == "" {
+		return fmt.Errorf("exec step requires command")
+	}
+
+	cmd := exec.Command("sh", "-c", step.Command)
 	cmd.Dir = pluginPath
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
 	return cmd.Run()
 }
 
@@ -112,6 +308,17 @@ type buildMetadata struct {
 	DistURL      string `json:"distUrl"`
 	BuiltAt      string `json:"builtAt"`
 }
+
+const runGoPluginScriptTemplate = `#!/usr/bin/env bash
+set -euo pipefail
+OS=$(uname -s | tr 'A-Z' 'a-z')
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64) ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
+esac
+exec "$(dirname "$0")/bin/%s-${OS}-${ARCH}" "$@"
+`
 
 func cookPluginContents(srcDir, dstDir string, version int, meta buildMetadata) error {
 	meta.BuiltAt = time.Now().UTC().Format(time.RFC3339)

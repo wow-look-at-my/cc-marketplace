@@ -194,6 +194,29 @@ func TestUnknownCommandPassthrough(t *testing.T) {
 	}
 }
 
+func TestReadAllowed(t *testing.T) {
+	input := `{"hook_event_name":"PermissionRequest","tool_name":"Read","tool_input":{"file_path":"/any/path/file.txt"}}`
+	output := captureOutput(func() {
+		old := os.Stdin
+		r, w, _ := os.Pipe()
+		os.Stdin = r
+		go func() {
+			w.Write([]byte(input))
+			w.Close()
+		}()
+		main()
+		os.Stdin = old
+	})
+
+	var resp PermissionResponse
+	if err := json.Unmarshal([]byte(output), &resp); err != nil {
+		t.Fatalf("Failed to parse output: %v\nOutput was: %s", err, output)
+	}
+	if resp.HookSpecificOutput.Decision.Behavior != "allow" {
+		t.Errorf("Expected allow for Read, got %q", resp.HookSpecificOutput.Decision.Behavior)
+	}
+}
+
 func getRepoRoot(t *testing.T) string {
 	t.Helper()
 	repoRoot := os.Getenv("REPO_ROOT")

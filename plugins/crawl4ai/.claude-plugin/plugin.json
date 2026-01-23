@@ -1,6 +1,5 @@
 {
   "name": "crawl4ai",
-  "version": "1.0.0",
   "description": "MCP server for crawling web pages using crawl4ai and returning content as markdown",
   "author": {
     "name": "wow-look-at-my-code"
@@ -8,6 +7,10 @@
   "keywords": ["web-crawling", "scraping", "markdown", "mcp"],
   "mcpServers": "./.mcp.json",
   "mh": {
-    "include_in_marketplace": true
+    "include_in_marketplace": true,
+    "build": {
+      "crawl4ai-mcp": { "type": "go_plugin" },
+      "test": { "type": "go_test", "depends": ["crawl4ai-mcp"] }
+    }
   }
 }
