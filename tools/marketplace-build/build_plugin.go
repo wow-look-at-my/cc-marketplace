@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -98,8 +99,24 @@ func runJustTest(pluginPath string) error {
 		return fmt.Errorf("no justfile found in %s", pluginPath)
 	}
 
+	// Write build script to temp file
+	tmpFile, err := os.CreateTemp("", "build-go-plugin-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(buildGoPluginScript); err != nil {
+		return fmt.Errorf("failed to write build script: %w", err)
+	}
+	if err := tmpFile.Chmod(0755); err != nil {
+		return fmt.Errorf("failed to chmod build script: %w", err)
+	}
+	tmpFile.Close()
+
 	cmd := exec.Command("just", "test")
 	cmd.Dir = pluginPath
+	cmd.Env = append(os.Environ(), "BUILD_GO_PLUGIN="+tmpFile.Name())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -113,11 +130,41 @@ type buildMetadata struct {
 	BuiltAt      string `json:"builtAt"`
 }
 
+const runGoPluginScriptTemplate = `#!/usr/bin/env bash
+set -euo pipefail
+OS=$(uname -s | tr 'A-Z' 'a-z')
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64) ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
+esac
+exec "$(dirname "$0")/bin/%s-${OS}-${ARCH}" "$@"
+`
+
+const buildGoPluginScript = `#!/usr/bin/env bash
+set -euo pipefail
+NAME="$1"
+mkdir -p bin
+go mod tidy >&2
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "bin/${NAME}-linux-amd64" . >&2
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o "bin/${NAME}-darwin-arm64" . >&2
+echo "$NAME" > .go-binary
+`
+
 func cookPluginContents(srcDir, dstDir string, version int, meta buildMetadata) error {
 	meta.BuiltAt = time.Now().UTC().Format(time.RFC3339)
 	metadataJSON, _ := json.MarshalIndent(meta, "", "  ")
 	if err := os.WriteFile(filepath.Join(dstDir, "mh.plugin.json"), metadataJSON, 0644); err != nil {
 		return fmt.Errorf("failed to write mh.plugin.json: %w", err)
+	}
+
+	// If .go-binary marker exists, write a run script
+	if data, err := os.ReadFile(filepath.Join(srcDir, ".go-binary")); err == nil {
+		binaryName := strings.TrimSpace(string(data))
+		script := fmt.Sprintf(runGoPluginScriptTemplate, binaryName)
+		if err := os.WriteFile(filepath.Join(dstDir, "run"), []byte(script), 0755); err != nil {
+			return fmt.Errorf("failed to write run script: %w", err)
+		}
 	}
 
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
