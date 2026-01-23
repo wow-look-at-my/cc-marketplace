@@ -304,8 +304,8 @@ func getRepoRoot() string {
 
 // runGit runs a git command and returns stdout
 func runGit(args ...string) (string, error) {
-	if dryRun && len(args) > 0 && args[0] == "push" {
-		fmt.Printf("[dry-run] git %v\n", args)
+	if os.Getenv("CI") == "" && len(args) > 0 && args[0] == "push" {
+		fmt.Printf("[local] skipping: git %v\n", args)
 		return "", nil
 	}
 

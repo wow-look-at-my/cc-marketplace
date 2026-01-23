@@ -7,8 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var dryRun bool
-
 var rootCmd = &cobra.Command{
 	Use:   "marketplace-build",
 	Short: "CI automation for Claude Code plugin marketplaces",
@@ -41,8 +39,6 @@ var cleanupBranchCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "Skip remote mutations (no push/delete)")
-
 	rootCmd.AddCommand(prepareMatrixCmd)
 	rootCmd.AddCommand(buildPluginCmd)
 	rootCmd.AddCommand(updateMarketplaceCmd)

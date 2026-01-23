@@ -4,7 +4,7 @@
 # Build outputs
 bin/
 plugins/*/bin/
-plugins/*/hook
+plugins/*/run
 .go-binary
 
 # Node

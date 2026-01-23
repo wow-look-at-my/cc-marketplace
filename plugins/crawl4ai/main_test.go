@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
-	"os"
 	"os/exec"
 	"testing"
 )
@@ -51,12 +50,7 @@ type toolsListResult struct {
 func startServer(t *testing.T) (*exec.Cmd, io.WriteCloser, *bufio.Reader) {
 	t.Helper()
 
-	exe := "./crawl4ai-mcp"
-	if _, err := os.Stat(exe); err != nil {
-		t.Skip("crawl4ai-mcp not built")
-	}
-
-	cmd := exec.Command(exe)
+	cmd := exec.Command("./run")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("failed to get stdin: %v", err)

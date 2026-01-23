@@ -13,7 +13,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/hook"
+						"command": "${CLAUDE_PLUGIN_ROOT}/run"
 					}
 				]
 			},
@@ -22,13 +22,17 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/hook"
+						"command": "${CLAUDE_PLUGIN_ROOT}/run"
 					}
 				]
 			}
 		]
 	},
 	"mh": {
-		"include_in_marketplace": true
+		"include_in_marketplace": true,
+		"build": {
+			"hook": { "type": "go_plugin", "source": "./cmd" },
+			"test": { "type": "go_test", "source": "./cmd", "depends": ["hook"] }
+		}
 	}
 }
