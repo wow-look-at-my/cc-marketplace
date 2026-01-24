@@ -62,7 +62,7 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - uses: wow-look-at-my-code/actions@smart-cache#1
+      - uses: wow-look-at-my-code/actions@smart-cache
         with:
           path: ~/go/pkg/mod ~/.cache/go-build
           key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
@@ -77,7 +77,7 @@ jobs:
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
-      - uses: wow-look-at-my-code/actions@orphan-tag#1
+      - uses: wow-look-at-my-code/actions@orphan-tag
         with:
           source: ${{ steps.release.outputs.source_dir }}
           tags: ${{ steps.release.outputs.tag }}
@@ -103,7 +103,7 @@ jobs:
         id: marketplace
         run: marketplace-build update-marketplace >> $GITHUB_OUTPUT
 
-      - uses: wow-look-at-my-code/actions@orphan-tag#1
+      - uses: wow-look-at-my-code/actions@orphan-tag
         with:
           source: ${{ steps.marketplace.outputs.source_dir }}
           tags: ${{ steps.marketplace.outputs.tag }} ${{ steps.marketplace.outputs.latest_tag }}
