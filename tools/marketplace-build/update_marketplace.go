@@ -410,9 +410,9 @@ func cleanupStaleBranchTags() error {
 		return nil
 	}
 
-	fmt.Printf("Cleaning up %d stale marketplace tags:\n", len(stale))
+	fmt.Fprintf(os.Stderr, "Cleaning up %d stale marketplace tags:\n", len(stale))
 	for _, tag := range stale {
-		fmt.Printf("  - %s\n", tag)
+		fmt.Fprintf(os.Stderr, "  - %s\n", tag)
 	}
 
 	// Delete remote tags
