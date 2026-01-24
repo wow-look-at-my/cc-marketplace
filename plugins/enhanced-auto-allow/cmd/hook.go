@@ -66,8 +66,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Allow all Read operations
-	if hi.ToolName == "Read" {
+	// Allow all read-only tools
+	if hi.ToolName == "Read" || hi.ToolName == "Glob" || hi.ToolName == "Grep" {
 		outputDecision("allow", "")
 		return
 	}
