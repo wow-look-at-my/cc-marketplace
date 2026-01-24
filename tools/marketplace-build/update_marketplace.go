@@ -83,19 +83,17 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write marketplace.json: %w", err)
 	}
 
-	var marketplaceName string
+	var name string
 	if branch == "master" || branch == "main" {
-		marketplaceName = "marketplace"
+		name = "marketplace"
 	} else {
-		marketplaceName = fmt.Sprintf("marketplace/%s", branch)
+		name = fmt.Sprintf("marketplace/%s", branch)
 	}
-	commitMsg := fmt.Sprintf("Update marketplace v%d for %s branch", newVersion, branch)
 
 	// Output for GitHub Actions (parsed by workflow)
 	fmt.Printf("source_dir=%s\n", tmpDir)
-	fmt.Printf("name=%s\n", marketplaceName)
-	fmt.Printf("version=%d\n", newVersion)
-	fmt.Printf("message=%s\n", commitMsg)
+	fmt.Printf("name=%s\n", name)
+	fmt.Printf("message=Update marketplace for %s\n", branch)
 
 	// Write step summary if GITHUB_STEP_SUMMARY is set
 	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {

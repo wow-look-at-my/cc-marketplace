@@ -72,12 +72,9 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to cook plugin contents: %w", err)
 	}
 
-	commitMsg := fmt.Sprintf("Release %s v%d", pluginName, newVersion)
-
 	// Output for GitHub Actions (parsed by workflow)
 	fmt.Printf("source_dir=%s\n", tmpDir)
-	fmt.Printf("version=%d\n", newVersion)
-	fmt.Printf("message=%s\n", commitMsg)
+	fmt.Printf("message=Release %s\n", pluginName)
 
 	fmt.Fprintf(os.Stderr, "Prepared release in %s\n", tmpDir)
 	return nil
