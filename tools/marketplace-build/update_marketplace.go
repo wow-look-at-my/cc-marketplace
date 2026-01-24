@@ -72,19 +72,13 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	}
 	// Note: NOT removing tmpDir - the orphan-tag action needs it
 
-	// Create .claude-plugin directory in temp
-	tmpPluginDir := filepath.Join(tmpDir, ".claude-plugin")
-	if err := os.MkdirAll(tmpPluginDir, 0755); err != nil {
-		return fmt.Errorf("failed to create temp plugin dir: %w", err)
-	}
-
-	// Write cooked marketplace.json
+	// Write cooked marketplace.json to root (orphan-tag's move will relocate to .claude-plugin/)
 	cookedData, err := json.MarshalIndent(marketplace, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal marketplace.json: %w", err)
 	}
 
-	tmpMarketplacePath := filepath.Join(tmpPluginDir, "marketplace.json")
+	tmpMarketplacePath := filepath.Join(tmpDir, "marketplace.json")
 	if err := os.WriteFile(tmpMarketplacePath, cookedData, 0644); err != nil {
 		return fmt.Errorf("failed to write marketplace.json: %w", err)
 	}

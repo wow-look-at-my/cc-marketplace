@@ -107,4 +107,5 @@ jobs:
         with:
           source: ${{ steps.marketplace.outputs.source_dir }}
           tags: ${{ steps.marketplace.outputs.tag }} ${{ steps.marketplace.outputs.latest_tag }}
+          move: marketplace.json:.claude-plugin/marketplace.json
           message: ${{ steps.marketplace.outputs.message }}
