@@ -62,7 +62,7 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - uses: ./.github/actions/smart-cache
+      - uses: wow-look-at-my-code/actions/smart-cache@smart-cache/v1
         with:
           path: ~/go/pkg/mod ~/.cache/go-build
           key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
