@@ -62,15 +62,10 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - uses: actions/cache/restore@v4
+      - uses: ./.github/actions/smart-cache
         with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
+          path: ~/go/pkg/mod ~/.cache/go-build
           key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
-
-      - name: Snapshot cache
-        run: marketplace-build cache-snapshot ~/go/pkg/mod ~/.cache/go-build
 
       - name: Build
         run: marketplace-build build-plugin ${{ matrix.plugin }}
@@ -80,24 +75,6 @@ jobs:
 
       - name: Release
         run: marketplace-build release-plugin ${{ matrix.plugin }}
-
-      - name: Check cache changes
-        id: cache-check
-        if: always()
-        run: |
-          marketplace-build cache-changed ~/go/pkg/mod ~/.cache/go-build | tee /tmp/cache-changes.txt | head -100
-          if [ -s /tmp/cache-changes.txt ]; then
-            echo "Total: $(wc -l < /tmp/cache-changes.txt) files changed"
-            echo "save=true" >> $GITHUB_OUTPUT
-          fi
-
-      - uses: actions/cache/save@v4
-        if: steps.cache-check.outputs.save == 'true'
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
 
   update:
     needs: [prepare, build]
