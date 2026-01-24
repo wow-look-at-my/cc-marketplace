@@ -252,6 +252,38 @@
 					}
 				}
 			]
+		},
+		{
+			"name": "zpool",
+			"description": "Auto-approve readonly zpool commands",
+			"subcommands": [
+				{
+					"name": [
+						"list",
+						"status",
+						"history",
+						"get",
+						"iostat",
+						"events"
+					],
+					"allowedFlags": "*"
+				}
+			]
+		},
+		{
+			"name": "zfs",
+			"description": "Auto-approve readonly zfs commands",
+			"subcommands": [
+				{
+					"name": [
+						"list",
+						"get",
+						"diff",
+						"holds"
+					],
+					"allowedFlags": "*"
+				}
+			]
 		}
 	]
 }
