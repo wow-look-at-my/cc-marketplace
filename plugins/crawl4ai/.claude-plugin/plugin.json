@@ -7,10 +7,6 @@
   "keywords": ["web-crawling", "scraping", "markdown", "mcp"],
   "mcpServers": "./.mcp.json",
   "mh": {
-    "include_in_marketplace": true,
-    "build": {
-      "crawl4ai-mcp": { "type": "go_plugin" },
-      "test": { "type": "go_test", "depends": ["crawl4ai-mcp"] }
-    }
+    "include_in_marketplace": true
   }
 }

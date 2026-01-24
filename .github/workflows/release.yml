@@ -69,7 +69,14 @@ jobs:
             ~/.cache/go-build
           key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
 
-      - run: marketplace-build build-plugin ${{ matrix.plugin }}
+      - name: Build
+        run: marketplace-build build-plugin ${{ matrix.plugin }}
+
+      - name: Test
+        run: marketplace-build test-plugin ${{ matrix.plugin }}
+
+      - name: Release
+        run: marketplace-build release-plugin ${{ matrix.plugin }}
 
   update:
     needs: [prepare, build]
