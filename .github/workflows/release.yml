@@ -77,10 +77,17 @@ jobs:
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
+      - name: Generate Tag Name
+        id: tag
+        uses: wow-look-at-my-code/actions@orphan-tag-name#latest
+        with:
+          name: plugin/${{ matrix.plugin }}
+          version: ${{ steps.release.outputs.version }}
+
       - uses: wow-look-at-my-code/actions@orphan-tag#latest
         with:
           source: ${{ steps.release.outputs.source_dir }}
-          tags: ${{ steps.release.outputs.tag }}
+          tags: ${{ steps.tag.outputs.tag }}
           message: ${{ steps.release.outputs.message }}
 
   update:
@@ -103,9 +110,16 @@ jobs:
         id: marketplace
         run: marketplace-build update-marketplace >> $GITHUB_OUTPUT
 
+      - name: Generate Tag Name
+        id: tag
+        uses: wow-look-at-my-code/actions@orphan-tag-name#latest
+        with:
+          name: ${{ steps.marketplace.outputs.name }}
+          version: ${{ steps.marketplace.outputs.version }}
+
       - uses: wow-look-at-my-code/actions@orphan-tag#latest
         with:
           source: ${{ steps.marketplace.outputs.source_dir }}
-          tags: ${{ steps.marketplace.outputs.tag }} ${{ steps.marketplace.outputs.latest_tag }}
+          tags: ${{ steps.tag.outputs.tag }}
           move: marketplace.json:.claude-plugin/marketplace.json
           message: ${{ steps.marketplace.outputs.message }}

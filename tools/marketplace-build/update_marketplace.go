@@ -83,21 +83,19 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write marketplace.json: %w", err)
 	}
 
-	var marketplaceTag string
-	if branch == "master" {
-		marketplaceTag = fmt.Sprintf("marketplace@v%d", newVersion)
+	var marketplaceName string
+	if branch == "master" || branch == "main" {
+		marketplaceName = "marketplace"
 	} else {
-		marketplaceTag = fmt.Sprintf("marketplace/%s@v%d", branch, newVersion)
+		marketplaceName = fmt.Sprintf("marketplace/%s", branch)
 	}
 	commitMsg := fmt.Sprintf("Update marketplace v%d for %s branch", newVersion, branch)
 
 	// Output for GitHub Actions (parsed by workflow)
 	fmt.Printf("source_dir=%s\n", tmpDir)
-	fmt.Printf("tag=%s\n", marketplaceTag)
+	fmt.Printf("name=%s\n", marketplaceName)
+	fmt.Printf("version=%d\n", newVersion)
 	fmt.Printf("message=%s\n", commitMsg)
-	if branch == "master" {
-		fmt.Printf("latest_tag=latest\n")
-	}
 
 	// Write step summary if GITHUB_STEP_SUMMARY is set
 	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
@@ -133,37 +131,41 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 	}
 }
 
-// getPluginRefs returns a map of plugin name -> latest version tag (global)
+// getPluginRefs returns a map of plugin name -> latest version tag (global, master branch only)
 func getPluginRefs(owner, repo string) (map[string]string, error) {
 	refs := make(map[string]string)
 
-	// List all plugin tags (format: plugin/{plugin-name}@vN)
+	// List all plugin tags (format: plugin/{name}#{version} for master)
 	tags, err := ListTagsWithPrefix("plugin/")
 	if err != nil {
 		return nil, err
 	}
 
-	// Find latest version for each plugin
+	// Find latest version for each plugin (only master/main branch tags)
 	pluginVersions := make(map[string]int) // plugin -> highest version
 
 	for _, tag := range tags {
-		// Parse tag: plugin/{plugin-name}@vN
-		// Split on @ first to get version
-		atParts := strings.Split(tag, "@")
-		if len(atParts) != 2 {
+		// Skip 'latest' tags
+		if strings.HasSuffix(tag, "#latest") {
 			continue
 		}
 
-		// Parse plugin/{plugin-name}
-		pathParts := strings.Split(atParts[0], "/")
+		// Parse tag: plugin/{name}#{version}
+		// Split on # first to get version
+		hashParts := strings.Split(tag, "#")
+		if len(hashParts) != 2 {
+			continue
+		}
+
+		// Parse plugin/{name} - skip branch tags (plugin/{name}/{branch}#version)
+		pathParts := strings.Split(hashParts[0], "/")
 		if len(pathParts) != 2 || pathParts[0] != "plugin" {
 			continue
 		}
 
 		pluginName := pathParts[1]
-		vStr := strings.TrimPrefix(atParts[1], "v")
 		var v int
-		fmt.Sscanf(vStr, "%d", &v)
+		fmt.Sscanf(hashParts[1], "%d", &v)
 
 		if existing, ok := pluginVersions[pluginName]; !ok || v > existing {
 			pluginVersions[pluginName] = v
@@ -345,7 +347,13 @@ func readMCPFromTag(tag string) map[string]interface{} {
 
 // bumpMarketplaceVersion reads current version from marketplace tag and increments it
 func bumpMarketplaceVersion(branch string) int {
-	tag := fmt.Sprintf("marketplace/%s", branch)
+	// Use the #latest tag to find current version
+	var tag string
+	if branch == "master" || branch == "main" {
+		tag = "marketplace#latest"
+	} else {
+		tag = fmt.Sprintf("marketplace/%s#latest", branch)
+	}
 
 	// Try to read current marketplace.json from tag
 	content, err := ReadFileFromTag(tag, ".claude-plugin/marketplace.json")
