@@ -62,7 +62,7 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - uses: wow-look-at-my-code/actions/smart-cache@smart-cache/v1
+      - uses: wow-look-at-my-code/actions/smart-cache@v1
         with:
           path: ~/go/pkg/mod ~/.cache/go-build
           key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
@@ -73,8 +73,15 @@ jobs:
       - name: Test
         run: marketplace-build test-plugin ${{ matrix.plugin }}
 
-      - name: Release
-        run: marketplace-build release-plugin ${{ matrix.plugin }}
+      - name: Prepare Release
+        id: release
+        run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
+
+      - uses: wow-look-at-my-code/actions/orphan-tag@v1
+        with:
+          source: ${{ steps.release.outputs.source_dir }}
+          tags: ${{ steps.release.outputs.tag }}
+          message: ${{ steps.release.outputs.message }}
 
   update:
     needs: [prepare, build]
@@ -88,6 +95,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - run: git fetch --tags
+
       - uses: ./.github/actions/setup-marketplace-build
 
-      - run: marketplace-build update-marketplace
+      - name: Prepare Marketplace Update
+        id: marketplace
+        run: marketplace-build update-marketplace >> $GITHUB_OUTPUT
+
+      - uses: wow-look-at-my-code/actions/orphan-tag@v1
+        with:
+          source: ${{ steps.marketplace.outputs.source_dir }}
+          tags: ${{ steps.marketplace.outputs.tag }} ${{ steps.marketplace.outputs.latest_tag }}
+          message: ${{ steps.marketplace.outputs.message }}

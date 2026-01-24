@@ -65,12 +65,12 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	delete(marketplace, "$schema")
 	delete(marketplace, "mh")
 
-	// Create temp directory for marketplace tag contents
+	// Create temp directory for marketplace tag contents (NOT cleaned up - workflow uses it)
 	tmpDir, err := os.MkdirTemp("", "marketplace-build-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	// Note: NOT removing tmpDir - the orphan-tag action needs it
 
 	// Create .claude-plugin directory in temp
 	tmpPluginDir := filepath.Join(tmpDir, ".claude-plugin")
@@ -89,34 +89,20 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write marketplace.json: %w", err)
 	}
 
-	// Create orphan commit
-	commitMsg := fmt.Sprintf("Update marketplace for %s branch", branch)
-	commitSHA, err := CreateOrphanCommit(tmpDir, commitMsg)
-	if err != nil {
-		return fmt.Errorf("failed to create orphan commit: %w", err)
-	}
-
-	fmt.Printf("Created marketplace commit: %s\n", commitSHA)
-
-	// Create/update branch marketplace tag
-	marketplaceTag := fmt.Sprintf("marketplace/%s", branch)
-	if err := CreateTag(marketplaceTag, commitSHA); err != nil {
-		return fmt.Errorf("failed to create marketplace tag: %w", err)
-	}
-	if err := ForcePushTag(marketplaceTag); err != nil {
-		return fmt.Errorf("failed to push marketplace tag: %w", err)
-	}
-	fmt.Printf("Updated tag: %s\n", marketplaceTag)
-
-	// If master branch, also update top-level latest tag
+	var marketplaceTag string
 	if branch == "master" {
-		if err := CreateTag("latest", commitSHA); err != nil {
-			return fmt.Errorf("failed to create latest tag: %w", err)
-		}
-		if err := ForcePushTag("latest"); err != nil {
-			return fmt.Errorf("failed to push latest tag: %w", err)
-		}
-		fmt.Printf("Updated latest tag\n")
+		marketplaceTag = fmt.Sprintf("marketplace@v%d", newVersion)
+	} else {
+		marketplaceTag = fmt.Sprintf("marketplace/%s@v%d", branch, newVersion)
+	}
+	commitMsg := fmt.Sprintf("Update marketplace v%d for %s branch", newVersion, branch)
+
+	// Output for GitHub Actions (parsed by workflow)
+	fmt.Printf("source_dir=%s\n", tmpDir)
+	fmt.Printf("tag=%s\n", marketplaceTag)
+	fmt.Printf("message=%s\n", commitMsg)
+	if branch == "master" {
+		fmt.Printf("latest_tag=latest\n")
 	}
 
 	// Write step summary if GITHUB_STEP_SUMMARY is set
@@ -124,6 +110,7 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		writeSummary(summaryPath, pluginRefs, owner, repo, branch)
 	}
 
+	fmt.Fprintf(os.Stderr, "Prepared marketplace update in %s\n", tmpDir)
 	return nil
 }
 
@@ -156,7 +143,7 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 func getPluginRefs(owner, repo string) (map[string]string, error) {
 	refs := make(map[string]string)
 
-	// List all plugin tags (format: plugin/{plugin-name}/vN)
+	// List all plugin tags (format: plugin/{plugin-name}@vN)
 	tags, err := ListTagsWithPrefix("plugin/")
 	if err != nil {
 		return nil, err
@@ -166,14 +153,21 @@ func getPluginRefs(owner, repo string) (map[string]string, error) {
 	pluginVersions := make(map[string]int) // plugin -> highest version
 
 	for _, tag := range tags {
-		// Parse tag: plugin/{plugin-name}/vN
-		parts := strings.Split(tag, "/")
-		if len(parts) != 3 || parts[0] != "plugin" {
+		// Parse tag: plugin/{plugin-name}@vN
+		// Split on @ first to get version
+		atParts := strings.Split(tag, "@")
+		if len(atParts) != 2 {
 			continue
 		}
 
-		pluginName := parts[1]
-		vStr := strings.TrimPrefix(parts[2], "v")
+		// Parse plugin/{plugin-name}
+		pathParts := strings.Split(atParts[0], "/")
+		if len(pathParts) != 2 || pathParts[0] != "plugin" {
+			continue
+		}
+
+		pluginName := pathParts[1]
+		vStr := strings.TrimPrefix(atParts[1], "v")
 		var v int
 		fmt.Sscanf(vStr, "%d", &v)
 

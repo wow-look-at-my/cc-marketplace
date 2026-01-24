@@ -12,7 +12,7 @@ import (
 
 var releasePluginCmd = &cobra.Command{
 	Use:   "release-plugin [plugin-name]",
-	Short: "Create orphan tag and push release for a plugin",
+	Short: "Prepare plugin for release (outputs source_dir, tag, message for orphan-tag action)",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runReleasePlugin,
 }
@@ -40,7 +40,7 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	}
 	newVersion := currentVersion + 1
 
-	fmt.Printf("Releasing %s: v%d -> v%d\n", pluginName, currentVersion, newVersion)
+	fmt.Fprintf(os.Stderr, "Preparing %s: v%d -> v%d\n", pluginName, currentVersion, newVersion)
 
 	// Get source commit SHA for change detection
 	sourceCommit, err := GetHeadSHA()
@@ -54,16 +54,16 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get repo info: %w", err)
 	}
 
-	versionTag := fmt.Sprintf("plugin/%s/v%d", pluginName, newVersion)
+	versionTag := fmt.Sprintf("plugin/%s@v%d", pluginName, newVersion)
 	distURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s", owner, repo, versionTag)
 	srcURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s/plugins/%s", owner, repo, sourceCommit, pluginName)
 
-	// Create temp directory for cooked plugin contents
+	// Create temp directory for cooked plugin contents (NOT cleaned up - workflow uses it)
 	tmpDir, err := os.MkdirTemp("", "plugin-release-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	// Note: NOT removing tmpDir - the orphan-tag action needs it
 
 	// Copy and cook plugin contents to temp directory
 	meta := releaseMetadata{
@@ -76,25 +76,14 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to cook plugin contents: %w", err)
 	}
 
-	// Create orphan commit
 	commitMsg := fmt.Sprintf("Release %s v%d", pluginName, newVersion)
-	commitSHA, err := CreateOrphanCommit(tmpDir, commitMsg)
-	if err != nil {
-		return fmt.Errorf("failed to create orphan commit: %w", err)
-	}
 
-	fmt.Printf("Created orphan commit: %s\n", commitSHA)
+	// Output for GitHub Actions (parsed by workflow)
+	fmt.Printf("source_dir=%s\n", tmpDir)
+	fmt.Printf("tag=%s\n", versionTag)
+	fmt.Printf("message=%s\n", commitMsg)
 
-	// Create and push version tag
-	if err := CreateTag(versionTag, commitSHA); err != nil {
-		return fmt.Errorf("failed to create version tag: %w", err)
-	}
-
-	if err := PushTags(versionTag); err != nil {
-		return fmt.Errorf("failed to push version tag: %w", err)
-	}
-
-	fmt.Printf("Released %s v%d (tag: %s)\n", pluginName, newVersion, versionTag)
+	fmt.Fprintf(os.Stderr, "Prepared release in %s\n", tmpDir)
 	return nil
 }
 
