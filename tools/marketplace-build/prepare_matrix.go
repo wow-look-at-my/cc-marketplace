@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -14,6 +15,12 @@ func runPrepareMatrix(cmd *cobra.Command, args []string) error {
 
 	repoRoot := getRepoRoot()
 	pluginsDir := filepath.Join(repoRoot, "plugins")
+
+	// Check if infrastructure changed (workflow or marketplace-build)
+	infraChanged := hasInfraChanges(repoRoot)
+	if infraChanged {
+		fmt.Fprintf(os.Stderr, "Infrastructure changed - rebuilding all plugins\n")
+	}
 
 	// Find all plugins with mh.include_in_marketplace: true
 	entries, err := os.ReadDir(pluginsDir)
@@ -55,6 +62,12 @@ func runPrepareMatrix(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
+		// If infra changed, rebuild all plugins
+		if infraChanged {
+			changedPlugins = append(changedPlugins, pluginName)
+			continue
+		}
+
 		// Check if there are commits after the latest tag
 		hasChanges, err := HasCommitsAfterTag(pluginName, pluginPath)
 		if err != nil {
@@ -88,4 +101,78 @@ func isIncludedInMarketplace(pluginJSON map[string]interface{}) bool {
 
 	include, ok := mh["include_in_marketplace"].(bool)
 	return ok && include
+}
+
+// hasInfraChanges checks if workflow or marketplace-build changed since the oldest plugin tag
+func hasInfraChanges(repoRoot string) bool {
+	// Get the oldest plugin tag to use as baseline
+	oldestCommit := getOldestPluginTagCommit()
+	if oldestCommit == "" {
+		// No tags exist, so this is first build - not an infra change
+		return false
+	}
+
+	// Check if workflow or tools changed since oldest tag
+	infraPaths := []string{
+		filepath.Join(repoRoot, ".github/workflows"),
+		filepath.Join(repoRoot, "tools/marketplace-build"),
+	}
+
+	for _, path := range infraPaths {
+		out, err := runGit("rev-list", "--count", fmt.Sprintf("%s..HEAD", oldestCommit), "--", path)
+		if err != nil {
+			continue
+		}
+		count := strings.TrimSpace(out)
+		if count != "0" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getOldestPluginTagCommit returns the source commit of the oldest plugin tag
+func getOldestPluginTagCommit() string {
+	// List all plugin tags
+	out, err := runGit("tag", "-l", "plugin/*/v*")
+	if err != nil || strings.TrimSpace(out) == "" {
+		return ""
+	}
+
+	tags := strings.Split(strings.TrimSpace(out), "\n")
+	if len(tags) == 0 {
+		return ""
+	}
+
+	// Find the oldest source commit across all tags
+	var oldestCommit string
+	for _, tag := range tags {
+		// Read mh.plugin.json from the tag
+		metaOut, err := runGit("show", fmt.Sprintf("%s:mh.plugin.json", tag))
+		if err != nil {
+			continue
+		}
+
+		var metadata struct {
+			SourceCommit string `json:"sourceCommit"`
+		}
+		if err := json.Unmarshal([]byte(metaOut), &metadata); err != nil || metadata.SourceCommit == "" {
+			continue
+		}
+
+		if oldestCommit == "" {
+			oldestCommit = metadata.SourceCommit
+			continue
+		}
+
+		// Check if this commit is older (is an ancestor of current oldest)
+		_, err = runGit("merge-base", "--is-ancestor", metadata.SourceCommit, oldestCommit)
+		if err == nil {
+			// metadata.SourceCommit is an ancestor of oldestCommit, so it's older
+			oldestCommit = metadata.SourceCommit
+		}
+	}
+
+	return oldestCommit
 }

@@ -93,13 +93,28 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
-	args := parseCommand(command)
-	if len(args) == 0 {
+	commands := parseAllCommands(command)
+	if len(commands) == 0 {
 		return "", ""
 	}
 
-	// Find matching command node and evaluate recursively
-	return evaluateArgs(args, rules.Commands)
+	// All commands must be allowed (or passthrough)
+	// If any is denied, deny. If all allowed, allow. Otherwise passthrough.
+	allAllowed := true
+	for _, args := range commands {
+		decision, msg := evaluateArgs(args, rules.Commands)
+		if decision == "deny" {
+			return "deny", msg
+		}
+		if decision != "allow" {
+			allAllowed = false
+		}
+	}
+
+	if allAllowed {
+		return "allow", ""
+	}
+	return "", ""
 }
 
 func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
@@ -199,31 +214,61 @@ func checkAllowedFlags(args []string, allowedFlags interface{}) bool {
 	return false
 }
 
-func parseCommand(command string) []string {
+func parseAllCommands(command string) [][]string {
 	parser := syntax.NewParser()
 	file, err := parser.Parse(strings.NewReader(command), "")
 	if err != nil {
 		return nil
 	}
 
-	// Must have exactly one statement
-	if len(file.Stmts) != 1 {
+	var allCommands [][]string
+	for _, stmt := range file.Stmts {
+		commands := extractCommands(stmt.Cmd)
+		if commands == nil {
+			return nil
+		}
+		allCommands = append(allCommands, commands...)
+	}
+
+	return allCommands
+}
+
+func extractCommands(cmd syntax.Command) [][]string {
+	if cmd == nil {
 		return nil
 	}
 
-	stmt := file.Stmts[0]
-
-	// Check for dangerous constructs anywhere in the AST
-	if hasDangerousConstruct(stmt) {
+	// Check for dangerous constructs
+	if hasDangerousConstruct(cmd) {
 		return nil
 	}
 
-	// Must be a simple call expression
-	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok {
+	switch c := cmd.(type) {
+	case *syntax.CallExpr:
+		args := extractCallArgs(c)
+		if args == nil {
+			return nil
+		}
+		return [][]string{args}
+
+	case *syntax.BinaryCmd:
+		// Handle &&, ||, |
+		left := extractCommands(c.X.Cmd)
+		if left == nil {
+			return nil
+		}
+		right := extractCommands(c.Y.Cmd)
+		if right == nil {
+			return nil
+		}
+		return append(left, right...)
+
+	default:
 		return nil
 	}
+}
 
+func extractCallArgs(call *syntax.CallExpr) []string {
 	var args []string
 	for _, word := range call.Args {
 		arg := extractWord(word)
@@ -232,7 +277,6 @@ func parseCommand(command string) []string {
 		}
 		args = append(args, arg)
 	}
-
 	return args
 }
 

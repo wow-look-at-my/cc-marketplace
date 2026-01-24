@@ -178,11 +178,19 @@ func TestCommandSubstitutionPassthrough(t *testing.T) {
 	}
 }
 
-func TestPipePassthrough(t *testing.T) {
+func TestPipeBothAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git log | head")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'git log | head' (both safe), got %q", decision)
+	}
+}
+
+func TestPipeOneUnknown(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git log | python")
 	if decision != "" {
-		t.Errorf("Expected passthrough for piped command, got %q", decision)
+		t.Errorf("Expected passthrough for 'git log | python', got %q", decision)
 	}
 }
 
@@ -191,6 +199,32 @@ func TestUnknownCommandPassthrough(t *testing.T) {
 	decision, _ := evaluateCommand("python --version")
 	if decision != "" {
 		t.Errorf("Expected passthrough for unknown command 'python', got %q", decision)
+	}
+}
+
+func TestCompoundCommands(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"and both allowed", "git status && git diff", "allow"},
+		{"and one unknown", "git status && python --version", ""},
+		{"or both allowed", "git status || git diff", "allow"},
+		{"fetch and show", "git fetch origin latest && git show HEAD", "allow"},
+		{"basic commands", "ls && cat file.txt", "allow"},
+		{"with deny", "git status && gh run view 123", "deny"},
+		{"triple and", "git status && git diff && git log", "allow"},
+		{"semicolon", "git status; git diff", "allow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			if decision != tt.expected {
+				t.Errorf("evaluateCommand(%q) = %q, want %q", tt.command, decision, tt.expected)
+			}
+		})
 	}
 }
 

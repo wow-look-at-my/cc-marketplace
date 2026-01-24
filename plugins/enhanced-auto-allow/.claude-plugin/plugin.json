@@ -29,10 +29,6 @@
 		]
 	},
 	"mh": {
-		"include_in_marketplace": true,
-		"build": {
-			"hook": { "type": "go_plugin", "source": "./cmd" },
-			"test": { "type": "go_test", "source": "./cmd", "depends": ["hook"] }
-		}
+		"include_in_marketplace": true
 	}
 }

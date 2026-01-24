@@ -51,10 +51,10 @@ func GetRepoInfo() (owner, repo string, err error) {
 	return "", "", fmt.Errorf("could not parse github repo from origin URL: %s", url)
 }
 
-// GetLatestTagVersion finds the highest version from plugin/{plugin}/v* tags
+// GetLatestTagVersion finds the highest version from plugin/{plugin}@v* tags
 // Returns 0 if no tags exist
 func GetLatestTagVersion(plugin string) (int, error) {
-	out, err := runGit("tag", "-l", fmt.Sprintf("plugin/%s/v*", plugin))
+	out, err := runGit("tag", "-l", fmt.Sprintf("plugin/%s@v*", plugin))
 	if err != nil {
 		return 0, nil
 	}
@@ -67,10 +67,10 @@ func GetLatestTagVersion(plugin string) (int, error) {
 	// Find highest version
 	highest := 0
 	for _, tag := range tags {
-		// Extract version from tag like "plugin/my-plugin/v3"
-		parts := strings.Split(tag, "/")
-		if len(parts) >= 2 {
-			vStr := strings.TrimPrefix(parts[len(parts)-1], "v")
+		// Extract version from tag like "plugin/my-plugin@v3"
+		atParts := strings.Split(tag, "@")
+		if len(atParts) == 2 {
+			vStr := strings.TrimPrefix(atParts[1], "v")
 			var v int
 			fmt.Sscanf(vStr, "%d", &v)
 			if v > highest {
@@ -91,7 +91,7 @@ func HasCommitsAfterTag(plugin, pluginPath string) (bool, error) {
 		return true, nil
 	}
 
-	tagName := fmt.Sprintf("plugin/%s/v%d", plugin, version)
+	tagName := fmt.Sprintf("plugin/%s@v%d", plugin, version)
 
 	// Read mh.plugin.json from the tag to get source commit
 	out, err := runGit("show", fmt.Sprintf("%s:mh.plugin.json", tagName))
