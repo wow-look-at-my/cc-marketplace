@@ -4,28 +4,19 @@ description: Build or restore cached marketplace-build CLI
 runs:
   using: composite
   steps:
-    - name: Get cache key
-      id: cache-key
-      shell: bash
-      run: echo "key=marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}" >> $GITHUB_OUTPUT
-
-    - name: Restore cached binary
-      id: cache
-      uses: actions/cache@v4
+    - uses: wow-look-at-my-code/actions@smart-cache#latest
       with:
         path: /usr/local/bin/marketplace-build
-        key: ${{ steps.cache-key.outputs.key }}
+        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
 
-    - name: Restore Go cache
-      if: steps.cache.outputs.cache-hit != 'true'
-      uses: actions/cache@v4
+    - uses: wow-look-at-my-code/actions@smart-cache#latest
       with:
-        path: |
-          ~/go/pkg/mod
-          ~/.cache/go-build
+        path: ~/go/pkg/mod ~/.cache/go-build
         key: go-marketplace-build-${{ hashFiles('tools/marketplace-build/go.sum') }}
 
     - name: Build CLI
-      if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: cd tools/marketplace-build && go build -o /usr/local/bin/marketplace-build .
+      run: |
+        if [ ! -f /usr/local/bin/marketplace-build ]; then
+          cd tools/marketplace-build && go build -o /usr/local/bin/marketplace-build .
+        fi
