@@ -284,6 +284,279 @@
 					"allowedFlags": "*"
 				}
 			]
+		},
+		{
+			"name": "docker",
+			"description": "Auto-approve readonly docker commands",
+			"subcommands": [
+				{
+					"name": [
+						"inspect",
+						"ps",
+						"images",
+						"logs",
+						"version",
+						"info",
+						"top",
+						"port",
+						"diff",
+						"history",
+						"stats",
+						"events",
+						"search"
+					],
+					"allowedFlags": "*"
+				},
+				{
+					"name": "image",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect",
+								"history"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "container",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect",
+								"logs",
+								"top",
+								"stats",
+								"port",
+								"diff"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "network",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "volume",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "context",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"show",
+								"inspect"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "config",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "secret",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "service",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect",
+								"logs",
+								"ps"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "node",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect",
+								"ps"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "stack",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"ps",
+								"services"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "plugin",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "system",
+					"subcommands": [
+						{
+							"name": [
+								"info",
+								"df",
+								"events"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "manifest",
+					"subcommands": [
+						{
+							"name": "inspect",
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "buildx",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"inspect",
+								"du",
+								"version"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "compose",
+					"subcommands": [
+						{
+							"name": [
+								"ls",
+								"ps",
+								"top",
+								"images",
+								"logs",
+								"config",
+								"version"
+							],
+							"allowedFlags": "*"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "brew",
+			"description": "Auto-approve readonly homebrew commands",
+			"subcommands": [
+				{
+					"name": [
+						"list",
+						"ls",
+						"info",
+						"search",
+						"config",
+						"doctor",
+						"deps",
+						"uses",
+						"outdated",
+						"leaves",
+						"desc",
+						"cat",
+						"home",
+						"log",
+						"options",
+						"formula",
+						"--version",
+						"--prefix",
+						"--cellar",
+						"--repository",
+						"--cache",
+						"analytics",
+						"commands",
+						"which-formula",
+						"tap-info",
+						"style",
+						"shellenv"
+					],
+					"allowedFlags": "*"
+				},
+				{
+					"name": "tap",
+					"allowedFlags": []
+				}
+			]
 		}
 	]
 }
