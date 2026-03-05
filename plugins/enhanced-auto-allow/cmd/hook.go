@@ -30,6 +30,7 @@ type CommandNode struct {
 	Name             interface{}      `json:"name"` // string or []string
 	Description      string           `json:"description,omitempty"`
 	AllowedFlags     interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
+	DeniedFlags      []string         `json:"deniedFlags,omitempty"`
 	RequiredFlags    []string         `json:"requiredFlags,omitempty"`
 	RequireFlagValue *RequireFlagRule `json:"requireFlagValue,omitempty"`
 	DenyWithMessage  string           `json:"denyWithMessage,omitempty"`
@@ -163,6 +164,11 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 			if decision != "" {
 				return decision, msg
 			}
+		}
+
+		// Check denied flags before allowed flags
+		if len(node.DeniedFlags) > 0 && hasAnyFlag(args, node.DeniedFlags) {
+			return "", ""
 		}
 
 		// Check allowed flags

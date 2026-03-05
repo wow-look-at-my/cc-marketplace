@@ -170,6 +170,46 @@ func TestGhRunListAllowed(t *testing.T) {
 	}
 }
 
+func TestFindPipeGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for find|grep file search, got %q", decision)
+	}
+}
+
+func TestFindBasicAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.go' -type f")
+	if decision != "allow" {
+		t.Errorf("Expected allow for basic find, got %q", decision)
+	}
+}
+
+func TestFindExecPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.tmp' -exec rm {} \\;")
+	if decision != "" {
+		t.Errorf("Expected passthrough for find with -exec, got %q", decision)
+	}
+}
+
+func TestFindDeletePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.tmp' -delete")
+	if decision != "" {
+		t.Errorf("Expected passthrough for find with -delete, got %q", decision)
+	}
+}
+
+func TestGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("grep -ri 'TODO' src/")
+	if decision != "allow" {
+		t.Errorf("Expected allow for grep, got %q", decision)
+	}
+}
+
 func TestCommandSubstitutionPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git log $(echo test)")

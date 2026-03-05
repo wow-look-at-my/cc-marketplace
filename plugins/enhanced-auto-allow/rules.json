@@ -40,6 +40,17 @@
 			"allowedFlags": "*"
 		},
 		{
+			"name": "find",
+			"description": "Auto-approve readonly find commands (deny -exec/-delete)",
+			"allowedFlags": "*",
+			"deniedFlags": ["-exec", "-execdir", "-delete", "-ok", "-okdir"]
+		},
+		{
+			"name": "grep",
+			"description": "Auto-approve grep (read-only search)",
+			"allowedFlags": "*"
+		},
+		{
 			"name": "git",
 			"description": "Auto-approve readonly git commands",
 			"subcommands": [
