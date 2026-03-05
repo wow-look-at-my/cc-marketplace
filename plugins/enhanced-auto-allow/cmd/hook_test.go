@@ -170,6 +170,54 @@ func TestGhRunListAllowed(t *testing.T) {
 	}
 }
 
+func TestFindPipeGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for find|grep file search, got %q", decision)
+	}
+}
+
+func TestFindBasicAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.go' -type f")
+	if decision != "allow" {
+		t.Errorf("Expected allow for basic find, got %q", decision)
+	}
+}
+
+func TestFindExecGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for find -exec grep, got %q", decision)
+	}
+}
+
+func TestFindExecRmPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.tmp' -exec rm {} \\;")
+	if decision != "" {
+		t.Errorf("Expected passthrough for find -exec rm, got %q", decision)
+	}
+}
+
+func TestFindDeletePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.tmp' -delete")
+	if decision != "" {
+		t.Errorf("Expected passthrough for find with -delete, got %q", decision)
+	}
+}
+
+func TestGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("grep -ri 'TODO' src/")
+	if decision != "allow" {
+		t.Errorf("Expected allow for grep, got %q", decision)
+	}
+}
+
 func TestCommandSubstitutionPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git log $(echo test)")
@@ -199,6 +247,46 @@ func TestUnknownCommandPassthrough(t *testing.T) {
 	decision, _ := evaluateCommand("python --version")
 	if decision != "" {
 		t.Errorf("Expected passthrough for unknown command 'python', got %q", decision)
+	}
+}
+
+func TestEchoRedirectPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo foo > file.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for echo with redirect, got %q", decision)
+	}
+}
+
+func TestEchoAppendPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo foo >> file.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for echo with append, got %q", decision)
+	}
+}
+
+func TestSortRedirectPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("sort input.txt > output.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for sort with redirect, got %q", decision)
+	}
+}
+
+func TestEchoPipeAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo hello | grep hello")
+	if decision != "allow" {
+		t.Errorf("Expected allow for echo piped to grep, got %q", decision)
+	}
+}
+
+func TestGitShowWithEchoAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`git show 54d7aa918a94 --stat && echo "---" && git show 54d7aa918a94 -- path/to/file.cpp`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for git show && echo && git show, got %q", decision)
 	}
 }
 
