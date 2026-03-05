@@ -34,9 +34,49 @@
 				"od",
 				"mdfind",
 				"mdls",
-				"locate"
+				"locate",
+				"echo",
+				"printf",
+				"true",
+				"false",
+				"test",
+				"[",
+				"date",
+				"hostname",
+				"pwd",
+				"env",
+				"sort",
+				"uniq",
+				"tr",
+				"cut",
+				"diff",
+				"comm",
+				"join",
+				"paste",
+				"column",
+				"expand",
+				"unexpand",
+				"fold",
+				"fmt",
+				"nl",
+				"rev",
+				"tac",
+				"seq",
+				"realpath"
 			],
 			"description": "Auto-approve readonly inspection commands",
+			"allowedFlags": "*"
+		},
+		{
+			"name": "find",
+			"description": "Auto-approve readonly find commands; -exec allowed if sub-command is whitelisted",
+			"allowedFlags": "*",
+			"deniedFlags": ["-delete"],
+			"execFlags": ["-exec", "-execdir", "-ok", "-okdir"]
+		},
+		{
+			"name": "grep",
+			"description": "Auto-approve grep (read-only search)",
 			"allowedFlags": "*"
 		},
 		{
@@ -251,6 +291,72 @@
 						]
 					}
 				}
+			]
+		},
+		{
+			"name": "claude",
+			"description": "Auto-approve readonly claude CLI commands",
+			"subcommands": [
+				{
+					"name": "mcp",
+					"subcommands": [
+						{
+							"name": [
+								"list",
+								"get"
+							],
+							"allowedFlags": "*"
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				},
+				{
+					"name": "plugin",
+					"subcommands": [
+						{
+							"name": "list",
+							"allowedFlags": "*"
+						},
+						{
+							"name": "marketplace",
+							"subcommands": [
+								{
+									"name": "list",
+									"allowedFlags": "*"
+								}
+							]
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				},
+				{
+					"name": "config",
+					"subcommands": [
+						{
+							"name": [
+								"list",
+								"get"
+							],
+							"allowedFlags": "*"
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				}
+			],
+			"allowedFlags": [
+				"--version",
+				"-v",
+				"--help",
+				"-h"
 			]
 		},
 		{
