@@ -41,9 +41,10 @@
 		},
 		{
 			"name": "find",
-			"description": "Auto-approve readonly find commands (deny -exec/-delete)",
+			"description": "Auto-approve readonly find commands; -exec allowed if sub-command is whitelisted",
 			"allowedFlags": "*",
-			"deniedFlags": ["-exec", "-execdir", "-delete", "-ok", "-okdir"]
+			"deniedFlags": ["-delete"],
+			"execFlags": ["-exec", "-execdir", "-ok", "-okdir"]
 		},
 		{
 			"name": "grep",

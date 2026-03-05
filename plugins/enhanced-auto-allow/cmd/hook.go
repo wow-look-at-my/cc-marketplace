@@ -31,6 +31,7 @@ type CommandNode struct {
 	Description      string           `json:"description,omitempty"`
 	AllowedFlags     interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
 	DeniedFlags      []string         `json:"deniedFlags,omitempty"`
+	ExecFlags        []string         `json:"execFlags,omitempty"`
 	RequiredFlags    []string         `json:"requiredFlags,omitempty"`
 	RequireFlagValue *RequireFlagRule `json:"requireFlagValue,omitempty"`
 	DenyWithMessage  string           `json:"denyWithMessage,omitempty"`
@@ -166,9 +167,23 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 			}
 		}
 
-		// Check denied flags before allowed flags
+		// Check denied flags
 		if len(node.DeniedFlags) > 0 && hasAnyFlag(args, node.DeniedFlags) {
 			return "", ""
+		}
+
+		// Check exec flags: extract sub-commands and evaluate them
+		if len(node.ExecFlags) > 0 {
+			subCmds := extractExecSubCommands(remaining, node.ExecFlags)
+			for _, subCmd := range subCmds {
+				decision, msg := evaluateArgs(subCmd, rules.Commands)
+				if decision == "deny" {
+					return "deny", msg
+				}
+				if decision != "allow" {
+					return "", ""
+				}
+			}
 		}
 
 		// Check allowed flags
@@ -308,6 +323,40 @@ func extractWord(word *syntax.Word) string {
 		}
 	}
 	return strings.Join(parts, "")
+}
+
+// extractExecSubCommands extracts sub-commands from exec-style flags.
+// e.g., for args ["-name", "*.h", "-exec", "grep", "-l", "pattern", "{}", ";"]
+// with execFlags ["-exec"], returns [["grep", "-l", "pattern"]].
+func extractExecSubCommands(args []string, execFlags []string) [][]string {
+	flagSet := make(map[string]bool, len(execFlags))
+	for _, f := range execFlags {
+		flagSet[f] = true
+	}
+
+	var result [][]string
+	for i := 0; i < len(args); i++ {
+		if !flagSet[args[i]] {
+			continue
+		}
+		// Collect args until ";" or "+"
+		var subCmd []string
+		i++
+		for i < len(args) {
+			a := args[i]
+			if a == ";" || a == "+" {
+				break
+			}
+			if a != "{}" {
+				subCmd = append(subCmd, a)
+			}
+			i++
+		}
+		if len(subCmd) > 0 {
+			result = append(result, subCmd)
+		}
+	}
+	return result
 }
 
 func hasDangerousConstruct(node syntax.Node) bool {

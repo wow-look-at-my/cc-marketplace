@@ -186,11 +186,19 @@ func TestFindBasicAllowed(t *testing.T) {
 	}
 }
 
-func TestFindExecPassthrough(t *testing.T) {
+func TestFindExecGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for find -exec grep, got %q", decision)
+	}
+}
+
+func TestFindExecRmPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("find . -name '*.tmp' -exec rm {} \\;")
 	if decision != "" {
-		t.Errorf("Expected passthrough for find with -exec, got %q", decision)
+		t.Errorf("Expected passthrough for find -exec rm, got %q", decision)
 	}
 }
 
