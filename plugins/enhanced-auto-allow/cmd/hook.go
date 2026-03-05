@@ -165,6 +165,12 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 			if decision != "" {
 				return decision, msg
 			}
+			// If the first remaining arg looks like a subcommand (not a flag)
+			// but didn't match any known subcommand, don't fall through to
+			// allowedFlags - it's an unknown/mutating subcommand.
+			if !strings.HasPrefix(remaining[0], "-") {
+				return "", ""
+			}
 		}
 
 		// Check denied flags

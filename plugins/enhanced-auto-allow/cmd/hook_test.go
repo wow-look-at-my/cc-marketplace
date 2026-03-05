@@ -290,6 +290,118 @@ func TestGitShowWithEchoAllowed(t *testing.T) {
 	}
 }
 
+func TestClaudeMcpListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude mcp list', got %q", decision)
+	}
+}
+
+func TestClaudeMcpHelpAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp --help")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude mcp --help', got %q", decision)
+	}
+}
+
+func TestClaudeMcpGetAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp get server-name")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude mcp get server-name', got %q", decision)
+	}
+}
+
+func TestClaudeMcpAddPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp add my-server -- npx server")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'claude mcp add', got %q", decision)
+	}
+}
+
+func TestClaudeMcpRemovePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp remove my-server")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'claude mcp remove', got %q", decision)
+	}
+}
+
+func TestClaudeVersionAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude --version")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude --version', got %q", decision)
+	}
+}
+
+func TestClaudeHelpAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude --help")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude --help', got %q", decision)
+	}
+}
+
+func TestClaudePluginListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude plugin list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude plugin list', got %q", decision)
+	}
+}
+
+func TestClaudePluginMarketplaceListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude plugin marketplace list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude plugin marketplace list', got %q", decision)
+	}
+}
+
+func TestClaudePluginInstallPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude plugin install some-plugin")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'claude plugin install', got %q", decision)
+	}
+}
+
+func TestClaudeConfigListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude config list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude config list', got %q", decision)
+	}
+}
+
+func TestClaudeConfigGetAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude config get key")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude config get key', got %q", decision)
+	}
+}
+
+func TestClaudeConfigSetPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude config set key value")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'claude config set', got %q", decision)
+	}
+}
+
+func TestClaudePluginHelpAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude plugin --help")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude plugin --help', got %q", decision)
+	}
+}
+
 func TestCompoundCommands(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {

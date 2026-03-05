@@ -294,6 +294,72 @@
 			]
 		},
 		{
+			"name": "claude",
+			"description": "Auto-approve readonly claude CLI commands",
+			"subcommands": [
+				{
+					"name": "mcp",
+					"subcommands": [
+						{
+							"name": [
+								"list",
+								"get"
+							],
+							"allowedFlags": "*"
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				},
+				{
+					"name": "plugin",
+					"subcommands": [
+						{
+							"name": "list",
+							"allowedFlags": "*"
+						},
+						{
+							"name": "marketplace",
+							"subcommands": [
+								{
+									"name": "list",
+									"allowedFlags": "*"
+								}
+							]
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				},
+				{
+					"name": "config",
+					"subcommands": [
+						{
+							"name": [
+								"list",
+								"get"
+							],
+							"allowedFlags": "*"
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				}
+			],
+			"allowedFlags": [
+				"--version",
+				"-v",
+				"--help",
+				"-h"
+			]
+		},
+		{
 			"name": "zpool",
 			"description": "Auto-approve readonly zpool commands",
 			"subcommands": [
