@@ -250,6 +250,14 @@ func TestUnknownCommandPassthrough(t *testing.T) {
 	}
 }
 
+func TestGitShowWithEchoAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`git show 54d7aa918a94 --stat && echo "---" && git show 54d7aa918a94 -- path/to/file.cpp`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for git show && echo && git show, got %q", decision)
+	}
+}
+
 func TestCompoundCommands(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
