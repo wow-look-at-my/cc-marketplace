@@ -242,6 +242,11 @@ func parseAllCommands(command string) [][]string {
 		return nil
 	}
 
+	// Reject any command with output redirections (>, >>, etc.)
+	if hasOutputRedirect(file) {
+		return nil
+	}
+
 	var allCommands [][]string
 	for _, stmt := range file.Stmts {
 		commands := extractCommands(stmt.Cmd)
@@ -357,6 +362,41 @@ func extractExecSubCommands(args []string, execFlags []string) [][]string {
 		}
 	}
 	return result
+}
+
+func hasOutputRedirect(node syntax.Node) bool {
+	found := false
+	syntax.Walk(node, func(n syntax.Node) bool {
+		if stmt, ok := n.(*syntax.Stmt); ok {
+			for _, r := range stmt.Redirs {
+				switch r.Op {
+				case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll,
+					syntax.DplOut, syntax.ClbOut, syntax.RdrInOut:
+					// Allow stderr redirects (fd 2) to /dev/null
+					if r.N != nil && r.N.Value == "2" && redirectTarget(r) == "/dev/null" {
+						continue
+					}
+					found = true
+					return false
+				}
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+func redirectTarget(r *syntax.Redirect) string {
+	if r.Word == nil {
+		return ""
+	}
+	var parts []string
+	for _, p := range r.Word.Parts {
+		if lit, ok := p.(*syntax.Lit); ok {
+			parts = append(parts, lit.Value)
+		}
+	}
+	return strings.Join(parts, "")
 }
 
 func hasDangerousConstruct(node syntax.Node) bool {

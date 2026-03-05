@@ -250,6 +250,38 @@ func TestUnknownCommandPassthrough(t *testing.T) {
 	}
 }
 
+func TestEchoRedirectPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo foo > file.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for echo with redirect, got %q", decision)
+	}
+}
+
+func TestEchoAppendPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo foo >> file.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for echo with append, got %q", decision)
+	}
+}
+
+func TestSortRedirectPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("sort input.txt > output.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for sort with redirect, got %q", decision)
+	}
+}
+
+func TestEchoPipeAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo hello | grep hello")
+	if decision != "allow" {
+		t.Errorf("Expected allow for echo piped to grep, got %q", decision)
+	}
+}
+
 func TestGitShowWithEchoAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand(`git show 54d7aa918a94 --stat && echo "---" && git show 54d7aa918a94 -- path/to/file.cpp`)
