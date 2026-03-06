@@ -360,6 +360,19 @@
 			]
 		},
 		{
+			"name": "just",
+			"description": "Auto-approve readonly just commands",
+			"requiredFlags": [
+				"--list",
+				"-l",
+				"--summary",
+				"--dump",
+				"--evaluate",
+				"--help",
+				"-h"
+			]
+		},
+		{
 			"name": "zpool",
 			"description": "Auto-approve readonly zpool commands",
 			"subcommands": [

@@ -290,6 +290,30 @@ func TestGitShowWithEchoAllowed(t *testing.T) {
 	}
 }
 
+func TestJustListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("just --list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'just --list', got %q", decision)
+	}
+}
+
+func TestJustListWithRedirectAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`just --list 2>/dev/null || echo "no justfile"`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'just --list 2>/dev/null || echo no justfile', got %q", decision)
+	}
+}
+
+func TestJustBuildPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("just build")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'just build', got %q", decision)
+	}
+}
+
 func TestClaudeMcpListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude mcp list")
