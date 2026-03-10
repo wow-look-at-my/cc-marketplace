@@ -16,14 +16,14 @@ claude plugin install html-demo
 
 ### Skills
 
-- `demo-page` - Creates an interactive HTML demo page for any concept, with code properly organized into separate HTML, CSS, and JS files.
+- `html-demo` - Creates an interactive HTML demo page for any concept, with code properly organized into separate HTML, CSS, and JS files.
 
 ## Usage
 
 ```
-/demo-page a particle system with gravity controls
-/demo-page a kanban board with drag and drop
-/demo-page a color palette generator
+/html-demo a particle system with gravity controls
+/html-demo a kanban board with drag and drop
+/html-demo a color palette generator
 ```
 
 The skill will create a clean directory structure:

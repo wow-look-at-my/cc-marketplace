@@ -1,5 +1,5 @@
 ---
-name: demo-page
+name: html-demo
 description: Create an HTML demo page to showcase or prototype something. Use when the user asks to build a demo, prototype, or interactive HTML page.
 argument-hint: <thing to demo>
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent
