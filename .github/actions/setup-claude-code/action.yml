@@ -1,0 +1,13 @@
+name: Setup Claude Code
+description: Install Claude Code CLI for plugin validation
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install Claude Code
+      shell: bash
+      run: npm install -g @anthropic-ai/claude-code
