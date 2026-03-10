@@ -228,17 +228,6 @@ func buildPluginsArray(pluginRefs map[string]string, existingMarketplace map[str
 			}
 		}
 
-		// Scan tag for component files
-		if commands := scanCommandsFromTag(tagRef); len(commands) > 0 {
-			plugin["commands"] = commands
-		}
-		if agents := scanAgentsFromTag(tagRef); len(agents) > 0 {
-			plugin["agents"] = agents
-		}
-		if skills := scanSkillsFromTag(tagRef); len(skills) > 0 {
-			plugin["skills"] = skills
-		}
-
 		// Read .mcp.json if it exists and mcpServers not already set
 		if _, hasMCP := plugin["mcpServers"]; !hasMCP {
 			if mcpServers := readMCPFromTag(tagRef); mcpServers != nil {
@@ -249,7 +238,7 @@ func buildPluginsArray(pluginRefs map[string]string, existingMarketplace map[str
 		// Preserve existing metadata not already set
 		if existing, ok := existingPlugins[pluginName]; ok {
 			for k, v := range existing {
-				if k != "name" && k != "source" && k != "mh" && k != "$schema" {
+				if k != "name" && k != "source" && k != "mh" && k != "$schema" && k != "commands" && k != "agents" && k != "skills" {
 					if _, exists := plugin[k]; !exists {
 						plugin[k] = v
 					}
@@ -274,55 +263,6 @@ func readPluginJSONFromTag(tag string) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return result, nil
-}
-
-// scanCommandsFromTag returns command names from the tag's commands/ directory
-func scanCommandsFromTag(tag string) []string {
-	files, err := ListFilesInTag(tag, "commands")
-	if err != nil {
-		return nil
-	}
-	var commands []string
-	for _, f := range files {
-		if strings.HasSuffix(f, ".md") {
-			// Remove .md extension to get command name
-			commands = append(commands, strings.TrimSuffix(f, ".md"))
-		}
-	}
-	return commands
-}
-
-// scanAgentsFromTag returns agent names from the tag's agents/ directory
-func scanAgentsFromTag(tag string) []string {
-	files, err := ListFilesInTag(tag, "agents")
-	if err != nil {
-		return nil
-	}
-	var agents []string
-	for _, f := range files {
-		if strings.HasSuffix(f, ".md") {
-			agents = append(agents, strings.TrimSuffix(f, ".md"))
-		}
-	}
-	return agents
-}
-
-// scanSkillsFromTag returns skill names from the tag's skills/ directory
-func scanSkillsFromTag(tag string) []string {
-	// Skills are directories with SKILL.md inside
-	files, err := ListFilesInTag(tag, "skills")
-	if err != nil {
-		return nil
-	}
-	var skills []string
-	for _, f := range files {
-		// Check if this is a directory containing SKILL.md
-		_, err := ReadFileFromTag(tag, fmt.Sprintf("skills/%s/SKILL.md", f))
-		if err == nil {
-			skills = append(skills, f)
-		}
-	}
-	return skills
 }
 
 // readMCPFromTag reads .mcp.json from the tag and returns mcpServers config
