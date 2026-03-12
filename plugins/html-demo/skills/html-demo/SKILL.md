@@ -31,6 +31,14 @@ You MUST keep code separated into distinct files. This is non-negotiable.
 - Keep each JS file focused on one concern
 - Use simple script tags (no bundler needed) — files can reference globals or use a simple namespace pattern
 
+### Shaders (GLSL)
+- **Shaders MUST NOT go in `.js` files.** This is an absolute rule — no exceptions.
+- All shader code (vertex shaders, fragment shaders, compute shaders) goes in dedicated `.glsl` files (e.g., `vertex.glsl`, `fragment.glsl`)
+- Load shader files at runtime using `fetch()` — for example: `const shaderSource = await fetch('shaders/fragment.glsl').then(r => r.text());`
+- Never embed shader source code as JavaScript string literals, template literals, or string constants
+- Never put shaders in `<script type="x-shader/...">` tags in HTML either
+- Organize shaders in a `shaders/` directory
+
 ### Directory Structure
 
 Put all demo files in a dedicated directory. Example layout:
@@ -46,6 +54,9 @@ demo-name/
 │   ├── app.js
 │   ├── controls.js
 │   └── utils.js
+├── shaders/         # if using WebGL/WebGPU — .glsl files loaded via fetch()
+│   ├── vertex.glsl
+│   └── fragment.glsl
 └── assets/          # only if needed (images, data files, etc.)
 ```
 
