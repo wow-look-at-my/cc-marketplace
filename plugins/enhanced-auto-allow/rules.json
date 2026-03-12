@@ -62,7 +62,8 @@
 				"rev",
 				"tac",
 				"seq",
-				"realpath"
+				"realpath",
+				"cd"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
