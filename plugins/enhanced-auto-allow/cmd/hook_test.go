@@ -210,6 +210,22 @@ func TestFindDeletePassthrough(t *testing.T) {
 	}
 }
 
+func TestWhichAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("which node")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'which node', got %q", decision)
+	}
+}
+
+func TestWhichMultipleArgsAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("which git node python")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'which git node python', got %q", decision)
+	}
+}
+
 func TestGrepAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("grep -ri 'TODO' src/")
