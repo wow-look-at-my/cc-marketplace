@@ -92,6 +92,30 @@ func TestGitRemoteShowAllowed(t *testing.T) {
 	}
 }
 
+func TestGitSubmoduleStatusAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule status")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'git submodule status', got %q", decision)
+	}
+}
+
+func TestGitSubmoduleStatusRecursiveAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule status --recursive")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'git submodule status --recursive', got %q", decision)
+	}
+}
+
+func TestGitSubmoduleUpdatePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule update --init")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'git submodule update --init', got %q", decision)
+	}
+}
+
 func TestGhPrListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh pr list")

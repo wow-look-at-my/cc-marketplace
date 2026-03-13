@@ -150,6 +150,15 @@
 					]
 				},
 				{
+					"name": "submodule",
+					"subcommands": [
+						{
+							"name": "status",
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
 					"name": "config",
 					"requiredFlags": [
 						"--get",
