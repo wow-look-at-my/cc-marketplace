@@ -441,6 +441,7 @@ func TestCompoundCommands(t *testing.T) {
 		{"with deny", "git status && gh run view 123", "deny"},
 		{"triple and", "git status && git diff && git log", "allow"},
 		{"semicolon", "git status; git diff", "allow"},
+		{"cd and git diff", "cd some/folder && git diff Config/DefaultEngine.ini", "allow"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
