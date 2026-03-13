@@ -106,7 +106,8 @@
 				{
 					"name": [
 						"version",
-						"env"
+						"env",
+						"doc"
 					],
 					"allowedFlags": "*"
 				}

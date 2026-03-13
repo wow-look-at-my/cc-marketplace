@@ -298,6 +298,26 @@ func TestGoEnvAllowed(t *testing.T) {
 	}
 }
 
+func TestGoDocAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"bare", "go doc fmt"},
+		{"symbol", "go doc fmt.Println"},
+		{"all flag", "go doc -all fmt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			if decision != "allow" {
+				t.Errorf("Expected allow for %q, got %q", tt.command, decision)
+			}
+		})
+	}
+}
+
 func TestGoBuildPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("go build ./...")
