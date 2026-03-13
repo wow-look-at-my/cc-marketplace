@@ -92,6 +92,30 @@ func TestGitRemoteShowAllowed(t *testing.T) {
 	}
 }
 
+func TestGitSubmoduleStatusAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule status")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'git submodule status', got %q", decision)
+	}
+}
+
+func TestGitSubmoduleStatusRecursiveAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule status --recursive")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'git submodule status --recursive', got %q", decision)
+	}
+}
+
+func TestGitSubmoduleUpdatePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule update --init")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'git submodule update --init', got %q", decision)
+	}
+}
+
 func TestGhPrListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh pr list")
@@ -207,6 +231,114 @@ func TestFindDeletePassthrough(t *testing.T) {
 	decision, _ := evaluateCommand("find . -name '*.tmp' -delete")
 	if decision != "" {
 		t.Errorf("Expected passthrough for find with -delete, got %q", decision)
+	}
+}
+
+func TestPkgConfigAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"cflags", "pkg-config --cflags openssl"},
+		{"libs", "pkg-config --libs openssl"},
+		{"modversion", "pkg-config --modversion openssl"},
+		{"list-all", "pkg-config --list-all"},
+		{"exists", "pkg-config --exists libcurl"},
+		{"pkgconf alias", "pkgconf --cflags openssl"},
+		{"pkg_config alias", "pkg_config --libs openssl"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			if decision != "allow" {
+				t.Errorf("Expected allow for %q, got %q", tt.command, decision)
+			}
+		})
+	}
+}
+
+func TestLdconfigPrintCacheAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("ldconfig -p")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'ldconfig -p', got %q", decision)
+	}
+}
+
+func TestLdconfigPrintCacheLongAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("ldconfig --print-cache")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'ldconfig --print-cache', got %q", decision)
+	}
+}
+
+func TestLdconfigBarePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("ldconfig")
+	if decision != "" {
+		t.Errorf("Expected passthrough for bare 'ldconfig', got %q", decision)
+	}
+}
+
+func TestGoVersionAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("go version")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'go version', got %q", decision)
+	}
+}
+
+func TestGoEnvAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("go env GOPATH")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'go env GOPATH', got %q", decision)
+	}
+}
+
+func TestGoDocAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"bare", "go doc fmt"},
+		{"symbol", "go doc fmt.Println"},
+		{"all flag", "go doc -all fmt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			if decision != "allow" {
+				t.Errorf("Expected allow for %q, got %q", tt.command, decision)
+			}
+		})
+	}
+}
+
+func TestGoBuildPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("go build ./...")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'go build', got %q", decision)
+	}
+}
+
+func TestWhichAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("which node")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'which node', got %q", decision)
+	}
+}
+
+func TestWhichMultipleArgsAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("which git node python")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'which git node python', got %q", decision)
 	}
 }
 
