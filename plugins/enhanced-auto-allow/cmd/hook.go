@@ -35,6 +35,7 @@ type CommandNode struct {
 	RequiredFlags    []string         `json:"requiredFlags,omitempty"`
 	RequireFlagValue *RequireFlagRule `json:"requireFlagValue,omitempty"`
 	DenyWithMessage  string           `json:"denyWithMessage,omitempty"`
+	FlagsWithValue   []string         `json:"flagsWithValue,omitempty"`
 	Subcommands      []CommandNode    `json:"subcommands,omitempty"`
 }
 
@@ -159,16 +160,22 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 			return "", ""
 		}
 
+		// Strip own flags (that take values) before subcommand matching
+		subcommandArgs := remaining
+		if len(node.FlagsWithValue) > 0 {
+			subcommandArgs = stripFlagsWithValue(remaining, node.FlagsWithValue)
+		}
+
 		// If there are subcommands, recurse
-		if len(node.Subcommands) > 0 && len(remaining) > 0 {
-			decision, msg := evaluateArgs(remaining, node.Subcommands)
+		if len(node.Subcommands) > 0 && len(subcommandArgs) > 0 {
+			decision, msg := evaluateArgs(subcommandArgs, node.Subcommands)
 			if decision != "" {
 				return decision, msg
 			}
 			// If the first remaining arg looks like a subcommand (not a flag)
 			// but didn't match any known subcommand, don't fall through to
 			// allowedFlags - it's an unknown/mutating subcommand.
-			if !strings.HasPrefix(remaining[0], "-") {
+			if !strings.HasPrefix(subcommandArgs[0], "-") {
 				return "", ""
 			}
 		}
@@ -429,6 +436,22 @@ func hasAnyFlag(args []string, flags []string) bool {
 		}
 	}
 	return false
+}
+
+func stripFlagsWithValue(args []string, flags []string) []string {
+	flagSet := make(map[string]bool, len(flags))
+	for _, f := range flags {
+		flagSet[f] = true
+	}
+	var result []string
+	for i := 0; i < len(args); i++ {
+		if flagSet[args[i]] && i+1 < len(args) {
+			i++ // skip the value too
+			continue
+		}
+		result = append(result, args[i])
+	}
+	return result
 }
 
 func getFlagValue(args []string, flags []string) string {

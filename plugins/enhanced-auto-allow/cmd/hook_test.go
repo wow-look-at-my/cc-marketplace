@@ -558,6 +558,36 @@ func TestClaudePluginHelpAllowed(t *testing.T) {
 	}
 }
 
+func TestDockerComposeRunRmAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"basic run --rm", "docker compose run --rm myservice", "allow"},
+		{"run --rm with args", "docker compose run --rm myservice bash", "allow"},
+		{"with -f flag", "docker compose -f docker-compose.yml run --rm myservice", "allow"},
+		{"with --file flag", "docker compose --file docker-compose.yml run --rm myservice", "allow"},
+		{"with -f and -p", "docker compose -f compose.yml -p myproject run --rm myservice", "allow"},
+		{"--rm at end", "docker compose -f compose.yml run myservice --rm", "allow"},
+		{"docker-compose alias", "docker-compose run --rm myservice", "allow"},
+		{"docker-compose with -f", "docker-compose -f docker-compose.yml run --rm myservice", "allow"},
+		{"run without --rm passthrough", "docker compose run myservice", ""},
+		{"docker-compose run without --rm passthrough", "docker-compose run myservice", ""},
+		{"compose up passthrough", "docker compose up", ""},
+		{"compose down passthrough", "docker compose down", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			if decision != tt.expected {
+				t.Errorf("evaluateCommand(%q) = %q, want %q", tt.command, decision, tt.expected)
+			}
+		})
+	}
+}
+
 func TestCompoundCommands(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
