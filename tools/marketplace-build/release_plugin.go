@@ -40,7 +40,7 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	}
 	newVersion := currentVersion + 1
 
-	fmt.Fprintf(os.Stderr, "Preparing %s: v%d -> v%d\n", pluginName, currentVersion, newVersion)
+	fmt.Fprintf(os.Stderr, "Preparing %s: %d -> %d\n", pluginName, currentVersion, newVersion)
 
 	// Get source commit SHA for change detection
 	sourceCommit, err := GetHeadSHA()
@@ -53,9 +53,6 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get repo info: %w", err)
 	}
-
-	versionTag := fmt.Sprintf("plugin/%s@v%d", pluginName, newVersion)
-	distURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s", owner, repo, versionTag)
 	srcURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s/plugins/%s", owner, repo, sourceCommit, pluginName)
 
 	// Create temp directory for cooked plugin contents (NOT cleaned up - workflow uses it)
@@ -69,19 +66,15 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	meta := releaseMetadata{
 		SourceCommit: sourceCommit,
 		SourceURL:    srcURL,
-		DistURL:      distURL,
 		BuiltAt:      time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := cookPluginForRelease(pluginPath, tmpDir, newVersion, meta); err != nil {
 		return fmt.Errorf("failed to cook plugin contents: %w", err)
 	}
 
-	commitMsg := fmt.Sprintf("Release %s v%d", pluginName, newVersion)
-
 	// Output for GitHub Actions (parsed by workflow)
 	fmt.Printf("source_dir=%s\n", tmpDir)
-	fmt.Printf("tag=%s\n", versionTag)
-	fmt.Printf("message=%s\n", commitMsg)
+	fmt.Printf("message=Release %s\n", pluginName)
 
 	fmt.Fprintf(os.Stderr, "Prepared release in %s\n", tmpDir)
 	return nil
@@ -90,7 +83,6 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 type releaseMetadata struct {
 	SourceCommit string `json:"sourceCommit"`
 	SourceURL    string `json:"sourceUrl"`
-	DistURL      string `json:"distUrl"`
 	BuiltAt      string `json:"builtAt"`
 }
 

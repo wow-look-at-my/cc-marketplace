@@ -82,10 +82,10 @@ jobs:
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - uses: wow-look-at-my-code/actions@orphan-tag#latest
+      - uses: wow-look-at-my-code/actions@orphan-release#latest
         with:
           source: ${{ steps.release.outputs.source_dir }}
-          tags: ${{ steps.release.outputs.tag }}
+          name: plugin/${{ matrix.plugin }}
           message: ${{ steps.release.outputs.message }}
 
   update:
@@ -119,9 +119,9 @@ jobs:
           rm ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin/marketplace.json
           rmdir ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin
 
-      - uses: wow-look-at-my-code/actions@orphan-tag#latest
+      - uses: wow-look-at-my-code/actions@orphan-release#latest
         with:
           source: ${{ steps.marketplace.outputs.source_dir }}
-          tags: ${{ steps.marketplace.outputs.tag }} ${{ steps.marketplace.outputs.latest_tag }}
+          name: ${{ steps.marketplace.outputs.name }}
           move: marketplace.json:.claude-plugin/marketplace.json
           message: ${{ steps.marketplace.outputs.message }}
