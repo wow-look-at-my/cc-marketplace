@@ -17,30 +17,39 @@ type ToolInput struct {
 	FilePath string `json:"file_path"`
 }
 
-func main() {
-	input, _ := io.ReadAll(os.Stdin)
+// evaluate checks whether a Write tool call should be blocked.
+// Returns exit code (0 = allow, 2 = block) and a message for stderr when blocking.
+func evaluate(input []byte) (int, string) {
 	var hi HookInput
 	if err := json.Unmarshal(input, &hi); err != nil {
-		os.Exit(0)
+		return 0, ""
 	}
 
 	if hi.ToolName != "Write" {
-		os.Exit(0)
+		return 0, ""
 	}
 
 	path := hi.ToolInput.FilePath
 	if path == "" {
-		os.Exit(0)
+		return 0, ""
 	}
 
 	// Check if the file already exists
 	_, err := os.Stat(path)
 	if err != nil {
 		// File doesn't exist (or can't stat) - allow the Write
-		os.Exit(0)
+		return 0, ""
 	}
 
 	// File exists - block the Write
-	fmt.Fprintf(os.Stderr, "BLOCKED: Cannot overwrite existing file %q with Write tool. Use the Edit tool instead to make changes to existing files.", path)
-	os.Exit(2)
+	return 2, fmt.Sprintf("BLOCKED: Cannot overwrite existing file %q with Write tool. Use the Edit tool instead to make changes to existing files.", path)
+}
+
+func main() {
+	input, _ := io.ReadAll(os.Stdin)
+	code, msg := evaluate(input)
+	if msg != "" {
+		fmt.Fprint(os.Stderr, msg)
+	}
+	os.Exit(code)
 }
