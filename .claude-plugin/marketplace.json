@@ -7,5 +7,20 @@
     "description": "Claude Code plugins by wow-look-at-my-code",
     "pluginRoot": "./plugins"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "html-demo",
+      "source": "./html-demo",
+      "description": "Create organized HTML demo pages with separate CSS and JS files",
+      "category": "development",
+      "keywords": ["html", "demo", "frontend", "prototype"]
+    },
+    {
+      "name": "jq",
+      "source": "./jq",
+      "description": "MCP server wrapping jq for JSON filtering, querying, and transforming without Bash permission prompts",
+      "category": "development",
+      "keywords": ["jq", "json", "filter", "query", "mcp"]
+    }
+  ]
 }

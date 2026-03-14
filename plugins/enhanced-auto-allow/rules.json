@@ -34,10 +34,84 @@
 				"od",
 				"mdfind",
 				"mdls",
-				"locate"
+				"locate",
+				"echo",
+				"printf",
+				"true",
+				"false",
+				"test",
+				"[",
+				"date",
+				"hostname",
+				"pwd",
+				"env",
+				"sort",
+				"uniq",
+				"tr",
+				"cut",
+				"diff",
+				"comm",
+				"join",
+				"paste",
+				"column",
+				"expand",
+				"unexpand",
+				"fold",
+				"fmt",
+				"nl",
+				"rev",
+				"tac",
+				"seq",
+				"realpath",
+				"cd",
+				"pkg-config",
+				"pkgconf",
+				"pkg_config"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
+		},
+		{
+			"name": "find",
+			"description": "Auto-approve readonly find commands; -exec allowed if sub-command is whitelisted",
+			"allowedFlags": "*",
+			"deniedFlags": [
+				"-delete"
+			],
+			"execFlags": [
+				"-exec",
+				"-execdir",
+				"-ok",
+				"-okdir"
+			]
+		},
+		{
+			"name": "grep",
+			"description": "Auto-approve grep (read-only search)",
+			"allowedFlags": "*"
+		},
+		{
+			"name": "ldconfig",
+			"description": "Auto-approve readonly ldconfig commands",
+			"requiredFlags": [
+				"-p",
+				"--print-cache",
+				"-v"
+			]
+		},
+		{
+			"name": "go",
+			"description": "Auto-approve readonly go toolchain commands",
+			"subcommands": [
+				{
+					"name": [
+						"version",
+						"env",
+						"doc"
+					],
+					"allowedFlags": "*"
+				}
+			]
 		},
 		{
 			"name": "git",
@@ -104,6 +178,15 @@
 								"show",
 								"get-url"
 							],
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "submodule",
+					"subcommands": [
+						{
+							"name": "status",
 							"allowedFlags": "*"
 						}
 					]
@@ -250,6 +333,112 @@
 							"GET"
 						]
 					}
+				}
+			]
+		},
+		{
+			"name": "claude",
+			"description": "Auto-approve readonly claude CLI commands",
+			"subcommands": [
+				{
+					"name": "mcp",
+					"subcommands": [
+						{
+							"name": [
+								"list",
+								"get"
+							],
+							"allowedFlags": "*"
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				},
+				{
+					"name": "plugin",
+					"subcommands": [
+						{
+							"name": "list",
+							"allowedFlags": "*"
+						},
+						{
+							"name": "marketplace",
+							"subcommands": [
+								{
+									"name": "list",
+									"allowedFlags": "*"
+								}
+							]
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				},
+				{
+					"name": "config",
+					"subcommands": [
+						{
+							"name": [
+								"list",
+								"get"
+							],
+							"allowedFlags": "*"
+						}
+					],
+					"allowedFlags": [
+						"--help",
+						"-h"
+					]
+				}
+			],
+			"allowedFlags": [
+				"--version",
+				"-v",
+				"--help",
+				"-h"
+			]
+		},
+		{
+			"name": "just",
+			"description": "Auto-approve readonly just commands",
+			"requiredFlags": [
+				"--list",
+				"-l",
+				"--summary",
+				"--dump",
+				"--evaluate",
+				"--help",
+				"-h"
+			]
+		},
+		{
+			"name": "docker",
+			"description": "Auto-approve docker compose run --rm",
+			"subcommands": [
+				{
+					"name": "compose",
+					"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
+					"subcommands": [
+						{
+							"name": "run",
+							"requiredFlags": ["--rm"]
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "docker-compose",
+			"description": "Auto-approve docker-compose run --rm",
+			"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
+			"subcommands": [
+				{
+					"name": "run",
+					"requiredFlags": ["--rm"]
 				}
 			]
 		},
