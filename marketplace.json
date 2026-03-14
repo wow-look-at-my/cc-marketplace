@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "description": "Claude Code plugins by wow-look-at-my-code",
+    "pluginRoot": "./plugins",
+    "version": "1"
+  },
+  "name": "wow-cc-marketplace",
+  "owner": {
+    "name": "wow-look-at-my-code"
+  },
+  "plugins": [
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Auto-approve readonly git and gh commands using JSON-driven rules",
+      "hooks": {
+        "PermissionRequest": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/run",
+                "type": "command"
+              }
+            ],
+            "matcher": "Bash"
+          },
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/run",
+                "type": "command"
+              }
+            ],
+            "matcher": "Read|Glob|Grep"
+          }
+        ]
+      },
+      "keywords": [
+        "git",
+        "github",
+        "auto-allow",
+        "permissions"
+      ],
+      "name": "enhanced-auto-allow",
+      "source": {
+        "ref": "plugin/enhanced-auto-allow#1",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "25"
+    }
+  ]
+}
