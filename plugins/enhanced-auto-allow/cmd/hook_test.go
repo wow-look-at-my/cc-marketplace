@@ -92,6 +92,30 @@ func TestGitRemoteShowAllowed(t *testing.T) {
 	}
 }
 
+func TestGitSubmoduleStatusAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule status")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'git submodule status', got %q", decision)
+	}
+}
+
+func TestGitSubmoduleStatusRecursiveAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule status --recursive")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'git submodule status --recursive', got %q", decision)
+	}
+}
+
+func TestGitSubmoduleUpdatePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git submodule update --init")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'git submodule update --init', got %q", decision)
+	}
+}
+
 func TestGhPrListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh pr list")
@@ -170,6 +194,162 @@ func TestGhRunListAllowed(t *testing.T) {
 	}
 }
 
+func TestFindPipeGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for find|grep file search, got %q", decision)
+	}
+}
+
+func TestFindBasicAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.go' -type f")
+	if decision != "allow" {
+		t.Errorf("Expected allow for basic find, got %q", decision)
+	}
+}
+
+func TestFindExecGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for find -exec grep, got %q", decision)
+	}
+}
+
+func TestFindExecRmPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.tmp' -exec rm {} \\;")
+	if decision != "" {
+		t.Errorf("Expected passthrough for find -exec rm, got %q", decision)
+	}
+}
+
+func TestFindDeletePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("find . -name '*.tmp' -delete")
+	if decision != "" {
+		t.Errorf("Expected passthrough for find with -delete, got %q", decision)
+	}
+}
+
+func TestPkgConfigAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"cflags", "pkg-config --cflags openssl"},
+		{"libs", "pkg-config --libs openssl"},
+		{"modversion", "pkg-config --modversion openssl"},
+		{"list-all", "pkg-config --list-all"},
+		{"exists", "pkg-config --exists libcurl"},
+		{"pkgconf alias", "pkgconf --cflags openssl"},
+		{"pkg_config alias", "pkg_config --libs openssl"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			if decision != "allow" {
+				t.Errorf("Expected allow for %q, got %q", tt.command, decision)
+			}
+		})
+	}
+}
+
+func TestLdconfigPrintCacheAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("ldconfig -p")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'ldconfig -p', got %q", decision)
+	}
+}
+
+func TestLdconfigPrintCacheLongAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("ldconfig --print-cache")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'ldconfig --print-cache', got %q", decision)
+	}
+}
+
+func TestLdconfigBarePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("ldconfig")
+	if decision != "" {
+		t.Errorf("Expected passthrough for bare 'ldconfig', got %q", decision)
+	}
+}
+
+func TestGoVersionAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("go version")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'go version', got %q", decision)
+	}
+}
+
+func TestGoEnvAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("go env GOPATH")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'go env GOPATH', got %q", decision)
+	}
+}
+
+func TestGoDocAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"bare", "go doc fmt"},
+		{"symbol", "go doc fmt.Println"},
+		{"all flag", "go doc -all fmt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			if decision != "allow" {
+				t.Errorf("Expected allow for %q, got %q", tt.command, decision)
+			}
+		})
+	}
+}
+
+func TestGoBuildPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("go build ./...")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'go build', got %q", decision)
+	}
+}
+
+func TestWhichAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("which node")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'which node', got %q", decision)
+	}
+}
+
+func TestWhichMultipleArgsAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("which git node python")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'which git node python', got %q", decision)
+	}
+}
+
+func TestGrepAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("grep -ri 'TODO' src/")
+	if decision != "allow" {
+		t.Errorf("Expected allow for grep, got %q", decision)
+	}
+}
+
 func TestCommandSubstitutionPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git log $(echo test)")
@@ -202,6 +382,212 @@ func TestUnknownCommandPassthrough(t *testing.T) {
 	}
 }
 
+func TestEchoRedirectPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo foo > file.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for echo with redirect, got %q", decision)
+	}
+}
+
+func TestEchoAppendPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo foo >> file.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for echo with append, got %q", decision)
+	}
+}
+
+func TestSortRedirectPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("sort input.txt > output.txt")
+	if decision != "" {
+		t.Errorf("Expected passthrough for sort with redirect, got %q", decision)
+	}
+}
+
+func TestEchoPipeAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("echo hello | grep hello")
+	if decision != "allow" {
+		t.Errorf("Expected allow for echo piped to grep, got %q", decision)
+	}
+}
+
+func TestGitShowWithEchoAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`git show 54d7aa918a94 --stat && echo "---" && git show 54d7aa918a94 -- path/to/file.cpp`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for git show && echo && git show, got %q", decision)
+	}
+}
+
+func TestJustListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("just --list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'just --list', got %q", decision)
+	}
+}
+
+func TestJustListWithRedirectAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand(`just --list 2>/dev/null || echo "no justfile"`)
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'just --list 2>/dev/null || echo no justfile', got %q", decision)
+	}
+}
+
+func TestJustBuildPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("just build")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'just build', got %q", decision)
+	}
+}
+
+func TestClaudeMcpListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude mcp list', got %q", decision)
+	}
+}
+
+func TestClaudeMcpHelpAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp --help")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude mcp --help', got %q", decision)
+	}
+}
+
+func TestClaudeMcpGetAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp get server-name")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude mcp get server-name', got %q", decision)
+	}
+}
+
+func TestClaudeMcpAddPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp add my-server -- npx server")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'claude mcp add', got %q", decision)
+	}
+}
+
+func TestClaudeMcpRemovePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude mcp remove my-server")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'claude mcp remove', got %q", decision)
+	}
+}
+
+func TestClaudeVersionAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude --version")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude --version', got %q", decision)
+	}
+}
+
+func TestClaudeHelpAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude --help")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude --help', got %q", decision)
+	}
+}
+
+func TestClaudePluginListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude plugin list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude plugin list', got %q", decision)
+	}
+}
+
+func TestClaudePluginMarketplaceListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude plugin marketplace list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude plugin marketplace list', got %q", decision)
+	}
+}
+
+func TestClaudePluginInstallPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude plugin install some-plugin")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'claude plugin install', got %q", decision)
+	}
+}
+
+func TestClaudeConfigListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude config list")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude config list', got %q", decision)
+	}
+}
+
+func TestClaudeConfigGetAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude config get key")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude config get key', got %q", decision)
+	}
+}
+
+func TestClaudeConfigSetPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude config set key value")
+	if decision != "" {
+		t.Errorf("Expected passthrough for 'claude config set', got %q", decision)
+	}
+}
+
+func TestClaudePluginHelpAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("claude plugin --help")
+	if decision != "allow" {
+		t.Errorf("Expected allow for 'claude plugin --help', got %q", decision)
+	}
+}
+
+func TestDockerComposeRunRmAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"basic run --rm", "docker compose run --rm myservice", "allow"},
+		{"run --rm with args", "docker compose run --rm myservice bash", "allow"},
+		{"with -f flag", "docker compose -f docker-compose.yml run --rm myservice", "allow"},
+		{"with --file flag", "docker compose --file docker-compose.yml run --rm myservice", "allow"},
+		{"with -f and -p", "docker compose -f compose.yml -p myproject run --rm myservice", "allow"},
+		{"--rm at end", "docker compose -f compose.yml run myservice --rm", "allow"},
+		{"docker-compose alias", "docker-compose run --rm myservice", "allow"},
+		{"docker-compose with -f", "docker-compose -f docker-compose.yml run --rm myservice", "allow"},
+		{"run without --rm passthrough", "docker compose run myservice", ""},
+		{"docker-compose run without --rm passthrough", "docker-compose run myservice", ""},
+		{"compose up passthrough", "docker compose up", ""},
+		{"compose down passthrough", "docker compose down", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			if decision != tt.expected {
+				t.Errorf("evaluateCommand(%q) = %q, want %q", tt.command, decision, tt.expected)
+			}
+		})
+	}
+}
+
 func TestCompoundCommands(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
@@ -217,6 +603,7 @@ func TestCompoundCommands(t *testing.T) {
 		{"with deny", "git status && gh run view 123", "deny"},
 		{"triple and", "git status && git diff && git log", "allow"},
 		{"semicolon", "git status; git diff", "allow"},
+		{"cd and git diff", "cd some/folder && git diff Config/DefaultEngine.ini", "allow"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
