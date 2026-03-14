@@ -123,14 +123,16 @@
         "SessionStart": { "$ref": "#/$defs/hookEventArray" },
         "PreToolUse": { "$ref": "#/$defs/hookEventArray" },
         "PostToolUse": { "$ref": "#/$defs/hookEventArray" },
-        "Stop": { "$ref": "#/$defs/hookEventArray" }
+        "Stop": { "$ref": "#/$defs/hookEventArray" },
+        "PermissionRequest": { "$ref": "#/$defs/hookEventArray" },
+        "UserPromptSubmit": { "$ref": "#/$defs/hookEventArray" }
       }
     },
     "hookEventArray": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["matcher", "hooks"],
+        "required": ["hooks"],
         "additionalProperties": false,
         "properties": {
           "matcher": {

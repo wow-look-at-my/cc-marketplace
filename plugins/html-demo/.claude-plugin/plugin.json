@@ -1,0 +1,11 @@
+{
+  "name": "html-demo",
+  "description": "Create organized, well-structured HTML demo pages with separate CSS and JS files",
+  "author": {
+    "name": "wow-look-at-my-code"
+  },
+  "keywords": ["html", "demo", "frontend", "prototype"],
+  "mh": {
+    "include_in_marketplace": true
+  }
+}
