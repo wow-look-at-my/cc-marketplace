@@ -416,6 +416,33 @@
 			]
 		},
 		{
+			"name": "docker",
+			"description": "Auto-approve docker compose run --rm",
+			"subcommands": [
+				{
+					"name": "compose",
+					"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
+					"subcommands": [
+						{
+							"name": "run",
+							"requiredFlags": ["--rm"]
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "docker-compose",
+			"description": "Auto-approve docker-compose run --rm",
+			"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
+			"subcommands": [
+				{
+					"name": "run",
+					"requiredFlags": ["--rm"]
+				}
+			]
+		},
+		{
 			"name": "zpool",
 			"description": "Auto-approve readonly zpool commands",
 			"subcommands": [
