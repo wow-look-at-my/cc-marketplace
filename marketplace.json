@@ -1,0 +1,147 @@
+{
+  "metadata": {
+    "description": "Claude Code plugins by wow-look-at-my-code",
+    "pluginRoot": "./plugins",
+    "version": "13"
+  },
+  "name": "wow-cc-marketplace",
+  "owner": {
+    "name": "wow-look-at-my-code"
+  },
+  "plugins": [
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "description": "MCP server for crawling web pages using crawl4ai and returning content as markdown",
+      "keywords": [
+        "web-crawling",
+        "scraping",
+        "markdown",
+        "mcp"
+      ],
+      "mcpServers": "./.mcp.json",
+      "name": "crawl4ai",
+      "source": {
+        "ref": "plugin/crawl4ai@v4",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "4"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Auto-approve readonly git and gh commands using JSON-driven rules",
+      "hooks": {
+        "PermissionRequest": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/run",
+                "type": "command"
+              }
+            ],
+            "matcher": "Bash"
+          },
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/run",
+                "type": "command"
+              }
+            ],
+            "matcher": "Read|Glob|Grep"
+          }
+        ]
+      },
+      "keywords": [
+        "git",
+        "github",
+        "auto-allow",
+        "permissions"
+      ],
+      "name": "enhanced-auto-allow",
+      "source": {
+        "ref": "plugin/enhanced-auto-allow@v24",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "24"
+    },
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "Create organized, well-structured HTML demo pages with separate CSS and JS files",
+      "keywords": [
+        "html",
+        "demo",
+        "frontend",
+        "prototype"
+      ],
+      "name": "html-demo",
+      "source": {
+        "ref": "plugin/html-demo@v5",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "5"
+    },
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "MCP server wrapping jq for JSON filtering, querying, and transforming without Bash permission prompts",
+      "keywords": [
+        "jq",
+        "json",
+        "filter",
+        "query",
+        "mcp"
+      ],
+      "mcpServers": "./.mcp.json",
+      "name": "jq",
+      "source": {
+        "ref": "plugin/jq@v2",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "2"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Fetch text content from URLs referenced with @https://... in prompts",
+      "hooks": {
+        "UserPromptSubmit": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/hook",
+                "type": "command"
+              }
+            ]
+          }
+        ]
+      },
+      "keywords": [
+        "fetch",
+        "url",
+        "text",
+        "content"
+      ],
+      "name": "prompt-url-fetch",
+      "source": {
+        "ref": "plugin/prompt-url-fetch@v2",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "2"
+    }
+  ]
+}
