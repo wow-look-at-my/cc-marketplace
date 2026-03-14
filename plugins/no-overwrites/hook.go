@@ -45,9 +45,14 @@ func evaluate(input []byte) (int, string) {
 	return 2, fmt.Sprintf("BLOCKED: Cannot overwrite existing file %q with Write tool. Use the Edit tool instead to make changes to existing files.", path)
 }
 
+// run reads stdin and returns the exit code and stderr message.
+func run(r io.Reader) (int, string) {
+	input, _ := io.ReadAll(r)
+	return evaluate(input)
+}
+
 func main() {
-	input, _ := io.ReadAll(os.Stdin)
-	code, msg := evaluate(input)
+	code, msg := run(os.Stdin)
 	if msg != "" {
 		fmt.Fprint(os.Stderr, msg)
 	}

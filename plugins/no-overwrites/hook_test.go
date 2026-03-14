@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/wow-look-at-my/testify/assert"
@@ -75,4 +76,22 @@ func TestAllowEmptyFilePath(t *testing.T) {
 func TestAllowInvalidJSON(t *testing.T) {
 	code, _ := evaluate([]byte("not json"))
 	assert.Equal(t, 0, code)
+}
+
+// TestRunFromReader exercises the run() function which reads from an io.Reader
+func TestRunFromReader(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "via-reader.txt")
+	require.NoError(t, os.WriteFile(tmp, []byte("content"), 0644))
+
+	input := HookInput{
+		HookEventName: "PreToolUse",
+		ToolName:      "Write",
+		ToolInput:     ToolInput{FilePath: tmp},
+	}
+	data, err := json.Marshal(input)
+	require.Nil(t, err)
+
+	code, msg := run(strings.NewReader(string(data)))
+	assert.Equal(t, 2, code)
+	assert.Contains(t, msg, "BLOCKED")
 }
