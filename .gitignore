@@ -5,6 +5,7 @@
 bin/
 plugins/*/bin/
 plugins/*/run
+plugins/*/crawl4ai-mcp
 .go-binary
 
 # Node

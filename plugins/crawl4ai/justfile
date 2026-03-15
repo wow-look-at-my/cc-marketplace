@@ -1,0 +1,9 @@
+[private]
+help:
+	@just --list
+
+build:
+	go build -o run .
+
+test: build
+	go test -v -cover ./...
