@@ -153,26 +153,6 @@ func TestValidateHookBinaries_NoHooks(t *testing.T) {
 	}
 }
 
-func TestValidateHookBinaries_RealEnhancedAutoAllow(t *testing.T) {
-	// This test uses the actual enhanced-auto-allow plugin.json to verify
-	// that the CI step catches the missing "run" binary at the plugin root.
-	repoRoot := getRepoRoot()
-	pluginPath := filepath.Join(repoRoot, "plugins", "enhanced-auto-allow")
-
-	if _, err := os.Stat(filepath.Join(pluginPath, ".claude-plugin", "plugin.json")); os.IsNotExist(err) {
-		t.Skip("enhanced-auto-allow plugin not found, skipping integration test")
-	}
-
-	err := validateHookBinaries(pluginPath)
-	if err == nil {
-		t.Fatal("expected validation to fail for enhanced-auto-allow (missing 'run' binary at plugin root)")
-	}
-	if !strings.Contains(err.Error(), "hook binary validation failed") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	t.Logf("Correctly caught: %v", err)
-}
-
 func TestValidateHookBinaries_InlineCommand(t *testing.T) {
 	// Commands that don't use ${CLAUDE_PLUGIN_ROOT} should be skipped
 	tmpDir := t.TempDir()

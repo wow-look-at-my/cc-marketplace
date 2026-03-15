@@ -13,7 +13,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/run"
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-overwrites"
 					}
 				]
 			},
@@ -22,7 +22,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/run"
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-overwrites"
 					}
 				]
 			},
