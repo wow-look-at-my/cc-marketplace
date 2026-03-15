@@ -54,6 +54,11 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("postbuild failed: %w", err)
 	}
 
+	// Validate hook binary paths exist after build
+	if err := validateHookBinaries(pluginPath); err != nil {
+		return err
+	}
+
 	return nil
 }
 
