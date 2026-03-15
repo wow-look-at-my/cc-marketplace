@@ -113,3 +113,8 @@ jobs:
           source: ${{ steps.marketplace.outputs.source_dir }}
           name: ${{ steps.marketplace.outputs.name }}
           message: ${{ steps.marketplace.outputs.message }}
+
+      - name: Verify marketplace install
+        run: |
+          claude plugin marketplace add ${{ github.repository }}#${{ steps.marketplace.outputs.name }}#latest
+          claude plugin marketplace list
