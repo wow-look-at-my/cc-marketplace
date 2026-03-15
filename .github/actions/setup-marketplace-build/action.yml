@@ -14,6 +14,12 @@ runs:
         path: ~/go/pkg/mod ~/.cache/go-build
         key: go-marketplace-build-${{ hashFiles('tools/marketplace-build/go.sum') }}
 
+    - name: Fetch tags
+      shell: bash
+      run: git fetch --tags --force
+
+    - uses: extractions/setup-just@v2
+
     - name: Build CLI
       shell: bash
       run: |
