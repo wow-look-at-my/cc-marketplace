@@ -19,4 +19,4 @@ Thumbs.db
 *.swp
 *.swo
 coverage.out
-/build/
+build/
