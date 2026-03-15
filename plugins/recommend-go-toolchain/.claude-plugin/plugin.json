@@ -13,7 +13,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/hook"
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/recommend-go-toolchain"
 					}
 				]
 			}
