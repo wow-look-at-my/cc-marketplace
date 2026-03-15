@@ -209,8 +209,11 @@ func getRepoRoot() string {
 	return repoRoot
 }
 
-// runGit runs a git command and returns stdout
-func runGit(args ...string) (string, error) {
+// runGit runs a git command and returns stdout.
+// This is a variable so tests can replace it with a mock.
+var runGit = runGitReal
+
+func runGitReal(args ...string) (string, error) {
 	if os.Getenv("CI") == "" && len(args) > 0 && args[0] == "push" {
 		fmt.Printf("[local] skipping: git %v\n", args)
 		return "", nil
@@ -228,8 +231,11 @@ func runGit(args ...string) (string, error) {
 	return string(out), nil
 }
 
-// runGitNoOutput runs a git command without returning output
-func runGitNoOutput(args ...string) error {
+// runGitNoOutput runs a git command without returning output.
+// This is a variable so tests can replace it with a mock.
+var runGitNoOutput = runGitNoOutputReal
+
+func runGitNoOutputReal(args ...string) error {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = getRepoRoot()
 	return cmd.Run()

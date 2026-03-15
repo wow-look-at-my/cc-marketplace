@@ -4,25 +4,16 @@ description: Build or restore cached marketplace-build CLI
 runs:
   using: composite
   steps:
-    - uses: wow-look-at-my-code/actions@smart-cache#latest
-      with:
-        path: /usr/local/bin/marketplace-build
-        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
-
-    - uses: wow-look-at-my-code/actions@smart-cache#latest
-      with:
-        path: ~/go/pkg/mod ~/.cache/go-build
-        key: go-marketplace-build-${{ hashFiles('tools/marketplace-build/go.sum') }}
-
     - name: Fetch tags
       shell: bash
       run: git fetch --tags --force
 
     - uses: extractions/setup-just@v2
+    
+    - uses: wow-look-at-my/go-toolchain@latest
+      with:
+        working-directory: "tools/marketplace-build"
 
-    - name: Build CLI
+    - run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
       shell: bash
-      run: |
-        if [ ! -f /usr/local/bin/marketplace-build ]; then
-          cd tools/marketplace-build && go build -o /usr/local/bin/marketplace-build .
-        fi
+      

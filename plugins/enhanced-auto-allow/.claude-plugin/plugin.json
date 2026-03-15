@@ -9,20 +9,11 @@
 	"hooks": {
 		"PermissionRequest": [
 			{
-				"matcher": "Bash",
+				"matcher": "Bash|Read|Glob|Grep",
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/run"
-					}
-				]
-			},
-			{
-				"matcher": "Read|Glob|Grep",
-				"hooks": [
-					{
-						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/run"
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/enhanced-auto-allow"
 					}
 				]
 			},
