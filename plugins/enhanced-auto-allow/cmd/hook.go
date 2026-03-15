@@ -95,10 +95,29 @@ func main() {
 	}
 }
 
+// isHelpOnlyCommand returns true if the parsed commands are all
+// "<program> [subcommands...] --help/-h" invocations for a given program.
+func isHelpOnlyCommand(commands [][]string, program string) bool {
+	for _, args := range commands {
+		if len(args) < 2 || args[0] != program {
+			return false
+		}
+		if last := args[len(args)-1]; last != "--help" && last != "-h" {
+			return false
+		}
+	}
+	return true
+}
+
 func evaluateCommand(command string) (string, string) {
 	commands := parseAllCommands(command)
 	if len(commands) == 0 {
 		return "", ""
+	}
+
+	// Auto-allow any "claude ... --help/-h" invocation universally.
+	if isHelpOnlyCommand(commands, "claude") {
+		return "allow", ""
 	}
 
 	// All commands must be allowed (or passthrough)
