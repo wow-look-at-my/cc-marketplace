@@ -134,20 +134,20 @@ func hasInfraChanges(repoRoot string) bool {
 
 // getOldestPluginTagCommit returns the source commit of the oldest plugin tag
 func getOldestPluginTagCommit() string {
-	// List all plugin tags
-	out, err := runGit("tag", "-l", "plugin/*/v*")
-	if err != nil || strings.TrimSpace(out) == "" {
-		return ""
-	}
-
-	tags := strings.Split(strings.TrimSpace(out), "\n")
-	if len(tags) == 0 {
+	// List all plugin tags (format: plugin/{name}#{version})
+	tags, err := ListTagsWithPrefix("plugin/")
+	if err != nil || len(tags) == 0 {
 		return ""
 	}
 
 	// Find the oldest source commit across all tags
 	var oldestCommit string
 	for _, tag := range tags {
+		// Skip #latest pointer tags
+		if strings.HasSuffix(tag, "#latest") {
+			continue
+		}
+
 		// Read mh.plugin.json from the tag
 		metaOut, err := runGit("show", fmt.Sprintf("%s:mh.plugin.json", tag))
 		if err != nil {
