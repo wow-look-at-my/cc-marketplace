@@ -27,16 +27,17 @@ type Rules struct {
 }
 
 type CommandNode struct {
-	Name             interface{}      `json:"name"` // string or []string
-	Description      string           `json:"description,omitempty"`
-	AllowedFlags     interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
-	DeniedFlags      []string         `json:"deniedFlags,omitempty"`
-	ExecFlags        []string         `json:"execFlags,omitempty"`
-	RequiredFlags    []string         `json:"requiredFlags,omitempty"`
-	RequireFlagValue *RequireFlagRule `json:"requireFlagValue,omitempty"`
-	DenyWithMessage  string           `json:"denyWithMessage,omitempty"`
-	FlagsWithValue   []string         `json:"flagsWithValue,omitempty"`
-	Subcommands      []CommandNode    `json:"subcommands,omitempty"`
+	Name              interface{}      `json:"name"` // string or []string
+	Description       string           `json:"description,omitempty"`
+	AllowedFlags      interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
+	DeniedFlags       []string         `json:"deniedFlags,omitempty"`
+	ExecFlags         []string         `json:"execFlags,omitempty"`
+	RequiredFlags     []string         `json:"requiredFlags,omitempty"`
+	RequireFlagValue  *RequireFlagRule `json:"requireFlagValue,omitempty"`
+	DenyWithMessage   string           `json:"denyWithMessage,omitempty"`
+	FlagsWithValue    []string         `json:"flagsWithValue,omitempty"`
+	HelpAlwaysAllowed bool             `json:"helpAlwaysAllowed,omitempty"`
+	Subcommands       []CommandNode    `json:"subcommands,omitempty"`
 }
 
 type RequireFlagRule struct {
@@ -95,29 +96,10 @@ func main() {
 	}
 }
 
-// isHelpOnlyCommand returns true if the parsed commands are all
-// "<program> [subcommands...] --help/-h" invocations for a given program.
-func isHelpOnlyCommand(commands [][]string, program string) bool {
-	for _, args := range commands {
-		if len(args) < 2 || args[0] != program {
-			return false
-		}
-		if last := args[len(args)-1]; last != "--help" && last != "-h" {
-			return false
-		}
-	}
-	return true
-}
-
 func evaluateCommand(command string) (string, string) {
 	commands := parseAllCommands(command)
 	if len(commands) == 0 {
 		return "", ""
-	}
-
-	// Auto-allow any "claude ... --help/-h" invocation universally.
-	if isHelpOnlyCommand(commands, "claude") {
-		return "allow", ""
 	}
 
 	// All commands must be allowed (or passthrough)
@@ -150,6 +132,11 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 	for _, node := range nodes {
 		if !matchesName(node.Name, current) {
 			continue
+		}
+
+		// If helpAlwaysAllowed, any subcommand chain ending in --help/-h is allowed
+		if node.HelpAlwaysAllowed && hasAnyFlag(remaining, []string{"--help", "-h"}) {
+			return "allow", ""
 		}
 
 		// Check deny with message first
