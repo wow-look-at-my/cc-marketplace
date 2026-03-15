@@ -1,0 +1,118 @@
+{
+  "metadata": {
+    "description": "Claude Code plugins by wow-look-at-my-code",
+    "pluginRoot": "./plugins",
+    "version": "1"
+  },
+  "name": "wow-cc-marketplace",
+  "owner": {
+    "name": "wow-look-at-my-code"
+  },
+  "plugins": [
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "MCP server for Chrome DevTools Protocol - inspect, debug, and interact with Chrome browser pages",
+      "keywords": [
+        "chrome",
+        "devtools",
+        "browser",
+        "debugging",
+        "mcp"
+      ],
+      "mcpServers": "./.mcp.json",
+      "name": "chrome-devtools",
+      "source": {
+        "ref": "plugin/chrome-devtools#2",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "1"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Auto-approve readonly git and gh commands using JSON-driven rules",
+      "hooks": {
+        "PermissionRequest": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/run",
+                "type": "command"
+              }
+            ],
+            "matcher": "Bash"
+          },
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/run",
+                "type": "command"
+              }
+            ],
+            "matcher": "Read|Glob|Grep"
+          }
+        ]
+      },
+      "keywords": [
+        "git",
+        "github",
+        "auto-allow",
+        "permissions"
+      ],
+      "name": "enhanced-auto-allow",
+      "source": {
+        "ref": "plugin/enhanced-auto-allow#4",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "25"
+    },
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "Create organized, well-structured HTML demo pages with separate CSS and JS files",
+      "keywords": [
+        "html",
+        "demo",
+        "frontend",
+        "prototype"
+      ],
+      "name": "html-demo",
+      "source": {
+        "ref": "plugin/html-demo#4",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "6"
+    },
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "MCP server wrapping jq for JSON filtering, querying, and transforming without Bash permission prompts",
+      "keywords": [
+        "jq",
+        "json",
+        "filter",
+        "query",
+        "mcp"
+      ],
+      "mcpServers": "./.mcp.json",
+      "name": "jq",
+      "source": {
+        "ref": "plugin/jq#4",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "3"
+    }
+  ]
+}
