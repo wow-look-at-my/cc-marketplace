@@ -1,0 +1,25 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "no-overwrites",
+	"description": "Blocks the Write tool from overwriting existing files - forces use of Edit instead",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["write", "edit", "overwrite", "guard", "hook"],
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "Write",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/hook"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
