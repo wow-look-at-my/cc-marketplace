@@ -2,19 +2,17 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-var buildTargets = []struct {
-	goos, goarch string
-}{
-	{"linux", "amd64"},
-	{"darwin", "arm64"},
-}
+const goToolchainRepo = "wow-look-at-my/go-toolchain"
 
 func runBuildPlugin(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
@@ -28,60 +26,140 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("plugin not found: %s", pluginPath)
 	}
 
-	// Check for go.mod
-	if _, err := os.Stat(filepath.Join(pluginPath, "go.mod")); os.IsNotExist(err) {
-		fmt.Printf("  (no go.mod found, skipping build)\n")
-		return nil
-	}
-
 	fmt.Printf("Building %s\n", pluginName)
 
-	// Create bin directory
-	binDir := filepath.Join(pluginPath, "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		return fmt.Errorf("failed to create bin dir: %w", err)
+	// Run prebuild recipe if available
+	if err := runJustRecipe(pluginPath, "prebuild"); err != nil {
+		return fmt.Errorf("prebuild failed: %w", err)
 	}
 
-	// Run go mod tidy
-	fmt.Printf("  go mod tidy\n")
-	tidyCmd := exec.Command("go", "mod", "tidy")
-	tidyCmd.Dir = pluginPath
-	tidyCmd.Stdout = os.Stdout
-	tidyCmd.Stderr = os.Stderr
-	if err := tidyCmd.Run(); err != nil {
-		return fmt.Errorf("go mod tidy failed: %w", err)
-	}
-
-	// Build for each target
-	for _, t := range buildTargets {
-		fmt.Printf("  go build (%s-%s)\n", t.goos, t.goarch)
-		binPath := filepath.Join(binDir, fmt.Sprintf("%s-%s-%s", pluginName, t.goos, t.goarch))
-		buildCmd := exec.Command("go", "build", "-o", binPath, "./...")
-		buildCmd.Dir = pluginPath
-		buildCmd.Env = append(os.Environ(), "GOOS="+t.goos, "GOARCH="+t.goarch, "CGO_ENABLED=0")
-		buildCmd.Stdout = os.Stdout
-		buildCmd.Stderr = os.Stderr
-		if err := buildCmd.Run(); err != nil {
-			return fmt.Errorf("%s-%s build failed: %w", t.goos, t.goarch, err)
+	// If .go files found, invoke go-toolchain
+	if hasGoFiles(pluginPath) {
+		if err := runGoToolchain(pluginPath); err != nil {
+			return fmt.Errorf("go-toolchain build failed: %w", err)
 		}
 	}
 
-	// Write run script
-	runScript := fmt.Sprintf(runGoPluginScriptTemplate, pluginName)
-	if err := os.WriteFile(filepath.Join(pluginPath, "run"), []byte(runScript), 0755); err != nil {
-		return fmt.Errorf("failed to write run script: %w", err)
+	// Run postbuild recipe if available
+	if err := runJustRecipe(pluginPath, "postbuild"); err != nil {
+		return fmt.Errorf("postbuild failed: %w", err)
 	}
 
 	return nil
 }
 
-const runGoPluginScriptTemplate = `#!/usr/bin/env bash
-set -euo pipefail
-OS=$(uname -s | tr 'A-Z' 'a-z')
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64) ARCH=amd64 ;;
-    aarch64|arm64) ARCH=arm64 ;;
-esac
-exec "$(dirname "$0")/bin/%s-${OS}-${ARCH}" "$@"
-`
+func hasGoFiles(dir string) bool {
+	found := false
+	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && filepath.Ext(path) == ".go" {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
+func runJustRecipe(dir, recipe string) error {
+	if _, err := os.Stat(filepath.Join(dir, "justfile")); os.IsNotExist(err) {
+		return nil
+	}
+
+	// Check if recipe exists
+	summaryCmd := exec.Command("just", "--summary")
+	summaryCmd.Dir = dir
+	out, err := summaryCmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	found := false
+	for _, name := range strings.Fields(string(out)) {
+		if name == recipe {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+
+	fmt.Printf("  just %s\n", recipe)
+	cmd := exec.Command("just", recipe)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func runGoToolchain(pluginPath string) error {
+	fmt.Printf("  Invoking go-toolchain (https://github.com/%s/releases/latest)\n", goToolchainRepo)
+
+	toolchainDir, err := os.MkdirTemp("", "go-toolchain-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(toolchainDir)
+
+	// Download latest release assets
+	dlCmd := exec.Command("gh", "release", "download",
+		"--repo", goToolchainRepo,
+		"--pattern", "*",
+		"-D", toolchainDir)
+	dlCmd.Stdout = os.Stdout
+	dlCmd.Stderr = os.Stderr
+	if err := dlCmd.Run(); err != nil {
+		return fmt.Errorf("failed to download go-toolchain: %w", err)
+	}
+
+	// Find binary matching current platform
+	binPath, err := findToolchainBinary(toolchainDir)
+	if err != nil {
+		return err
+	}
+
+	if err := os.Chmod(binPath, 0755); err != nil {
+		return fmt.Errorf("failed to make go-toolchain executable: %w", err)
+	}
+
+	// Run toolchain in plugin directory
+	runCmd := exec.Command(binPath)
+	runCmd.Dir = pluginPath
+	runCmd.Stdout = os.Stdout
+	runCmd.Stderr = os.Stderr
+	if err := runCmd.Run(); err != nil {
+		return fmt.Errorf("go-toolchain failed: %w", err)
+	}
+
+	return nil
+}
+
+func findToolchainBinary(dir string) (string, error) {
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", fmt.Errorf("failed to read toolchain dir: %w", err)
+	}
+
+	// First pass: look for platform-specific binary
+	for _, e := range entries {
+		name := e.Name()
+		if strings.Contains(name, goos) && strings.Contains(name, goarch) {
+			return filepath.Join(dir, name), nil
+		}
+	}
+
+	// Second pass: use first file found
+	for _, e := range entries {
+		if !e.IsDir() {
+			return filepath.Join(dir, e.Name()), nil
+		}
+	}
+
+	return "", fmt.Errorf("no go-toolchain binary found in release assets")
+}
