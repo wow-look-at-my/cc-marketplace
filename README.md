@@ -7,8 +7,10 @@ A marketplace of Claude Code plugins.
 ### Add This Marketplace
 
 ```bash
-claude plugin marketplace add wow-look-at-my-code/cc-marketplace#latest
+claude plugin marketplace add wow-look-at-my/cc-marketplace#marketplace#latest
 ```
+
+The marketplace is published as an orphan tag `marketplace#latest` that CI updates automatically on every push to master. The `#` after the repo name is the git ref separator, and `marketplace#latest` is the tag name.
 
 ### Install Plugins
 

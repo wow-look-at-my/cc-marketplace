@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -28,6 +30,13 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Building %s\n", pluginName)
 
+	justfilePath := filepath.Join(pluginPath, "justfile")
+	if _, err := os.Stat(justfilePath); err == nil {
+		if err := validateJustfile(justfilePath); err != nil {
+			return err
+		}
+	}
+
 	// Run prebuild recipe if available
 	if err := runJustRecipe(pluginPath, "prebuild"); err != nil {
 		return fmt.Errorf("prebuild failed: %w", err)
@@ -45,6 +54,31 @@ func runBuildPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("postbuild failed: %w", err)
 	}
 
+	return nil
+}
+
+var forbiddenJustfilePattern = regexp.MustCompile(`\b(go\s+build|go\s+test|go-toolchain|go-safe-build)\b`)
+
+func validateJustfile(justfilePath string) error {
+	f, err := os.Open(justfilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read justfile: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+		// Skip comments
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if m := forbiddenJustfilePattern.FindString(line); m != "" {
+			return fmt.Errorf("justfile:%d: forbidden command %q — go-toolchain is invoked automatically by the build system", lineNum, m)
+		}
+	}
 	return nil
 }
 
