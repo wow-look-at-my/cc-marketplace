@@ -1,9 +1,0 @@
-[private]
-help:
-    @just --list
-
-prebuild:
-    echo "No prebuild step configured"
-
-postbuild:
-    echo "No postbuild step configured"

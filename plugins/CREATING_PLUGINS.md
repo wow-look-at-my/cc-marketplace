@@ -132,7 +132,7 @@ See `example-plugin/.mcp.template.json` for a full example.
 
 ### Build Script (`justfile`)
 
-If your plugin needs custom steps before or after the build, create a `justfile` with `prebuild` and/or `postbuild` recipes:
+If your plugin needs custom steps before or after the build, create a `justfile` with only the recipes you need. Only include `prebuild` and/or `postbuild` if they do real work — don't add a justfile at all if neither is needed.
 
 ```just
 [private]
@@ -141,18 +141,15 @@ help:
 
 prebuild:
     npm install
-
-postbuild:
-    npm run lint
 ```
 
-The marketplace builder runs recipes in this order:
+The marketplace builder runs in this order:
 
 1. `just prebuild` (if recipe exists in justfile)
 2. **go-toolchain** (automatically invoked if any `.go` files are found in the plugin directory — downloads from `https://github.com/wow-look-at-my/go-toolchain/releases/latest`)
 3. `just postbuild` (if recipe exists in justfile)
 
-See `example-plugin/justfile.template` for a starting point.
+See `example-plugin/justfile.template` for examples.
 
 ## Step 3: Enable Marketplace Inclusion
 
