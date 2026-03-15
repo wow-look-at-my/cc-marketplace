@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -133,7 +134,7 @@ func cookPluginForRelease(srcDir, dstDir string, version int, meta releaseMetada
 }
 
 func containsTemplate(filename string) bool {
-	return len(filename) > 10 && filename[len(filename)-10:] == ".template."
+	return strings.Contains(filename, ".template.")
 }
 
 func cookJSONForRelease(data []byte, version int, relPath string) ([]byte, error) {
