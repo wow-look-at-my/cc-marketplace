@@ -124,6 +124,114 @@ func TestValidateHookBinaries_NoHooks(t *testing.T) {
 
 }
 
+func TestValidateHookBinaries_NoPluginJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := validateHookBinaries(tmpDir)
+	require.Nil(t, err)
+}
+
+func TestValidateHookBinaries_InvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	pluginDir := filepath.Join(tmpDir, ".claude-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte("{bad json"), 0644))
+
+	err := validateHookBinaries(tmpDir)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "failed to parse plugin.json")
+}
+
+func TestValidateHookBinaries_CommandWithArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	pluginDir := filepath.Join(tmpDir, ".claude-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+
+	pluginJSON := `{
+		"name": "test-plugin",
+		"hooks": {
+			"PreToolUse": [
+				{
+					"matcher": "Write",
+					"hooks": [
+						{
+							"type": "command",
+							"command": "${CLAUDE_PLUGIN_ROOT}/build/hook --strict"
+						}
+					]
+				}
+			]
+		}
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(pluginJSON), 0644))
+
+	// Missing binary — should fail referencing build/hook not build/hook --strict
+	err := validateHookBinaries(tmpDir)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "build/hook")
+
+	// Create the binary — should pass
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "build"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build", "hook"), []byte("#!/bin/sh\n"), 0755))
+
+	err = validateHookBinaries(tmpDir)
+	require.Nil(t, err)
+}
+
+func TestValidateHookBinaries_MultipleEvents(t *testing.T) {
+	tmpDir := t.TempDir()
+	pluginDir := filepath.Join(tmpDir, ".claude-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+
+	pluginJSON := `{
+		"name": "test-plugin",
+		"hooks": {
+			"PreToolUse": [
+				{
+					"matcher": "Write",
+					"hooks": [
+						{
+							"type": "command",
+							"command": "${CLAUDE_PLUGIN_ROOT}/build/pre-hook"
+						}
+					]
+				}
+			],
+			"PostToolUse": [
+				{
+					"matcher": "Write",
+					"hooks": [
+						{
+							"type": "command",
+							"command": "${CLAUDE_PLUGIN_ROOT}/build/post-hook"
+						}
+					]
+				}
+			]
+		}
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(pluginJSON), 0644))
+
+	// Both missing
+	err := validateHookBinaries(tmpDir)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "pre-hook")
+	require.Contains(t, err.Error(), "post-hook")
+
+	// Create only one — should still fail
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "build"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build", "pre-hook"), []byte("#!/bin/sh\n"), 0755))
+
+	err = validateHookBinaries(tmpDir)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "post-hook")
+
+	// Create both — should pass
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build", "post-hook"), []byte("#!/bin/sh\n"), 0755))
+
+	err = validateHookBinaries(tmpDir)
+	require.Nil(t, err)
+}
+
 func TestValidateHookBinaries_InlineCommand(t *testing.T) {
 	// Commands that don't use ${CLAUDE_PLUGIN_ROOT} should be skipped
 	tmpDir := t.TempDir()
