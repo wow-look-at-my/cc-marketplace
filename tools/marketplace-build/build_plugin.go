@@ -107,6 +107,7 @@ func runGoToolchain(pluginPath string) error {
 	// Download latest release assets
 	dlCmd := exec.Command("gh", "release", "download",
 		"--repo", goToolchainRepo,
+		"--pattern", "*",
 		"-D", toolchainDir)
 	dlCmd.Stdout = os.Stdout
 	dlCmd.Stderr = os.Stderr
