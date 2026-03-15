@@ -427,10 +427,6 @@
 						{
 							"name": "run",
 							"requiredFlags": ["--rm"]
-						},
-						{
-							"name": "ps",
-							"allowedFlags": "*"
 						}
 					]
 				}
@@ -438,15 +434,30 @@
 		},
 		{
 			"name": "docker-compose",
-			"description": "Auto-approve docker-compose run --rm and ps",
+			"description": "Auto-approve docker-compose run --rm",
 			"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
 			"subcommands": [
 				{
 					"name": "run",
 					"requiredFlags": ["--rm"]
-				},
+				}
+			]
+		},
+		{
+			"name": "docker-compose",
+			"description": "Auto-approve readonly docker-compose commands",
+			"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
+			"subcommands": [
 				{
-					"name": "ps",
+					"name": [
+						"ls",
+						"ps",
+						"top",
+						"images",
+						"logs",
+						"config",
+						"version"
+					],
 					"allowedFlags": "*"
 				}
 			]
@@ -697,6 +708,7 @@
 				},
 				{
 					"name": "compose",
+					"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
 					"subcommands": [
 						{
 							"name": [

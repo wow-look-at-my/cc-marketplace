@@ -477,6 +477,87 @@ func TestDockerComposeRunRmAllowed(t *testing.T) {
 	}
 }
 
+func TestDockerComposePsAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"basic ps", "docker compose ps", "allow"},
+		{"ps with flags", "docker compose ps --all", "allow"},
+		{"ps with -f", "docker compose -f docker-compose.yml ps", "allow"},
+		{"docker-compose ps", "docker-compose ps", "allow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
+		})
+	}
+}
+
+func TestDuplicateEntriesMerged(t *testing.T) {
+	// Verify that when multiple nodes match the same command name,
+	// their subcommands are effectively merged (allow wins over passthrough).
+	saved := rules
+	defer func() { rules = saved }()
+
+	rules = Rules{
+		Commands: []CommandNode{
+			{
+				Name:        "mycmd",
+				Description: "first entry",
+				Subcommands: []CommandNode{
+					{Name: "sub1", AllowedFlags: "*"},
+				},
+			},
+			{
+				Name:        "mycmd",
+				Description: "second entry",
+				Subcommands: []CommandNode{
+					{Name: "sub2", AllowedFlags: "*"},
+				},
+			},
+		},
+	}
+
+	decision, _ := evaluateCommand("mycmd sub1")
+	assert.Equal(t, "allow", decision, "mycmd sub1 should match first entry")
+
+	decision, _ = evaluateCommand("mycmd sub2")
+	assert.Equal(t, "allow", decision, "mycmd sub2 should match second entry")
+
+	decision, _ = evaluateCommand("mycmd sub3")
+	assert.Equal(t, "", decision, "mycmd sub3 should passthrough (no match)")
+}
+
+func TestDuplicateEntriesDenyWins(t *testing.T) {
+	saved := rules
+	defer func() { rules = saved }()
+
+	rules = Rules{
+		Commands: []CommandNode{
+			{
+				Name: "mycmd",
+				Subcommands: []CommandNode{
+					{Name: "ok", AllowedFlags: "*"},
+				},
+			},
+			{
+				Name: "mycmd",
+				Subcommands: []CommandNode{
+					{Name: "ok", DenyWithMessage: "blocked"},
+				},
+			},
+		},
+	}
+
+	decision, msg := evaluateCommand("mycmd ok")
+	assert.Equal(t, "deny", decision, "deny should win over allow for duplicate entries")
+	assert.Equal(t, "blocked", msg)
+}
+
 func TestCompoundCommands(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
