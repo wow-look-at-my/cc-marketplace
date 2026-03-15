@@ -15,7 +15,12 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 
 	// Clean up stale branch tags first
 	if err := cleanupStaleBranchTags(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup stale tags: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup stale branch tags: %v\n", err)
+	}
+
+	// Clean up stale plugin tags (removed plugins + old versions)
+	if err := cleanupStalePluginTags(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup stale plugin tags: %v\n", err)
 	}
 
 	branch, err := GetCurrentBranch()
@@ -368,6 +373,113 @@ func cleanupStaleBranchTags() error {
 
 	// Delete local tags
 	_ = DeleteLocalTags(stale...)
+
+	return nil
+}
+
+// cleanupStalePluginTags removes plugin tags for plugins that no longer exist
+// in the repo and prunes old version tags (keeping only the latest 3 versions)
+func cleanupStalePluginTags() error {
+	repoRoot := getRepoRoot()
+	pluginsDir := filepath.Join(repoRoot, "plugins")
+
+	// Get all plugin names that have tags
+	taggedPlugins, err := ListPluginNames()
+	if err != nil {
+		return fmt.Errorf("failed to list plugin names from tags: %w", err)
+	}
+
+	var allStale []string
+
+	for _, pluginName := range taggedPlugins {
+		pluginPath := filepath.Join(pluginsDir, pluginName)
+		pluginJSONPath := filepath.Join(pluginPath, ".claude-plugin", "plugin.json")
+
+		// Check if plugin still exists and is included in marketplace
+		removed := false
+		if _, err := os.Stat(pluginJSONPath); os.IsNotExist(err) {
+			removed = true
+		} else if err == nil {
+			// Plugin exists — check if it's still included in marketplace
+			data, readErr := os.ReadFile(pluginJSONPath)
+			if readErr == nil {
+				var pluginJSON map[string]interface{}
+				if json.Unmarshal(data, &pluginJSON) == nil {
+					if !isIncludedInMarketplace(pluginJSON) {
+						removed = true
+					}
+				}
+			}
+		}
+
+		pluginTags, err := ListPluginTags(pluginName)
+		if err != nil {
+			continue
+		}
+
+		if removed {
+			// Plugin removed — delete ALL its tags (versioned + #latest)
+			fmt.Fprintf(os.Stderr, "Plugin %s removed — marking all %d tags for deletion\n", pluginName, len(pluginTags))
+			allStale = append(allStale, pluginTags...)
+			// Also delete the #latest pointer
+			allStale = append(allStale, fmt.Sprintf("plugin/%s#latest", pluginName))
+			continue
+		}
+
+		// Plugin still exists — prune old versions, keep latest 3
+		if len(pluginTags) <= 3 {
+			continue
+		}
+
+		// Tags are unordered, sort by version number
+		type versionedTag struct {
+			tag     string
+			version int
+		}
+		var vTags []versionedTag
+		for _, tag := range pluginTags {
+			hashParts := strings.SplitN(tag, "#", 2)
+			if len(hashParts) != 2 {
+				continue
+			}
+			var v int
+			fmt.Sscanf(hashParts[1], "%d", &v)
+			vTags = append(vTags, versionedTag{tag: tag, version: v})
+		}
+
+		// Sort descending by version
+		for i := 0; i < len(vTags); i++ {
+			for j := i + 1; j < len(vTags); j++ {
+				if vTags[j].version > vTags[i].version {
+					vTags[i], vTags[j] = vTags[j], vTags[i]
+				}
+			}
+		}
+
+		// Keep top 3, delete the rest
+		for i := 3; i < len(vTags); i++ {
+			allStale = append(allStale, vTags[i].tag)
+		}
+
+		if len(vTags) > 3 {
+			fmt.Fprintf(os.Stderr, "Plugin %s: pruning %d old version tags (keeping latest 3)\n",
+				pluginName, len(vTags)-3)
+		}
+	}
+
+	if len(allStale) == 0 {
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "Cleaning up %d stale plugin tags\n", len(allStale))
+
+	// Delete remote tags
+	if err := DeleteRemoteTags(allStale...); err != nil {
+		return fmt.Errorf("failed to delete stale plugin tags: %w", err)
+	}
+
+	// Delete local tags
+	_ = DeleteLocalTags(allStale...)
 
 	return nil
 }

@@ -51,28 +51,32 @@ func GetRepoInfo() (owner, repo string, err error) {
 	return "", "", fmt.Errorf("could not parse github repo from origin URL: %s", url)
 }
 
-// GetLatestTagVersion finds the highest version from plugin/{plugin}@v* tags
+// GetLatestTagVersion finds the highest version from plugin/{plugin}#* tags
 // Returns 0 if no tags exist
 func GetLatestTagVersion(plugin string) (int, error) {
-	out, err := runGit("tag", "-l", fmt.Sprintf("plugin/%s@v*", plugin))
+	prefix := fmt.Sprintf("plugin/%s#", plugin)
+	tags, err := ListTagsWithPrefix(prefix)
 	if err != nil {
 		return 0, nil
 	}
 
-	tags := strings.Split(strings.TrimSpace(out), "\n")
-	if len(tags) == 0 || tags[0] == "" {
+	if len(tags) == 0 {
 		return 0, nil
 	}
 
 	// Find highest version
 	highest := 0
 	for _, tag := range tags {
-		// Extract version from tag like "plugin/my-plugin@v3"
-		atParts := strings.Split(tag, "@")
-		if len(atParts) == 2 {
-			vStr := strings.TrimPrefix(atParts[1], "v")
+		// Skip 'latest' pointer tags
+		if strings.HasSuffix(tag, "#latest") {
+			continue
+		}
+
+		// Extract version from tag like "plugin/my-plugin#3"
+		hashParts := strings.SplitN(tag, "#", 2)
+		if len(hashParts) == 2 {
 			var v int
-			fmt.Sscanf(vStr, "%d", &v)
+			fmt.Sscanf(hashParts[1], "%d", &v)
 			if v > highest {
 				highest = v
 			}
@@ -91,7 +95,7 @@ func HasCommitsAfterTag(plugin, pluginPath string) (bool, error) {
 		return true, nil
 	}
 
-	tagName := fmt.Sprintf("plugin/%s@v%d", plugin, version)
+	tagName := fmt.Sprintf("plugin/%s#%d", plugin, version)
 
 	// Read mh.plugin.json from the tag to get source commit
 	out, err := runGit("show", fmt.Sprintf("%s:mh.plugin.json", tagName))
@@ -229,6 +233,52 @@ func runGitNoOutput(args ...string) error {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = getRepoRoot()
 	return cmd.Run()
+}
+
+// ListPluginNames returns unique plugin names from plugin/{name}#* tags
+func ListPluginNames() ([]string, error) {
+	tags, err := ListTagsWithPrefix("plugin/")
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool)
+	var names []string
+	for _, tag := range tags {
+		// Parse plugin/{name}#{version}
+		hashParts := strings.SplitN(tag, "#", 2)
+		if len(hashParts) != 2 {
+			continue
+		}
+		pathParts := strings.SplitN(hashParts[0], "/", 2)
+		if len(pathParts) != 2 || pathParts[0] != "plugin" {
+			continue
+		}
+		name := pathParts[1]
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return names, nil
+}
+
+// ListPluginTags returns all tags for a specific plugin, sorted by version ascending
+func ListPluginTags(plugin string) ([]string, error) {
+	prefix := fmt.Sprintf("plugin/%s#", plugin)
+	tags, err := ListTagsWithPrefix(prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter out #latest pointer
+	var result []string
+	for _, tag := range tags {
+		if !strings.HasSuffix(tag, "#latest") {
+			result = append(result, tag)
+		}
+	}
+	return result, nil
 }
 
 // RemoteBranchExists checks if a branch exists on the remote
