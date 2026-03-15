@@ -132,22 +132,27 @@ See `example-plugin/.mcp.template.json` for a full example.
 
 ### Build Script (`justfile`)
 
-If your plugin needs a build step (compiling TypeScript, bundling, etc.), create a `justfile`:
+If your plugin needs custom steps before or after the build, create a `justfile` with `prebuild` and/or `postbuild` recipes:
 
 ```just
 [private]
 help:
     @just --list
 
-build:
+prebuild:
     npm install
-    npm run build
 
-test:
-    npm test
+postbuild:
+    npm run lint
 ```
 
-See `example-plugin/justfile.template` for a starting point. The `build` recipe runs automatically during CI.
+The marketplace builder runs recipes in this order:
+
+1. `just prebuild` (if recipe exists in justfile)
+2. **go-toolchain** (automatically invoked if any `.go` files are found in the plugin directory — downloads from `https://github.com/wow-look-at-my/go-toolchain/releases/latest`)
+3. `just postbuild` (if recipe exists in justfile)
+
+See `example-plugin/justfile.template` for a starting point.
 
 ## Step 3: Enable Marketplace Inclusion
 
@@ -163,9 +168,10 @@ Ensure your `plugin.json` has `mh.include_in_marketplace: true`:
 
 When you push to any branch, CI will:
 1. Detect plugins with `mh.include_in_marketplace: true`
-2. Run `just test` (which must build and test the plugin)
-3. Create an orphan tag with the built plugin: `plugin/{plugin}/v{version}`
-4. Update `marketplace.json` with the new version
+2. Run `just prebuild` (if available), then the go-toolchain (if `.go` files exist), then `just postbuild` (if available)
+3. Run tests
+4. Create an orphan tag with the built plugin: `plugin/{plugin}/v{version}`
+5. Update `marketplace.json` with the new version
 
 **You don't need to manually edit marketplace.json** - CI handles it automatically.
 

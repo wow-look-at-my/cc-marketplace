@@ -2,8 +2,8 @@
 help:
     @just --list
 
-build:
-    go build -o hook .
+prebuild:
+    echo "No prebuild step configured"
 
-test: build
-    go test -v -cover ./...
+postbuild:
+    echo "No postbuild step configured"
