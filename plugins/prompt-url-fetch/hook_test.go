@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // Mock HTTP client for testing
@@ -70,9 +72,7 @@ func TestNormalizeURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := normalizeURL(tt.input)
-			if result != tt.expected {
-				t.Errorf("normalizeURL(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "normalizeURL(%q)", tt.input)
 		})
 	}
 }
@@ -113,14 +113,9 @@ func TestExtractURLs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := extractURLs(tt.prompt)
-			if len(result) != len(tt.expected) {
-				t.Errorf("extractURLs(%q) returned %d urls, want %d", tt.prompt, len(result), len(tt.expected))
-				return
-			}
+			assert.Equal(t, len(tt.expected), len(result), "extractURLs(%q) url count", tt.prompt)
 			for i, url := range result {
-				if url != tt.expected[i] {
-					t.Errorf("extractURLs(%q)[%d] = %q, want %q", tt.prompt, i, url, tt.expected[i])
-				}
+				assert.Equal(t, tt.expected[i], url, "extractURLs(%q)[%d]", tt.prompt, i)
 			}
 		})
 	}
@@ -182,9 +177,7 @@ func TestFetchURL(t *testing.T) {
 			}
 			totalChars := 0
 			result := fetchURL(tt.url, client, &totalChars)
-			if !strings.Contains(result, tt.wantContain) {
-				t.Errorf("fetchURL(%q) = %q, want to contain %q", tt.url, result, tt.wantContain)
-			}
+			assert.Contains(t, result, tt.wantContain, "fetchURL(%q)", tt.url)
 		})
 	}
 }
@@ -202,9 +195,7 @@ func TestFetchURLTruncation(t *testing.T) {
 
 	totalChars := 0
 	result := fetchURL("https://example.com", client, &totalChars)
-	if !strings.Contains(result, "truncated") {
-		t.Errorf("expected truncation message, got %q", result[:100])
-	}
+	assert.Contains(t, result, "truncated")
 }
 
 func TestFetchURLSkipWhenNearLimit(t *testing.T) {
@@ -221,9 +212,7 @@ func TestFetchURLSkipWhenNearLimit(t *testing.T) {
 
 	totalChars := maxChars - 500 // only 500 chars remaining
 	result := fetchURL("https://example.com", client, &totalChars)
-	if !strings.Contains(result, "[Skipped: exceeded") {
-		t.Errorf("expected skip message, got %q", result)
-	}
+	assert.Contains(t, result, "[Skipped: exceeded")
 }
 
 func TestProcessInput(t *testing.T) {
@@ -271,9 +260,7 @@ func TestProcessInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := processInput(strings.NewReader(tt.input), client)
-			if !strings.Contains(result, tt.wantContain) {
-				t.Errorf("processInput() = %q, want to contain %q", result, tt.wantContain)
-			}
+			assert.Contains(t, result, tt.wantContain)
 		})
 	}
 }
@@ -291,13 +278,7 @@ func TestFetchAllURLs(t *testing.T) {
 	urls := []string{"https://a.com", "https://b.com"}
 	result := fetchAllURLs(urls, client)
 
-	if !strings.Contains(result, "Fetched from https://a.com") {
-		t.Errorf("expected first URL in output")
-	}
-	if !strings.Contains(result, "Fetched from https://b.com") {
-		t.Errorf("expected second URL in output")
-	}
-	if !strings.Contains(result, "content for https://a.com") {
-		t.Errorf("expected first URL content in output")
-	}
+	assert.Contains(t, result, "Fetched from https://a.com")
+	assert.Contains(t, result, "Fetched from https://b.com")
+	assert.Contains(t, result, "content for https://a.com")
 }
