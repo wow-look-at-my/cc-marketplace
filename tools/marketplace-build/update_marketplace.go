@@ -23,6 +23,11 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup stale plugin tags: %v\n", err)
 	}
 
+	// Clean up legacy tags using old @v and /v formats
+	if err := cleanupLegacyPluginTags(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup legacy plugin tags: %v\n", err)
+	}
+
 	branch, err := GetCurrentBranch()
 	if err != nil {
 		return err
@@ -481,5 +486,47 @@ func cleanupStalePluginTags() error {
 	// Delete local tags
 	_ = DeleteLocalTags(allStale...)
 
+	return nil
+}
+
+// cleanupLegacyPluginTags removes plugin tags using old naming formats:
+// - plugin/{name}@v{N} (original @ format)
+// - plugin/{name}/v{N} (intermediate /v format)
+// These were replaced by the current plugin/{name}#{N} format.
+func cleanupLegacyPluginTags() error {
+	allTags, err := ListTagsWithPrefix("plugin/")
+	if err != nil {
+		return err
+	}
+
+	var legacy []string
+	for _, tag := range allTags {
+		// Match plugin/{name}@v{N}
+		if strings.Contains(tag, "@") {
+			legacy = append(legacy, tag)
+			continue
+		}
+		// Match plugin/{name}/v{N} — these have 3 parts when split by /
+		// (current format uses # so no extra / segments)
+		parts := strings.Split(tag, "/")
+		if len(parts) == 3 && parts[0] == "plugin" && strings.HasPrefix(parts[2], "v") {
+			legacy = append(legacy, tag)
+		}
+	}
+
+	if len(legacy) == 0 {
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "Cleaning up %d legacy plugin tags (old @v and /v formats)\n", len(legacy))
+	for _, tag := range legacy {
+		fmt.Fprintf(os.Stderr, "  - %s\n", tag)
+	}
+
+	if err := DeleteRemoteTags(legacy...); err != nil {
+		return fmt.Errorf("failed to delete legacy plugin tags: %w", err)
+	}
+
+	_ = DeleteLocalTags(legacy...)
 	return nil
 }
