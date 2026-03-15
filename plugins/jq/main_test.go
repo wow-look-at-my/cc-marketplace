@@ -1,323 +1,297 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
-	"io"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wow-look-at-my/testify/assert"
 	"github.com/wow-look-at-my/testify/require"
 )
 
-type jsonRPCRequest struct {
-	JSONRPC	string	`json:"jsonrpc"`
-	ID	int	`json:"id"`
-	Method	string	`json:"method"`
-	Params	any	`json:"params,omitempty"`
+func TestMain(m *testing.M) {
+	path, err := exec.LookPath("jq")
+	if err == nil {
+		jqPath = path
+	}
+	os.Exit(m.Run())
 }
 
-type jsonRPCResponse struct {
-	JSONRPC	string		`json:"jsonrpc"`
-	ID	int		`json:"id"`
-	Result	json.RawMessage	`json:"result"`
-	Error	*struct {
-		Code	int	`json:"code"`
-		Message	string	`json:"message"`
-	}	`json:"error"`
-}
-
-type initializeParams struct {
-	ProtocolVersion	string	`json:"protocolVersion"`
-	ClientInfo	struct {
-		Name string `json:"name"`
-	}	`json:"clientInfo"`
-	Capabilities	struct{}	`json:"capabilities"`
-}
-
-type initializeResult struct {
-	ServerInfo struct {
-		Name	string	`json:"name"`
-		Version	string	`json:"version"`
-	} `json:"serverInfo"`
-}
-
-type toolsListResult struct {
-	Tools []struct {
-		Name		string	`json:"name"`
-		Description	string	`json:"description"`
-	} `json:"tools"`
-}
-
-type callToolParams struct {
-	Name		string		`json:"name"`
-	Arguments	map[string]any	`json:"arguments"`
-}
-
-type callToolResult struct {
-	Content	[]struct {
-		Type	string	`json:"type"`
-		Text	string	`json:"text"`
-	}	`json:"content"`
-	IsError	bool	`json:"isError"`
-}
-
-func startServer(t *testing.T) (*exec.Cmd, io.WriteCloser, *bufio.Reader) {
+func connect(t *testing.T) *mcp.ClientSession {
 	t.Helper()
 
-	cmd := exec.Command("./run")
-	stdin, err := cmd.StdinPipe()
-	require.Nil(t, err)
+	if jqPath == "" {
+		t.Skip("jq not installed")
+	}
 
-	stdout, err := cmd.StdoutPipe()
-	require.Nil(t, err)
+	server := mcp.NewServer(&mcp.Implementation{
+		Name:    "jq",
+		Version: "1.0.0",
+	}, nil)
 
-	require.NoError(t, cmd.Start())
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "jq",
+		Description: "Run a jq expression against a JSON file or inline JSON string.",
+	}, runJq)
 
-	return cmd, stdin, bufio.NewReader(stdout)
-}
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "jq_read",
+		Description: "Read and pretty-print a JSON file.",
+	}, readJson)
 
-func sendRequest(t *testing.T, stdin io.Writer, stdout *bufio.Reader, req jsonRPCRequest) jsonRPCResponse {
-	t.Helper()
+	ctx := context.Background()
+	t1, t2 := mcp.NewInMemoryTransports()
+	_, err := server.Connect(ctx, t1, nil)
+	require.NoError(t, err)
 
-	data, err := json.Marshal(req)
-	require.Nil(t, err)
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0.1"}, nil)
+	session, err := client.Connect(ctx, t2, nil)
+	require.NoError(t, err)
 
-	_, err = stdin.Write(append(data, '\n'))
-	require.Nil(t, err)
-
-	line, err := stdout.ReadBytes('\n')
-	require.Nil(t, err)
-
-	var resp jsonRPCResponse
-	require.NoError(t, json.Unmarshal(line, &resp))
-
-	return resp
-}
-
-func initServer(t *testing.T, stdin io.Writer, stdout *bufio.Reader) {
-	t.Helper()
-	params := initializeParams{ProtocolVersion: "2024-11-05"}
-	params.ClientInfo.Name = "test"
-	sendRequest(t, stdin, stdout, jsonRPCRequest{
-		JSONRPC:	"2.0", ID: 1, Method: "initialize", Params: params,
-	})
-}
-
-func callTool(t *testing.T, stdin io.Writer, stdout *bufio.Reader, id int, name string, args map[string]any) callToolResult {
-	t.Helper()
-	resp := sendRequest(t, stdin, stdout, jsonRPCRequest{
-		JSONRPC:	"2.0", ID: id, Method: "tools/call",
-		Params:	callToolParams{Name: name, Arguments: args},
-	})
-	require.Nil(t, resp.Error)
-
-	var result callToolResult
-	require.NoError(t, json.Unmarshal(resp.Result, &result))
-
-	return result
+	t.Cleanup(func() { session.Close() })
+	return session
 }
 
 func TestInitialize(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
+	session := connect(t)
 
-	params := initializeParams{ProtocolVersion: "2024-11-05"}
-	params.ClientInfo.Name = "test"
-
-	resp := sendRequest(t, stdin, stdout, jsonRPCRequest{
-		JSONRPC:	"2.0", ID: 1, Method: "initialize", Params: params,
-	})
-
-	require.Nil(t, resp.Error)
-
-	var result initializeResult
-	require.NoError(t, json.Unmarshal(resp.Result, &result))
-
-	assert.Equal(t, "jq", result.ServerInfo.Name)
-
+	// The client is already initialized via Connect, so just verify we can list tools
+	result, err := session.ListTools(context.Background(), nil)
+	require.NoError(t, err)
+	assert.True(t, len(result.Tools) >= 2)
 }
 
 func TestListTools(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
-
-	initServer(t, stdin, stdout)
-
-	resp := sendRequest(t, stdin, stdout, jsonRPCRequest{
-		JSONRPC:	"2.0", ID: 2, Method: "tools/list",
-	})
-
-	require.Nil(t, resp.Error)
-
-	var result toolsListResult
-	require.NoError(t, json.Unmarshal(resp.Result, &result))
-
-	require.Equal(t, 2, len(result.Tools))
+	session := connect(t)
 
 	names := map[string]bool{}
-	for _, tool := range result.Tools {
+	for tool, err := range session.Tools(context.Background(), nil) {
+		require.NoError(t, err)
 		names[tool.Name] = true
 	}
+
 	assert.True(t, names["jq"])
-
 	assert.True(t, names["jq_read"])
-
 }
 
 func TestJqInlineInput(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
+	session := connect(t)
 
-	initServer(t, stdin, stdout)
-
-	result := callTool(t, stdin, stdout, 2, "jq", map[string]any{
-		"filter":	".name",
-		"input":	`{"name": "test", "value": 42}`,
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq",
+		Arguments: map[string]any{
+			"filter": ".name",
+			"input":  `{"name": "test", "value": 42}`,
+		},
 	})
-
+	require.NoError(t, err)
 	require.False(t, result.IsError)
 
-	text := strings.TrimSpace(result.Content[0].Text)
+	text := strings.TrimSpace(result.Content[0].(*mcp.TextContent).Text)
 	assert.Equal(t, `"test"`, text)
-
 }
 
 func TestJqRawOutput(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
+	session := connect(t)
 
-	initServer(t, stdin, stdout)
-
-	result := callTool(t, stdin, stdout, 2, "jq", map[string]any{
-		"filter":	".name",
-		"input":	`{"name": "test"}`,
-		"raw_output":	true,
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq",
+		Arguments: map[string]any{
+			"filter":     ".name",
+			"input":      `{"name": "test"}`,
+			"raw_output": true,
+		},
 	})
-
+	require.NoError(t, err)
 	require.False(t, result.IsError)
 
-	text := strings.TrimSpace(result.Content[0].Text)
+	text := strings.TrimSpace(result.Content[0].(*mcp.TextContent).Text)
 	assert.Equal(t, "test", text)
-
 }
 
 func TestJqFileInput(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
-
-	initServer(t, stdin, stdout)
+	session := connect(t)
 
 	tmpFile := filepath.Join(t.TempDir(), "test.json")
 	require.NoError(t, os.WriteFile(tmpFile, []byte(`{"items": [1, 2, 3]}`), 0644))
 
-	result := callTool(t, stdin, stdout, 2, "jq", map[string]any{
-		"filter":	".items | length",
-		"file":		tmpFile,
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq",
+		Arguments: map[string]any{
+			"filter": ".items | length",
+			"file":   tmpFile,
+		},
 	})
-
+	require.NoError(t, err)
 	require.False(t, result.IsError)
 
-	text := strings.TrimSpace(result.Content[0].Text)
+	text := strings.TrimSpace(result.Content[0].(*mcp.TextContent).Text)
 	assert.Equal(t, "3", text)
-
 }
 
 func TestJqReadTool(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
-
-	initServer(t, stdin, stdout)
+	session := connect(t)
 
 	tmpFile := filepath.Join(t.TempDir(), "test.json")
 	require.NoError(t, os.WriteFile(tmpFile, []byte(`{"a":1,"b":2}`), 0644))
 
-	result := callTool(t, stdin, stdout, 2, "jq_read", map[string]any{
-		"file": tmpFile,
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq_read",
+		Arguments: map[string]any{
+			"file": tmpFile,
+		},
 	})
-
+	require.NoError(t, err)
 	require.False(t, result.IsError)
 
-	text := result.Content[0].Text
-	assert.False(t, !strings.Contains(text, `"a"`) || !strings.Contains(text, `"b"`))
-
+	text := result.Content[0].(*mcp.TextContent).Text
+	assert.Contains(t, text, `"a"`)
+	assert.Contains(t, text, `"b"`)
 }
 
 func TestJqInvalidFilter(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
+	session := connect(t)
 
-	initServer(t, stdin, stdout)
-
-	result := callTool(t, stdin, stdout, 2, "jq", map[string]any{
-		"filter":	"invalid[[",
-		"input":	`{"a": 1}`,
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq",
+		Arguments: map[string]any{
+			"filter": "invalid[[",
+			"input":  `{"a": 1}`,
+		},
 	})
-
+	require.NoError(t, err)
 	assert.True(t, result.IsError)
-
 }
 
 func TestJqValidationBothInputs(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
+	session := connect(t)
 
-	initServer(t, stdin, stdout)
-
-	result := callTool(t, stdin, stdout, 2, "jq", map[string]any{
-		"filter":	".",
-		"file":		"/tmp/test.json",
-		"input":	`{}`,
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq",
+		Arguments: map[string]any{
+			"filter": ".",
+			"file":   "/tmp/test.json",
+			"input":  `{}`,
+		},
 	})
-
+	require.NoError(t, err)
 	assert.True(t, result.IsError)
-
-	assert.Contains(t, result.Content[0].Text, "exactly one")
-
+	assert.Contains(t, result.Content[0].(*mcp.TextContent).Text, "exactly one")
 }
 
 func TestJqValidationNoInput(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
+	session := connect(t)
 
-	initServer(t, stdin, stdout)
-
-	result := callTool(t, stdin, stdout, 2, "jq", map[string]any{
-		"filter": ".",
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq",
+		Arguments: map[string]any{
+			"filter": ".",
+		},
 	})
-
+	require.NoError(t, err)
 	assert.True(t, result.IsError)
+}
 
+func TestJqReadToolFileNotFound(t *testing.T) {
+	session := connect(t)
+
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq_read",
+		Arguments: map[string]any{
+			"file": "/nonexistent/path/to/file.json",
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(*mcp.TextContent).Text, "failed to read file")
+}
+
+func TestJqReadToolInvalidJSON(t *testing.T) {
+	session := connect(t)
+
+	tmpFile := filepath.Join(t.TempDir(), "bad.json")
+	require.NoError(t, os.WriteFile(tmpFile, []byte(`not json at all {{{`), 0644))
+
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq_read",
+		Arguments: map[string]any{
+			"file": tmpFile,
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+}
+
+func TestJqFileNotFound(t *testing.T) {
+	session := connect(t)
+
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq",
+		Arguments: map[string]any{
+			"filter": ".",
+			"file":   "/nonexistent/file.json",
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(*mcp.TextContent).Text, "failed to read file")
+}
+
+func TestJqNoJqInstalled(t *testing.T) {
+	// Temporarily clear jqPath to test the "not installed" path
+	saved := jqPath
+	jqPath = ""
+	defer func() { jqPath = saved }()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "jq", Version: "1.0.0"}, nil)
+	mcp.AddTool(server, &mcp.Tool{Name: "jq"}, runJq)
+	mcp.AddTool(server, &mcp.Tool{Name: "jq_read"}, readJson)
+
+	ctx := context.Background()
+	t1, t2 := mcp.NewInMemoryTransports()
+	server.Connect(ctx, t1, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0.1"}, nil)
+	session, err := client.Connect(ctx, t2, nil)
+	require.NoError(t, err)
+	defer session.Close()
+
+	// Test jq tool
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "jq",
+		Arguments: map[string]any{"filter": ".", "input": "{}"},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(*mcp.TextContent).Text, "jq is not installed")
+
+	// Test jq_read tool
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "jq_read",
+		Arguments: map[string]any{"file": "/tmp/test.json"},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(*mcp.TextContent).Text, "jq is not installed")
 }
 
 func TestJqSlurp(t *testing.T) {
-	cmd, stdin, stdout := startServer(t)
-	defer cmd.Process.Kill()
-	defer stdin.Close()
+	session := connect(t)
 
-	initServer(t, stdin, stdout)
-
-	result := callTool(t, stdin, stdout, 2, "jq", map[string]any{
-		"filter":	"length",
-		"input":	"{\"a\":1}\n{\"b\":2}\n",
-		"slurp":	true,
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "jq",
+		Arguments: map[string]any{
+			"filter": "length",
+			"input":  "{\"a\":1}\n{\"b\":2}\n",
+			"slurp":  true,
+		},
 	})
-
+	require.NoError(t, err)
 	require.False(t, result.IsError)
 
-	text := strings.TrimSpace(result.Content[0].Text)
+	text := strings.TrimSpace(result.Content[0].(*mcp.TextContent).Text)
 	assert.Equal(t, "2", text)
-
 }
