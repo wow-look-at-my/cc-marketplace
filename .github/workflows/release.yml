@@ -114,16 +114,12 @@ jobs:
 
       - name: Validate Marketplace
         run: |
-          # Replicate the directory structure that orphan-tag will create
           mkdir -p ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin
-          cp ${{ steps.marketplace.outputs.source_dir }}/marketplace.json ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin/marketplace.json
+          mv ${{ steps.marketplace.outputs.source_dir }}/marketplace.json ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin/marketplace.json
           claude plugin validate ${{ steps.marketplace.outputs.source_dir }}
-          rm ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin/marketplace.json
-          rmdir ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin
 
       - uses: wow-look-at-my-code/actions@orphan-release#latest
         with:
           source: ${{ steps.marketplace.outputs.source_dir }}
           name: ${{ steps.marketplace.outputs.name }}
-          move: marketplace.json:.claude-plugin/marketplace.json
           message: ${{ steps.marketplace.outputs.message }}
