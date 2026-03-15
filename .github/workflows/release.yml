@@ -115,6 +115,9 @@ jobs:
           message: ${{ steps.marketplace.outputs.message }}
 
       - name: Verify marketplace install
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
           claude plugin marketplace add ${{ github.repository }}#${{ steps.marketplace.outputs.name }}#latest
           claude plugin marketplace list
