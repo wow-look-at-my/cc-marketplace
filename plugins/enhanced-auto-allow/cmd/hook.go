@@ -75,19 +75,6 @@ func main() {
 		return
 	}
 
-	// Allow read-only GitHub API MCP tools (get_*, list_*, search_*, *_read)
-	if strings.HasPrefix(hi.ToolName, "mcp__claude_ai_GitHub_API__") {
-		action := strings.TrimPrefix(hi.ToolName, "mcp__claude_ai_GitHub_API__")
-		if strings.HasPrefix(action, "get_") ||
-			strings.HasPrefix(action, "list_") ||
-			strings.HasPrefix(action, "search_") ||
-			strings.HasSuffix(action, "_read") {
-			outputDecision("allow", "")
-			return
-		}
-		os.Exit(0)
-	}
-
 	if hi.ToolName != "Bash" {
 		os.Exit(0)
 	}
