@@ -1,0 +1,8 @@
+[private]
+help:
+	@just --list
+
+build:
+	go-toolchain
+
+test: build

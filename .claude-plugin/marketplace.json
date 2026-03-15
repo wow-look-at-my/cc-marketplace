@@ -21,6 +21,13 @@
       "description": "MCP server wrapping jq for JSON filtering, querying, and transforming without Bash permission prompts",
       "category": "development",
       "keywords": ["jq", "json", "filter", "query", "mcp"]
+    },
+    {
+      "name": "recommend-go-toolchain",
+      "source": "./recommend-go-toolchain",
+      "description": "Blocks direct go build/test commands and recommends go-toolchain instead",
+      "category": "development",
+      "keywords": ["go", "build", "test", "toolchain", "hook"]
     }
   ]
 }
