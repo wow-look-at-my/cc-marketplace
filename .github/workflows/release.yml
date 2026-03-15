@@ -69,6 +69,8 @@ jobs:
 
       - name: Build
         run: marketplace-build build-plugin ${{ matrix.plugin }}
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Test
         run: marketplace-build test-plugin ${{ matrix.plugin }}
