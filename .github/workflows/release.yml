@@ -17,8 +17,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: git fetch --tags
-
       - uses: ./.github/actions/setup-marketplace-build
 
       - run: marketplace-build cleanup-branch ${{ github.event.ref }}
@@ -34,8 +32,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - run: git fetch --tags
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -56,11 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: git fetch --tags
-
       - uses: ./.github/actions/setup-marketplace-build
-
-      - uses: extractions/setup-just@v2
 
       - uses: wow-look-at-my-code/actions@smart-cache#latest
         with:
@@ -101,8 +93,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - run: git fetch --tags
 
       - uses: ./.github/actions/setup-marketplace-build
 
