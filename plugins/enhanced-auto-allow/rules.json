@@ -339,6 +339,7 @@
 		{
 			"name": "claude",
 			"description": "Auto-approve readonly claude CLI commands",
+			"helpAlwaysAllowed": true,
 			"subcommands": [
 				{
 					"name": "mcp",

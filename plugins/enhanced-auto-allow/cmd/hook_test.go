@@ -429,6 +429,26 @@ func TestClaudePluginHelpAllowed(t *testing.T) {
 	assert.Equal(t, "allow", decision, "claude plugin --help should be allowed")
 }
 
+func TestClaudeHelpAlwaysAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"unknown subcommand with --help", "claude hook --help", "allow"},
+		{"deep unknown subcommand with --help", "claude plugin marketplace add --help", "allow"},
+		{"unknown subcommand with -h", "claude whatever -h", "allow"},
+		{"unknown subcommand without help passthrough", "claude hook list", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
+		})
+	}
+}
+
 func TestDockerComposeRunRmAllowed(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
