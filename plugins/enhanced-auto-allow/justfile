@@ -1,6 +1,0 @@
-[private]
-help:
-    @just --list
-
-postbuild:
-    cp build/no-overwrites run
