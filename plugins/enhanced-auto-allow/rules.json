@@ -427,6 +427,10 @@
 						{
 							"name": "run",
 							"requiredFlags": ["--rm"]
+						},
+						{
+							"name": "ps",
+							"allowedFlags": "*"
 						}
 					]
 				}
@@ -434,12 +438,16 @@
 		},
 		{
 			"name": "docker-compose",
-			"description": "Auto-approve docker-compose run --rm",
+			"description": "Auto-approve docker-compose run --rm and ps",
 			"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
 			"subcommands": [
 				{
 					"name": "run",
 					"requiredFlags": ["--rm"]
+				},
+				{
+					"name": "ps",
+					"allowedFlags": "*"
 				}
 			]
 		},
