@@ -8,6 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/wow-look-at-my/testify/assert"
+	"github.com/wow-look-at-my/testify/require"
 )
 
 // Note: Schema validation is handled by plugin.bats during build
@@ -15,223 +18,165 @@ import (
 func TestGitStatusAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git status")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git status', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git status should be allowed")
 }
 
 func TestGitDiffAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git diff")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git diff', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git diff should be allowed")
 }
 
 func TestGitLogAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git log --oneline -10")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git log --oneline -10', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git log --oneline -10 should be allowed")
 }
 
 func TestGitBranchListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git branch -a")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git branch -a', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git branch -a should be allowed")
 }
 
 func TestGitBranchDeletePassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git branch -d feature")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'git branch -d feature', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "git branch -d feature should passthrough")
 }
 
 func TestGitConfigGetAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git config --get user.email")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git config --get user.email', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git config --get user.email should be allowed")
 }
 
 func TestGitConfigListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git config --list")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git config --list', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git config --list should be allowed")
 }
 
 func TestGitConfigSetPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git config user.email foo@bar.com")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'git config user.email foo@bar.com', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "git config user.email foo@bar.com should passthrough")
 }
 
 func TestGitRemoteVerboseAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git remote -v")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git remote -v', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git remote -v should be allowed")
 }
 
 func TestGitRemoteShowAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git remote show origin")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git remote show origin', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git remote show origin should be allowed")
 }
 
 func TestGitSubmoduleStatusAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git submodule status")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git submodule status', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git submodule status should be allowed")
 }
 
 func TestGitSubmoduleStatusRecursiveAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git submodule status --recursive")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git submodule status --recursive', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git submodule status --recursive should be allowed")
 }
 
 func TestGitSubmoduleUpdatePassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git submodule update --init")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'git submodule update --init', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "git submodule update --init should passthrough")
 }
 
 func TestGhPrListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh pr list")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'gh pr list', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "gh pr list should be allowed")
 }
 
 func TestGhPrViewAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh pr view 123")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'gh pr view 123', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "gh pr view 123 should be allowed")
 }
 
 func TestGhPrCreatePassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh pr create")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'gh pr create', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "gh pr create should passthrough")
 }
 
 func TestGhApiGetAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh api /repos/owner/repo")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'gh api /repos/owner/repo', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "gh api /repos/owner/repo should be allowed")
 }
 
 func TestGhApiPostPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh api -X POST /repos/owner/repo")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'gh api -X POST /repos/owner/repo', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "gh api -X POST should passthrough")
 }
 
 func TestGhBrowseAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh browse")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'gh browse', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "gh browse should be allowed")
 }
 
 func TestGhRunViewDenied(t *testing.T) {
 	loadTestRules(t)
 	decision, message := evaluateCommand("gh run view 123")
-	if decision != "deny" {
-		t.Errorf("Expected deny for 'gh run view 123', got %q", decision)
-	}
-	if message == "" {
-		t.Error("Expected deny message for 'gh run view'")
-	}
+	assert.Equal(t, "deny", decision, "gh run view 123 should be denied")
+	assert.NotEqual(t, "", message, "gh run view should have a deny message")
 }
 
 func TestGhRunWatchDenied(t *testing.T) {
 	loadTestRules(t)
 	decision, message := evaluateCommand("gh run watch 123")
-	if decision != "deny" {
-		t.Errorf("Expected deny for 'gh run watch 123', got %q", decision)
-	}
-	if message == "" {
-		t.Error("Expected deny message for 'gh run watch'")
-	}
+	assert.Equal(t, "deny", decision, "gh run watch 123 should be denied")
+	assert.NotEqual(t, "", message, "gh run watch should have a deny message")
 }
 
 func TestGhRunListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh run list")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'gh run list', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "gh run list should be allowed")
 }
 
 func TestFindPipeGrepAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand(`find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool`)
-	if decision != "allow" {
-		t.Errorf("Expected allow for find|grep file search, got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "find|grep file search should be allowed")
 }
 
 func TestFindBasicAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("find . -name '*.go' -type f")
-	if decision != "allow" {
-		t.Errorf("Expected allow for basic find, got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "basic find should be allowed")
 }
 
 func TestFindExecGrepAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand(`find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;`)
-	if decision != "allow" {
-		t.Errorf("Expected allow for find -exec grep, got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "find -exec grep should be allowed")
 }
 
 func TestFindExecRmPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("find . -name '*.tmp' -exec rm {} \\;")
-	if decision != "" {
-		t.Errorf("Expected passthrough for find -exec rm, got %q", decision)
-	}
+	assert.Equal(t, "", decision, "find -exec rm should passthrough")
 }
 
 func TestFindDeletePassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("find . -name '*.tmp' -delete")
-	if decision != "" {
-		t.Errorf("Expected passthrough for find with -delete, got %q", decision)
-	}
+	assert.Equal(t, "", decision, "find with -delete should passthrough")
 }
 
 func TestPkgConfigAllowed(t *testing.T) {
@@ -251,9 +196,7 @@ func TestPkgConfigAllowed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decision, _ := evaluateCommand(tt.command)
-			if decision != "allow" {
-				t.Errorf("Expected allow for %q, got %q", tt.command, decision)
-			}
+			assert.Equal(t, "allow", decision, "%q should be allowed", tt.command)
 		})
 	}
 }
@@ -261,41 +204,31 @@ func TestPkgConfigAllowed(t *testing.T) {
 func TestLdconfigPrintCacheAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("ldconfig -p")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'ldconfig -p', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "ldconfig -p should be allowed")
 }
 
 func TestLdconfigPrintCacheLongAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("ldconfig --print-cache")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'ldconfig --print-cache', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "ldconfig --print-cache should be allowed")
 }
 
 func TestLdconfigBarePassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("ldconfig")
-	if decision != "" {
-		t.Errorf("Expected passthrough for bare 'ldconfig', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "bare ldconfig should passthrough")
 }
 
 func TestGoVersionAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("go version")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'go version', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "go version should be allowed")
 }
 
 func TestGoEnvAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("go env GOPATH")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'go env GOPATH', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "go env GOPATH should be allowed")
 }
 
 func TestGoDocAllowed(t *testing.T) {
@@ -311,9 +244,7 @@ func TestGoDocAllowed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decision, _ := evaluateCommand(tt.command)
-			if decision != "allow" {
-				t.Errorf("Expected allow for %q, got %q", tt.command, decision)
-			}
+			assert.Equal(t, "allow", decision, "%q should be allowed", tt.command)
 		})
 	}
 }
@@ -321,241 +252,181 @@ func TestGoDocAllowed(t *testing.T) {
 func TestGoBuildPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("go build ./...")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'go build', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "go build should passthrough")
 }
 
 func TestWhichAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("which node")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'which node', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "which node should be allowed")
 }
 
 func TestWhichMultipleArgsAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("which git node python")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'which git node python', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "which git node python should be allowed")
 }
 
 func TestGrepAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("grep -ri 'TODO' src/")
-	if decision != "allow" {
-		t.Errorf("Expected allow for grep, got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "grep should be allowed")
 }
 
 func TestCommandSubstitutionPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git log $(echo test)")
-	if decision != "" {
-		t.Errorf("Expected passthrough for command with substitution, got %q", decision)
-	}
+	assert.Equal(t, "", decision, "command with substitution should passthrough")
 }
 
 func TestPipeBothAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git log | head")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'git log | head' (both safe), got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git log | head should be allowed")
 }
 
 func TestPipeOneUnknown(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git log | python")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'git log | python', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "git log | python should passthrough")
 }
 
 func TestUnknownCommandPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("python --version")
-	if decision != "" {
-		t.Errorf("Expected passthrough for unknown command 'python', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "unknown command python should passthrough")
 }
 
 func TestEchoRedirectPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("echo foo > file.txt")
-	if decision != "" {
-		t.Errorf("Expected passthrough for echo with redirect, got %q", decision)
-	}
+	assert.Equal(t, "", decision, "echo with redirect should passthrough")
 }
 
 func TestEchoAppendPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("echo foo >> file.txt")
-	if decision != "" {
-		t.Errorf("Expected passthrough for echo with append, got %q", decision)
-	}
+	assert.Equal(t, "", decision, "echo with append should passthrough")
 }
 
 func TestSortRedirectPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("sort input.txt > output.txt")
-	if decision != "" {
-		t.Errorf("Expected passthrough for sort with redirect, got %q", decision)
-	}
+	assert.Equal(t, "", decision, "sort with redirect should passthrough")
 }
 
 func TestEchoPipeAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("echo hello | grep hello")
-	if decision != "allow" {
-		t.Errorf("Expected allow for echo piped to grep, got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "echo piped to grep should be allowed")
 }
 
 func TestGitShowWithEchoAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand(`git show 54d7aa918a94 --stat && echo "---" && git show 54d7aa918a94 -- path/to/file.cpp`)
-	if decision != "allow" {
-		t.Errorf("Expected allow for git show && echo && git show, got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "git show && echo && git show should be allowed")
 }
 
 func TestJustListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("just --list")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'just --list', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "just --list should be allowed")
 }
 
 func TestJustListWithRedirectAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand(`just --list 2>/dev/null || echo "no justfile"`)
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'just --list 2>/dev/null || echo no justfile', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "just --list 2>/dev/null || echo should be allowed")
 }
 
 func TestJustBuildPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("just build")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'just build', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "just build should passthrough")
 }
 
 func TestClaudeMcpListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude mcp list")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude mcp list', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude mcp list should be allowed")
 }
 
 func TestClaudeMcpHelpAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude mcp --help")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude mcp --help', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude mcp --help should be allowed")
 }
 
 func TestClaudeMcpGetAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude mcp get server-name")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude mcp get server-name', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude mcp get server-name should be allowed")
 }
 
 func TestClaudeMcpAddPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude mcp add my-server -- npx server")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'claude mcp add', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "claude mcp add should passthrough")
 }
 
 func TestClaudeMcpRemovePassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude mcp remove my-server")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'claude mcp remove', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "claude mcp remove should passthrough")
 }
 
 func TestClaudeVersionAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude --version")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude --version', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude --version should be allowed")
 }
 
 func TestClaudeHelpAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude --help")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude --help', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude --help should be allowed")
 }
 
 func TestClaudePluginListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude plugin list")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude plugin list', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude plugin list should be allowed")
 }
 
 func TestClaudePluginMarketplaceListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude plugin marketplace list")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude plugin marketplace list', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude plugin marketplace list should be allowed")
 }
 
 func TestClaudePluginInstallPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude plugin install some-plugin")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'claude plugin install', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "claude plugin install should passthrough")
 }
 
 func TestClaudeConfigListAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude config list")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude config list', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude config list should be allowed")
 }
 
 func TestClaudeConfigGetAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude config get key")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude config get key', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude config get key should be allowed")
 }
 
 func TestClaudeConfigSetPassthrough(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude config set key value")
-	if decision != "" {
-		t.Errorf("Expected passthrough for 'claude config set', got %q", decision)
-	}
+	assert.Equal(t, "", decision, "claude config set should passthrough")
 }
 
 func TestClaudePluginHelpAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("claude plugin --help")
-	if decision != "allow" {
-		t.Errorf("Expected allow for 'claude plugin --help', got %q", decision)
-	}
+	assert.Equal(t, "allow", decision, "claude plugin --help should be allowed")
 }
 
 func TestDockerComposeRunRmAllowed(t *testing.T) {
@@ -581,9 +452,7 @@ func TestDockerComposeRunRmAllowed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decision, _ := evaluateCommand(tt.command)
-			if decision != tt.expected {
-				t.Errorf("evaluateCommand(%q) = %q, want %q", tt.command, decision, tt.expected)
-			}
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
 		})
 	}
 }
@@ -608,9 +477,7 @@ func TestCompoundCommands(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decision, _ := evaluateCommand(tt.command)
-			if decision != tt.expected {
-				t.Errorf("evaluateCommand(%q) = %q, want %q", tt.command, decision, tt.expected)
-			}
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
 		})
 	}
 }
@@ -630,12 +497,8 @@ func TestReadAllowed(t *testing.T) {
 	})
 
 	var resp PermissionResponse
-	if err := json.Unmarshal([]byte(output), &resp); err != nil {
-		t.Fatalf("Failed to parse output: %v\nOutput was: %s", err, output)
-	}
-	if resp.HookSpecificOutput.Decision.Behavior != "allow" {
-		t.Errorf("Expected allow for Read, got %q", resp.HookSpecificOutput.Decision.Behavior)
-	}
+	require.NoError(t, json.Unmarshal([]byte(output), &resp), "output was: %s", output)
+	assert.Equal(t, "allow", resp.HookSpecificOutput.Decision.Behavior, "Read should be allowed")
 }
 
 func getRepoRoot(t *testing.T) string {
@@ -657,12 +520,8 @@ func loadTestRules(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json")
 	data, err := os.ReadFile(rulesPath)
-	if err != nil {
-		t.Fatalf("Failed to read rules: %v", err)
-	}
-	if err := json.Unmarshal(data, &rules); err != nil {
-		t.Fatalf("Failed to parse rules: %v", err)
-	}
+	require.Nil(t, err, "Failed to read rules")
+	require.NoError(t, json.Unmarshal(data, &rules), "Failed to parse rules")
 }
 
 func captureOutput(f func()) string {
