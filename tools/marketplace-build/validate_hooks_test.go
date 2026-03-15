@@ -127,7 +127,8 @@ func TestValidateHookBinaries_NoHooks(t *testing.T) {
 func TestValidateHookBinaries_NoPluginJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	err := validateHookBinaries(tmpDir)
-	require.Nil(t, err)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "plugin.json not found")
 }
 
 func TestValidateHookBinaries_InvalidJSON(t *testing.T) {

@@ -16,7 +16,7 @@ func validateHookBinaries(pluginPath string) error {
 	data, err := os.ReadFile(pluginJSON)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil // no plugin.json, nothing to validate
+			return fmt.Errorf("plugin.json not found: %s", pluginJSON)
 		}
 		return fmt.Errorf("failed to read plugin.json: %w", err)
 	}
