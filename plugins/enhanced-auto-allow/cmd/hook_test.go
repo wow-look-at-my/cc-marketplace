@@ -63,6 +63,72 @@ func TestGitConfigSetPassthrough(t *testing.T) {
 	assert.Equal(t, "", decision, "git config user.email foo@bar.com should passthrough")
 }
 
+func TestGitConfigLocalListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git config --local --list 2>&1")
+	assert.Equal(t, "allow", decision, "git config --local --list 2>&1 should be allowed")
+}
+
+func TestGitConfigGetUrlmatchAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git config --get-urlmatch http https://example.com")
+	assert.Equal(t, "allow", decision, "git config --get-urlmatch should be allowed")
+}
+
+func TestGitReplaceListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git replace -l 2>&1")
+	assert.Equal(t, "allow", decision, "git replace -l 2>&1 should be allowed")
+}
+
+func TestGitReplaceListLongAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git replace --list")
+	assert.Equal(t, "allow", decision, "git replace --list should be allowed")
+}
+
+func TestGitReplaceWritePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git replace abc123 def456")
+	assert.Equal(t, "", decision, "git replace (write) should passthrough")
+}
+
+func TestGitCommitGraphVerifyAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git commit-graph verify")
+	assert.Equal(t, "allow", decision, "git commit-graph verify should be allowed")
+}
+
+func TestGitCommitGraphWritePassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git commit-graph write")
+	assert.Equal(t, "", decision, "git commit-graph write should passthrough")
+}
+
+func TestGitPushDryRunAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git push --dry-run origin main")
+	assert.Equal(t, "allow", decision, "git push --dry-run should be allowed")
+}
+
+func TestGitPushDryRunShortAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git push -n origin main")
+	assert.Equal(t, "allow", decision, "git push -n should be allowed")
+}
+
+func TestGitPushPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git push origin main")
+	assert.Equal(t, "", decision, "git push without --dry-run should passthrough")
+}
+
+func TestStderrToStdoutRedirectAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("git status 2>&1")
+	assert.Equal(t, "allow", decision, "command with 2>&1 should be allowed")
+}
+
 func TestGitRemoteVerboseAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git remote -v")

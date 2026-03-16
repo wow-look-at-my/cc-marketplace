@@ -198,7 +198,33 @@
 						"--list",
 						"--get-all",
 						"--get-regexp",
+						"--get-urlmatch",
+						"--get-color",
+						"--get-colorbool",
 						"-l"
+					]
+				},
+				{
+					"name": "replace",
+					"requiredFlags": [
+						"-l",
+						"--list"
+					]
+				},
+				{
+					"name": "commit-graph",
+					"subcommands": [
+						{
+							"name": "verify",
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "push",
+					"requiredFlags": [
+						"--dry-run",
+						"-n"
 					]
 				}
 			]
