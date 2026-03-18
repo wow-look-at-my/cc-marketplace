@@ -74,8 +74,8 @@
 		},
 		{
 			"name": "mount",
-			"description": "Auto-approve mount with no flags (lists mounted filesystems)",
-			"allowedFlags": []
+			"description": "Auto-approve bare mount (lists mounted filesystems)",
+			"bareOnly": true
 		},
 		{
 			"name": "find",
