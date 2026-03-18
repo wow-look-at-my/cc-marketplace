@@ -204,7 +204,33 @@
 						"--list",
 						"--get-all",
 						"--get-regexp",
+						"--get-urlmatch",
+						"--get-color",
+						"--get-colorbool",
 						"-l"
+					]
+				},
+				{
+					"name": "replace",
+					"requiredFlags": [
+						"-l",
+						"--list"
+					]
+				},
+				{
+					"name": "commit-graph",
+					"subcommands": [
+						{
+							"name": "verify",
+							"allowedFlags": "*"
+						}
+					]
+				},
+				{
+					"name": "push",
+					"requiredFlags": [
+						"--dry-run",
+						"-n"
 					]
 				}
 			]
@@ -446,6 +472,25 @@
 				{
 					"name": "run",
 					"requiredFlags": ["--rm"]
+				}
+			]
+		},
+		{
+			"name": "docker-compose",
+			"description": "Auto-approve readonly docker-compose commands",
+			"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
+			"subcommands": [
+				{
+					"name": [
+						"ls",
+						"ps",
+						"top",
+						"images",
+						"logs",
+						"config",
+						"version"
+					],
+					"allowedFlags": "*"
 				}
 			]
 		},
@@ -695,6 +740,7 @@
 				},
 				{
 					"name": "compose",
+					"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
 					"subcommands": [
 						{
 							"name": [
