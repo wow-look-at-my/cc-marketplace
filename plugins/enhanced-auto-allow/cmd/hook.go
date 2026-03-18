@@ -129,90 +129,106 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 	current := args[0]
 	remaining := args[1:]
 
+	// Try all matching nodes and merge results.
+	// Deny wins over allow; allow wins over passthrough.
+	anyAllowed := false
 	for _, node := range nodes {
 		if !matchesName(node.Name, current) {
 			continue
 		}
 
-		// If helpAlwaysAllowed, any subcommand chain ending in --help/-h is allowed
-		if node.HelpAlwaysAllowed && hasAnyFlag(remaining, []string{"--help", "-h"}) {
+		decision, msg := evaluateOneNode(node, args, remaining)
+		if decision == "deny" {
+			return "deny", msg
+		}
+		if decision == "allow" {
+			anyAllowed = true
+		}
+	}
+
+	if anyAllowed {
+		return "allow", ""
+	}
+	return "", ""
+}
+
+func evaluateOneNode(node CommandNode, args []string, remaining []string) (string, string) {
+	// If helpAlwaysAllowed, any subcommand chain ending in --help/-h is allowed
+	if node.HelpAlwaysAllowed && hasAnyFlag(remaining, []string{"--help", "-h"}) {
+		return "allow", ""
+	}
+
+	// Check deny with message first
+	if node.DenyWithMessage != "" {
+		return "deny", node.DenyWithMessage
+	}
+
+	// Check required flags
+	if len(node.RequiredFlags) > 0 {
+		if hasAnyFlag(args, node.RequiredFlags) {
 			return "allow", ""
 		}
+		return "", ""
+	}
 
-		// Check deny with message first
-		if node.DenyWithMessage != "" {
-			return "deny", node.DenyWithMessage
+	// Check requireFlagValue
+	if node.RequireFlagValue != nil {
+		value := getFlagValue(args, node.RequireFlagValue.Flags)
+		if value == "" {
+			value = node.RequireFlagValue.Default
 		}
-
-		// Check required flags
-		if len(node.RequiredFlags) > 0 {
-			if hasAnyFlag(args, node.RequiredFlags) {
+		for _, allowed := range node.RequireFlagValue.Allowed {
+			if value == allowed {
 				return "allow", ""
 			}
+		}
+		return "", ""
+	}
+
+	// Strip own flags (that take values) before subcommand matching
+	subcommandArgs := remaining
+	if len(node.FlagsWithValue) > 0 {
+		subcommandArgs = stripFlagsWithValue(remaining, node.FlagsWithValue)
+	}
+
+	// If there are subcommands, recurse
+	if len(node.Subcommands) > 0 && len(subcommandArgs) > 0 {
+		decision, msg := evaluateArgs(subcommandArgs, node.Subcommands)
+		if decision != "" {
+			return decision, msg
+		}
+		// If the first remaining arg looks like a subcommand (not a flag)
+		// but didn't match any known subcommand, don't fall through to
+		// allowedFlags - it's an unknown/mutating subcommand.
+		if !strings.HasPrefix(subcommandArgs[0], "-") {
 			return "", ""
 		}
+	}
 
-		// Check requireFlagValue
-		if node.RequireFlagValue != nil {
-			value := getFlagValue(args, node.RequireFlagValue.Flags)
-			if value == "" {
-				value = node.RequireFlagValue.Default
-			}
-			for _, allowed := range node.RequireFlagValue.Allowed {
-				if value == allowed {
-					return "allow", ""
-				}
-			}
-			return "", ""
-		}
+	// Check denied flags
+	if len(node.DeniedFlags) > 0 && hasAnyFlag(args, node.DeniedFlags) {
+		return "", ""
+	}
 
-		// Strip own flags (that take values) before subcommand matching
-		subcommandArgs := remaining
-		if len(node.FlagsWithValue) > 0 {
-			subcommandArgs = stripFlagsWithValue(remaining, node.FlagsWithValue)
-		}
-
-		// If there are subcommands, recurse
-		if len(node.Subcommands) > 0 && len(subcommandArgs) > 0 {
-			decision, msg := evaluateArgs(subcommandArgs, node.Subcommands)
-			if decision != "" {
-				return decision, msg
+	// Check exec flags: extract sub-commands and evaluate them
+	if len(node.ExecFlags) > 0 {
+		subCmds := extractExecSubCommands(remaining, node.ExecFlags)
+		for _, subCmd := range subCmds {
+			decision, msg := evaluateArgs(subCmd, rules.Commands)
+			if decision == "deny" {
+				return "deny", msg
 			}
-			// If the first remaining arg looks like a subcommand (not a flag)
-			// but didn't match any known subcommand, don't fall through to
-			// allowedFlags - it's an unknown/mutating subcommand.
-			if !strings.HasPrefix(subcommandArgs[0], "-") {
+			if decision != "allow" {
 				return "", ""
 			}
 		}
+	}
 
-		// Check denied flags
-		if len(node.DeniedFlags) > 0 && hasAnyFlag(args, node.DeniedFlags) {
-			return "", ""
+	// Check allowed flags
+	if node.AllowedFlags != nil {
+		if checkAllowedFlags(remaining, node.AllowedFlags) {
+			return "allow", ""
 		}
-
-		// Check exec flags: extract sub-commands and evaluate them
-		if len(node.ExecFlags) > 0 {
-			subCmds := extractExecSubCommands(remaining, node.ExecFlags)
-			for _, subCmd := range subCmds {
-				decision, msg := evaluateArgs(subCmd, rules.Commands)
-				if decision == "deny" {
-					return "deny", msg
-				}
-				if decision != "allow" {
-					return "", ""
-				}
-			}
-		}
-
-		// Check allowed flags
-		if node.AllowedFlags != nil {
-			if checkAllowedFlags(remaining, node.AllowedFlags) {
-				return "allow", ""
-			}
-		}
-
-		return "", ""
 	}
 
 	return "", ""

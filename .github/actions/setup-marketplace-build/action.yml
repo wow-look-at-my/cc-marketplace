@@ -9,11 +9,10 @@ runs:
       run: git fetch --tags --force
 
     - uses: extractions/setup-just@v2
-    
+
     - uses: wow-look-at-my/go-toolchain@latest
       with:
         working-directory: "tools/marketplace-build"
 
     - run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
       shell: bash
-      

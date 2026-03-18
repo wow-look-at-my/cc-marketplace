@@ -2,6 +2,8 @@ module github.com/wow-look-at-my-code/cc-marketplace-template/tools/marketplace-
 
 go 1.25.0
 
+toolchain go1.25.0
+
 require (
 	github.com/spf13/cobra v1.10.2
 	github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb

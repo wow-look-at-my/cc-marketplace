@@ -470,6 +470,25 @@
 			]
 		},
 		{
+			"name": "docker-compose",
+			"description": "Auto-approve readonly docker-compose commands",
+			"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
+			"subcommands": [
+				{
+					"name": [
+						"ls",
+						"ps",
+						"top",
+						"images",
+						"logs",
+						"config",
+						"version"
+					],
+					"allowedFlags": "*"
+				}
+			]
+		},
+		{
 			"name": "zpool",
 			"description": "Auto-approve readonly zpool commands",
 			"subcommands": [
@@ -715,6 +734,7 @@
 				},
 				{
 					"name": "compose",
+					"flagsWithValue": ["-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--progress", "--ansi"],
 					"subcommands": [
 						{
 							"name": [
