@@ -37,6 +37,7 @@ type CommandNode struct {
 	DenyWithMessage   string           `json:"denyWithMessage,omitempty"`
 	FlagsWithValue    []string         `json:"flagsWithValue,omitempty"`
 	HelpAlwaysAllowed bool             `json:"helpAlwaysAllowed,omitempty"`
+	BareOnly          bool             `json:"bareOnly,omitempty"`
 	Subcommands       []CommandNode    `json:"subcommands,omitempty"`
 }
 
@@ -166,6 +167,14 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 	// Check required flags
 	if len(node.RequiredFlags) > 0 {
 		if hasAnyFlag(args, node.RequiredFlags) {
+			return "allow", ""
+		}
+		return "", ""
+	}
+
+	// If bareOnly, only allow when there are no remaining arguments
+	if node.BareOnly {
+		if len(remaining) == 0 {
 			return "allow", ""
 		}
 		return "", ""

@@ -66,10 +66,16 @@
 				"cd",
 				"pkg-config",
 				"pkgconf",
-				"pkg_config"
+				"pkg_config",
+				"dig"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
+		},
+		{
+			"name": "mount",
+			"description": "Auto-approve bare mount (lists mounted filesystems)",
+			"bareOnly": true
 		},
 		{
 			"name": "find",
