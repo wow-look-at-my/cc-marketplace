@@ -407,9 +407,12 @@ func hasOutputRedirect(node syntax.Node) bool {
 				switch r.Op {
 				case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll,
 					syntax.DplOut, syntax.ClbOut, syntax.RdrInOut:
-					// Allow stderr redirects (fd 2) to /dev/null
-					if r.N != nil && r.N.Value == "2" && redirectTarget(r) == "/dev/null" {
-						continue
+					// Allow stderr redirects: 2>/dev/null and 2>&1
+					if r.N != nil && r.N.Value == "2" {
+						target := redirectTarget(r)
+						if target == "/dev/null" || (r.Op == syntax.DplOut && target == "1") {
+							continue
+						}
 					}
 					found = true
 					return false
