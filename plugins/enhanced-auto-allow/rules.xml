@@ -1,0 +1,582 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rules>
+  <!-- Auto-approve readonly inspection commands -->
+  <command description="Auto-approve readonly inspection commands" allowedFlags="*">
+    <name>ls</name>
+    <name>cat</name>
+    <name>head</name>
+    <name>tail</name>
+    <name>file</name>
+    <name>wc</name>
+    <name>stat</name>
+    <name>du</name>
+    <name>df</name>
+    <name>uname</name>
+    <name>uptime</name>
+    <name>sw_vers</name>
+    <name>arch</name>
+    <name>hostinfo</name>
+    <name>vm_stat</name>
+    <name>whoami</name>
+    <name>id</name>
+    <name>groups</name>
+    <name>pgrep</name>
+    <name>which</name>
+    <name>whereis</name>
+    <name>readlink</name>
+    <name>basename</name>
+    <name>dirname</name>
+    <name>printenv</name>
+    <name>shasum</name>
+    <name>md5</name>
+    <name>strings</name>
+    <name>hexdump</name>
+    <name>od</name>
+    <name>mdfind</name>
+    <name>mdls</name>
+    <name>locate</name>
+    <name>echo</name>
+    <name>printf</name>
+    <name>true</name>
+    <name>false</name>
+    <name>test</name>
+    <name>[</name>
+    <name>date</name>
+    <name>hostname</name>
+    <name>pwd</name>
+    <name>env</name>
+    <name>sort</name>
+    <name>uniq</name>
+    <name>tr</name>
+    <name>cut</name>
+    <name>diff</name>
+    <name>comm</name>
+    <name>join</name>
+    <name>paste</name>
+    <name>column</name>
+    <name>expand</name>
+    <name>unexpand</name>
+    <name>fold</name>
+    <name>fmt</name>
+    <name>nl</name>
+    <name>rev</name>
+    <name>tac</name>
+    <name>seq</name>
+    <name>realpath</name>
+    <name>cd</name>
+    <name>pkg-config</name>
+    <name>pkgconf</name>
+    <name>pkg_config</name>
+  </command>
+
+  <!-- find -->
+  <command name="find" description="Auto-approve readonly find commands; -exec allowed if sub-command is whitelisted" allowedFlags="*">
+    <deniedFlags>
+      <flag>-delete</flag>
+    </deniedFlags>
+    <execFlags>
+      <flag>-exec</flag>
+      <flag>-execdir</flag>
+      <flag>-ok</flag>
+      <flag>-okdir</flag>
+    </execFlags>
+  </command>
+
+  <!-- grep -->
+  <command name="grep" description="Auto-approve grep (read-only search)" allowedFlags="*"/>
+
+  <!-- ldconfig -->
+  <command name="ldconfig" description="Auto-approve readonly ldconfig commands">
+    <requiredFlags>
+      <flag>-p</flag>
+      <flag>--print-cache</flag>
+      <flag>-v</flag>
+    </requiredFlags>
+  </command>
+
+  <!-- go -->
+  <command name="go" description="Auto-approve readonly go toolchain commands">
+    <subcommand allowedFlags="*">
+      <name>version</name>
+      <name>env</name>
+      <name>doc</name>
+    </subcommand>
+  </command>
+
+  <!-- git -->
+  <command name="git" description="Auto-approve readonly git commands">
+    <subcommand allowedFlags="*">
+      <name>status</name>
+      <name>diff</name>
+      <name>log</name>
+      <name>show</name>
+      <name>fetch</name>
+      <name>ls-files</name>
+      <name>ls-tree</name>
+      <name>ls-remote</name>
+      <name>rev-parse</name>
+      <name>rev-list</name>
+      <name>describe</name>
+      <name>blame</name>
+      <name>shortlog</name>
+      <name>whatchanged</name>
+      <name>reflog</name>
+      <name>count-objects</name>
+      <name>fsck</name>
+      <name>verify-pack</name>
+      <name>cat-file</name>
+      <name>for-each-ref</name>
+      <name>name-rev</name>
+      <name>merge-base</name>
+    </subcommand>
+    <subcommand name="branch">
+      <allowedFlags>
+        <flag>-a</flag>
+        <flag>-r</flag>
+        <flag>-v</flag>
+        <flag>-vv</flag>
+        <flag>--list</flag>
+        <flag>--all</flag>
+        <flag>--remotes</flag>
+        <flag>--verbose</flag>
+      </allowedFlags>
+    </subcommand>
+    <subcommand name="tag">
+      <allowedFlags>
+        <flag>-l</flag>
+        <flag>-n</flag>
+        <flag>--list</flag>
+        <flag>--sort</flag>
+      </allowedFlags>
+    </subcommand>
+    <subcommand name="remote">
+      <allowedFlags>
+        <flag>-v</flag>
+        <flag>--verbose</flag>
+      </allowedFlags>
+      <subcommand allowedFlags="*">
+        <name>show</name>
+        <name>get-url</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="submodule">
+      <subcommand name="status" allowedFlags="*"/>
+    </subcommand>
+    <subcommand name="config">
+      <requiredFlags>
+        <flag>--get</flag>
+        <flag>--list</flag>
+        <flag>--get-all</flag>
+        <flag>--get-regexp</flag>
+        <flag>--get-urlmatch</flag>
+        <flag>--get-color</flag>
+        <flag>--get-colorbool</flag>
+        <flag>-l</flag>
+      </requiredFlags>
+    </subcommand>
+    <subcommand name="replace">
+      <requiredFlags>
+        <flag>-l</flag>
+        <flag>--list</flag>
+      </requiredFlags>
+    </subcommand>
+    <subcommand name="commit-graph">
+      <subcommand name="verify" allowedFlags="*"/>
+    </subcommand>
+    <subcommand name="push">
+      <requiredFlags>
+        <flag>--dry-run</flag>
+        <flag>-n</flag>
+      </requiredFlags>
+    </subcommand>
+  </command>
+
+  <!-- gh (GitHub CLI) -->
+  <command name="gh" description="Auto-approve readonly GitHub CLI commands">
+    <subcommand name="repo">
+      <subcommand allowedFlags="*">
+        <name>view</name>
+        <name>list</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="issue">
+      <subcommand allowedFlags="*">
+        <name>list</name>
+        <name>view</name>
+        <name>status</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="pr">
+      <subcommand allowedFlags="*">
+        <name>list</name>
+        <name>view</name>
+        <name>status</name>
+        <name>diff</name>
+        <name>checks</name>
+      </subcommand>
+    </subcommand>
+    <subcommand>
+      <name>release</name>
+      <name>workflow</name>
+      <subcommand allowedFlags="*">
+        <name>list</name>
+        <name>view</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="run">
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand denyWithMessage="Use 'gh wait-ci' instead for checking CI status">
+        <name>view</name>
+        <name>watch</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="search">
+      <subcommand allowedFlags="*">
+        <name>repos</name>
+        <name>issues</name>
+        <name>prs</name>
+        <name>commits</name>
+        <name>code</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="browse" allowedFlags="*"/>
+    <subcommand>
+      <name>label</name>
+      <name>cache</name>
+      <subcommand name="list" allowedFlags="*"/>
+    </subcommand>
+    <subcommand name="gist">
+      <subcommand allowedFlags="*">
+        <name>list</name>
+        <name>view</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="api">
+      <requireFlagValue default="GET">
+        <flag>-X</flag>
+        <flag>--method</flag>
+        <allowed>GET</allowed>
+      </requireFlagValue>
+    </subcommand>
+  </command>
+
+  <!-- claude CLI -->
+  <command name="claude" description="Auto-approve readonly claude CLI commands" helpAlwaysAllowed="true">
+    <allowedFlags>
+      <flag>--version</flag>
+      <flag>-v</flag>
+      <flag>--help</flag>
+      <flag>-h</flag>
+    </allowedFlags>
+    <subcommand name="mcp">
+      <allowedFlags>
+        <flag>--help</flag>
+        <flag>-h</flag>
+      </allowedFlags>
+      <subcommand allowedFlags="*">
+        <name>list</name>
+        <name>get</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="plugin">
+      <allowedFlags>
+        <flag>--help</flag>
+        <flag>-h</flag>
+      </allowedFlags>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="marketplace">
+        <subcommand name="list" allowedFlags="*"/>
+      </subcommand>
+    </subcommand>
+    <subcommand name="config">
+      <allowedFlags>
+        <flag>--help</flag>
+        <flag>-h</flag>
+      </allowedFlags>
+      <subcommand allowedFlags="*">
+        <name>list</name>
+        <name>get</name>
+      </subcommand>
+    </subcommand>
+  </command>
+
+  <!-- just -->
+  <command name="just" description="Auto-approve readonly just commands">
+    <requiredFlags>
+      <flag>--list</flag>
+      <flag>-l</flag>
+      <flag>--summary</flag>
+      <flag>--dump</flag>
+      <flag>--evaluate</flag>
+      <flag>--help</flag>
+      <flag>-h</flag>
+    </requiredFlags>
+  </command>
+
+  <!-- docker compose run --rm -->
+  <command name="docker" description="Auto-approve docker compose run --rm">
+    <subcommand name="compose">
+      <flagsWithValue>
+        <flag>-f</flag>
+        <flag>--file</flag>
+        <flag>-p</flag>
+        <flag>--project-name</flag>
+        <flag>--env-file</flag>
+        <flag>--profile</flag>
+        <flag>--progress</flag>
+        <flag>--ansi</flag>
+      </flagsWithValue>
+      <subcommand name="run">
+        <requiredFlags>
+          <flag>--rm</flag>
+        </requiredFlags>
+      </subcommand>
+    </subcommand>
+  </command>
+
+  <!-- docker-compose run --rm -->
+  <command name="docker-compose" description="Auto-approve docker-compose run --rm">
+    <flagsWithValue>
+      <flag>-f</flag>
+      <flag>--file</flag>
+      <flag>-p</flag>
+      <flag>--project-name</flag>
+      <flag>--env-file</flag>
+      <flag>--profile</flag>
+      <flag>--progress</flag>
+      <flag>--ansi</flag>
+    </flagsWithValue>
+    <subcommand name="run">
+      <requiredFlags>
+        <flag>--rm</flag>
+      </requiredFlags>
+    </subcommand>
+  </command>
+
+  <!-- docker-compose readonly -->
+  <command name="docker-compose" description="Auto-approve readonly docker-compose commands">
+    <flagsWithValue>
+      <flag>-f</flag>
+      <flag>--file</flag>
+      <flag>-p</flag>
+      <flag>--project-name</flag>
+      <flag>--env-file</flag>
+      <flag>--profile</flag>
+      <flag>--progress</flag>
+      <flag>--ansi</flag>
+    </flagsWithValue>
+    <subcommand allowedFlags="*">
+      <name>ls</name>
+      <name>ps</name>
+      <name>top</name>
+      <name>images</name>
+      <name>logs</name>
+      <name>config</name>
+      <name>version</name>
+    </subcommand>
+  </command>
+
+  <!-- zpool -->
+  <command name="zpool" description="Auto-approve readonly zpool commands">
+    <subcommand allowedFlags="*">
+      <name>list</name>
+      <name>status</name>
+      <name>history</name>
+      <name>get</name>
+      <name>iostat</name>
+      <name>events</name>
+    </subcommand>
+  </command>
+
+  <!-- zfs -->
+  <command name="zfs" description="Auto-approve readonly zfs commands">
+    <subcommand allowedFlags="*">
+      <name>list</name>
+      <name>get</name>
+      <name>diff</name>
+      <name>holds</name>
+    </subcommand>
+  </command>
+
+  <!-- docker readonly -->
+  <command name="docker" description="Auto-approve readonly docker commands">
+    <subcommand allowedFlags="*">
+      <name>inspect</name>
+      <name>ps</name>
+      <name>images</name>
+      <name>logs</name>
+      <name>version</name>
+      <name>info</name>
+      <name>top</name>
+      <name>port</name>
+      <name>diff</name>
+      <name>history</name>
+      <name>stats</name>
+      <name>events</name>
+      <name>search</name>
+    </subcommand>
+    <subcommand name="image">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+        <name>history</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="container">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+        <name>logs</name>
+        <name>top</name>
+        <name>stats</name>
+        <name>port</name>
+        <name>diff</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="network">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="volume">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="context">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>show</name>
+        <name>inspect</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="config">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="secret">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="service">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+        <name>logs</name>
+        <name>ps</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="node">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+        <name>ps</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="stack">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>ps</name>
+        <name>services</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="plugin">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>list</name>
+        <name>inspect</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="system">
+      <subcommand allowedFlags="*">
+        <name>info</name>
+        <name>df</name>
+        <name>events</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="manifest">
+      <subcommand name="inspect" allowedFlags="*"/>
+    </subcommand>
+    <subcommand name="buildx">
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>inspect</name>
+        <name>du</name>
+        <name>version</name>
+      </subcommand>
+    </subcommand>
+    <subcommand name="compose">
+      <flagsWithValue>
+        <flag>-f</flag>
+        <flag>--file</flag>
+        <flag>-p</flag>
+        <flag>--project-name</flag>
+        <flag>--env-file</flag>
+        <flag>--profile</flag>
+        <flag>--progress</flag>
+        <flag>--ansi</flag>
+      </flagsWithValue>
+      <subcommand allowedFlags="*">
+        <name>ls</name>
+        <name>ps</name>
+        <name>top</name>
+        <name>images</name>
+        <name>logs</name>
+        <name>config</name>
+        <name>version</name>
+      </subcommand>
+    </subcommand>
+  </command>
+
+  <!-- brew -->
+  <command name="brew" description="Auto-approve readonly homebrew commands">
+    <subcommand allowedFlags="*">
+      <name>list</name>
+      <name>ls</name>
+      <name>info</name>
+      <name>search</name>
+      <name>config</name>
+      <name>doctor</name>
+      <name>deps</name>
+      <name>uses</name>
+      <name>outdated</name>
+      <name>leaves</name>
+      <name>desc</name>
+      <name>cat</name>
+      <name>home</name>
+      <name>log</name>
+      <name>options</name>
+      <name>formula</name>
+      <name>--version</name>
+      <name>--prefix</name>
+      <name>--cellar</name>
+      <name>--repository</name>
+      <name>--cache</name>
+      <name>analytics</name>
+      <name>commands</name>
+      <name>which-formula</name>
+      <name>tap-info</name>
+      <name>style</name>
+      <name>shellenv</name>
+    </subcommand>
+    <subcommand name="tap">
+      <allowedFlags/>
+    </subcommand>
+  </command>
+</rules>
