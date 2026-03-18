@@ -66,7 +66,8 @@
 				"cd",
 				"pkg-config",
 				"pkgconf",
-				"pkg_config"
+				"pkg_config",
+				"dig"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
