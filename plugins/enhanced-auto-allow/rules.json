@@ -73,6 +73,11 @@
 			"allowedFlags": "*"
 		},
 		{
+			"name": "mount",
+			"description": "Auto-approve mount with no flags (lists mounted filesystems)",
+			"allowedFlags": []
+		},
+		{
 			"name": "find",
 			"description": "Auto-approve readonly find commands; -exec allowed if sub-command is whitelisted",
 			"allowedFlags": "*",
