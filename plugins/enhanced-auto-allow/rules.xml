@@ -1,76 +1,74 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rules>
-  <!-- Auto-approve readonly inspection commands -->
-  <command description="Auto-approve readonly inspection commands" allowedFlags="*">
-    <name>ls</name>
-    <name>cat</name>
-    <name>head</name>
-    <name>tail</name>
-    <name>file</name>
-    <name>wc</name>
-    <name>stat</name>
-    <name>du</name>
-    <name>df</name>
-    <name>uname</name>
-    <name>uptime</name>
-    <name>sw_vers</name>
-    <name>arch</name>
-    <name>hostinfo</name>
-    <name>vm_stat</name>
-    <name>whoami</name>
-    <name>id</name>
-    <name>groups</name>
-    <name>pgrep</name>
-    <name>which</name>
-    <name>whereis</name>
-    <name>readlink</name>
-    <name>basename</name>
-    <name>dirname</name>
-    <name>printenv</name>
-    <name>shasum</name>
-    <name>md5</name>
-    <name>strings</name>
-    <name>hexdump</name>
-    <name>od</name>
-    <name>mdfind</name>
-    <name>mdls</name>
-    <name>locate</name>
-    <name>echo</name>
-    <name>printf</name>
-    <name>true</name>
-    <name>false</name>
-    <name>test</name>
-    <name>[</name>
-    <name>date</name>
-    <name>hostname</name>
-    <name>pwd</name>
-    <name>env</name>
-    <name>sort</name>
-    <name>uniq</name>
-    <name>tr</name>
-    <name>cut</name>
-    <name>diff</name>
-    <name>comm</name>
-    <name>join</name>
-    <name>paste</name>
-    <name>column</name>
-    <name>expand</name>
-    <name>unexpand</name>
-    <name>fold</name>
-    <name>fmt</name>
-    <name>nl</name>
-    <name>rev</name>
-    <name>tac</name>
-    <name>seq</name>
-    <name>realpath</name>
-    <name>cd</name>
-    <name>pkg-config</name>
-    <name>pkgconf</name>
-    <name>pkg_config</name>
-  </command>
+  <!-- Readonly inspection commands -->
+  <command name="ls" allowedFlags="*"/>
+  <command name="cat" allowedFlags="*"/>
+  <command name="head" allowedFlags="*"/>
+  <command name="tail" allowedFlags="*"/>
+  <command name="file" allowedFlags="*"/>
+  <command name="wc" allowedFlags="*"/>
+  <command name="stat" allowedFlags="*"/>
+  <command name="du" allowedFlags="*"/>
+  <command name="df" allowedFlags="*"/>
+  <command name="uname" allowedFlags="*"/>
+  <command name="uptime" allowedFlags="*"/>
+  <command name="sw_vers" allowedFlags="*"/>
+  <command name="arch" allowedFlags="*"/>
+  <command name="hostinfo" allowedFlags="*"/>
+  <command name="vm_stat" allowedFlags="*"/>
+  <command name="whoami" allowedFlags="*"/>
+  <command name="id" allowedFlags="*"/>
+  <command name="groups" allowedFlags="*"/>
+  <command name="pgrep" allowedFlags="*"/>
+  <command name="which" allowedFlags="*"/>
+  <command name="whereis" allowedFlags="*"/>
+  <command name="readlink" allowedFlags="*"/>
+  <command name="basename" allowedFlags="*"/>
+  <command name="dirname" allowedFlags="*"/>
+  <command name="printenv" allowedFlags="*"/>
+  <command name="shasum" allowedFlags="*"/>
+  <command name="md5" allowedFlags="*"/>
+  <command name="strings" allowedFlags="*"/>
+  <command name="hexdump" allowedFlags="*"/>
+  <command name="od" allowedFlags="*"/>
+  <command name="mdfind" allowedFlags="*"/>
+  <command name="mdls" allowedFlags="*"/>
+  <command name="locate" allowedFlags="*"/>
+  <command name="echo" allowedFlags="*"/>
+  <command name="printf" allowedFlags="*"/>
+  <command name="true" allowedFlags="*"/>
+  <command name="false" allowedFlags="*"/>
+  <command name="test" allowedFlags="*"/>
+  <command name="[" allowedFlags="*"/>
+  <command name="date" allowedFlags="*"/>
+  <command name="hostname" allowedFlags="*"/>
+  <command name="pwd" allowedFlags="*"/>
+  <command name="env" allowedFlags="*"/>
+  <command name="sort" allowedFlags="*"/>
+  <command name="uniq" allowedFlags="*"/>
+  <command name="tr" allowedFlags="*"/>
+  <command name="cut" allowedFlags="*"/>
+  <command name="diff" allowedFlags="*"/>
+  <command name="comm" allowedFlags="*"/>
+  <command name="join" allowedFlags="*"/>
+  <command name="paste" allowedFlags="*"/>
+  <command name="column" allowedFlags="*"/>
+  <command name="expand" allowedFlags="*"/>
+  <command name="unexpand" allowedFlags="*"/>
+  <command name="fold" allowedFlags="*"/>
+  <command name="fmt" allowedFlags="*"/>
+  <command name="nl" allowedFlags="*"/>
+  <command name="rev" allowedFlags="*"/>
+  <command name="tac" allowedFlags="*"/>
+  <command name="seq" allowedFlags="*"/>
+  <command name="realpath" allowedFlags="*"/>
+  <command name="cd" allowedFlags="*"/>
+  <command name="pkg-config" allowedFlags="*"/>
+  <command name="pkgconf" allowedFlags="*"/>
+  <command name="pkg_config" allowedFlags="*"/>
 
   <!-- find -->
-  <command name="find" description="Auto-approve readonly find commands; -exec allowed if sub-command is whitelisted" allowedFlags="*">
+  <command name="find" allowedFlags="*">
     <deniedFlags>
       <flag>-delete</flag>
     </deniedFlags>
@@ -83,10 +81,10 @@
   </command>
 
   <!-- grep -->
-  <command name="grep" description="Auto-approve grep (read-only search)" allowedFlags="*"/>
+  <command name="grep" allowedFlags="*"/>
 
   <!-- ldconfig -->
-  <command name="ldconfig" description="Auto-approve readonly ldconfig commands">
+  <command name="ldconfig">
     <requiredFlags>
       <flag>-p</flag>
       <flag>--print-cache</flag>
@@ -95,40 +93,36 @@
   </command>
 
   <!-- go -->
-  <command name="go" description="Auto-approve readonly go toolchain commands">
-    <subcommand allowedFlags="*">
-      <name>version</name>
-      <name>env</name>
-      <name>doc</name>
-    </subcommand>
+  <command name="go">
+    <subcommand name="version" allowedFlags="*"/>
+    <subcommand name="env" allowedFlags="*"/>
+    <subcommand name="doc" allowedFlags="*"/>
   </command>
 
   <!-- git -->
-  <command name="git" description="Auto-approve readonly git commands">
-    <subcommand allowedFlags="*">
-      <name>status</name>
-      <name>diff</name>
-      <name>log</name>
-      <name>show</name>
-      <name>fetch</name>
-      <name>ls-files</name>
-      <name>ls-tree</name>
-      <name>ls-remote</name>
-      <name>rev-parse</name>
-      <name>rev-list</name>
-      <name>describe</name>
-      <name>blame</name>
-      <name>shortlog</name>
-      <name>whatchanged</name>
-      <name>reflog</name>
-      <name>count-objects</name>
-      <name>fsck</name>
-      <name>verify-pack</name>
-      <name>cat-file</name>
-      <name>for-each-ref</name>
-      <name>name-rev</name>
-      <name>merge-base</name>
-    </subcommand>
+  <command name="git">
+    <subcommand name="status" allowedFlags="*"/>
+    <subcommand name="diff" allowedFlags="*"/>
+    <subcommand name="log" allowedFlags="*"/>
+    <subcommand name="show" allowedFlags="*"/>
+    <subcommand name="fetch" allowedFlags="*"/>
+    <subcommand name="ls-files" allowedFlags="*"/>
+    <subcommand name="ls-tree" allowedFlags="*"/>
+    <subcommand name="ls-remote" allowedFlags="*"/>
+    <subcommand name="rev-parse" allowedFlags="*"/>
+    <subcommand name="rev-list" allowedFlags="*"/>
+    <subcommand name="describe" allowedFlags="*"/>
+    <subcommand name="blame" allowedFlags="*"/>
+    <subcommand name="shortlog" allowedFlags="*"/>
+    <subcommand name="whatchanged" allowedFlags="*"/>
+    <subcommand name="reflog" allowedFlags="*"/>
+    <subcommand name="count-objects" allowedFlags="*"/>
+    <subcommand name="fsck" allowedFlags="*"/>
+    <subcommand name="verify-pack" allowedFlags="*"/>
+    <subcommand name="cat-file" allowedFlags="*"/>
+    <subcommand name="for-each-ref" allowedFlags="*"/>
+    <subcommand name="name-rev" allowedFlags="*"/>
+    <subcommand name="merge-base" allowedFlags="*"/>
     <subcommand name="branch">
       <allowedFlags>
         <flag>-a</flag>
@@ -154,10 +148,8 @@
         <flag>-v</flag>
         <flag>--verbose</flag>
       </allowedFlags>
-      <subcommand allowedFlags="*">
-        <name>show</name>
-        <name>get-url</name>
-      </subcommand>
+      <subcommand name="show" allowedFlags="*"/>
+      <subcommand name="get-url" allowedFlags="*"/>
     </subcommand>
     <subcommand name="submodule">
       <subcommand name="status" allowedFlags="*"/>
@@ -192,64 +184,53 @@
   </command>
 
   <!-- gh (GitHub CLI) -->
-  <command name="gh" description="Auto-approve readonly GitHub CLI commands">
+  <command name="gh">
     <subcommand name="repo">
-      <subcommand allowedFlags="*">
-        <name>view</name>
-        <name>list</name>
-      </subcommand>
+      <subcommand name="view" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
     </subcommand>
     <subcommand name="issue">
-      <subcommand allowedFlags="*">
-        <name>list</name>
-        <name>view</name>
-        <name>status</name>
-      </subcommand>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="view" allowedFlags="*"/>
+      <subcommand name="status" allowedFlags="*"/>
     </subcommand>
     <subcommand name="pr">
-      <subcommand allowedFlags="*">
-        <name>list</name>
-        <name>view</name>
-        <name>status</name>
-        <name>diff</name>
-        <name>checks</name>
-      </subcommand>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="view" allowedFlags="*"/>
+      <subcommand name="status" allowedFlags="*"/>
+      <subcommand name="diff" allowedFlags="*"/>
+      <subcommand name="checks" allowedFlags="*"/>
     </subcommand>
-    <subcommand>
-      <name>release</name>
-      <name>workflow</name>
-      <subcommand allowedFlags="*">
-        <name>list</name>
-        <name>view</name>
-      </subcommand>
+    <subcommand name="release">
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="view" allowedFlags="*"/>
+    </subcommand>
+    <subcommand name="workflow">
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="view" allowedFlags="*"/>
     </subcommand>
     <subcommand name="run">
       <subcommand name="list" allowedFlags="*"/>
-      <subcommand denyWithMessage="Use 'gh wait-ci' instead for checking CI status">
-        <name>view</name>
-        <name>watch</name>
-      </subcommand>
+      <subcommand name="view" denyWithMessage="Use 'gh wait-ci' instead for checking CI status"/>
+      <subcommand name="watch" denyWithMessage="Use 'gh wait-ci' instead for checking CI status"/>
     </subcommand>
     <subcommand name="search">
-      <subcommand allowedFlags="*">
-        <name>repos</name>
-        <name>issues</name>
-        <name>prs</name>
-        <name>commits</name>
-        <name>code</name>
-      </subcommand>
+      <subcommand name="repos" allowedFlags="*"/>
+      <subcommand name="issues" allowedFlags="*"/>
+      <subcommand name="prs" allowedFlags="*"/>
+      <subcommand name="commits" allowedFlags="*"/>
+      <subcommand name="code" allowedFlags="*"/>
     </subcommand>
     <subcommand name="browse" allowedFlags="*"/>
-    <subcommand>
-      <name>label</name>
-      <name>cache</name>
+    <subcommand name="label">
+      <subcommand name="list" allowedFlags="*"/>
+    </subcommand>
+    <subcommand name="cache">
       <subcommand name="list" allowedFlags="*"/>
     </subcommand>
     <subcommand name="gist">
-      <subcommand allowedFlags="*">
-        <name>list</name>
-        <name>view</name>
-      </subcommand>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="view" allowedFlags="*"/>
     </subcommand>
     <subcommand name="api">
       <requireFlagValue default="GET">
@@ -261,7 +242,7 @@
   </command>
 
   <!-- claude CLI -->
-  <command name="claude" description="Auto-approve readonly claude CLI commands" helpAlwaysAllowed="true">
+  <command name="claude" helpAlwaysAllowed="true">
     <allowedFlags>
       <flag>--version</flag>
       <flag>-v</flag>
@@ -273,10 +254,8 @@
         <flag>--help</flag>
         <flag>-h</flag>
       </allowedFlags>
-      <subcommand allowedFlags="*">
-        <name>list</name>
-        <name>get</name>
-      </subcommand>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="get" allowedFlags="*"/>
     </subcommand>
     <subcommand name="plugin">
       <allowedFlags>
@@ -293,15 +272,13 @@
         <flag>--help</flag>
         <flag>-h</flag>
       </allowedFlags>
-      <subcommand allowedFlags="*">
-        <name>list</name>
-        <name>get</name>
-      </subcommand>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="get" allowedFlags="*"/>
     </subcommand>
   </command>
 
   <!-- just -->
-  <command name="just" description="Auto-approve readonly just commands">
+  <command name="just">
     <requiredFlags>
       <flag>--list</flag>
       <flag>-l</flag>
@@ -314,7 +291,7 @@
   </command>
 
   <!-- docker compose run --rm -->
-  <command name="docker" description="Auto-approve docker compose run --rm">
+  <command name="docker" description="docker compose run --rm">
     <subcommand name="compose">
       <flagsWithValue>
         <flag>-f</flag>
@@ -335,7 +312,7 @@
   </command>
 
   <!-- docker-compose run --rm -->
-  <command name="docker-compose" description="Auto-approve docker-compose run --rm">
+  <command name="docker-compose" description="docker-compose run --rm">
     <flagsWithValue>
       <flag>-f</flag>
       <flag>--file</flag>
@@ -354,7 +331,7 @@
   </command>
 
   <!-- docker-compose readonly -->
-  <command name="docker-compose" description="Auto-approve readonly docker-compose commands">
+  <command name="docker-compose" description="readonly docker-compose">
     <flagsWithValue>
       <flag>-f</flag>
       <flag>--file</flag>
@@ -365,161 +342,127 @@
       <flag>--progress</flag>
       <flag>--ansi</flag>
     </flagsWithValue>
-    <subcommand allowedFlags="*">
-      <name>ls</name>
-      <name>ps</name>
-      <name>top</name>
-      <name>images</name>
-      <name>logs</name>
-      <name>config</name>
-      <name>version</name>
-    </subcommand>
+    <subcommand name="ls" allowedFlags="*"/>
+    <subcommand name="ps" allowedFlags="*"/>
+    <subcommand name="top" allowedFlags="*"/>
+    <subcommand name="images" allowedFlags="*"/>
+    <subcommand name="logs" allowedFlags="*"/>
+    <subcommand name="config" allowedFlags="*"/>
+    <subcommand name="version" allowedFlags="*"/>
   </command>
 
   <!-- zpool -->
-  <command name="zpool" description="Auto-approve readonly zpool commands">
-    <subcommand allowedFlags="*">
-      <name>list</name>
-      <name>status</name>
-      <name>history</name>
-      <name>get</name>
-      <name>iostat</name>
-      <name>events</name>
-    </subcommand>
+  <command name="zpool">
+    <subcommand name="list" allowedFlags="*"/>
+    <subcommand name="status" allowedFlags="*"/>
+    <subcommand name="history" allowedFlags="*"/>
+    <subcommand name="get" allowedFlags="*"/>
+    <subcommand name="iostat" allowedFlags="*"/>
+    <subcommand name="events" allowedFlags="*"/>
   </command>
 
   <!-- zfs -->
-  <command name="zfs" description="Auto-approve readonly zfs commands">
-    <subcommand allowedFlags="*">
-      <name>list</name>
-      <name>get</name>
-      <name>diff</name>
-      <name>holds</name>
-    </subcommand>
+  <command name="zfs">
+    <subcommand name="list" allowedFlags="*"/>
+    <subcommand name="get" allowedFlags="*"/>
+    <subcommand name="diff" allowedFlags="*"/>
+    <subcommand name="holds" allowedFlags="*"/>
   </command>
 
   <!-- docker readonly -->
-  <command name="docker" description="Auto-approve readonly docker commands">
-    <subcommand allowedFlags="*">
-      <name>inspect</name>
-      <name>ps</name>
-      <name>images</name>
-      <name>logs</name>
-      <name>version</name>
-      <name>info</name>
-      <name>top</name>
-      <name>port</name>
-      <name>diff</name>
-      <name>history</name>
-      <name>stats</name>
-      <name>events</name>
-      <name>search</name>
-    </subcommand>
+  <command name="docker" description="readonly docker">
+    <subcommand name="inspect" allowedFlags="*"/>
+    <subcommand name="ps" allowedFlags="*"/>
+    <subcommand name="images" allowedFlags="*"/>
+    <subcommand name="logs" allowedFlags="*"/>
+    <subcommand name="version" allowedFlags="*"/>
+    <subcommand name="info" allowedFlags="*"/>
+    <subcommand name="top" allowedFlags="*"/>
+    <subcommand name="port" allowedFlags="*"/>
+    <subcommand name="diff" allowedFlags="*"/>
+    <subcommand name="history" allowedFlags="*"/>
+    <subcommand name="stats" allowedFlags="*"/>
+    <subcommand name="events" allowedFlags="*"/>
+    <subcommand name="search" allowedFlags="*"/>
     <subcommand name="image">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-        <name>history</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
+      <subcommand name="history" allowedFlags="*"/>
     </subcommand>
     <subcommand name="container">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-        <name>logs</name>
-        <name>top</name>
-        <name>stats</name>
-        <name>port</name>
-        <name>diff</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
+      <subcommand name="logs" allowedFlags="*"/>
+      <subcommand name="top" allowedFlags="*"/>
+      <subcommand name="stats" allowedFlags="*"/>
+      <subcommand name="port" allowedFlags="*"/>
+      <subcommand name="diff" allowedFlags="*"/>
     </subcommand>
     <subcommand name="network">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
     </subcommand>
     <subcommand name="volume">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
     </subcommand>
     <subcommand name="context">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>show</name>
-        <name>inspect</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="show" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
     </subcommand>
     <subcommand name="config">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
     </subcommand>
     <subcommand name="secret">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
     </subcommand>
     <subcommand name="service">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-        <name>logs</name>
-        <name>ps</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
+      <subcommand name="logs" allowedFlags="*"/>
+      <subcommand name="ps" allowedFlags="*"/>
     </subcommand>
     <subcommand name="node">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-        <name>ps</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
+      <subcommand name="ps" allowedFlags="*"/>
     </subcommand>
     <subcommand name="stack">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>ps</name>
-        <name>services</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="ps" allowedFlags="*"/>
+      <subcommand name="services" allowedFlags="*"/>
     </subcommand>
     <subcommand name="plugin">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>list</name>
-        <name>inspect</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="list" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
     </subcommand>
     <subcommand name="system">
-      <subcommand allowedFlags="*">
-        <name>info</name>
-        <name>df</name>
-        <name>events</name>
-      </subcommand>
+      <subcommand name="info" allowedFlags="*"/>
+      <subcommand name="df" allowedFlags="*"/>
+      <subcommand name="events" allowedFlags="*"/>
     </subcommand>
     <subcommand name="manifest">
       <subcommand name="inspect" allowedFlags="*"/>
     </subcommand>
     <subcommand name="buildx">
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>inspect</name>
-        <name>du</name>
-        <name>version</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="inspect" allowedFlags="*"/>
+      <subcommand name="du" allowedFlags="*"/>
+      <subcommand name="version" allowedFlags="*"/>
     </subcommand>
     <subcommand name="compose">
       <flagsWithValue>
@@ -532,49 +475,45 @@
         <flag>--progress</flag>
         <flag>--ansi</flag>
       </flagsWithValue>
-      <subcommand allowedFlags="*">
-        <name>ls</name>
-        <name>ps</name>
-        <name>top</name>
-        <name>images</name>
-        <name>logs</name>
-        <name>config</name>
-        <name>version</name>
-      </subcommand>
+      <subcommand name="ls" allowedFlags="*"/>
+      <subcommand name="ps" allowedFlags="*"/>
+      <subcommand name="top" allowedFlags="*"/>
+      <subcommand name="images" allowedFlags="*"/>
+      <subcommand name="logs" allowedFlags="*"/>
+      <subcommand name="config" allowedFlags="*"/>
+      <subcommand name="version" allowedFlags="*"/>
     </subcommand>
   </command>
 
   <!-- brew -->
-  <command name="brew" description="Auto-approve readonly homebrew commands">
-    <subcommand allowedFlags="*">
-      <name>list</name>
-      <name>ls</name>
-      <name>info</name>
-      <name>search</name>
-      <name>config</name>
-      <name>doctor</name>
-      <name>deps</name>
-      <name>uses</name>
-      <name>outdated</name>
-      <name>leaves</name>
-      <name>desc</name>
-      <name>cat</name>
-      <name>home</name>
-      <name>log</name>
-      <name>options</name>
-      <name>formula</name>
-      <name>--version</name>
-      <name>--prefix</name>
-      <name>--cellar</name>
-      <name>--repository</name>
-      <name>--cache</name>
-      <name>analytics</name>
-      <name>commands</name>
-      <name>which-formula</name>
-      <name>tap-info</name>
-      <name>style</name>
-      <name>shellenv</name>
-    </subcommand>
+  <command name="brew">
+    <subcommand name="list" allowedFlags="*"/>
+    <subcommand name="ls" allowedFlags="*"/>
+    <subcommand name="info" allowedFlags="*"/>
+    <subcommand name="search" allowedFlags="*"/>
+    <subcommand name="config" allowedFlags="*"/>
+    <subcommand name="doctor" allowedFlags="*"/>
+    <subcommand name="deps" allowedFlags="*"/>
+    <subcommand name="uses" allowedFlags="*"/>
+    <subcommand name="outdated" allowedFlags="*"/>
+    <subcommand name="leaves" allowedFlags="*"/>
+    <subcommand name="desc" allowedFlags="*"/>
+    <subcommand name="cat" allowedFlags="*"/>
+    <subcommand name="home" allowedFlags="*"/>
+    <subcommand name="log" allowedFlags="*"/>
+    <subcommand name="options" allowedFlags="*"/>
+    <subcommand name="formula" allowedFlags="*"/>
+    <subcommand name="--version" allowedFlags="*"/>
+    <subcommand name="--prefix" allowedFlags="*"/>
+    <subcommand name="--cellar" allowedFlags="*"/>
+    <subcommand name="--repository" allowedFlags="*"/>
+    <subcommand name="--cache" allowedFlags="*"/>
+    <subcommand name="analytics" allowedFlags="*"/>
+    <subcommand name="commands" allowedFlags="*"/>
+    <subcommand name="which-formula" allowedFlags="*"/>
+    <subcommand name="tap-info" allowedFlags="*"/>
+    <subcommand name="style" allowedFlags="*"/>
+    <subcommand name="shellenv" allowedFlags="*"/>
     <subcommand name="tap">
       <allowedFlags/>
     </subcommand>
