@@ -70,13 +70,13 @@
   <!-- find -->
   <cmd name="find" allowedFlags="*">
     <deniedFlags>
-      <flag>-delete</flag>
+      <flag name="-delete" />
     </deniedFlags>
     <execFlags>
-      <flag>-exec</flag>
-      <flag>-execdir</flag>
-      <flag>-ok</flag>
-      <flag>-okdir</flag>
+      <flag name="-exec" />
+      <flag name="-execdir" />
+      <flag name="-ok" />
+      <flag name="-okdir" />
     </execFlags>
   </cmd>
 
@@ -86,9 +86,9 @@
   <!-- ldconfig -->
   <cmd name="ldconfig">
     <requiredFlags>
-      <flag>-p</flag>
-      <flag>--print-cache</flag>
-      <flag>-v</flag>
+      <flag name="-p" />
+      <flag name="--print-cache" />
+      <flag name="-v" />
     </requiredFlags>
   </cmd>
 
@@ -125,28 +125,28 @@
     <subcmd name="merge-base" allowedFlags="*"/>
     <subcmd name="branch">
       <allowedFlags>
-        <flag>-a</flag>
-        <flag>-r</flag>
-        <flag>-v</flag>
-        <flag>-vv</flag>
-        <flag>--list</flag>
-        <flag>--all</flag>
-        <flag>--remotes</flag>
-        <flag>--verbose</flag>
+        <flag name="-a" />
+        <flag name="-r" />
+        <flag name="-v" />
+        <flag name="-vv" />
+        <flag name="--list" />
+        <flag name="--all" />
+        <flag name="--remotes" />
+        <flag name="--verbose" />
       </allowedFlags>
     </subcmd>
     <subcmd name="tag">
       <allowedFlags>
-        <flag>-l</flag>
-        <flag>-n</flag>
-        <flag>--list</flag>
-        <flag>--sort</flag>
+        <flag name="-l" />
+        <flag name="-n" />
+        <flag name="--list" />
+        <flag name="--sort" />
       </allowedFlags>
     </subcmd>
     <subcmd name="remote">
       <allowedFlags>
-        <flag>-v</flag>
-        <flag>--verbose</flag>
+        <flag name="-v" />
+        <flag name="--verbose" />
       </allowedFlags>
       <subcmd name="show" allowedFlags="*"/>
       <subcmd name="get-url" allowedFlags="*"/>
@@ -156,20 +156,20 @@
     </subcmd>
     <subcmd name="config">
       <requiredFlags>
-        <flag>--get</flag>
-        <flag>--list</flag>
-        <flag>--get-all</flag>
-        <flag>--get-regexp</flag>
-        <flag>--get-urlmatch</flag>
-        <flag>--get-color</flag>
-        <flag>--get-colorbool</flag>
-        <flag>-l</flag>
+        <flag name="--get" />
+        <flag name="--list" />
+        <flag name="--get-all" />
+        <flag name="--get-regexp" />
+        <flag name="--get-urlmatch" />
+        <flag name="--get-color" />
+        <flag name="--get-colorbool" />
+        <flag name="-l" />
       </requiredFlags>
     </subcmd>
     <subcmd name="replace">
       <requiredFlags>
-        <flag>-l</flag>
-        <flag>--list</flag>
+        <flag name="-l" />
+        <flag name="--list" />
       </requiredFlags>
     </subcmd>
     <subcmd name="commit-graph">
@@ -177,8 +177,8 @@
     </subcmd>
     <subcmd name="push">
       <requiredFlags>
-        <flag>--dry-run</flag>
-        <flag>-n</flag>
+        <flag name="--dry-run" />
+        <flag name="-n" />
       </requiredFlags>
     </subcmd>
   </cmd>
@@ -234,8 +234,8 @@
     </subcmd>
     <subcmd name="api">
       <requireFlagValue default="GET">
-        <flag>-X</flag>
-        <flag>--method</flag>
+        <flag name="-X" />
+        <flag name="--method" />
         <allowed>GET</allowed>
       </requireFlagValue>
     </subcmd>
@@ -244,23 +244,23 @@
   <!-- claude CLI -->
   <cmd name="claude" helpAlwaysAllowed="true">
     <allowedFlags>
-      <flag>--version</flag>
-      <flag>-v</flag>
-      <flag>--help</flag>
-      <flag>-h</flag>
+      <flag name="--version" />
+      <flag name="-v" />
+      <flag name="--help" />
+      <flag name="-h" />
     </allowedFlags>
     <subcmd name="mcp">
       <allowedFlags>
-        <flag>--help</flag>
-        <flag>-h</flag>
+        <flag name="--help" />
+        <flag name="-h" />
       </allowedFlags>
       <subcmd name="list" allowedFlags="*"/>
       <subcmd name="get" allowedFlags="*"/>
     </subcmd>
     <subcmd name="plugin">
       <allowedFlags>
-        <flag>--help</flag>
-        <flag>-h</flag>
+        <flag name="--help" />
+        <flag name="-h" />
       </allowedFlags>
       <subcmd name="list" allowedFlags="*"/>
       <subcmd name="marketplace">
@@ -269,8 +269,8 @@
     </subcmd>
     <subcmd name="config">
       <allowedFlags>
-        <flag>--help</flag>
-        <flag>-h</flag>
+        <flag name="--help" />
+        <flag name="-h" />
       </allowedFlags>
       <subcmd name="list" allowedFlags="*"/>
       <subcmd name="get" allowedFlags="*"/>
@@ -280,13 +280,13 @@
   <!-- just -->
   <cmd name="just">
     <requiredFlags>
-      <flag>--list</flag>
-      <flag>-l</flag>
-      <flag>--summary</flag>
-      <flag>--dump</flag>
-      <flag>--evaluate</flag>
-      <flag>--help</flag>
-      <flag>-h</flag>
+      <flag name="--list" />
+      <flag name="-l" />
+      <flag name="--summary" />
+      <flag name="--dump" />
+      <flag name="--evaluate" />
+      <flag name="--help" />
+      <flag name="-h" />
     </requiredFlags>
   </cmd>
 
@@ -294,18 +294,18 @@
   <cmd name="docker" description="docker compose run --rm">
     <subcmd name="compose">
       <flagsWithValue>
-        <flag>-f</flag>
-        <flag>--file</flag>
-        <flag>-p</flag>
-        <flag>--project-name</flag>
-        <flag>--env-file</flag>
-        <flag>--profile</flag>
-        <flag>--progress</flag>
-        <flag>--ansi</flag>
+        <flag name="-f" />
+        <flag name="--file" />
+        <flag name="-p" />
+        <flag name="--project-name" />
+        <flag name="--env-file" />
+        <flag name="--profile" />
+        <flag name="--progress" />
+        <flag name="--ansi" />
       </flagsWithValue>
       <subcmd name="run">
         <requiredFlags>
-          <flag>--rm</flag>
+          <flag name="--rm" />
         </requiredFlags>
       </subcmd>
     </subcmd>
@@ -314,18 +314,18 @@
   <!-- docker-compose run --rm -->
   <cmd name="docker-compose" description="docker-compose run --rm">
     <flagsWithValue>
-      <flag>-f</flag>
-      <flag>--file</flag>
-      <flag>-p</flag>
-      <flag>--project-name</flag>
-      <flag>--env-file</flag>
-      <flag>--profile</flag>
-      <flag>--progress</flag>
-      <flag>--ansi</flag>
+      <flag name="-f" />
+      <flag name="--file" />
+      <flag name="-p" />
+      <flag name="--project-name" />
+      <flag name="--env-file" />
+      <flag name="--profile" />
+      <flag name="--progress" />
+      <flag name="--ansi" />
     </flagsWithValue>
     <subcmd name="run">
       <requiredFlags>
-        <flag>--rm</flag>
+        <flag name="--rm" />
       </requiredFlags>
     </subcmd>
   </cmd>
@@ -333,14 +333,14 @@
   <!-- docker-compose readonly -->
   <cmd name="docker-compose" description="readonly docker-compose">
     <flagsWithValue>
-      <flag>-f</flag>
-      <flag>--file</flag>
-      <flag>-p</flag>
-      <flag>--project-name</flag>
-      <flag>--env-file</flag>
-      <flag>--profile</flag>
-      <flag>--progress</flag>
-      <flag>--ansi</flag>
+      <flag name="-f" />
+      <flag name="--file" />
+      <flag name="-p" />
+      <flag name="--project-name" />
+      <flag name="--env-file" />
+      <flag name="--profile" />
+      <flag name="--progress" />
+      <flag name="--ansi" />
     </flagsWithValue>
     <subcmd name="ls" allowedFlags="*"/>
     <subcmd name="ps" allowedFlags="*"/>
@@ -466,14 +466,14 @@
     </subcmd>
     <subcmd name="compose">
       <flagsWithValue>
-        <flag>-f</flag>
-        <flag>--file</flag>
-        <flag>-p</flag>
-        <flag>--project-name</flag>
-        <flag>--env-file</flag>
-        <flag>--profile</flag>
-        <flag>--progress</flag>
-        <flag>--ansi</flag>
+        <flag name="-f" />
+        <flag name="--file" />
+        <flag name="-p" />
+        <flag name="--project-name" />
+        <flag name="--env-file" />
+        <flag name="--profile" />
+        <flag name="--progress" />
+        <flag name="--ansi" />
       </flagsWithValue>
       <subcmd name="ls" allowedFlags="*"/>
       <subcmd name="ps" allowedFlags="*"/>
