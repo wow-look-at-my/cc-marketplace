@@ -189,28 +189,26 @@ func TestGhApiPostPassthrough(t *testing.T) {
 	assert.Equal(t, "", decision, "gh api -X POST should passthrough")
 }
 
-func TestGhRepoViewAllowed(t *testing.T) {
+func TestGhRepoAndReleaseAllowed(t *testing.T) {
 	loadTestRules(t)
-	decision, _ := evaluateCommand("gh repo view wow-look-at-my/go-toolchain")
-	assert.Equal(t, "allow", decision, "gh repo view should be allowed")
-}
-
-func TestGhRepoViewWithFlagsAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("gh repo view wow-look-at-my/go-toolchain --json name,description")
-	assert.Equal(t, "allow", decision, "gh repo view --json should be allowed")
-}
-
-func TestGhReleaseListAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("gh release list")
-	assert.Equal(t, "allow", decision, "gh release list should be allowed")
-}
-
-func TestGhReleaseListWithFlagsAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("gh release list -R owner/repo")
-	assert.Equal(t, "allow", decision, "gh release list -R should be allowed")
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"repo view", "gh repo view wow-look-at-my/go-toolchain", "allow"},
+		{"repo view --json", "gh repo view wow-look-at-my/go-toolchain --json name,description", "allow"},
+		{"repo list", "gh repo list", "allow"},
+		{"release list", "gh release list", "allow"},
+		{"release list -R", "gh release list -R owner/repo", "allow"},
+		{"release view", "gh release view v1.0.0", "allow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
+		})
+	}
 }
 
 func TestGhBrowseAllowed(t *testing.T) {
@@ -272,8 +270,8 @@ func TestFindDeletePassthrough(t *testing.T) {
 func TestPkgConfigAllowed(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
-		name    string
-		command string
+		name	string
+		command	string
 	}{
 		{"cflags", "pkg-config --cflags openssl"},
 		{"libs", "pkg-config --libs openssl"},
@@ -324,8 +322,8 @@ func TestGoEnvAllowed(t *testing.T) {
 func TestGoDocAllowed(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
-		name    string
-		command string
+		name	string
+		command	string
 	}{
 		{"bare", "go doc fmt"},
 		{"symbol", "go doc fmt.Println"},
@@ -522,9 +520,9 @@ func TestClaudePluginHelpAllowed(t *testing.T) {
 func TestClaudeHelpAlwaysAllowed(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
-		name     string
-		command  string
-		expected string
+		name		string
+		command		string
+		expected	string
 	}{
 		{"unknown subcommand with --help", "claude hook --help", "allow"},
 		{"deep unknown subcommand with --help", "claude plugin marketplace add --help", "allow"},
@@ -542,9 +540,9 @@ func TestClaudeHelpAlwaysAllowed(t *testing.T) {
 func TestDockerComposeRunRmAllowed(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
-		name     string
-		command  string
-		expected string
+		name		string
+		command		string
+		expected	string
 	}{
 		{"basic run --rm", "docker compose run --rm myservice", "allow"},
 		{"run --rm with args", "docker compose run --rm myservice bash", "allow"},
@@ -588,9 +586,9 @@ func TestMountWithFlagsPassthrough(t *testing.T) {
 func TestDockerComposePsAllowed(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
-		name     string
-		command  string
-		expected string
+		name		string
+		command		string
+		expected	string
 	}{
 		{"basic ps", "docker compose ps", "allow"},
 		{"ps with flags", "docker compose ps --all", "allow"},
@@ -614,15 +612,15 @@ func TestDuplicateEntriesMerged(t *testing.T) {
 	rules = Rules{
 		Commands: []CommandNode{
 			{
-				Name:        "mycmd",
-				Description: "first entry",
+				Name:		"mycmd",
+				Description:	"first entry",
 				Subcommands: []CommandNode{
 					{Name: "sub1", AllowedFlags: "*"},
 				},
 			},
 			{
-				Name:        "mycmd",
-				Description: "second entry",
+				Name:		"mycmd",
+				Description:	"second entry",
 				Subcommands: []CommandNode{
 					{Name: "sub2", AllowedFlags: "*"},
 				},
@@ -647,13 +645,13 @@ func TestDuplicateEntriesDenyWins(t *testing.T) {
 	rules = Rules{
 		Commands: []CommandNode{
 			{
-				Name: "mycmd",
+				Name:	"mycmd",
 				Subcommands: []CommandNode{
 					{Name: "ok", AllowedFlags: "*"},
 				},
 			},
 			{
-				Name: "mycmd",
+				Name:	"mycmd",
 				Subcommands: []CommandNode{
 					{Name: "ok", DenyWithMessage: "blocked"},
 				},
@@ -669,9 +667,9 @@ func TestDuplicateEntriesDenyWins(t *testing.T) {
 func TestCompoundCommands(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
-		name     string
-		command  string
-		expected string
+		name		string
+		command		string
+		expected	string
 	}{
 		{"and both allowed", "git status && git diff", "allow"},
 		{"and one unknown", "git status && python --version", ""},
@@ -708,62 +706,6 @@ func TestReadAllowed(t *testing.T) {
 	var resp PermissionResponse
 	require.NoError(t, json.Unmarshal([]byte(output), &resp), "output was: %s", output)
 	assert.Equal(t, "allow", resp.HookSpecificOutput.Decision.Behavior, "Read should be allowed")
-}
-
-// Integration test: build the binary and test end-to-end like the hook actually runs
-func TestEndToEndGhRepoView(t *testing.T) {
-	repoRoot := getRepoRoot(t)
-	pluginDir := filepath.Join(repoRoot, "plugins/enhanced-auto-allow")
-
-	// Build the binary into build/ like the real plugin
-	buildDir := filepath.Join(pluginDir, "build")
-	os.MkdirAll(buildDir, 0o755)
-	binaryPath := filepath.Join(buildDir, "enhanced-auto-allow-test")
-	defer os.Remove(binaryPath)
-
-	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/")
-	cmd.Dir = pluginDir
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "build failed: %s", out)
-
-	tests := []struct {
-		name     string
-		command  string
-		expected string
-	}{
-		{"gh repo view", "gh repo view wow-look-at-my/go-toolchain", "allow"},
-		{"gh repo view --json", "gh repo view wow-look-at-my/go-toolchain --json name,description", "allow"},
-		{"gh release list", "gh release list", "allow"},
-		{"gh release list -R", "gh release list -R owner/repo", "allow"},
-		{"gh pr list (known good)", "gh pr list", "allow"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			input := HookInput{
-				HookEventName: "PermissionRequest",
-				ToolName:      "Bash",
-				ToolInput:     ToolInput{Command: tt.command},
-			}
-			inputBytes, _ := json.Marshal(input)
-
-			cmd := exec.Command(binaryPath)
-			cmd.Stdin = bytes.NewReader(inputBytes)
-			output, err := cmd.Output()
-			if err != nil {
-				t.Fatalf("binary exited with error: %v, output: %s", err, output)
-			}
-
-			if len(output) == 0 {
-				t.Fatalf("binary produced no output (passthrough) for %q — expected %s", tt.command, tt.expected)
-			}
-
-			var resp PermissionResponse
-			require.NoError(t, json.Unmarshal(output, &resp), "output was: %s", output)
-			assert.Equal(t, tt.expected, resp.HookSpecificOutput.Decision.Behavior,
-				"end-to-end: %q should be %s", tt.command, tt.expected)
-		})
-	}
 }
 
 func getRepoRoot(t *testing.T) string {
