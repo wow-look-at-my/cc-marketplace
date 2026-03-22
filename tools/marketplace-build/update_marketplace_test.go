@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,87 +21,76 @@ func TestWriteSummary(t *testing.T) {
 		"my-plugin": "plugin/my-plugin#3",
 	}
 
-	writeSummary(summaryPath, pluginRefs, "owner", "repo", "master")
+	writeSummary(summaryPath, pluginRefs, "owner", "repo")
 
 	data, err := os.ReadFile(summaryPath)
 	require.NoError(t, err)
 
 	content := string(data)
 	require.Contains(t, content, "## Marketplace Updated")
-	require.Contains(t, content, "master")
 	require.Contains(t, content, "my-plugin")
 	require.Contains(t, content, "plugin/my-plugin#3")
 }
 
 func TestWriteSummary_BadPath(t *testing.T) {
 	// Should not panic on bad path
-	writeSummary("/nonexistent/dir/summary.md", nil, "o", "r", "b")
+	writeSummary("/nonexistent/dir/summary.md", nil, "o", "r")
 }
 
-func TestBumpMarketplaceVersion_NoExistingTag(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		return "", fmt.Errorf("tag not found")
-	})
-	v := bumpMarketplaceVersion("feature-branch")
+func TestBumpMarketplaceVersion_NoURL(t *testing.T) {
+	t.Setenv("MARKETPLACE_URL", "")
+	v := bumpMarketplaceVersion()
 	require.Equal(t, 1, v)
 }
 
 func TestBumpMarketplaceVersion_ExistingStringVersion(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return `{"metadata":{"version":"5"}}`, nil
-		}
-		return "", nil
-	})
-	v := bumpMarketplaceVersion("master")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"metadata":{"version":"5"}}`)
+	}))
+	defer srv.Close()
+	t.Setenv("MARKETPLACE_URL", srv.URL)
+	v := bumpMarketplaceVersion()
 	require.Equal(t, 6, v)
 }
 
 func TestBumpMarketplaceVersion_ExistingFloatVersion(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return `{"metadata":{"version":10}}`, nil
-		}
-		return "", nil
-	})
-	v := bumpMarketplaceVersion("master")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"metadata":{"version":10}}`)
+	}))
+	defer srv.Close()
+	t.Setenv("MARKETPLACE_URL", srv.URL)
+	v := bumpMarketplaceVersion()
 	require.Equal(t, 11, v)
 }
 
 func TestBumpMarketplaceVersion_NoMetadata(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return `{"name":"marketplace"}`, nil
-		}
-		return "", nil
-	})
-	v := bumpMarketplaceVersion("master")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"name":"marketplace"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("MARKETPLACE_URL", srv.URL)
+	v := bumpMarketplaceVersion()
 	require.Equal(t, 1, v)
 }
 
 func TestBumpMarketplaceVersion_InvalidJSON(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return "{bad json", nil
-		}
-		return "", nil
-	})
-	v := bumpMarketplaceVersion("master")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "{bad json")
+	}))
+	defer srv.Close()
+	t.Setenv("MARKETPLACE_URL", srv.URL)
+	v := bumpMarketplaceVersion()
 	require.Equal(t, 1, v)
 }
 
-func TestBumpMarketplaceVersion_BranchTag(t *testing.T) {
-	// For non-master branches, should use marketplace/{branch}#latest tag
-	var requestedTag string
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			requestedTag = args[1]
-			return "", fmt.Errorf("not found")
-		}
-		return "", nil
-	})
-	bumpMarketplaceVersion("feature-x")
-	require.Contains(t, requestedTag, "marketplace/feature-x#latest")
+func TestBumpMarketplaceVersion_HTTP404(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	t.Setenv("MARKETPLACE_URL", srv.URL)
+	v := bumpMarketplaceVersion()
+	require.Equal(t, 1, v)
 }
 
 func TestGetPluginRefs(t *testing.T) {
@@ -185,47 +176,6 @@ func TestCleanupLegacyPluginTags_SlashVFormat(t *testing.T) {
 func TestCleanupLegacyPluginTags_None(t *testing.T) {
 	mockGitWithTags(t, []string{"plugin/foo#1", "plugin/bar#2"})
 	err := cleanupLegacyPluginTags()
-	require.NoError(t, err)
-}
-
-func TestCleanupStaleBranchTags(t *testing.T) {
-	var deletedTags []string
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "marketplace/feature-x\nmarketplace/feature-y\n", nil
-		}
-		if args[0] == "ls-remote" {
-			// feature-x exists, feature-y doesn't
-			branch := args[3]
-			if branch == "feature-x" {
-				return "abc123\trefs/heads/feature-x\n", nil
-			}
-			return "", nil
-		}
-		if args[0] == "push" {
-			deletedTags = append(deletedTags, strings.TrimPrefix(args[2], ":refs/tags/"))
-			return "", nil
-		}
-		if args[0] == "tag" && args[1] == "-d" {
-			return "", nil
-		}
-		return "", nil
-	})
-
-	err := cleanupStaleBranchTags()
-	require.NoError(t, err)
-	require.Len(t, deletedTags, 1)
-	require.Equal(t, "marketplace/feature-y", deletedTags[0])
-}
-
-func TestCleanupStaleBranchTags_NoneStale(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" {
-			return "", nil
-		}
-		return "", nil
-	})
-	err := cleanupStaleBranchTags()
 	require.NoError(t, err)
 }
 
@@ -513,18 +463,14 @@ func TestRunUpdateMarketplace(t *testing.T) {
 	repoRoot = tmpDir
 	t.Cleanup(func() { repoRoot = origRoot })
 
+	t.Setenv("MARKETPLACE_URL", "")
+
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "tag" && args[1] == "-l" {
 			return "", nil // no tags
 		}
-		if args[0] == "rev-parse" && args[1] == "--abbrev-ref" {
-			return "master\n", nil
-		}
 		if args[0] == "remote" {
 			return "https://github.com/owner/repo.git\n", nil
-		}
-		if args[0] == "ls-remote" {
-			return "", nil
 		}
 		if args[0] == "push" {
 			return "", nil
@@ -532,7 +478,6 @@ func TestRunUpdateMarketplace(t *testing.T) {
 		return "", nil
 	})
 
-	// Use cobra command
 	cmd := updateMarketplaceCmd
 	err = runUpdateMarketplace(cmd, nil)
 	require.NoError(t, err)

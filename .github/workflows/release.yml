@@ -2,25 +2,11 @@ name: Release Plugins
 
 on:
   push:
-  delete:
 
 concurrency:
   group: release-${{ github.ref }}
 
 jobs:
-  cleanup:
-    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-marketplace-build
-
-      - run: marketplace-build cleanup-branch ${{ github.event.ref }}
-
   prepare:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -84,11 +70,14 @@ jobs:
 
   update:
     needs: [prepare, build]
-    if: ${{ !cancelled() && !failure() }}
+    if: github.ref == 'refs/heads/master' && !cancelled() && !failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
+      pages: write
+      id-token: write
+    environment: github-pages
     steps:
       - uses: actions/checkout@v4
         with:
@@ -98,26 +87,24 @@ jobs:
 
       - name: Prepare Marketplace Update
         id: marketplace
+        env:
+          MARKETPLACE_URL: https://wow-look-at-my.github.io/cc-marketplace/marketplace.json
         run: marketplace-build update-marketplace >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/setup-claude-code
 
       - name: Validate Marketplace
-        run: |
-          mkdir -p ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin
-          mv ${{ steps.marketplace.outputs.source_dir }}/marketplace.json ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin/marketplace.json
-          claude plugin validate ${{ steps.marketplace.outputs.source_dir }}
+        run: claude plugin validate ${{ steps.marketplace.outputs.source_dir }}
 
-      - uses: wow-look-at-my-code/actions@orphan-release#latest
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
         with:
-          source: ${{ steps.marketplace.outputs.source_dir }}
-          name: ${{ steps.marketplace.outputs.name }}
-          message: ${{ steps.marketplace.outputs.message }}
+          path: ${{ steps.marketplace.outputs.source_dir }}
+
+      - uses: actions/deploy-pages@v4
 
       - name: Verify marketplace install
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
-          claude plugin marketplace add ${{ github.repository }}#${{ steps.marketplace.outputs.name }}#latest
+          claude plugin marketplace add https://wow-look-at-my.github.io/cc-marketplace/marketplace.json
           claude plugin marketplace list
