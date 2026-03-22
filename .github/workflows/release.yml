@@ -6,17 +6,49 @@ on:
 concurrency:
   group: release-${{ github.ref }}
 
+env:
+  GOPROXY: goproxy.pazer.io
+  GOSUMDB: gosumdb.pazer.io
+
 jobs:
   build-cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
-    uses: wow-look-at-my/go-toolchain/.github/workflows/build.yml@v1
-    with:
-      working-directory: tools/marketplace-build
-      os: linux
-      arch: amd64
-      binary-artifact: marketplace-build
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git for private repos
+        run: git config --global url."https://${{ secrets.PRIVATE_ORG_REPO_READ }}@github.com/wow-look-at-my/".insteadOf "https://github.com/wow-look-at-my/"
+
+      - name: Configure netrc for Go proxy
+        run: |
+          cat >> ~/.netrc <<EOF
+          machine goproxy.pazer.io login ${{ secrets.GOPROXY_USER }} password ${{ secrets.GOPROXY_PASSWORD }}
+          EOF
+          chmod 600 ~/.netrc
+
+      - uses: wow-look-at-my/actions@download-release-binary#latest
+        with:
+          repo: wow-look-at-my/go-toolchain
+          name: go-toolchain
+          token: ${{ github.token }}
+
+      - name: Build marketplace-build
+        working-directory: tools/marketplace-build
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.GO_BUILDCACHE_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.GO_BUILDCACHE_ACCESS_KEY }}
+          GOCACHE_S3_ENDPOINT: ${{ secrets.GO_BUILDCACHE_ENDPOINT }}
+          GOCACHE_S3_REGION: ${{ secrets.GO_BUILDCACHE_REGION }}
+        run: go-toolchain matrix --os linux --arch amd64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: marketplace-build
+          path: tools/marketplace-build/build/marketplace-build_linux_amd64
+          if-no-files-found: error
 
   prepare:
     needs: build-cli
