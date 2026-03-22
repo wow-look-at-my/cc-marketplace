@@ -15,7 +15,7 @@ jobs:
       working-directory: tools/marketplace-build
       os: linux
       arch: amd64
-      binary-artifact: marketplace-build
+      artifact-name: marketplace-build
     secrets: inherit
 
   prepare:

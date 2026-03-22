@@ -16,4 +16,6 @@ runs:
         path: /usr/local/bin
 
     - shell: bash
-      run: chmod +x /usr/local/bin/marketplace-build
+      run: |
+        mv /usr/local/bin/marketplace-build_linux_amd64 /usr/local/bin/marketplace-build
+        chmod +x /usr/local/bin/marketplace-build
