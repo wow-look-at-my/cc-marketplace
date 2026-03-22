@@ -189,6 +189,30 @@ func TestGhApiPostPassthrough(t *testing.T) {
 	assert.Equal(t, "", decision, "gh api -X POST should passthrough")
 }
 
+func TestGhRepoViewAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("gh repo view wow-look-at-my/go-toolchain")
+	assert.Equal(t, "allow", decision, "gh repo view should be allowed")
+}
+
+func TestGhRepoViewWithFlagsAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("gh repo view wow-look-at-my/go-toolchain --json name,description")
+	assert.Equal(t, "allow", decision, "gh repo view --json should be allowed")
+}
+
+func TestGhReleaseListAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("gh release list")
+	assert.Equal(t, "allow", decision, "gh release list should be allowed")
+}
+
+func TestGhReleaseListWithFlagsAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("gh release list -R owner/repo")
+	assert.Equal(t, "allow", decision, "gh release list -R should be allowed")
+}
+
 func TestGhBrowseAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("gh browse")
@@ -684,6 +708,62 @@ func TestReadAllowed(t *testing.T) {
 	var resp PermissionResponse
 	require.NoError(t, json.Unmarshal([]byte(output), &resp), "output was: %s", output)
 	assert.Equal(t, "allow", resp.HookSpecificOutput.Decision.Behavior, "Read should be allowed")
+}
+
+// Integration test: build the binary and test end-to-end like the hook actually runs
+func TestEndToEndGhRepoView(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+	pluginDir := filepath.Join(repoRoot, "plugins/enhanced-auto-allow")
+
+	// Build the binary into build/ like the real plugin
+	buildDir := filepath.Join(pluginDir, "build")
+	os.MkdirAll(buildDir, 0o755)
+	binaryPath := filepath.Join(buildDir, "enhanced-auto-allow-test")
+	defer os.Remove(binaryPath)
+
+	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/")
+	cmd.Dir = pluginDir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "build failed: %s", out)
+
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"gh repo view", "gh repo view wow-look-at-my/go-toolchain", "allow"},
+		{"gh repo view --json", "gh repo view wow-look-at-my/go-toolchain --json name,description", "allow"},
+		{"gh release list", "gh release list", "allow"},
+		{"gh release list -R", "gh release list -R owner/repo", "allow"},
+		{"gh pr list (known good)", "gh pr list", "allow"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := HookInput{
+				HookEventName: "PermissionRequest",
+				ToolName:      "Bash",
+				ToolInput:     ToolInput{Command: tt.command},
+			}
+			inputBytes, _ := json.Marshal(input)
+
+			cmd := exec.Command(binaryPath)
+			cmd.Stdin = bytes.NewReader(inputBytes)
+			output, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("binary exited with error: %v, output: %s", err, output)
+			}
+
+			if len(output) == 0 {
+				t.Fatalf("binary produced no output (passthrough) for %q — expected %s", tt.command, tt.expected)
+			}
+
+			var resp PermissionResponse
+			require.NoError(t, json.Unmarshal(output, &resp), "output was: %s", output)
+			assert.Equal(t, tt.expected, resp.HookSpecificOutput.Decision.Behavior,
+				"end-to-end: %q should be %s", tt.command, tt.expected)
+		})
+	}
 }
 
 func getRepoRoot(t *testing.T) string {
