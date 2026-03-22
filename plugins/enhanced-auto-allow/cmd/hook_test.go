@@ -189,7 +189,7 @@ func TestGhApiPostPassthrough(t *testing.T) {
 	assert.Equal(t, "", decision, "gh api -X POST should passthrough")
 }
 
-func TestGhRepoAndReleaseAllowed(t *testing.T) {
+func TestGhCommands(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
 		name     string
@@ -202,6 +202,8 @@ func TestGhRepoAndReleaseAllowed(t *testing.T) {
 		{"release list", "gh release list", "allow"},
 		{"release list -R", "gh release list -R owner/repo", "allow"},
 		{"release view", "gh release view v1.0.0", "allow"},
+		{"browse", "gh browse", "allow"},
+		{"run list", "gh run list", "allow"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -211,60 +213,71 @@ func TestGhRepoAndReleaseAllowed(t *testing.T) {
 	}
 }
 
-func TestGhBrowseAllowed(t *testing.T) {
+func TestGhRunDenied(t *testing.T) {
 	loadTestRules(t)
-	decision, _ := evaluateCommand("gh browse")
-	assert.Equal(t, "allow", decision, "gh browse should be allowed")
+	for _, cmd := range []string{"gh run view 123", "gh run watch 123"} {
+		decision, message := evaluateCommand(cmd)
+		assert.Equal(t, "deny", decision, "%q should be denied", cmd)
+		assert.NotEqual(t, "", message, "%q should have a deny message", cmd)
+	}
 }
 
-func TestGhRunViewDenied(t *testing.T) {
-	loadTestRules(t)
-	decision, message := evaluateCommand("gh run view 123")
-	assert.Equal(t, "deny", decision, "gh run view 123 should be denied")
-	assert.NotEqual(t, "", message, "gh run view should have a deny message")
+// TestCookedRulesRoundTrip simulates the cookJSONForRelease transformation
+// that marketplace-build applies to rules.json before releasing.
+func TestCookedRulesRoundTrip(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json")
+	data, err := os.ReadFile(rulesPath)
+	require.Nil(t, err)
+
+	// Simulate cookJSONForRelease: unmarshal into generic map, re-marshal
+	var generic map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &generic))
+	delete(generic, "$schema")
+	delete(generic, "mh")
+	cooked, err := json.MarshalIndent(generic, "", "\t")
+	require.NoError(t, err)
+
+	// Load the cooked rules into the global rules var
+	require.NoError(t, json.Unmarshal(cooked, &rules))
+
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"gh repo view", "gh repo view wow-look-at-my/go-toolchain", "allow"},
+		{"gh release list", "gh release list", "allow"},
+		{"gh pr list", "gh pr list", "allow"},
+		{"git status", "git status", "allow"},
+		{"gh run view denied", "gh run view 123", "deny"},
+		{"unknown passthrough", "python --version", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			assert.Equal(t, tt.expected, decision, "cooked rules: evaluateCommand(%q)", tt.command)
+		})
+	}
 }
 
-func TestGhRunWatchDenied(t *testing.T) {
+func TestFindCommands(t *testing.T) {
 	loadTestRules(t)
-	decision, message := evaluateCommand("gh run watch 123")
-	assert.Equal(t, "deny", decision, "gh run watch 123 should be denied")
-	assert.NotEqual(t, "", message, "gh run watch should have a deny message")
-}
-
-func TestGhRunListAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("gh run list")
-	assert.Equal(t, "allow", decision, "gh run list should be allowed")
-}
-
-func TestFindPipeGrepAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand(`find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool`)
-	assert.Equal(t, "allow", decision, "find|grep file search should be allowed")
-}
-
-func TestFindBasicAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("find . -name '*.go' -type f")
-	assert.Equal(t, "allow", decision, "basic find should be allowed")
-}
-
-func TestFindExecGrepAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand(`find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;`)
-	assert.Equal(t, "allow", decision, "find -exec grep should be allowed")
-}
-
-func TestFindExecRmPassthrough(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("find . -name '*.tmp' -exec rm {} \\;")
-	assert.Equal(t, "", decision, "find -exec rm should passthrough")
-}
-
-func TestFindDeletePassthrough(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("find . -name '*.tmp' -delete")
-	assert.Equal(t, "", decision, "find with -delete should passthrough")
+	tests := []struct {
+		name, command, expected string
+	}{
+		{"pipe grep", `find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool`, "allow"},
+		{"basic", "find . -name '*.go' -type f", "allow"},
+		{"exec grep", `find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;`, "allow"},
+		{"exec rm passthrough", "find . -name '*.tmp' -exec rm {} \\;", ""},
+		{"delete passthrough", "find . -name '*.tmp' -delete", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
+		})
+	}
 }
 
 func TestPkgConfigAllowed(t *testing.T) {
@@ -289,58 +302,41 @@ func TestPkgConfigAllowed(t *testing.T) {
 	}
 }
 
-func TestLdconfigPrintCacheAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("ldconfig -p")
-	assert.Equal(t, "allow", decision, "ldconfig -p should be allowed")
-}
-
-func TestLdconfigPrintCacheLongAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("ldconfig --print-cache")
-	assert.Equal(t, "allow", decision, "ldconfig --print-cache should be allowed")
-}
-
-func TestLdconfigBarePassthrough(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("ldconfig")
-	assert.Equal(t, "", decision, "bare ldconfig should passthrough")
-}
-
-func TestGoVersionAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("go version")
-	assert.Equal(t, "allow", decision, "go version should be allowed")
-}
-
-func TestGoEnvAllowed(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("go env GOPATH")
-	assert.Equal(t, "allow", decision, "go env GOPATH should be allowed")
-}
-
-func TestGoDocAllowed(t *testing.T) {
+func TestLdconfigCommands(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {
-		name	string
-		command	string
+		name, command, expected string
 	}{
-		{"bare", "go doc fmt"},
-		{"symbol", "go doc fmt.Println"},
-		{"all flag", "go doc -all fmt"},
+		{"-p", "ldconfig -p", "allow"},
+		{"--print-cache", "ldconfig --print-cache", "allow"},
+		{"bare passthrough", "ldconfig", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decision, _ := evaluateCommand(tt.command)
-			assert.Equal(t, "allow", decision, "%q should be allowed", tt.command)
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
 		})
 	}
 }
 
-func TestGoBuildPassthrough(t *testing.T) {
+func TestGoCommands(t *testing.T) {
 	loadTestRules(t)
-	decision, _ := evaluateCommand("go build ./...")
-	assert.Equal(t, "", decision, "go build should passthrough")
+	tests := []struct {
+		name, command, expected string
+	}{
+		{"version", "go version", "allow"},
+		{"env", "go env GOPATH", "allow"},
+		{"doc bare", "go doc fmt", "allow"},
+		{"doc symbol", "go doc fmt.Println", "allow"},
+		{"doc -all", "go doc -all fmt", "allow"},
+		{"build passthrough", "go build ./...", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
+		})
+	}
 }
 
 func TestWhichAllowed(t *testing.T) {
