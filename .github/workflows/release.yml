@@ -60,6 +60,7 @@ jobs:
         run: marketplace-build build-plugin ${{ matrix.plugin }}
         env:
           GH_TOKEN: ${{ github.token }}
+          GO_BUILDCACHE_CONFIG: ${{ secrets.GO_BUILDCACHE_CONFIG }}
 
       - name: Test
         run: marketplace-build test-plugin ${{ matrix.plugin }}
