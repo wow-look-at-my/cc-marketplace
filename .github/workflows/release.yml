@@ -8,6 +8,8 @@ concurrency:
 
 jobs:
   build-cli:
+    permissions:
+      contents: write
     uses: wow-look-at-my/go-toolchain/.github/workflows/build.yml@v1
     with:
       working-directory: tools/marketplace-build
