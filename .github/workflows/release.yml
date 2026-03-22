@@ -7,8 +7,17 @@ concurrency:
   group: release-${{ github.ref }}
 
 jobs:
+  build-cli:
+    uses: wow-look-at-my/go-toolchain/.github/workflows/build.yml@v1
+    with:
+      working-directory: tools/marketplace-build
+      os: linux
+      arch: amd64
+      binary-artifact: marketplace-build
+    secrets: inherit
+
   prepare:
-    if: github.event_name == 'push'
+    needs: build-cli
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
