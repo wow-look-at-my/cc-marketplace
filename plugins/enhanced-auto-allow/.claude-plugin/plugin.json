@@ -9,7 +9,7 @@
 	"hooks": {
 		"PermissionRequest": [
 			{
-				"matcher": "Bash|Read|Glob|Grep",
+				"matcher": "*",
 				"hooks": [
 					{
 						"type": "command",
