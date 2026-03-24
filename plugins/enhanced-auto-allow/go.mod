@@ -1,8 +1,11 @@
 module enhanced-auto-allow
 
-go 1.23
+go 1.24.7
 
-require mvdan.cc/sh/v3 v3.10.0
+require (
+	github.com/wow-look-at-my/go-containers v0.0.0-20260307175019-180529c50d33
+	mvdan.cc/sh/v3 v3.10.0
+)
 
 require (
 	github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb
