@@ -1,10 +1,7 @@
 {
-	"mcpTools": [
-		"get_*",
-		"list_*",
-		"search_*",
-		"query_*"
-	],
+	"mcpServers": {
+		"grafana": ["get_*", "list_*", "search_*", "query_*"]
+	},
 	"commands": [
 		{
 			"name": [

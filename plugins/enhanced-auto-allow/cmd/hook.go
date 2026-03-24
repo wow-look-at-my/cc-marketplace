@@ -24,8 +24,8 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure
 type Rules struct {
-	Commands    []CommandNode `json:"commands"`
-	MCPToolPats []string     `json:"mcpTools"`
+	Commands   []CommandNode        `json:"commands"`
+	MCPServers map[string][]string `json:"mcpServers"`
 }
 
 type CommandNode struct {
@@ -89,9 +89,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Allow read-only MCP tools by suffix (prefix varies by installation)
-	if mcpSuffix := mcpToolSuffix(hi.ToolName); mcpSuffix != "" {
-		if matchMCPTool(rules.MCPToolPats, mcpSuffix) {
+	// Allow read-only MCP tools by server + tool pattern matching
+	if server, tool := parseMCPTool(hi.ToolName); tool != "" {
+		if matchMCPServer(rules.MCPServers, server, tool) {
 			outputDecision("allow", "")
 			return
 		}
@@ -512,25 +512,31 @@ func getFlagValue(args []string, flags []string) string {
 	return ""
 }
 
-// mcpToolSuffix extracts the tool name suffix from an MCP tool name.
-// MCP tools follow the pattern mcp__<server>__<tool_name>.
-// Returns empty string if not an MCP tool.
-func mcpToolSuffix(toolName string) string {
+// parseMCPTool splits "mcp__<server>__<tool>" into server and tool.
+// Returns ("", "") if the name is not an MCP tool.
+func parseMCPTool(toolName string) (server, tool string) {
 	if !strings.HasPrefix(toolName, "mcp__") {
-		return ""
+		return "", ""
 	}
 	lastIdx := strings.LastIndex(toolName, "__")
 	if lastIdx <= 4 { // must have at least mcp__x__
-		return ""
+		return "", ""
 	}
-	return toolName[lastIdx+2:]
+	return toolName[5:lastIdx], toolName[lastIdx+2:]
 }
 
-// matchMCPTool checks if suffix matches any pattern (glob via path.Match).
-func matchMCPTool(patterns []string, suffix string) bool {
-	for _, pat := range patterns {
-		if matched, _ := path.Match(pat, suffix); matched {
-			return true
+// matchMCPServer checks whether a server+tool combination is allowed.
+// Server keys in the map are glob patterns matched against the server name;
+// values are glob patterns matched against the tool name.
+func matchMCPServer(servers map[string][]string, server, tool string) bool {
+	for serverPat, toolPats := range servers {
+		if matched, _ := path.Match(serverPat, server); !matched {
+			continue
+		}
+		for _, toolPat := range toolPats {
+			if matched, _ := path.Match(toolPat, tool); matched {
+				return true
+			}
 		}
 	}
 	return false
