@@ -23,7 +23,8 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure
 type Rules struct {
-	Commands []CommandNode `json:"commands"`
+	Commands []CommandNode   `json:"commands"`
+	MCPTools map[string]bool `json:"mcpTools"`
 }
 
 type CommandNode struct {
@@ -58,81 +59,6 @@ type PermissionResponse struct {
 	} `json:"hookSpecificOutput"`
 }
 
-// allowedMCPTools contains read-only MCP tool suffixes that are auto-allowed.
-// These are matched against the part after the last "__" in MCP tool names
-// (e.g., mcp__grafana__search_dashboards -> search_dashboards).
-var allowedMCPTools = map[string]bool{
-	// Grafana MCP (github.com/grafana/mcp-grafana) - search
-	"search_dashboards": true,
-	"search_logs":       true,
-	// Grafana MCP - get
-	"get_dashboard_by_uid":       true,
-	"get_dashboard_summary":      true,
-	"get_dashboard_property":     true,
-	"get_dashboard_panel_queries": true,
-	"get_datasource":             true,
-	"get_query_examples":         true,
-	"get_incident":               true,
-	"get_oncall_shift":           true,
-	"get_alert_group":            true,
-	"get_sift_investigation":     true,
-	"get_sift_analysis":          true,
-	"get_annotations":            true,
-	"get_annotation_tags":        true,
-	"get_panel_image":            true,
-	"get_role_details":           true,
-	"get_resource_permissions":   true,
-	"get_resource_description":   true,
-	"get_current_oncall_users":   true,
-	// Grafana MCP - list
-	"list_datasources":                true,
-	"list_prometheus_metric_metadata": true,
-	"list_prometheus_metric_names":    true,
-	"list_prometheus_label_names":     true,
-	"list_prometheus_label_values":    true,
-	"list_loki_label_names":           true,
-	"list_loki_label_values":          true,
-	"list_clickhouse_tables":          true,
-	"list_cloudwatch_namespaces":      true,
-	"list_cloudwatch_metrics":         true,
-	"list_cloudwatch_dimensions":      true,
-	"list_incidents":                  true,
-	"list_oncall_schedules":           true,
-	"list_oncall_teams":               true,
-	"list_oncall_users":               true,
-	"list_alert_groups":               true,
-	"list_sift_investigations":        true,
-	"list_teams":                      true,
-	"list_users_by_org":               true,
-	"list_all_roles":                  true,
-	"list_pyroscope_label_names":      true,
-	"list_pyroscope_label_values":     true,
-	"list_pyroscope_profile_types":    true,
-	// Grafana MCP - query
-	"query_prometheus":           true,
-	"query_prometheus_histogram": true,
-	"query_loki_logs":            true,
-	"query_loki_stats":           true,
-	"query_loki_patterns":        true,
-	"query_clickhouse":           true,
-	"query_cloudwatch":           true,
-	"query_elasticsearch":        true,
-}
-
-// mcpToolSuffix extracts the tool name suffix from an MCP tool name.
-// MCP tools follow the pattern mcp__<server>__<tool_name>.
-// Returns empty string if not an MCP tool.
-func mcpToolSuffix(toolName string) string {
-	if !strings.HasPrefix(toolName, "mcp__") {
-		return ""
-	}
-	lastIdx := strings.LastIndex(toolName, "__")
-	if lastIdx <= 4 { // must have at least mcp__x__
-		return ""
-	}
-	return toolName[lastIdx+2:]
-}
-
 var rules Rules
 
 func main() {
@@ -152,18 +78,6 @@ func main() {
 		return
 	}
 
-	// Allow read-only MCP tools by suffix (prefix varies by installation)
-	if mcpSuffix := mcpToolSuffix(hi.ToolName); mcpSuffix != "" {
-		if allowedMCPTools[mcpSuffix] {
-			outputDecision("allow", "")
-			return
-		}
-	}
-
-	if hi.ToolName != "Bash" {
-		os.Exit(0)
-	}
-
 	// Load rules from adjacent file
 	rulesPath := filepath.Join(filepath.Dir(os.Args[0]), "..", "rules.json")
 	rulesData, err := os.ReadFile(rulesPath)
@@ -171,6 +85,19 @@ func main() {
 		os.Exit(0)
 	}
 	if err := json.Unmarshal(rulesData, &rules); err != nil {
+		os.Exit(0)
+	}
+
+	// Allow read-only MCP tools by suffix (prefix varies by installation)
+	if mcpSuffix := mcpToolSuffix(hi.ToolName); mcpSuffix != "" {
+		if rules.MCPTools[mcpSuffix] {
+			outputDecision("allow", "")
+			return
+		}
+		os.Exit(0)
+	}
+
+	if hi.ToolName != "Bash" {
 		os.Exit(0)
 	}
 
@@ -582,6 +509,20 @@ func getFlagValue(args []string, flags []string) string {
 		}
 	}
 	return ""
+}
+
+// mcpToolSuffix extracts the tool name suffix from an MCP tool name.
+// MCP tools follow the pattern mcp__<server>__<tool_name>.
+// Returns empty string if not an MCP tool.
+func mcpToolSuffix(toolName string) string {
+	if !strings.HasPrefix(toolName, "mcp__") {
+		return ""
+	}
+	lastIdx := strings.LastIndex(toolName, "__")
+	if lastIdx <= 4 { // must have at least mcp__x__
+		return ""
+	}
+	return toolName[lastIdx+2:]
 }
 
 func outputDecision(behavior, message string) {
