@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wow-look-at-my/go-containers/set"
+	"path"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -24,8 +24,8 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure
 type Rules struct {
-	Commands []CommandNode  `json:"commands"`
-	MCPTools set.Set[string] `json:"mcpTools"`
+	Commands    []CommandNode `json:"commands"`
+	MCPToolPats []string     `json:"mcpTools"`
 }
 
 type CommandNode struct {
@@ -91,7 +91,7 @@ func main() {
 
 	// Allow read-only MCP tools by suffix (prefix varies by installation)
 	if mcpSuffix := mcpToolSuffix(hi.ToolName); mcpSuffix != "" {
-		if rules.MCPTools.Contains(mcpSuffix) {
+		if matchMCPTool(rules.MCPToolPats, mcpSuffix) {
 			outputDecision("allow", "")
 			return
 		}
@@ -524,6 +524,16 @@ func mcpToolSuffix(toolName string) string {
 		return ""
 	}
 	return toolName[lastIdx+2:]
+}
+
+// matchMCPTool checks if suffix matches any pattern (glob via path.Match).
+func matchMCPTool(patterns []string, suffix string) bool {
+	for _, pat := range patterns {
+		if matched, _ := path.Match(pat, suffix); matched {
+			return true
+		}
+	}
+	return false
 }
 
 func outputDecision(behavior, message string) {
