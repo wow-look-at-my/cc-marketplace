@@ -24,9 +24,8 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure
 type Rules struct {
-	Commands    []CommandNode `json:"commands"`
-	MCPToolList []string      `json:"mcpTools"`
-	mcpTools    set.Set[string]
+	Commands []CommandNode  `json:"commands"`
+	MCPTools set.Set[string] `json:"mcpTools"`
 }
 
 type CommandNode struct {
@@ -89,11 +88,10 @@ func main() {
 	if err := json.Unmarshal(rulesData, &rules); err != nil {
 		os.Exit(0)
 	}
-	rules.mcpTools = set.Of(rules.MCPToolList...)
 
 	// Allow read-only MCP tools by suffix (prefix varies by installation)
 	if mcpSuffix := mcpToolSuffix(hi.ToolName); mcpSuffix != "" {
-		if rules.mcpTools.Contains(mcpSuffix) {
+		if rules.MCPTools.Contains(mcpSuffix) {
 			outputDecision("allow", "")
 			return
 		}

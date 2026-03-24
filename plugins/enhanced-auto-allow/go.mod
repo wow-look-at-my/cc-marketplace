@@ -3,7 +3,7 @@ module enhanced-auto-allow
 go 1.24.7
 
 require (
-	github.com/wow-look-at-my/go-containers v0.0.0-20260307175019-180529c50d33
+	github.com/wow-look-at-my/go-containers v0.0.0-20260324103618-d5200d58948d
 	mvdan.cc/sh/v3 v3.10.0
 )
 

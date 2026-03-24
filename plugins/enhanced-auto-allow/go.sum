@@ -14,8 +14,8 @@ github.com/rogpeppe/go-internal v1.13.1 h1:KvO1DLK/DRN07sQ1LQKScxyZJuNnedQ5/wKSR
 github.com/rogpeppe/go-internal v1.13.1/go.mod h1:uMEvuHeurkdAXX61udpOXGD/AzZDWNMNyH2VO9fmH0o=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/wow-look-at-my/go-containers v0.0.0-20260307175019-180529c50d33 h1:OYI2FPYVGQ1EjPOsQ7I/0rNcnU9UdtzKRsIL4FqAPxM=
-github.com/wow-look-at-my/go-containers v0.0.0-20260307175019-180529c50d33/go.mod h1:AGGzFZheJSooQmBf0LdfoAGXr7jSGxsn7N1NrOdhmIs=
+github.com/wow-look-at-my/go-containers v0.0.0-20260324103618-d5200d58948d h1:kNQpKMSpc6Ynu2dfPa4xO4b0iXZEVRqaVg207/OXmw4=
+github.com/wow-look-at-my/go-containers v0.0.0-20260324103618-d5200d58948d/go.mod h1:AGGzFZheJSooQmBf0LdfoAGXr7jSGxsn7N1NrOdhmIs=
 github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb h1:kLSElPimf1wjuunb+noAlkV/xzrE65BzqnQr3Xr31u4=
 github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb/go.mod h1:xlD/Hz0iizP83KvPMWiQ8dbEvfjRGQ2A5qsK+GBq9do=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
