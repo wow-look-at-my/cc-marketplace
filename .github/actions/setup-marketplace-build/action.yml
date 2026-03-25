@@ -1,5 +1,11 @@
 name: Setup marketplace-build
-description: Build or restore cached marketplace-build CLI
+description: Install pre-built marketplace-build CLI from artifact
+
+inputs:
+  artifact-name:
+    description: Name of the uploaded artifact containing the marketplace-build binary
+    required: false
+    default: 'marketplace-build'
 
 runs:
   using: composite
@@ -10,33 +16,20 @@ runs:
 
     - uses: extractions/setup-just@v2
 
-    - name: Configure git for private repos
-      shell: bash
-      run: git config --global url."https://${PRIVATE_ORG_REPO_READ}@github.com/wow-look-at-my/".insteadOf "https://github.com/wow-look-at-my/"
+    - name: Download marketplace-build
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: /tmp/marketplace-build-artifact
 
-    - name: Configure netrc for Go proxy
+    - name: Install marketplace-build
       shell: bash
       run: |
-        cat >> ~/.netrc <<EOF
-        machine goproxy.pazer.io login ${GOPROXY_USER} password ${GOPROXY_PASSWORD}
-        EOF
-        chmod 600 ~/.netrc
-
-    - uses: wow-look-at-my/actions@download-release-binary#latest
-      with:
-        repo: wow-look-at-my/go-toolchain
-        name: go-toolchain
-        token: ${{ github.token }}
-
-    - uses: actions/setup-go@v5
-      with:
-        go-version: 'stable'
-
-    - name: Build marketplace-build
-      shell: bash
-      run: |
-        cd tools/marketplace-build
-        go-toolchain
-
-    - run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
-      shell: bash
+        # go-toolchain names binaries as name_os_arch
+        BIN="/tmp/marketplace-build-artifact/marketplace-build_linux_amd64"
+        if [ ! -f "$BIN" ]; then
+          # Fallback: try plain name
+          BIN="/tmp/marketplace-build-artifact/marketplace-build"
+        fi
+        chmod +x "$BIN"
+        sudo cp "$BIN" /usr/local/bin/marketplace-build
