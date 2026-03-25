@@ -7,6 +7,14 @@ on:
 concurrency:
   group: release-${{ github.ref }}
 
+env:
+  GOPROXY: goproxy.pazer.io
+  GOSUMDB: gosumdb.pazer.io
+  PRIVATE_ORG_REPO_READ: ${{ secrets.PRIVATE_ORG_REPO_READ }}
+  GOPROXY_USER: ${{ secrets.GOPROXY_USER }}
+  GOPROXY_PASSWORD: ${{ secrets.GOPROXY_PASSWORD }}
+  GO_BUILDCACHE_CONFIG: ${{ secrets.GO_BUILDCACHE_CONFIG }}
+
 jobs:
   cleanup:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
