@@ -1,12 +1,6 @@
 name: Setup marketplace-build
 description: Install pre-built marketplace-build CLI from artifact
 
-inputs:
-  artifact-name:
-    description: Name of the uploaded artifact containing the marketplace-build binary
-    required: false
-    default: 'marketplace-build'
-
 runs:
   using: composite
   steps:
@@ -19,16 +13,14 @@ runs:
     - name: Download marketplace-build
       uses: actions/download-artifact@v4
       with:
-        name: ${{ inputs.artifact-name }}
+        name: marketplace-build
         path: /tmp/marketplace-build-artifact
 
     - name: Install marketplace-build
       shell: bash
       run: |
-        # go-toolchain names binaries as name_os_arch
         BIN="/tmp/marketplace-build-artifact/marketplace-build_linux_amd64"
         if [ ! -f "$BIN" ]; then
-          # Fallback: try plain name
           BIN="/tmp/marketplace-build-artifact/marketplace-build"
         fi
         chmod +x "$BIN"
