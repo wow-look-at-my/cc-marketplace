@@ -7,6 +7,10 @@ on:
 concurrency:
   group: release-${{ github.ref }}
 
+permissions:
+  contents: write
+  id-token: write
+
 jobs:
   build-tool:
     if: github.event_name == 'push'
