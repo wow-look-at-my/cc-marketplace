@@ -10,9 +10,18 @@ runs:
 
     - uses: extractions/setup-just@v2
 
-    - uses: wow-look-at-my/go-toolchain@latest
+    - name: Download marketplace-build
+      uses: actions/download-artifact@v4
       with:
-        working-directory: "tools/marketplace-build"
+        name: marketplace-build
+        path: /tmp/marketplace-build-artifact
 
-    - run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
+    - name: Install marketplace-build
       shell: bash
+      run: |
+        BIN="/tmp/marketplace-build-artifact/marketplace-build_linux_amd64"
+        if [ ! -f "$BIN" ]; then
+          BIN="/tmp/marketplace-build-artifact/marketplace-build"
+        fi
+        chmod +x "$BIN"
+        cp "$BIN" /usr/local/bin/marketplace-build

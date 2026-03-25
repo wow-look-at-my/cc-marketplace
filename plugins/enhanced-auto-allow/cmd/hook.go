@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"path"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -23,7 +24,8 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure
 type Rules struct {
-	Commands []CommandNode `json:"commands"`
+	Commands   []CommandNode        `json:"commands"`
+	MCPServers map[string][]string `json:"mcpServers"`
 }
 
 type CommandNode struct {
@@ -77,10 +79,6 @@ func main() {
 		return
 	}
 
-	if hi.ToolName != "Bash" {
-		os.Exit(0)
-	}
-
 	// Load rules from adjacent file
 	rulesPath := filepath.Join(filepath.Dir(os.Args[0]), "..", "rules.json")
 	rulesData, err := os.ReadFile(rulesPath)
@@ -88,6 +86,19 @@ func main() {
 		os.Exit(0)
 	}
 	if err := json.Unmarshal(rulesData, &rules); err != nil {
+		os.Exit(0)
+	}
+
+	// Allow read-only MCP tools by server + tool pattern matching
+	if server, tool := parseMCPTool(hi.ToolName); tool != "" {
+		if matchMCPServer(rules.MCPServers, server, tool) {
+			outputDecision("allow", "")
+			return
+		}
+		os.Exit(0)
+	}
+
+	if hi.ToolName != "Bash" {
 		os.Exit(0)
 	}
 
@@ -499,6 +510,36 @@ func getFlagValue(args []string, flags []string) string {
 		}
 	}
 	return ""
+}
+
+// parseMCPTool splits "mcp__<server>__<tool>" into server and tool.
+// Returns ("", "") if the name is not an MCP tool.
+func parseMCPTool(toolName string) (server, tool string) {
+	if !strings.HasPrefix(toolName, "mcp__") {
+		return "", ""
+	}
+	lastIdx := strings.LastIndex(toolName, "__")
+	if lastIdx <= 4 { // must have at least mcp__x__
+		return "", ""
+	}
+	return toolName[5:lastIdx], toolName[lastIdx+2:]
+}
+
+// matchMCPServer checks whether a server+tool combination is allowed.
+// Server keys in the map are glob patterns matched against the server name;
+// values are glob patterns matched against the tool name.
+func matchMCPServer(servers map[string][]string, server, tool string) bool {
+	for serverPat, toolPats := range servers {
+		if matched, _ := path.Match(serverPat, server); !matched {
+			continue
+		}
+		for _, toolPat := range toolPats {
+			if matched, _ := path.Match(toolPat, tool); matched {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func outputDecision(behavior, message string) {

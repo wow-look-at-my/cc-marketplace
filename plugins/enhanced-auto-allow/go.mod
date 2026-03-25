@@ -1,6 +1,6 @@
 module enhanced-auto-allow
 
-go 1.23
+go 1.24.7
 
 require mvdan.cc/sh/v3 v3.10.0
 
