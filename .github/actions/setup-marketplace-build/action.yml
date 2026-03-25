@@ -10,37 +10,18 @@ runs:
 
     - uses: extractions/setup-just@v2
 
-    - name: Configure git for private repos
-      shell: bash
-      run: git config --global url."https://${PRIVATE_ORG_REPO_READ}@github.com/wow-look-at-my/".insteadOf "https://github.com/wow-look-at-my/"
-
-    - name: Configure netrc for Go proxy
-      shell: bash
-      run: |
-        printf 'machine goproxy.pazer.io login %s password %s\n' "$GOPROXY_USER" "$GOPROXY_PASSWORD" >> ~/.netrc
-        chmod 600 ~/.netrc
-
-    - uses: actions/setup-go@v5
+    - name: Download marketplace-build
+      uses: actions/download-artifact@v4
       with:
-        go-version: 'stable'
-
-    - uses: wow-look-at-my/actions@download-release-binary#latest
-      with:
-        repo: wow-look-at-my/go-toolchain
-        name: go-toolchain
-        token: ${{ github.token }}
-
-    - name: Build marketplace-build
-      shell: bash
-      run: |
-        cd tools/marketplace-build
-        go-toolchain
+        name: marketplace-build
+        path: /tmp/marketplace-build-artifact
 
     - name: Install marketplace-build
       shell: bash
       run: |
-        BIN="tools/marketplace-build/build/marketplace-build_linux_amd64"
+        BIN="/tmp/marketplace-build-artifact/marketplace-build_linux_amd64"
         if [ ! -f "$BIN" ]; then
-          BIN="tools/marketplace-build/build/marketplace-build"
+          BIN="/tmp/marketplace-build-artifact/marketplace-build"
         fi
-        sudo cp "$BIN" /usr/local/bin/marketplace-build
+        chmod +x "$BIN"
+        cp "$BIN" /usr/local/bin/marketplace-build
