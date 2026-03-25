@@ -7,21 +7,15 @@ on:
 concurrency:
   group: release-${{ github.ref }}
 
-permissions:
-  contents: write
-  id-token: write
+env:
+  GOPROXY: goproxy.pazer.io
+  GOSUMDB: gosumdb.pazer.io
+  PRIVATE_ORG_REPO_READ: ${{ secrets.PRIVATE_ORG_REPO_READ }}
+  GOPROXY_USER: ${{ secrets.GOPROXY_USER }}
+  GOPROXY_PASSWORD: ${{ secrets.GOPROXY_PASSWORD }}
+  GO_BUILDCACHE_CONFIG: ${{ secrets.GO_BUILDCACHE_CONFIG }}
 
 jobs:
-  build-tool:
-    if: github.event_name == 'push'
-    uses: wow-look-at-my/go-toolchain/.github/workflows/build.yml@v1
-    with:
-      working-directory: tools/marketplace-build
-      os: linux
-      arch: amd64
-      artifact-name: marketplace-build
-    secrets: inherit
-
   cleanup:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
@@ -31,28 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch tags
-        run: git fetch --tags --force
-
-      - uses: wow-look-at-my/actions@download-release-binary#latest
-        with:
-          repo: wow-look-at-my/go-toolchain
-          name: go-toolchain
-          token: ${{ github.token }}
-
-      - name: Build marketplace-build
-        run: |
-          cd tools/marketplace-build
-          go-toolchain
-          sudo cp build/marketplace-build_linux_amd64 /usr/local/bin/marketplace-build
-        env:
-          GOPROXY: goproxy.pazer.io
-          GOSUMDB: gosumdb.pazer.io
+      - uses: ./.github/actions/setup-marketplace-build
 
       - run: marketplace-build cleanup-branch ${{ github.event.ref }}
 
   prepare:
-    needs: build-tool
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
