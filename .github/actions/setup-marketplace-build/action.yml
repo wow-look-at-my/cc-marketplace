@@ -28,6 +28,10 @@ runs:
         name: go-toolchain
         token: ${{ github.token }}
 
+    - uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
     - name: Build marketplace-build
       shell: bash
       run: |
