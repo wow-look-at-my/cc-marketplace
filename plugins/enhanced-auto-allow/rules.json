@@ -67,7 +67,8 @@
 				"pkg-config",
 				"pkgconf",
 				"pkg_config",
-				"dig"
+				"dig",
+				"base64"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
