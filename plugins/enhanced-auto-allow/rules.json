@@ -88,6 +88,12 @@
 			"allowedFlags": "*"
 		},
 		{
+			"name": "yq",
+			"description": "Auto-approve readonly yq commands (deny in-place editing)",
+			"allowedFlags": "*",
+			"deniedFlags": ["-i", "--in-place"]
+		},
+		{
 			"name": "mount",
 			"description": "Auto-approve bare mount (lists mounted filesystems)",
 			"bareOnly": true
