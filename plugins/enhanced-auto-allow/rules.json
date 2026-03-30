@@ -68,7 +68,21 @@
 				"pkgconf",
 				"pkg_config",
 				"dig",
-				"base64"
+				"base64",
+				"md5sum",
+				"sha1sum",
+				"sha256sum",
+				"sha384sum",
+				"sha512sum",
+				"b2sum",
+				"cksum",
+				"sum",
+				"xxd",
+				"jq",
+				"nproc",
+				"free",
+				"lscpu",
+				"lsblk"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
