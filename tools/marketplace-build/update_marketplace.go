@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,11 +15,6 @@ import (
 func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 
-	// Clean up stale branch tags first
-	if err := cleanupStaleBranchTags(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup stale branch tags: %v\n", err)
-	}
-
 	// Clean up stale plugin tags (removed plugins + old versions)
 	if err := cleanupStalePluginTags(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup stale plugin tags: %v\n", err)
@@ -26,11 +23,6 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	// Clean up legacy tags using old @v and /v formats
 	if err := cleanupLegacyPluginTags(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup legacy plugin tags: %v\n", err)
-	}
-
-	branch, err := GetCurrentBranch()
-	if err != nil {
-		return err
 	}
 
 	owner, repo, err := GetRepoInfo()
@@ -63,7 +55,7 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	marketplace["plugins"] = plugins
 
 	// Bump marketplace version
-	newVersion := bumpMarketplaceVersion(branch)
+	newVersion := bumpMarketplaceVersion()
 	metadata, ok := marketplace["metadata"].(map[string]interface{})
 	if !ok {
 		metadata = make(map[string]interface{})
@@ -75,63 +67,60 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	delete(marketplace, "$schema")
 	delete(marketplace, "mh")
 
-	// Create temp directory for marketplace tag contents (NOT cleaned up - workflow uses it)
+	// Create temp directory for Pages deployment (NOT cleaned up - workflow uses it)
 	tmpDir, err := os.MkdirTemp("", "marketplace-build-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	// Note: NOT removing tmpDir - the orphan-tag action needs it
 
-	// Write cooked marketplace.json to root (orphan-tag's move will relocate to .claude-plugin/)
+	// Write cooked marketplace.json into .claude-plugin/ so the dir validates directly
+	pluginDir := filepath.Join(tmpDir, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .claude-plugin dir: %w", err)
+	}
+
 	cookedData, err := json.MarshalIndent(marketplace, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal marketplace.json: %w", err)
 	}
 
-	tmpMarketplacePath := filepath.Join(tmpDir, "marketplace.json")
-	if err := os.WriteFile(tmpMarketplacePath, cookedData, 0644); err != nil {
+	// Write to .claude-plugin/marketplace.json (for validation)
+	if err := os.WriteFile(filepath.Join(pluginDir, "marketplace.json"), cookedData, 0644); err != nil {
 		return fmt.Errorf("failed to write marketplace.json: %w", err)
 	}
 
-	var name string
-	if branch == "master" || branch == "main" {
-		name = "marketplace"
-	} else {
-		name = fmt.Sprintf("marketplace/%s", branch)
+	// Also write to root marketplace.json (for Pages URL: /marketplace.json)
+	if err := os.WriteFile(filepath.Join(tmpDir, "marketplace.json"), cookedData, 0644); err != nil {
+		return fmt.Errorf("failed to write root marketplace.json: %w", err)
 	}
 
-	// Output for GitHub Actions (parsed by workflow)
+	// Output for GitHub Actions
 	fmt.Printf("source_dir=%s\n", tmpDir)
-	fmt.Printf("name=%s\n", name)
-	fmt.Printf("message=Update marketplace for %s\n", branch)
 
 	// Write step summary if GITHUB_STEP_SUMMARY is set
 	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
-		writeSummary(summaryPath, pluginRefs, owner, repo, branch)
+		writeSummary(summaryPath, pluginRefs, owner, repo)
 	}
 
 	fmt.Fprintf(os.Stderr, "Prepared marketplace update in %s\n", tmpDir)
 	return nil
 }
 
-func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch string) {
+func writeSummary(path string, pluginRefs map[string]string, owner, repo string) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 
-	marketplaceTag := fmt.Sprintf("marketplace/%s", branch)
-	marketplaceURL := fmt.Sprintf("https://github.com/%s/%s/blob/%s/.claude-plugin/marketplace.json", owner, repo, marketplaceTag)
+	pagesURL := fmt.Sprintf("https://%s.github.io/%s/marketplace.json", owner, repo)
 
 	fmt.Fprintf(f, "## Marketplace Updated\n\n")
-	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)
-	fmt.Fprintf(f, "**Marketplace:** [marketplace.json](%s)\n\n", marketplaceURL)
+	fmt.Fprintf(f, "**URL:** [marketplace.json](%s)\n\n", pagesURL)
 	fmt.Fprintf(f, "| Plugin | Version |\n")
 	fmt.Fprintf(f, "|--------|--------|\n")
 
 	for plugin, tag := range pluginRefs {
-		// Extract version from tag (plugin/vN -> vN)
 		parts := strings.Split(tag, "/")
 		version := parts[len(parts)-1]
 		tagURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s", owner, repo, tag)
@@ -293,24 +282,33 @@ func readMCPFromTag(tag string) map[string]interface{} {
 	return nil
 }
 
-// bumpMarketplaceVersion reads current version from marketplace tag and increments it
-func bumpMarketplaceVersion(branch string) int {
-	// Use the #latest tag to find current version
-	var tag string
-	if branch == "master" || branch == "main" {
-		tag = "marketplace#latest"
-	} else {
-		tag = fmt.Sprintf("marketplace/%s#latest", branch)
+// bumpMarketplaceVersion fetches current version from the live marketplace URL and increments it
+func bumpMarketplaceVersion() int {
+	marketplaceURL := os.Getenv("MARKETPLACE_URL")
+	if marketplaceURL == "" {
+		fmt.Fprintf(os.Stderr, "Warning: MARKETPLACE_URL not set, starting at version 1\n")
+		return 1
 	}
 
-	// Try to read current marketplace.json from tag
-	content, err := ReadFileFromTag(tag, ".claude-plugin/marketplace.json")
+	resp, err := http.Get(marketplaceURL)
 	if err != nil {
-		return 1 // First version
+		fmt.Fprintf(os.Stderr, "Warning: failed to fetch marketplace: %v (starting at version 1)\n", err)
+		return 1
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Warning: marketplace returned %d (starting at version 1)\n", resp.StatusCode)
+		return 1
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 1
 	}
 
 	var marketplace map[string]interface{}
-	if err := json.Unmarshal([]byte(content), &marketplace); err != nil {
+	if err := json.Unmarshal(body, &marketplace); err != nil {
 		return 1
 	}
 
@@ -331,55 +329,6 @@ func bumpMarketplaceVersion(branch string) int {
 	}
 
 	return 1
-}
-
-// cleanupStaleBranchTags removes marketplace/{branch} tags for branches that no longer exist
-func cleanupStaleBranchTags() error {
-	// List all marketplace tags
-	tags, err := ListTagsWithPrefix("marketplace/")
-	if err != nil {
-		return err
-	}
-
-	var stale []string
-	for _, tag := range tags {
-		// Extract branch name from marketplace/{branch}
-		parts := strings.Split(tag, "/")
-		if len(parts) != 2 || parts[0] != "marketplace" {
-			continue
-		}
-		branch := parts[1]
-
-		// Check if branch exists on remote
-		exists, err := RemoteBranchExists(branch)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to check branch %s: %v\n", branch, err)
-			continue
-		}
-
-		if !exists {
-			stale = append(stale, tag)
-		}
-	}
-
-	if len(stale) == 0 {
-		return nil
-	}
-
-	fmt.Fprintf(os.Stderr, "Cleaning up %d stale marketplace tags:\n", len(stale))
-	for _, tag := range stale {
-		fmt.Fprintf(os.Stderr, "  - %s\n", tag)
-	}
-
-	// Delete remote tags
-	if err := DeleteRemoteTags(stale...); err != nil {
-		return fmt.Errorf("failed to delete remote tags: %w", err)
-	}
-
-	// Delete local tags
-	_ = DeleteLocalTags(stale...)
-
-	return nil
 }
 
 // cleanupStalePluginTags removes plugin tags for plugins that no longer exist
