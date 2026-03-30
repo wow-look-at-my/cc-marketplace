@@ -2,12 +2,28 @@ name: Release Plugins
 
 on:
   push:
+  delete:
 
 concurrency:
   group: release-${{ github.ref }}
 
 jobs:
+  cleanup:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - run: marketplace-build cleanup-branch ${{ github.event.ref }}
+
   build-cli:
+    if: github.event_name == 'push'
     permissions:
       contents: write
     uses: wow-look-at-my/go-toolchain/.github/workflows/build.yml@v1
@@ -20,8 +36,12 @@ jobs:
 
   prepare:
     needs: build-cli
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
+      id-token: write
     outputs:
       plugins: ${{ steps.matrix.outputs.plugins }}
       has_changes: ${{ steps.matrix.outputs.has_changes }}
@@ -42,6 +62,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
