@@ -42,8 +42,8 @@ func GetRepoInfo() (owner, repo string, err error) {
 		return matches[1], matches[2], nil
 	}
 
-	// Handle HTTPS format: https://github.com/owner/repo.git
-	httpsPattern := regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+?)(?:\.git)?$`)
+	// Handle HTTPS format: https://github.com/owner/repo.git (with optional user@ credentials)
+	httpsPattern := regexp.MustCompile(`https://(?:[^@]+@)?github\.com/([^/]+)/([^/]+?)(?:\.git)?$`)
 	if matches := httpsPattern.FindStringSubmatch(url); matches != nil {
 		return matches[1], matches[2], nil
 	}

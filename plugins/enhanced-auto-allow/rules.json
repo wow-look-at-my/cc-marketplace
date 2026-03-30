@@ -67,10 +67,31 @@
 				"pkg-config",
 				"pkgconf",
 				"pkg_config",
-				"dig"
+				"dig",
+				"base64",
+				"md5sum",
+				"sha1sum",
+				"sha256sum",
+				"sha384sum",
+				"sha512sum",
+				"b2sum",
+				"cksum",
+				"sum",
+				"xxd",
+				"jq",
+				"nproc",
+				"free",
+				"lscpu",
+				"lsblk"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
+		},
+		{
+			"name": "yq",
+			"description": "Auto-approve readonly yq commands (deny in-place editing)",
+			"allowedFlags": "*",
+			"deniedFlags": ["-i", "--in-place"]
 		},
 		{
 			"name": "mount",
