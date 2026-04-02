@@ -66,10 +66,37 @@
 				"cd",
 				"pkg-config",
 				"pkgconf",
-				"pkg_config"
+				"pkg_config",
+				"dig",
+				"base64",
+				"md5sum",
+				"sha1sum",
+				"sha256sum",
+				"sha384sum",
+				"sha512sum",
+				"b2sum",
+				"cksum",
+				"sum",
+				"xxd",
+				"jq",
+				"nproc",
+				"free",
+				"lscpu",
+				"lsblk"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
+		},
+		{
+			"name": "yq",
+			"description": "Auto-approve readonly yq commands (deny in-place editing)",
+			"allowedFlags": "*",
+			"deniedFlags": ["-i", "--in-place"]
+		},
+		{
+			"name": "mount",
+			"description": "Auto-approve bare mount (lists mounted filesystems)",
+			"bareOnly": true
 		},
 		{
 			"name": "find",

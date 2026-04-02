@@ -543,6 +543,24 @@ func TestDockerComposeRunRmAllowed(t *testing.T) {
 	}
 }
 
+func TestMountBareAllowed(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("mount")
+	assert.Equal(t, "allow", decision, "bare mount should be allowed")
+}
+
+func TestMountWithArgsPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("mount /dev/sda1 /mnt")
+	assert.Equal(t, "", decision, "mount /dev/sda1 /mnt should passthrough")
+}
+
+func TestMountWithFlagsPassthrough(t *testing.T) {
+	loadTestRules(t)
+	decision, _ := evaluateCommand("mount -t ext4 /dev/sda1 /mnt")
+	assert.Equal(t, "", decision, "mount -t ext4 /dev/sda1 /mnt should passthrough")
+}
+
 func TestDockerComposePsAllowed(t *testing.T) {
 	loadTestRules(t)
 	tests := []struct {

@@ -73,6 +73,16 @@ func TestGetRepoInfo_HTTPSNoGit(t *testing.T) {
 	require.Equal(t, "myrepo", repo)
 }
 
+func TestGetRepoInfo_HTTPSWithCredentials(t *testing.T) {
+	mockGit(t, func(args ...string) (string, error) {
+		return "https://x-access-token:ghp_abc123@github.com/myowner/myrepo\n", nil
+	})
+	owner, repo, err := GetRepoInfo()
+	require.NoError(t, err)
+	require.Equal(t, "myowner", owner)
+	require.Equal(t, "myrepo", repo)
+}
+
 func TestGetRepoInfo_UnknownFormat(t *testing.T) {
 	mockGit(t, func(args ...string) (string, error) {
 		return "http://localhost/repo\n", nil
