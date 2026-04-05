@@ -782,6 +782,13 @@
 			]
 		},
 		{
+			"name": "curl",
+			"description": "Auto-approve curl to localhost read API",
+			"flagsWithValue": ["-H", "--header", "-d", "--data", "--data-raw", "--data-binary", "--data-urlencode", "-o", "--output", "-X", "--request", "-u", "--user", "-A", "--user-agent", "-e", "--referer", "-b", "--cookie", "-c", "--cookie-jar", "-w", "--write-out", "--connect-timeout", "--max-time", "-m", "--retry", "--retry-delay", "--retry-max-time", "-x", "--proxy"],
+			"allowedFlags": "*",
+			"allowedArgPrefixes": ["http://localhost:9120/read"]
+		},
+		{
 			"name": "brew",
 			"description": "Auto-approve readonly homebrew commands",
 			"subcommands": [

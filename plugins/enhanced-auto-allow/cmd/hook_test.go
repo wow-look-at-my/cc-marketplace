@@ -686,6 +686,25 @@ func TestReadAllowed(t *testing.T) {
 	assert.Equal(t, "allow", resp.HookSpecificOutput.Decision.Behavior, "Read should be allowed")
 }
 
+func TestCurlAllowedArgPrefixes(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name, command, expected string
+	}{
+		{"read with flags", `curl -s http://localhost:9120/read/ListStacks -H 'Content-Type: application/json' -H 'X-Api-Key: asdf' -H 'X-Api-Secret: fdsa' -d '{}'`, "allow"},
+		{"read simple", `curl http://localhost:9120/read/SomeEndpoint`, "allow"},
+		{"write path", `curl http://localhost:9120/write/Something`, ""},
+		{"external host", `curl http://evil.com/`, ""},
+		{"bare curl", `curl`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			assert.Equal(t, tt.expected, decision)
+		})
+	}
+}
+
 func getRepoRoot(t *testing.T) string {
 	t.Helper()
 	repoRoot := os.Getenv("REPO_ROOT")

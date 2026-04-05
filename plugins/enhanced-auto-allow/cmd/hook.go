@@ -34,7 +34,8 @@ type CommandNode struct {
 	ExecFlags         []string         `json:"execFlags,omitempty"`
 	RequiredFlags     []string         `json:"requiredFlags,omitempty"`
 	RequireFlagValue  *RequireFlagRule `json:"requireFlagValue,omitempty"`
-	DenyWithMessage   string           `json:"denyWithMessage,omitempty"`
+	DenyWithMessage    string           `json:"denyWithMessage,omitempty"`
+	AllowedArgPrefixes []string        `json:"allowedArgPrefixes,omitempty"`
 	FlagsWithValue    []string         `json:"flagsWithValue,omitempty"`
 	HelpAlwaysAllowed bool             `json:"helpAlwaysAllowed,omitempty"`
 	BareOnly          bool             `json:"bareOnly,omitempty"`
@@ -233,9 +234,25 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		}
 	}
 
-	// Check allowed flags
+	// Check allowed flags (and optionally constrain positional args by prefix)
 	if node.AllowedFlags != nil {
-		if checkAllowedFlags(remaining, node.AllowedFlags) {
+		effectiveRemaining := remaining
+		if len(node.FlagsWithValue) > 0 {
+			effectiveRemaining = stripFlagsWithValue(remaining, node.FlagsWithValue)
+		}
+
+		if len(node.AllowedArgPrefixes) > 0 {
+			flags, positionals := splitFlagsAndArgs(effectiveRemaining)
+			if len(positionals) == 0 {
+				return "", ""
+			}
+			if !allArgsMatchPrefix(positionals, node.AllowedArgPrefixes) {
+				return "", ""
+			}
+			if checkAllowedFlags(flags, node.AllowedFlags) {
+				return "allow", ""
+			}
+		} else if checkAllowedFlags(remaining, node.AllowedFlags) {
 			return "allow", ""
 		}
 	}
@@ -499,6 +516,33 @@ func getFlagValue(args []string, flags []string) string {
 		}
 	}
 	return ""
+}
+
+func splitFlagsAndArgs(args []string) (flags, positionals []string) {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+		} else {
+			positionals = append(positionals, arg)
+		}
+	}
+	return
+}
+
+func allArgsMatchPrefix(args []string, prefixes []string) bool {
+	for _, arg := range args {
+		matched := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(arg, prefix) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }
 
 func outputDecision(behavior, message string) {
