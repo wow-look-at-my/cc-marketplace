@@ -82,7 +82,9 @@
 				"nproc",
 				"free",
 				"lscpu",
-				"lsblk"
+				"lsblk",
+				"fd",
+				"fdfind"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
