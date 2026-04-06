@@ -91,7 +91,8 @@
 				"size",
 				"ldd",
 				"ar",
-				"addr2line"
+				"addr2line",
+				"rg"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
