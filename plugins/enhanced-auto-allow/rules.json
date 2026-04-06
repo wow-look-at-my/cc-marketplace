@@ -84,7 +84,14 @@
 				"lscpu",
 				"lsblk",
 				"fd",
-				"fdfind"
+				"fdfind",
+				"readelf",
+				"objdump",
+				"nm",
+				"size",
+				"ldd",
+				"ar",
+				"addr2line"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
