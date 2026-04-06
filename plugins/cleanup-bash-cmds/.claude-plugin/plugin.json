@@ -1,0 +1,25 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "cleanup-bash-cmds",
+	"description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, | head, | tail, and set -e",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["bash", "cleanup", "rewrite", "hook"],
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "Bash",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/cleanup-bash-cmds"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
