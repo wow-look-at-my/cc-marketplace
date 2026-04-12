@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var crossBuildTargets = []string{"linux,darwin", "amd64,arm64"}
+
 const goToolchainRepo = "wow-look-at-my/go-toolchain"
 
 func runBuildPlugin(cmd *cobra.Command, args []string) error {
@@ -135,7 +137,7 @@ func runJustRecipe(dir, recipe string) error {
 }
 
 func runGoToolchain(pluginPath string) error {
-	fmt.Printf("  Invoking go-toolchain (https://github.com/%s/releases/latest)\n", goToolchainRepo)
+	fmt.Printf("  Invoking go-toolchain matrix (https://github.com/%s/releases/latest)\n", goToolchainRepo)
 
 	toolchainDir, err := os.MkdirTemp("", "go-toolchain-*")
 	if err != nil {
@@ -164,15 +166,74 @@ func runGoToolchain(pluginPath string) error {
 		return fmt.Errorf("failed to make go-toolchain executable: %w", err)
 	}
 
-	// Run toolchain in plugin directory
-	runCmd := exec.Command(binPath)
+	// Run toolchain with matrix cross-compilation
+	runCmd := exec.Command(binPath, "matrix",
+		"--os", crossBuildTargets[0],
+		"--arch", crossBuildTargets[1])
 	runCmd.Dir = pluginPath
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 	if err := runCmd.Run(); err != nil {
-		return fmt.Errorf("go-toolchain failed: %w", err)
+		return fmt.Errorf("go-toolchain matrix failed: %w", err)
 	}
 
+	// Replace symlinks with a platform-detection shell script wrapper
+	moduleName, err := getGoModuleName(pluginPath)
+	if err != nil {
+		return fmt.Errorf("failed to read module name: %w", err)
+	}
+	if err := generatePlatformWrapper(filepath.Join(pluginPath, "build"), moduleName); err != nil {
+		return fmt.Errorf("failed to generate platform wrapper: %w", err)
+	}
+
+	return nil
+}
+
+// getGoModuleName reads go.mod and returns the module name.
+func getGoModuleName(dir string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(line[len("module "):]), nil
+		}
+	}
+	return "", fmt.Errorf("no module directive found in go.mod")
+}
+
+const platformWrapperScript = `#!/bin/sh
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64) ARCH="amd64" ;;
+  aarch64) ARCH="arm64" ;;
+esac
+BINARY="$SCRIPT_DIR/$(basename "$0")_${OS}_${ARCH}"
+if [ ! -f "$BINARY" ]; then
+  exit 0
+fi
+exec "$BINARY" "$@"
+`
+
+// generatePlatformWrapper removes the symlinks created by go-toolchain matrix
+// and writes a shell script that detects the platform and execs the right binary.
+func generatePlatformWrapper(buildDir, name string) error {
+	wrapperPath := filepath.Join(buildDir, name)
+	hostLink := filepath.Join(buildDir, name+"_host")
+
+	// Remove symlinks (go-toolchain matrix creates these)
+	os.Remove(wrapperPath)
+	os.Remove(hostLink)
+
+	if err := os.WriteFile(wrapperPath, []byte(platformWrapperScript), 0755); err != nil {
+		return fmt.Errorf("failed to write wrapper script: %w", err)
+	}
+
+	fmt.Printf("  Generated platform wrapper: build/%s\n", name)
 	return nil
 }
 
