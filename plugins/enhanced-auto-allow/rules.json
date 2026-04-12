@@ -67,10 +67,41 @@
 				"pkg-config",
 				"pkgconf",
 				"pkg_config",
-				"dig"
+				"dig",
+				"base64",
+				"md5sum",
+				"sha1sum",
+				"sha256sum",
+				"sha384sum",
+				"sha512sum",
+				"b2sum",
+				"cksum",
+				"sum",
+				"xxd",
+				"jq",
+				"nproc",
+				"free",
+				"lscpu",
+				"lsblk",
+				"fd",
+				"fdfind",
+				"readelf",
+				"objdump",
+				"nm",
+				"size",
+				"ldd",
+				"ar",
+				"addr2line",
+				"rg"
 			],
 			"description": "Auto-approve readonly inspection commands",
 			"allowedFlags": "*"
+		},
+		{
+			"name": "yq",
+			"description": "Auto-approve readonly yq commands (deny in-place editing)",
+			"allowedFlags": "*",
+			"deniedFlags": ["-i", "--in-place"]
 		},
 		{
 			"name": "mount",
@@ -757,6 +788,91 @@
 					]
 				}
 			]
+		},
+		{
+			"name": "apt",
+			"description": "Auto-approve readonly apt commands",
+			"subcommands": [
+				{
+					"name": [
+						"list",
+						"show",
+						"search",
+						"depends",
+						"rdepends",
+						"policy",
+						"madison"
+					],
+					"allowedFlags": "*"
+				}
+			]
+		},
+		{
+			"name": "apt-cache",
+			"description": "Auto-approve readonly apt-cache commands",
+			"subcommands": [
+				{
+					"name": [
+						"search",
+						"show",
+						"showpkg",
+						"showsrc",
+						"depends",
+						"rdepends",
+						"policy",
+						"madison",
+						"pkgnames",
+						"dump",
+						"dumpavail",
+						"stats",
+						"unmet",
+						"dotty",
+						"xvcg"
+					],
+					"allowedFlags": "*"
+				}
+			]
+		},
+		{
+			"name": "apt-mark",
+			"description": "Auto-approve readonly apt-mark commands",
+			"subcommands": [
+				{
+					"name": [
+						"showmanual",
+						"showauto",
+						"showhold",
+						"showinstall",
+						"showremove",
+						"showpurge"
+					],
+					"allowedFlags": "*"
+				}
+			]
+		},
+		{
+			"name": "dpkg",
+			"description": "Auto-approve readonly dpkg commands",
+			"requiredFlags": [
+				"-L",
+				"--listfiles",
+				"-l",
+				"--list",
+				"-s",
+				"--status",
+				"-p",
+				"--print-avail",
+				"-S",
+				"--search",
+				"--get-selections",
+				"--print-architecture",
+				"--print-foreign-architectures"
+			]
+		},
+		{
+			"name": "dpkg-query",
+			"description": "Auto-approve readonly dpkg-query commands",
+			"allowedFlags": "*"
 		},
 		{
 			"name": "brew",
