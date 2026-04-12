@@ -1,5 +1,5 @@
 name: Setup marketplace-build
-description: Download pre-built marketplace-build CLI from artifact
+description: Build or restore cached marketplace-build CLI
 
 runs:
   using: composite
@@ -10,12 +10,9 @@ runs:
 
     - uses: extractions/setup-just@v2
 
-    - uses: actions/download-artifact@v4
+    - uses: wow-look-at-my/go-toolchain@latest
       with:
-        name: marketplace-build
-        path: /usr/local/bin
+        working-directory: "tools/marketplace-build"
 
-    - shell: bash
-      run: |
-        mv /usr/local/bin/marketplace-build_linux_amd64 /usr/local/bin/marketplace-build
-        chmod +x /usr/local/bin/marketplace-build
+    - run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
+      shell: bash

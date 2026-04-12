@@ -2,24 +2,27 @@ name: Release Plugins
 
 on:
   push:
+  delete:
 
 concurrency:
   group: release-${{ github.ref }}
 
 jobs:
-  build-cli:
+  cleanup:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
-    uses: wow-look-at-my/go-toolchain/.github/workflows/build.yml@v1
-    with:
-      working-directory: tools/marketplace-build
-      os: linux
-      arch: amd64
-      artifact-name: marketplace-build
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - run: marketplace-build cleanup-branch ${{ github.event.ref }}
 
   prepare:
-    needs: build-cli
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
