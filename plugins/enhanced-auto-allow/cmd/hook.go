@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -416,12 +417,8 @@ func hasOutputRedirect(node syntax.Node) bool {
 				switch r.Op {
 				case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll,
 					syntax.DplOut, syntax.ClbOut, syntax.RdrInOut:
-					// Allow stderr redirects: 2>/dev/null and 2>&1
-					if r.N != nil && r.N.Value == "2" {
-						target := redirectTarget(r)
-						if target == "/dev/null" || (r.Op == syntax.DplOut && target == "1") {
-							continue
-						}
+					if isAllowedRedirect(r) {
+						continue
 					}
 					found = true
 					return false
@@ -433,15 +430,54 @@ func hasOutputRedirect(node syntax.Node) bool {
 	return found
 }
 
+// isAllowedRedirect reports whether a redirect operation is safe to auto-allow.
+// Permitted: 2>&1, and stdout/stderr writes to /dev/null or under /tmp/.
+func isAllowedRedirect(r *syntax.Redirect) bool {
+	fd := "1"
+	if r.N != nil {
+		fd = r.N.Value
+	}
+	target := redirectTarget(r)
+
+	// 2>&1
+	if r.Op == syntax.DplOut {
+		return fd == "2" && target == "1"
+	}
+
+	switch r.Op {
+	case syntax.RdrOut, syntax.AppOut:
+		if fd != "1" && fd != "2" {
+			return false
+		}
+	case syntax.RdrAll, syntax.AppAll:
+		// &> and &>> redirect both stdout and stderr
+	default:
+		return false
+	}
+
+	return isSafeRedirectPath(target)
+}
+
+// isSafeRedirectPath reports whether target is /dev/null or a path under /tmp/.
+// path.Clean defeats traversal attempts like /tmp/../etc/passwd.
+func isSafeRedirectPath(target string) bool {
+	if target == "/dev/null" {
+		return true
+	}
+	return strings.HasPrefix(path.Clean(target), "/tmp/")
+}
+
 func redirectTarget(r *syntax.Redirect) string {
 	if r.Word == nil {
 		return ""
 	}
 	var parts []string
 	for _, p := range r.Word.Parts {
-		if lit, ok := p.(*syntax.Lit); ok {
-			parts = append(parts, lit.Value)
+		lit, ok := p.(*syntax.Lit)
+		if !ok {
+			return ""
 		}
+		parts = append(parts, lit.Value)
 	}
 	return strings.Join(parts, "")
 }
