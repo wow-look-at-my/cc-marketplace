@@ -28,6 +28,13 @@
       "description": "MCP server for Chrome DevTools Protocol - inspect, debug, and interact with Chrome browser pages",
       "category": "development",
       "keywords": ["chrome", "devtools", "browser", "debugging", "mcp"]
+    },
+    {
+      "name": "haiku-compact",
+      "source": "./haiku-compact",
+      "description": "Temporarily switch the active model to Haiku during context compaction",
+      "category": "development",
+      "keywords": ["compact", "haiku", "model", "cost", "hook"]
     }
   ]
 }
