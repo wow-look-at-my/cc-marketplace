@@ -75,6 +75,8 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 
 	// Output for GitHub Actions (parsed by workflow)
 	fmt.Printf("source_dir=%s\n", tmpDir)
+	fmt.Printf("next_version=%d\n", newVersion)
+	fmt.Printf("tag=plugin/%s/v%d\n", pluginName, newVersion)
 	fmt.Printf("message=Release %s\n", pluginName)
 
 	fmt.Fprintf(os.Stderr, "Prepared release in %s\n", tmpDir)

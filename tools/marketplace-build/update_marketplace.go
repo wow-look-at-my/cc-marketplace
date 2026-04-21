@@ -143,7 +143,7 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 func getPluginRefs(owner, repo string) (map[string]string, error) {
 	refs := make(map[string]string)
 
-	// List all plugin tags (format: plugin/{name}#{version} for master)
+	// List all plugin tags (format: plugin/{name}/v{version} for master)
 	tags, err := ListTagsWithPrefix("plugin/")
 	if err != nil {
 		return nil, err
@@ -153,27 +153,20 @@ func getPluginRefs(owner, repo string) (map[string]string, error) {
 	pluginVersions := make(map[string]int) // plugin -> highest version
 
 	for _, tag := range tags {
-		// Skip 'latest' tags
-		if strings.HasSuffix(tag, "#latest") {
+		// Parse plugin/{name}/v{version} — exactly 3 slash-parts.
+		// Skip branch tags (plugin/{name}/{branch}/v{version} has 4 parts)
+		// and the plugin/{name}/latest pointer.
+		parts := strings.Split(tag, "/")
+		if len(parts) != 3 || parts[0] != "plugin" {
+			continue
+		}
+		if !strings.HasPrefix(parts[2], "v") {
 			continue
 		}
 
-		// Parse tag: plugin/{name}#{version}
-		// Split on # first to get version
-		hashParts := strings.Split(tag, "#")
-		if len(hashParts) != 2 {
-			continue
-		}
-
-		// Parse plugin/{name} - skip branch tags (plugin/{name}/{branch}#version)
-		pathParts := strings.Split(hashParts[0], "/")
-		if len(pathParts) != 2 || pathParts[0] != "plugin" {
-			continue
-		}
-
-		pluginName := pathParts[1]
+		pluginName := parts[1]
 		var v int
-		fmt.Sscanf(hashParts[1], "%d", &v)
+		fmt.Sscanf(parts[2][1:], "%d", &v)
 
 		if existing, ok := pluginVersions[pluginName]; !ok || v > existing {
 			pluginVersions[pluginName] = v
@@ -423,11 +416,11 @@ func cleanupStalePluginTags() error {
 		}
 
 		if removed {
-			// Plugin removed — delete ALL its tags (versioned + #latest)
+			// Plugin removed — delete ALL its tags (versioned + /latest)
 			fmt.Fprintf(os.Stderr, "Plugin %s removed — marking all %d tags for deletion\n", pluginName, len(pluginTags))
 			allStale = append(allStale, pluginTags...)
-			// Also delete the #latest pointer
-			allStale = append(allStale, fmt.Sprintf("plugin/%s#latest", pluginName))
+			// Also delete the /latest pointer
+			allStale = append(allStale, fmt.Sprintf("plugin/%s/latest", pluginName))
 			continue
 		}
 
@@ -443,12 +436,10 @@ func cleanupStalePluginTags() error {
 		}
 		var vTags []versionedTag
 		for _, tag := range pluginTags {
-			hashParts := strings.SplitN(tag, "#", 2)
-			if len(hashParts) != 2 {
+			v := parsePluginTagVersion(tag)
+			if v == 0 {
 				continue
 			}
-			var v int
-			fmt.Sscanf(hashParts[1], "%d", &v)
 			vTags = append(vTags, versionedTag{tag: tag, version: v})
 		}
 
@@ -491,8 +482,8 @@ func cleanupStalePluginTags() error {
 
 // cleanupLegacyPluginTags removes plugin tags using old naming formats:
 // - plugin/{name}@v{N} (original @ format)
-// - plugin/{name}/v{N} (intermediate /v format)
-// These were replaced by the current plugin/{name}#{N} format.
+// - plugin/{name}#{N} and plugin/{name}#latest (intermediate # format, broken by URL parsing)
+// These were replaced by the current plugin/{name}/v{N} format.
 func cleanupLegacyPluginTags() error {
 	allTags, err := ListTagsWithPrefix("plugin/")
 	if err != nil {
@@ -501,15 +492,8 @@ func cleanupLegacyPluginTags() error {
 
 	var legacy []string
 	for _, tag := range allTags {
-		// Match plugin/{name}@v{N}
-		if strings.Contains(tag, "@") {
-			legacy = append(legacy, tag)
-			continue
-		}
-		// Match plugin/{name}/v{N} — these have 3 parts when split by /
-		// (current format uses # so no extra / segments)
-		parts := strings.Split(tag, "/")
-		if len(parts) == 3 && parts[0] == "plugin" && strings.HasPrefix(parts[2], "v") {
+		// Match anything containing @ (plugin/{name}@v{N}) or # (plugin/{name}#{N} or #latest)
+		if strings.ContainsAny(tag, "@#") {
 			legacy = append(legacy, tag)
 		}
 	}
@@ -518,7 +502,7 @@ func cleanupLegacyPluginTags() error {
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "Cleaning up %d legacy plugin tags (old @v and /v formats)\n", len(legacy))
+	fmt.Fprintf(os.Stderr, "Cleaning up %d legacy plugin tags (old @v and # formats)\n", len(legacy))
 	for _, tag := range legacy {
 		fmt.Fprintf(os.Stderr, "  - %s\n", tag)
 	}

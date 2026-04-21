@@ -46,7 +46,7 @@ jobs:
     needs: prepare
     if: needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: write
       id-token: write
@@ -81,11 +81,28 @@ jobs:
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - uses: wow-look-at-my-code/actions@orphan-release#latest
-        with:
-          source: ${{ steps.release.outputs.source_dir }}
-          name: plugin/${{ matrix.plugin }}
-          message: ${{ steps.release.outputs.message }}
+      - name: Push plugin orphan tags
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_DIR: ${{ steps.release.outputs.source_dir }}
+          VERSIONED_TAG: ${{ steps.release.outputs.tag }}
+          LATEST_TAG: plugin/${{ matrix.plugin }}/latest
+          MESSAGE: ${{ steps.release.outputs.message }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          git init -b master
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "$MESSAGE"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          git tag "$VERSIONED_TAG"
+          git tag "$LATEST_TAG"
+          git push --force origin "refs/tags/$VERSIONED_TAG" "refs/tags/$LATEST_TAG"
+          echo "Created tag: $VERSIONED_TAG"
+          echo "Created tag: $LATEST_TAG"
 
   update:
     needs: [prepare, build]
