@@ -9,6 +9,8 @@ runs:
       run: git fetch --tags --force
 
     - uses: extractions/setup-just@v2
+      with:
+        just-version: "1"
 
     - uses: wow-look-at-my/go-toolchain@latest
       with:
