@@ -16,7 +16,7 @@ func TestWriteSummary(t *testing.T) {
 	summaryPath := filepath.Join(dir, "summary.md")
 
 	pluginRefs := map[string]string{
-		"my-plugin": "plugin/my-plugin#3",
+		"my-plugin": "plugin/my-plugin/v3",
 	}
 
 	writeSummary(summaryPath, pluginRefs, "owner", "repo", "master")
@@ -28,7 +28,7 @@ func TestWriteSummary(t *testing.T) {
 	require.Contains(t, content, "## Marketplace Updated")
 	require.Contains(t, content, "master")
 	require.Contains(t, content, "my-plugin")
-	require.Contains(t, content, "plugin/my-plugin#3")
+	require.Contains(t, content, "plugin/my-plugin/v3")
 }
 
 func TestWriteSummary_BadPath(t *testing.T) {
@@ -104,24 +104,24 @@ func TestBumpMarketplaceVersion_BranchTag(t *testing.T) {
 
 func TestGetPluginRefs(t *testing.T) {
 	mockGitWithTags(t, []string{
-		"plugin/alpha#1",
-		"plugin/alpha#3",
-		"plugin/alpha#2",
-		"plugin/beta#1",
-		"plugin/beta#latest",
+		"plugin/alpha/v1",
+		"plugin/alpha/v3",
+		"plugin/alpha/v2",
+		"plugin/beta/v1",
+		"plugin/beta/latest",
 	})
 
 	refs, err := getPluginRefs("owner", "repo")
 	require.NoError(t, err)
 	require.Len(t, refs, 2)
-	require.Equal(t, "plugin/alpha#3", refs["alpha"])
-	require.Equal(t, "plugin/beta#1", refs["beta"])
+	require.Equal(t, "plugin/alpha/v3", refs["alpha"])
+	require.Equal(t, "plugin/beta/v1", refs["beta"])
 }
 
 func TestGetPluginRefs_SkipsBranchTags(t *testing.T) {
 	mockGitWithTags(t, []string{
-		"plugin/alpha#1",
-		"plugin/alpha/feature#1", // branch-specific, should be skipped (3 path parts)
+		"plugin/alpha/v1",
+		"plugin/alpha/feature/v1", // branch-specific, should be skipped (4 path parts)
 	})
 
 	refs, err := getPluginRefs("owner", "repo")
@@ -141,7 +141,7 @@ func TestCleanupLegacyPluginTags_AtFormat(t *testing.T) {
 	var deletedTags []string
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/foo@v1\nplugin/foo@v2\nplugin/bar#1\n", nil
+			return "plugin/foo@v1\nplugin/foo@v2\nplugin/bar/v1\n", nil
 		}
 		if args[0] == "push" && strings.HasPrefix(args[2], ":refs/tags/") {
 			deletedTags = append(deletedTags, strings.TrimPrefix(args[2], ":refs/tags/"))
@@ -160,11 +160,11 @@ func TestCleanupLegacyPluginTags_AtFormat(t *testing.T) {
 	require.Len(t, deletedTags, 2)
 }
 
-func TestCleanupLegacyPluginTags_SlashVFormat(t *testing.T) {
+func TestCleanupLegacyPluginTags_HashFormat(t *testing.T) {
 	var deletedTags []string
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/foo/v1\nplugin/foo/v2\nplugin/bar#1\n", nil
+			return "plugin/foo#1\nplugin/foo#2\nplugin/foo#latest\nplugin/bar/v1\n", nil
 		}
 		if args[0] == "push" {
 			deletedTags = append(deletedTags, strings.TrimPrefix(args[2], ":refs/tags/"))
@@ -178,12 +178,14 @@ func TestCleanupLegacyPluginTags_SlashVFormat(t *testing.T) {
 
 	err := cleanupLegacyPluginTags()
 	require.NoError(t, err)
-	require.Contains(t, deletedTags, "plugin/foo/v1")
-	require.Contains(t, deletedTags, "plugin/foo/v2")
+	require.Contains(t, deletedTags, "plugin/foo#1")
+	require.Contains(t, deletedTags, "plugin/foo#2")
+	require.Contains(t, deletedTags, "plugin/foo#latest")
+	require.Len(t, deletedTags, 3)
 }
 
 func TestCleanupLegacyPluginTags_None(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/foo#1", "plugin/bar#2"})
+	mockGitWithTags(t, []string{"plugin/foo/v1", "plugin/bar/v2"})
 	err := cleanupLegacyPluginTags()
 	require.NoError(t, err)
 }
@@ -250,13 +252,13 @@ func TestCleanupStalePluginTags(t *testing.T) {
 				prefix = strings.TrimSuffix(args[2], "*")
 			}
 			allTags := []string{
-				"plugin/existing-plugin#1",
-				"plugin/existing-plugin#2",
-				"plugin/existing-plugin#3",
-				"plugin/existing-plugin#4",
-				"plugin/existing-plugin#5",
-				"plugin/removed-plugin#1",
-				"plugin/removed-plugin#2",
+				"plugin/existing-plugin/v1",
+				"plugin/existing-plugin/v2",
+				"plugin/existing-plugin/v3",
+				"plugin/existing-plugin/v4",
+				"plugin/existing-plugin/v5",
+				"plugin/removed-plugin/v1",
+				"plugin/removed-plugin/v2",
 			}
 			var matching []string
 			for _, tag := range allTags {
@@ -282,14 +284,14 @@ func TestCleanupStalePluginTags(t *testing.T) {
 	err := cleanupStalePluginTags()
 	require.NoError(t, err)
 
-	// removed-plugin tags should be deleted (all of them + #latest)
-	require.Contains(t, deletedTags, "plugin/removed-plugin#1")
-	require.Contains(t, deletedTags, "plugin/removed-plugin#2")
-	require.Contains(t, deletedTags, "plugin/removed-plugin#latest")
+	// removed-plugin tags should be deleted (all of them + /latest)
+	require.Contains(t, deletedTags, "plugin/removed-plugin/v1")
+	require.Contains(t, deletedTags, "plugin/removed-plugin/v2")
+	require.Contains(t, deletedTags, "plugin/removed-plugin/latest")
 
 	// existing-plugin: has 5 versions, keep top 3 (5,4,3), prune 1,2
-	require.Contains(t, deletedTags, "plugin/existing-plugin#1")
-	require.Contains(t, deletedTags, "plugin/existing-plugin#2")
+	require.Contains(t, deletedTags, "plugin/existing-plugin/v1")
+	require.Contains(t, deletedTags, "plugin/existing-plugin/v2")
 }
 
 func TestBuildPluginsArray(t *testing.T) {
@@ -309,7 +311,7 @@ func TestBuildPluginsArray(t *testing.T) {
 	})
 
 	pluginRefs := map[string]string{
-		"alpha": "plugin/alpha#3",
+		"alpha": "plugin/alpha/v3",
 	}
 
 	existing := map[string]interface{}{
@@ -333,7 +335,7 @@ func TestBuildPluginsArray(t *testing.T) {
 	// Source set correctly
 	src := p["source"].(map[string]interface{})
 	require.Equal(t, "github", src["source"])
-	require.Equal(t, "plugin/alpha#3", src["ref"])
+	require.Equal(t, "plugin/alpha/v3", src["ref"])
 }
 
 func TestBuildPluginsArray_WithMCP(t *testing.T) {
@@ -352,7 +354,7 @@ func TestBuildPluginsArray_WithMCP(t *testing.T) {
 		return "", nil
 	})
 
-	plugins := buildPluginsArray(map[string]string{"beta": "plugin/beta#1"}, map[string]interface{}{})
+	plugins := buildPluginsArray(map[string]string{"beta": "plugin/beta/v1"}, map[string]interface{}{})
 	require.Len(t, plugins, 1)
 
 	p := plugins[0].(map[string]interface{})
@@ -371,7 +373,7 @@ func TestReadPluginJSONFromTag(t *testing.T) {
 		return "", nil
 	})
 
-	result, err := readPluginJSONFromTag("plugin/test#1")
+	result, err := readPluginJSONFromTag("plugin/test/v1")
 	require.NoError(t, err)
 	require.Equal(t, "test", result["name"])
 	require.Equal(t, "A plugin", result["description"])
@@ -433,13 +435,13 @@ func TestGetOldestPluginTagCommit_NoTags(t *testing.T) {
 func TestGetOldestPluginTagCommit_WithTags(t *testing.T) {
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/a#1\nplugin/a#2\nplugin/a#latest\n", nil
+			return "plugin/a/v1\nplugin/a/v2\nplugin/a/latest\n", nil
 		}
 		if args[0] == "show" {
-			if strings.Contains(args[1], "#1:") {
+			if strings.Contains(args[1], "/v1:") {
 				return `{"sourceCommit":"oldest111"}`, nil
 			}
-			if strings.Contains(args[1], "#2:") {
+			if strings.Contains(args[1], "/v2:") {
 				return `{"sourceCommit":"newer222"}`, nil
 			}
 		}
@@ -465,7 +467,7 @@ func TestHasInfraChanges_NoTags(t *testing.T) {
 func TestHasInfraChanges_WithChanges(t *testing.T) {
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/a#1\n", nil
+			return "plugin/a/v1\n", nil
 		}
 		if args[0] == "show" {
 			return `{"sourceCommit":"abc123"}`, nil
@@ -481,7 +483,7 @@ func TestHasInfraChanges_WithChanges(t *testing.T) {
 func TestHasInfraChanges_NoChanges(t *testing.T) {
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/a#1\n", nil
+			return "plugin/a/v1\n", nil
 		}
 		if args[0] == "show" {
 			return `{"sourceCommit":"abc123"}`, nil

@@ -113,8 +113,8 @@ func TestListTagsWithPrefix_NonExistentPrefix(t *testing.T) {
 }
 
 func TestListTagsWithPrefix_WithTags(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/a#1", "plugin/a#2", "plugin/b#1"})
-	tags, err := ListTagsWithPrefix("plugin/a#")
+	mockGitWithTags(t, []string{"plugin/a/v1", "plugin/a/v2", "plugin/b/v1"})
+	tags, err := ListTagsWithPrefix("plugin/a/")
 	require.NoError(t, err)
 	require.Len(t, tags, 2)
 }
@@ -133,15 +133,33 @@ func TestGetLatestTagVersion_NoTags(t *testing.T) {
 	require.Equal(t, 0, v)
 }
 
+func TestParsePluginTagVersion(t *testing.T) {
+	cases := map[string]int{
+		"plugin/foo/v1":           1,
+		"plugin/foo/v42":          42,
+		"plugin/foo/latest":       0,
+		"plugin/foo/vabc":         0,
+		"plugin/foo":              0,
+		"plugin/foo/v1/extra":     0,
+		"notplugin/foo/v1":        0,
+		"plugin/foo/branch/v1":    0,
+		"plugin/foo#1":            0,
+	}
+	for tag, want := range cases {
+		got := parsePluginTagVersion(tag)
+		require.Equal(t, want, got, "tag=%s", tag)
+	}
+}
+
 func TestGetLatestTagVersion_WithVersions(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/myplugin#1", "plugin/myplugin#5", "plugin/myplugin#3", "plugin/myplugin#latest"})
+	mockGitWithTags(t, []string{"plugin/myplugin/v1", "plugin/myplugin/v5", "plugin/myplugin/v3", "plugin/myplugin/latest"})
 	v, err := GetLatestTagVersion("myplugin")
 	require.NoError(t, err)
 	require.Equal(t, 5, v)
 }
 
 func TestListPluginNames(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/alpha#1", "plugin/alpha#2", "plugin/beta#1"})
+	mockGitWithTags(t, []string{"plugin/alpha/v1", "plugin/alpha/v2", "plugin/beta/v1"})
 	names, err := ListPluginNames()
 	require.NoError(t, err)
 	require.Len(t, names, 2)
@@ -150,7 +168,7 @@ func TestListPluginNames(t *testing.T) {
 }
 
 func TestListPluginNames_SkipsBadFormat(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/good#1", "badformat", "nohash"})
+	mockGitWithTags(t, []string{"plugin/good/v1", "badformat", "no-v-suffix/x"})
 	names, err := ListPluginNames()
 	require.NoError(t, err)
 	require.Len(t, names, 1)
@@ -164,12 +182,13 @@ func TestListPluginTags_NonExistent(t *testing.T) {
 }
 
 func TestListPluginTags_FiltersLatest(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/myplugin#1", "plugin/myplugin#2", "plugin/myplugin#latest"})
+	// The /v prefix itself excludes the /latest pointer, so only versioned tags are returned.
+	mockGitWithTags(t, []string{"plugin/myplugin/v1", "plugin/myplugin/v2"})
 	tags, err := ListPluginTags("myplugin")
 	require.NoError(t, err)
 	require.Len(t, tags, 2)
 	for _, tag := range tags {
-		require.False(t, strings.HasSuffix(tag, "#latest"))
+		require.False(t, strings.HasSuffix(tag, "/latest"))
 	}
 }
 
@@ -239,14 +258,14 @@ func TestHasCommitsAfterTag_NoTags(t *testing.T) {
 }
 
 func TestHasCommitsAfterTag_NoChanges(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/myplugin#1"})
+	mockGitWithTags(t, []string{"plugin/myplugin/v1"})
 	has, err := HasCommitsAfterTag("myplugin", "/tmp/path")
 	require.NoError(t, err)
 	require.False(t, has) // mock returns "0" for rev-list --count
 }
 
 func TestHasCommitsAfterTag_WithChanges(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/myplugin#1"}, func(args ...string) (string, error) {
+	mockGitWithTags(t, []string{"plugin/myplugin/v1"}, func(args ...string) (string, error) {
 		if args[0] == "rev-list" {
 			return "3\n", nil
 		}
