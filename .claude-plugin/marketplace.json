@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "description": "Claude Code plugins by wow-look-at-my-code",
+    "pluginRoot": "./plugins",
+    "version": "2"
+  },
+  "name": "wow-cc-marketplace",
+  "owner": {
+    "name": "wow-look-at-my-code"
+  },
+  "plugins": [
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "Create organized, well-structured HTML demo pages with separate CSS and JS files",
+      "keywords": [
+        "html",
+        "demo",
+        "frontend",
+        "prototype"
+      ],
+      "name": "html-demo",
+      "source": {
+        "ref": "plugin/html-demo/v1",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "1"
+    }
+  ]
+}
