@@ -101,7 +101,7 @@ func TestRunPrepareMatrix_InfraChanged(t *testing.T) {
 
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/my-plugin#1\n", nil
+			return "plugin/my-plugin/v1\n", nil
 		}
 		if args[0] == "show" {
 			return `{"sourceCommit":"old123"}`, nil

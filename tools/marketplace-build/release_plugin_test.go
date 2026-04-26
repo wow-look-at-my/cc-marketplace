@@ -2,12 +2,61 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/wow-look-at-my/testify/require"
 )
+
+func TestRunReleasePlugin_OutputsTagAndVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	pluginName := "my-plugin"
+	pluginDir := filepath.Join(tmpDir, "plugins", pluginName, ".claude-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"my-plugin","mh":{"include_in_marketplace":true}}`),
+		0644,
+	))
+
+	origRoot := repoRoot
+	repoRoot = tmpDir
+	t.Cleanup(func() { repoRoot = origRoot })
+
+	mockGit(t, func(args ...string) (string, error) {
+		if args[0] == "tag" && args[1] == "-l" {
+			return "plugin/my-plugin/v2\n", nil
+		}
+		if args[0] == "rev-parse" {
+			return "abcdef0123456789abcdef0123456789abcdef01\n", nil
+		}
+		if args[0] == "remote" {
+			return "https://github.com/owner/repo.git\n", nil
+		}
+		return "", nil
+	})
+
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = origStdout })
+
+	err = runReleasePlugin(releasePluginCmd, []string{pluginName})
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	stdout := string(out)
+
+	require.True(t, strings.Contains(stdout, "tag=plugin/my-plugin/v3"), "stdout=%s", stdout)
+	require.True(t, strings.Contains(stdout, "next_version=3"), "stdout=%s", stdout)
+	require.True(t, strings.Contains(stdout, "message=Release my-plugin"), "stdout=%s", stdout)
+}
 
 func TestContainsTemplate(t *testing.T) {
 	tests := []struct {

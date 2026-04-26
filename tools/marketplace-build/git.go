@@ -51,10 +51,10 @@ func GetRepoInfo() (owner, repo string, err error) {
 	return "", "", fmt.Errorf("could not parse github repo from origin URL: %s", url)
 }
 
-// GetLatestTagVersion finds the highest version from plugin/{plugin}#* tags
+// GetLatestTagVersion finds the highest version from plugin/{plugin}/v* tags
 // Returns 0 if no tags exist
 func GetLatestTagVersion(plugin string) (int, error) {
-	prefix := fmt.Sprintf("plugin/%s#", plugin)
+	prefix := fmt.Sprintf("plugin/%s/v", plugin)
 	tags, err := ListTagsWithPrefix(prefix)
 	if err != nil {
 		return 0, nil
@@ -67,23 +67,28 @@ func GetLatestTagVersion(plugin string) (int, error) {
 	// Find highest version
 	highest := 0
 	for _, tag := range tags {
-		// Skip 'latest' pointer tags
-		if strings.HasSuffix(tag, "#latest") {
-			continue
-		}
-
-		// Extract version from tag like "plugin/my-plugin#3"
-		hashParts := strings.SplitN(tag, "#", 2)
-		if len(hashParts) == 2 {
-			var v int
-			fmt.Sscanf(hashParts[1], "%d", &v)
-			if v > highest {
-				highest = v
-			}
+		v := parsePluginTagVersion(tag)
+		if v > highest {
+			highest = v
 		}
 	}
 
 	return highest, nil
+}
+
+// parsePluginTagVersion extracts the numeric version from a plugin/{name}/v{N} tag.
+// Returns 0 for tags that don't match the format (e.g. plugin/{name}/latest pointer).
+func parsePluginTagVersion(tag string) int {
+	parts := strings.Split(tag, "/")
+	if len(parts) != 3 || parts[0] != "plugin" {
+		return 0
+	}
+	if !strings.HasPrefix(parts[2], "v") {
+		return 0
+	}
+	var v int
+	fmt.Sscanf(parts[2][1:], "%d", &v)
+	return v
 }
 
 // HasCommitsAfterTag checks if there are commits to pluginPath after the latest version tag
@@ -95,7 +100,7 @@ func HasCommitsAfterTag(plugin, pluginPath string) (bool, error) {
 		return true, nil
 	}
 
-	tagName := fmt.Sprintf("plugin/%s#%d", plugin, version)
+	tagName := fmt.Sprintf("plugin/%s/v%d", plugin, version)
 
 	// Read mh.plugin.json from the tag to get source commit
 	out, err := runGit("show", fmt.Sprintf("%s:mh.plugin.json", tagName))
@@ -241,7 +246,7 @@ func runGitNoOutputReal(args ...string) error {
 	return cmd.Run()
 }
 
-// ListPluginNames returns unique plugin names from plugin/{name}#* tags
+// ListPluginNames returns unique plugin names from plugin/{name}/v* tags
 func ListPluginNames() ([]string, error) {
 	tags, err := ListTagsWithPrefix("plugin/")
 	if err != nil {
@@ -251,16 +256,15 @@ func ListPluginNames() ([]string, error) {
 	seen := make(map[string]bool)
 	var names []string
 	for _, tag := range tags {
-		// Parse plugin/{name}#{version}
-		hashParts := strings.SplitN(tag, "#", 2)
-		if len(hashParts) != 2 {
+		// Parse plugin/{name}/v{version} — require exactly 3 path parts
+		parts := strings.Split(tag, "/")
+		if len(parts) != 3 || parts[0] != "plugin" {
 			continue
 		}
-		pathParts := strings.SplitN(hashParts[0], "/", 2)
-		if len(pathParts) != 2 || pathParts[0] != "plugin" {
+		if !strings.HasPrefix(parts[2], "v") {
 			continue
 		}
-		name := pathParts[1]
+		name := parts[1]
 		if !seen[name] {
 			seen[name] = true
 			names = append(names, name)
@@ -269,22 +273,14 @@ func ListPluginNames() ([]string, error) {
 	return names, nil
 }
 
-// ListPluginTags returns all tags for a specific plugin, sorted by version ascending
+// ListPluginTags returns all versioned tags for a specific plugin (excluding /latest pointer)
 func ListPluginTags(plugin string) ([]string, error) {
-	prefix := fmt.Sprintf("plugin/%s#", plugin)
+	prefix := fmt.Sprintf("plugin/%s/v", plugin)
 	tags, err := ListTagsWithPrefix(prefix)
 	if err != nil {
 		return nil, err
 	}
-
-	// Filter out #latest pointer
-	var result []string
-	for _, tag := range tags {
-		if !strings.HasSuffix(tag, "#latest") {
-			result = append(result, tag)
-		}
-	}
-	return result, nil
+	return tags, nil
 }
 
 // RemoteBranchExists checks if a branch exists on the remote
