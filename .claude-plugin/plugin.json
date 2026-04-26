@@ -1,0 +1,16 @@
+{
+	"author": {
+		"name": "wow-look-at-my-code"
+	},
+	"description": "MCP server for Chrome DevTools Protocol - inspect, debug, and interact with Chrome browser pages",
+	"keywords": [
+		"chrome",
+		"devtools",
+		"browser",
+		"debugging",
+		"mcp"
+	],
+	"mcpServers": "./.mcp.json",
+	"name": "chrome-devtools",
+	"version": "3"
+}
