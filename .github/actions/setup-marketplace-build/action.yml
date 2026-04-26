@@ -15,6 +15,7 @@ runs:
     - uses: wow-look-at-my/go-toolchain@latest
       with:
         working-directory: "tools/marketplace-build"
+        timeout: "15"
 
     - run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
       shell: bash
