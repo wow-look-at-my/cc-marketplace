@@ -1,0 +1,963 @@
+{
+	"commands": [
+		{
+			"allowedFlags": "*",
+			"description": "Auto-approve readonly inspection commands",
+			"name": [
+				"ls",
+				"cat",
+				"head",
+				"tail",
+				"file",
+				"wc",
+				"stat",
+				"du",
+				"df",
+				"uname",
+				"uptime",
+				"sw_vers",
+				"arch",
+				"hostinfo",
+				"vm_stat",
+				"whoami",
+				"id",
+				"groups",
+				"pgrep",
+				"which",
+				"whereis",
+				"readlink",
+				"basename",
+				"dirname",
+				"printenv",
+				"shasum",
+				"md5",
+				"strings",
+				"hexdump",
+				"od",
+				"mdfind",
+				"mdls",
+				"locate",
+				"echo",
+				"printf",
+				"true",
+				"false",
+				"test",
+				"[",
+				"date",
+				"hostname",
+				"pwd",
+				"env",
+				"sort",
+				"uniq",
+				"tr",
+				"cut",
+				"diff",
+				"comm",
+				"join",
+				"paste",
+				"column",
+				"expand",
+				"unexpand",
+				"fold",
+				"fmt",
+				"nl",
+				"rev",
+				"tac",
+				"seq",
+				"realpath",
+				"cd",
+				"pkg-config",
+				"pkgconf",
+				"pkg_config",
+				"dig",
+				"base64",
+				"md5sum",
+				"sha1sum",
+				"sha256sum",
+				"sha384sum",
+				"sha512sum",
+				"b2sum",
+				"cksum",
+				"sum",
+				"xxd",
+				"jq",
+				"nproc",
+				"free",
+				"lscpu",
+				"lsblk",
+				"fd",
+				"fdfind",
+				"readelf",
+				"objdump",
+				"nm",
+				"size",
+				"ldd",
+				"ar",
+				"addr2line",
+				"rg"
+			]
+		},
+		{
+			"allowedFlags": "*",
+			"deniedFlags": [
+				"-i",
+				"--in-place"
+			],
+			"description": "Auto-approve readonly yq commands (deny in-place editing)",
+			"name": "yq"
+		},
+		{
+			"bareOnly": true,
+			"description": "Auto-approve bare mount (lists mounted filesystems)",
+			"name": "mount"
+		},
+		{
+			"allowedFlags": "*",
+			"deniedFlags": [
+				"-delete"
+			],
+			"description": "Auto-approve readonly find commands; -exec allowed if sub-command is whitelisted",
+			"execFlags": [
+				"-exec",
+				"-execdir",
+				"-ok",
+				"-okdir"
+			],
+			"name": "find"
+		},
+		{
+			"allowedFlags": "*",
+			"description": "Auto-approve grep (read-only search)",
+			"name": "grep"
+		},
+		{
+			"description": "Auto-approve readonly ldconfig commands",
+			"name": "ldconfig",
+			"requiredFlags": [
+				"-p",
+				"--print-cache",
+				"-v"
+			]
+		},
+		{
+			"description": "Auto-approve readonly go toolchain commands",
+			"name": "go",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"version",
+						"env",
+						"doc"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly git commands",
+			"name": "git",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"status",
+						"diff",
+						"log",
+						"show",
+						"fetch",
+						"ls-files",
+						"ls-tree",
+						"ls-remote",
+						"rev-parse",
+						"rev-list",
+						"describe",
+						"blame",
+						"shortlog",
+						"whatchanged",
+						"reflog",
+						"count-objects",
+						"fsck",
+						"verify-pack",
+						"cat-file",
+						"for-each-ref",
+						"name-rev",
+						"merge-base"
+					]
+				},
+				{
+					"allowedFlags": [
+						"-a",
+						"-r",
+						"-v",
+						"-vv",
+						"--list",
+						"--all",
+						"--remotes",
+						"--verbose"
+					],
+					"name": "branch"
+				},
+				{
+					"allowedFlags": [
+						"-l",
+						"-n",
+						"--list",
+						"--sort"
+					],
+					"name": "tag"
+				},
+				{
+					"allowedFlags": [
+						"-v",
+						"--verbose"
+					],
+					"name": "remote",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"show",
+								"get-url"
+							]
+						}
+					]
+				},
+				{
+					"name": "submodule",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": "status"
+						}
+					]
+				},
+				{
+					"name": "config",
+					"requiredFlags": [
+						"--get",
+						"--list",
+						"--get-all",
+						"--get-regexp",
+						"--get-urlmatch",
+						"--get-color",
+						"--get-colorbool",
+						"-l"
+					]
+				},
+				{
+					"name": "replace",
+					"requiredFlags": [
+						"-l",
+						"--list"
+					]
+				},
+				{
+					"name": "commit-graph",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": "verify"
+						}
+					]
+				},
+				{
+					"name": "push",
+					"requiredFlags": [
+						"--dry-run",
+						"-n"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly GitHub CLI commands",
+			"name": "gh",
+			"subcommands": [
+				{
+					"name": "repo",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"view",
+								"list"
+							]
+						}
+					]
+				},
+				{
+					"name": "issue",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"list",
+								"view",
+								"status"
+							]
+						}
+					]
+				},
+				{
+					"name": "pr",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"list",
+								"view",
+								"status",
+								"diff",
+								"checks"
+							]
+						}
+					]
+				},
+				{
+					"name": [
+						"release",
+						"workflow"
+					],
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"list",
+								"view"
+							]
+						}
+					]
+				},
+				{
+					"name": "run",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": "list"
+						},
+						{
+							"denyWithMessage": "Use 'gh wait-ci' instead for checking CI status",
+							"name": [
+								"view",
+								"watch"
+							]
+						}
+					]
+				},
+				{
+					"name": "search",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"repos",
+								"issues",
+								"prs",
+								"commits",
+								"code"
+							]
+						}
+					]
+				},
+				{
+					"allowedFlags": "*",
+					"name": "browse"
+				},
+				{
+					"name": [
+						"label",
+						"cache"
+					],
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": "list"
+						}
+					]
+				},
+				{
+					"name": "gist",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"list",
+								"view"
+							]
+						}
+					]
+				},
+				{
+					"name": "api",
+					"requireFlagValue": {
+						"allowed": [
+							"GET"
+						],
+						"default": "GET",
+						"flags": [
+							"-X",
+							"--method"
+						]
+					}
+				}
+			]
+		},
+		{
+			"allowedFlags": [
+				"--version",
+				"-v",
+				"--help",
+				"-h"
+			],
+			"description": "Auto-approve readonly claude CLI commands",
+			"helpAlwaysAllowed": true,
+			"name": "claude",
+			"subcommands": [
+				{
+					"allowedFlags": [
+						"--help",
+						"-h"
+					],
+					"name": "mcp",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"list",
+								"get"
+							]
+						}
+					]
+				},
+				{
+					"allowedFlags": [
+						"--help",
+						"-h"
+					],
+					"name": "plugin",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": "list"
+						},
+						{
+							"name": "marketplace",
+							"subcommands": [
+								{
+									"allowedFlags": "*",
+									"name": "list"
+								}
+							]
+						}
+					]
+				},
+				{
+					"allowedFlags": [
+						"--help",
+						"-h"
+					],
+					"name": "config",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"list",
+								"get"
+							]
+						}
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly just commands",
+			"name": "just",
+			"requiredFlags": [
+				"--list",
+				"-l",
+				"--summary",
+				"--dump",
+				"--evaluate",
+				"--help",
+				"-h"
+			]
+		},
+		{
+			"description": "Auto-approve docker compose run --rm",
+			"name": "docker",
+			"subcommands": [
+				{
+					"flagsWithValue": [
+						"-f",
+						"--file",
+						"-p",
+						"--project-name",
+						"--env-file",
+						"--profile",
+						"--progress",
+						"--ansi"
+					],
+					"name": "compose",
+					"subcommands": [
+						{
+							"name": "run",
+							"requiredFlags": [
+								"--rm"
+							]
+						}
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve docker-compose run --rm",
+			"flagsWithValue": [
+				"-f",
+				"--file",
+				"-p",
+				"--project-name",
+				"--env-file",
+				"--profile",
+				"--progress",
+				"--ansi"
+			],
+			"name": "docker-compose",
+			"subcommands": [
+				{
+					"name": "run",
+					"requiredFlags": [
+						"--rm"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly docker-compose commands",
+			"flagsWithValue": [
+				"-f",
+				"--file",
+				"-p",
+				"--project-name",
+				"--env-file",
+				"--profile",
+				"--progress",
+				"--ansi"
+			],
+			"name": "docker-compose",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"ls",
+						"ps",
+						"top",
+						"images",
+						"logs",
+						"config",
+						"version"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly zpool commands",
+			"name": "zpool",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"list",
+						"status",
+						"history",
+						"get",
+						"iostat",
+						"events"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly zfs commands",
+			"name": "zfs",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"list",
+						"get",
+						"diff",
+						"holds"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly docker commands",
+			"name": "docker",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"inspect",
+						"ps",
+						"images",
+						"logs",
+						"version",
+						"info",
+						"top",
+						"port",
+						"diff",
+						"history",
+						"stats",
+						"events",
+						"search"
+					]
+				},
+				{
+					"name": "image",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect",
+								"history"
+							]
+						}
+					]
+				},
+				{
+					"name": "container",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect",
+								"logs",
+								"top",
+								"stats",
+								"port",
+								"diff"
+							]
+						}
+					]
+				},
+				{
+					"name": "network",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							]
+						}
+					]
+				},
+				{
+					"name": "volume",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							]
+						}
+					]
+				},
+				{
+					"name": "context",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"show",
+								"inspect"
+							]
+						}
+					]
+				},
+				{
+					"name": "config",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							]
+						}
+					]
+				},
+				{
+					"name": "secret",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							]
+						}
+					]
+				},
+				{
+					"name": "service",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect",
+								"logs",
+								"ps"
+							]
+						}
+					]
+				},
+				{
+					"name": "node",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect",
+								"ps"
+							]
+						}
+					]
+				},
+				{
+					"name": "stack",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"ps",
+								"services"
+							]
+						}
+					]
+				},
+				{
+					"name": "plugin",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"list",
+								"inspect"
+							]
+						}
+					]
+				},
+				{
+					"name": "system",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"info",
+								"df",
+								"events"
+							]
+						}
+					]
+				},
+				{
+					"name": "manifest",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": "inspect"
+						}
+					]
+				},
+				{
+					"name": "buildx",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"inspect",
+								"du",
+								"version"
+							]
+						}
+					]
+				},
+				{
+					"flagsWithValue": [
+						"-f",
+						"--file",
+						"-p",
+						"--project-name",
+						"--env-file",
+						"--profile",
+						"--progress",
+						"--ansi"
+					],
+					"name": "compose",
+					"subcommands": [
+						{
+							"allowedFlags": "*",
+							"name": [
+								"ls",
+								"ps",
+								"top",
+								"images",
+								"logs",
+								"config",
+								"version"
+							]
+						}
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly apt commands",
+			"name": "apt",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"list",
+						"show",
+						"search",
+						"depends",
+						"rdepends",
+						"policy",
+						"madison"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly apt-cache commands",
+			"name": "apt-cache",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"search",
+						"show",
+						"showpkg",
+						"showsrc",
+						"depends",
+						"rdepends",
+						"policy",
+						"madison",
+						"pkgnames",
+						"dump",
+						"dumpavail",
+						"stats",
+						"unmet",
+						"dotty",
+						"xvcg"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly apt-mark commands",
+			"name": "apt-mark",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"showmanual",
+						"showauto",
+						"showhold",
+						"showinstall",
+						"showremove",
+						"showpurge"
+					]
+				}
+			]
+		},
+		{
+			"description": "Auto-approve readonly dpkg commands",
+			"name": "dpkg",
+			"requiredFlags": [
+				"-L",
+				"--listfiles",
+				"-l",
+				"--list",
+				"-s",
+				"--status",
+				"-p",
+				"--print-avail",
+				"-S",
+				"--search",
+				"--get-selections",
+				"--print-architecture",
+				"--print-foreign-architectures"
+			]
+		},
+		{
+			"allowedFlags": "*",
+			"description": "Auto-approve readonly dpkg-query commands",
+			"name": "dpkg-query"
+		},
+		{
+			"description": "Auto-approve readonly homebrew commands",
+			"name": "brew",
+			"subcommands": [
+				{
+					"allowedFlags": "*",
+					"name": [
+						"list",
+						"ls",
+						"info",
+						"search",
+						"config",
+						"doctor",
+						"deps",
+						"uses",
+						"outdated",
+						"leaves",
+						"desc",
+						"cat",
+						"home",
+						"log",
+						"options",
+						"formula",
+						"--version",
+						"--prefix",
+						"--cellar",
+						"--repository",
+						"--cache",
+						"analytics",
+						"commands",
+						"which-formula",
+						"tap-info",
+						"style",
+						"shellenv"
+					]
+				},
+				{
+					"allowedFlags": [],
+					"name": "tap"
+				}
+			]
+		}
+	]
+}
