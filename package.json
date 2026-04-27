@@ -1,0 +1,5 @@
+{
+  "description": "Detects permission-seeking patterns in assistant messages and blocks the stop with a lecture about autonomy",
+  "name": "wow-look-at-my-detect-permission-seeking",
+  "version": "13.0.0"
+}
