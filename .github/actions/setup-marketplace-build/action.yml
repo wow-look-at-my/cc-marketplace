@@ -14,7 +14,9 @@ runs:
       shell: bash
       run: git fetch --tags --force
 
-    - uses: extractions/setup-just@v2
+    - name: Install just
+      shell: bash
+      run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
     - uses: wow-look-at-my/go-toolchain@latest
       if: inputs.artifact-name == ''

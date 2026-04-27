@@ -3,6 +3,8 @@ name: Release Plugins
 on:
   push:
   delete:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -23,7 +25,7 @@ jobs:
       - run: marketplace-build cleanup-branch ${{ github.event.ref }}
 
   prepare:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -45,11 +47,12 @@ jobs:
           path: tools/marketplace-build/build/marketplace-build
 
       - id: matrix
+        if: github.event_name == 'push'
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
   build:
     needs: prepare
-    if: needs.prepare.outputs.has_changes == 'true'
+    if: github.event_name == 'push' && needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -100,7 +103,7 @@ jobs:
 
   pages:
     needs: [prepare, build]
-    if: ${{ !cancelled() && !failure() }}
+    if: github.event_name == 'push' && !cancelled() && !failure()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -137,3 +140,49 @@ jobs:
         id: deployment
         if: github.ref == 'refs/heads/master'
         uses: actions/deploy-pages@v4
+
+  pr-pages:
+    needs: prepare
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-marketplace-build
+        with:
+          artifact-name: marketplace-build-cli
+
+      - name: Build npm registry
+        id: registry
+        run: marketplace-build build-npm-registry >> $GITHUB_OUTPUT
+
+      - name: Add marketplace.json to registry
+        run: |
+          marketplace-build update-marketplace > /tmp/marketplace-out.txt
+          src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
+          cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-registry
+          path: ${{ steps.registry.outputs.registry_dir }}
+
+  deploy-preview:
+    needs: pr-pages
+    if: github.event_name == 'pull_request' && always()
+    permissions:
+      contents: write
+      pull-requests: write
+      pages: write
+      id-token: write
+      statuses: write
+    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@4f248afac2702fab9d8bbffff53335b120dbf463
+    with:
+      artifact-name: npm-registry
+    secrets: inherit
