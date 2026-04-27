@@ -59,11 +59,6 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - uses: wow-look-at-my-code/actions@smart-cache#latest
-        with:
-          path: ~/go/pkg/mod ~/.cache/go-build
-          key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
-
       - name: Build
         run: marketplace-build build-plugin ${{ matrix.plugin }}
         env:
