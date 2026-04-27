@@ -1,0 +1,5 @@
+{
+  "description": "Blocks direct go build/test commands - use go-toolchain instead",
+  "name": "wow-look-at-my-recommend-go-toolchain",
+  "version": "13.0.0"
+}
