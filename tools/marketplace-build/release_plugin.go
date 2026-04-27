@@ -73,12 +73,55 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to cook plugin contents: %w", err)
 	}
 
+	// Generate package.json for GitHub Packages (npm) publishing
+	npmPackageName := fmt.Sprintf("@%s/%s", owner, pluginName)
+	npmVersion := fmt.Sprintf("%d.0.0", newVersion)
+	if err := writeNPMPackageJSON(tmpDir, npmPackageName, npmVersion); err != nil {
+		return fmt.Errorf("failed to write package.json: %w", err)
+	}
+
 	// Output for GitHub Actions (parsed by workflow)
 	fmt.Printf("source_dir=%s\n", tmpDir)
+	fmt.Printf("package_name=%s\n", npmPackageName)
+	fmt.Printf("package_version=%s\n", npmVersion)
 	fmt.Printf("message=Release %s\n", pluginName)
 
 	fmt.Fprintf(os.Stderr, "Prepared release in %s\n", tmpDir)
 	return nil
+}
+
+func writeNPMPackageJSON(dir, packageName, version string) error {
+	description := ""
+	license := ""
+	pluginJSONPath := filepath.Join(dir, ".claude-plugin", "plugin.json")
+	if data, err := os.ReadFile(pluginJSONPath); err == nil {
+		var pluginJSON map[string]interface{}
+		if json.Unmarshal(data, &pluginJSON) == nil {
+			if desc, ok := pluginJSON["description"].(string); ok {
+				description = desc
+			}
+			if lic, ok := pluginJSON["license"].(string); ok {
+				license = lic
+			}
+		}
+	}
+
+	pkg := map[string]interface{}{
+		"name":    packageName,
+		"version": version,
+		"publishConfig": map[string]interface{}{
+			"registry": "https://npm.pkg.github.com",
+		},
+	}
+	if description != "" {
+		pkg["description"] = description
+	}
+	if license != "" {
+		pkg["license"] = license
+	}
+
+	data, _ := json.MarshalIndent(pkg, "", "  ")
+	return os.WriteFile(filepath.Join(dir, "package.json"), data, 0644)
 }
 
 type releaseMetadata struct {

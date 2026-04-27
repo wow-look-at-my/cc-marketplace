@@ -127,15 +127,13 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 	fmt.Fprintf(f, "## Marketplace Updated\n\n")
 	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)
 	fmt.Fprintf(f, "**Marketplace:** [marketplace.json](%s)\n\n", marketplaceURL)
-	fmt.Fprintf(f, "| Plugin | Version |\n")
-	fmt.Fprintf(f, "|--------|--------|\n")
+	fmt.Fprintf(f, "| Plugin | npm package | Version |\n")
+	fmt.Fprintf(f, "|--------|-------------|--------|\n")
 
 	for plugin, tag := range pluginRefs {
-		// Extract version from tag (plugin/vN -> vN)
-		parts := strings.Split(tag, "/")
-		version := parts[len(parts)-1]
-		tagURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s", owner, repo, tag)
-		fmt.Fprintf(f, "| %s | [%s](%s) |\n", plugin, version, tagURL)
+		version := semverFromTag(tag)
+		pkgName := fmt.Sprintf("@%s/%s", owner, plugin)
+		fmt.Fprintf(f, "| %s | `%s` | `%s` |\n", plugin, pkgName, version)
 	}
 }
 
@@ -200,15 +198,16 @@ func buildPluginsArray(pluginRefs map[string]string, existingMarketplace map[str
 		}
 	}
 
-	owner, repo, _ := GetRepoInfo()
+	owner, _, _ := GetRepoInfo()
 
 	for pluginName, tagRef := range pluginRefs {
 		plugin := map[string]interface{}{
 			"name": pluginName,
 			"source": map[string]interface{}{
-				"source": "github",
-				"repo":   fmt.Sprintf("%s/%s", owner, repo),
-				"ref":    tagRef,
+				"source":   "npm",
+				"package":  fmt.Sprintf("@%s/%s", owner, pluginName),
+				"version":  semverFromTag(tagRef),
+				"registry": "https://npm.pkg.github.com",
 			},
 		}
 
@@ -260,6 +259,17 @@ func buildPluginsArray(pluginRefs map[string]string, existingMarketplace map[str
 	}
 
 	return plugins
+}
+
+// semverFromTag converts a plugin tag (e.g. "plugin/jq#42") to a semver string ("42.0.0").
+func semverFromTag(tag string) string {
+	parts := strings.Split(tag, "#")
+	if len(parts) != 2 {
+		return "1.0.0"
+	}
+	var v int
+	fmt.Sscanf(parts[1], "%d", &v)
+	return fmt.Sprintf("%d.0.0", v)
 }
 
 // readPluginJSONFromTag reads and parses .claude-plugin/plugin.json from a tag

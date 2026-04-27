@@ -147,3 +147,62 @@ func TestCookPluginForRelease(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "key: val", string(data))
 }
+
+func TestWriteNPMPackageJSON(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755))
+
+	pluginJSON := `{"name":"my-plugin","description":"Does stuff","license":"MIT"}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(pluginJSON), 0644))
+
+	err := writeNPMPackageJSON(dir, "@owner/my-plugin", "42.0.0")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	require.NoError(t, err)
+
+	var pkg map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &pkg))
+	require.Equal(t, "@owner/my-plugin", pkg["name"])
+	require.Equal(t, "42.0.0", pkg["version"])
+	require.Equal(t, "Does stuff", pkg["description"])
+	require.Equal(t, "MIT", pkg["license"])
+	pub := pkg["publishConfig"].(map[string]interface{})
+	require.Equal(t, "https://npm.pkg.github.com", pub["registry"])
+}
+
+func TestWriteNPMPackageJSON_NoPluginJSON(t *testing.T) {
+	dir := t.TempDir()
+
+	err := writeNPMPackageJSON(dir, "@owner/empty-plugin", "1.0.0")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	require.NoError(t, err)
+
+	var pkg map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &pkg))
+	require.Equal(t, "@owner/empty-plugin", pkg["name"])
+	require.Equal(t, "1.0.0", pkg["version"])
+	_, hasDesc := pkg["description"]
+	require.False(t, hasDesc)
+	_, hasLicense := pkg["license"]
+	require.False(t, hasLicense)
+}
+
+func TestWriteNPMPackageJSON_BadPluginJSON(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte("{bad json}"), 0644))
+
+	err := writeNPMPackageJSON(dir, "@owner/plugin", "5.0.0")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	require.NoError(t, err)
+	var pkg map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &pkg))
+	require.Equal(t, "@owner/plugin", pkg["name"])
+	_, hasDesc := pkg["description"]
+	require.False(t, hasDesc)
+}

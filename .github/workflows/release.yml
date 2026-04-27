@@ -50,6 +50,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -80,6 +81,11 @@ jobs:
 
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
+
+      - name: Publish to GitHub npm registry
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{ github.token }}" >> ~/.npmrc
+          npm publish "${{ steps.release.outputs.source_dir }}" --registry https://npm.pkg.github.com
 
       - uses: wow-look-at-my-code/actions@orphan-release#latest
         with:

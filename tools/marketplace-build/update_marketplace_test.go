@@ -28,7 +28,8 @@ func TestWriteSummary(t *testing.T) {
 	require.Contains(t, content, "## Marketplace Updated")
 	require.Contains(t, content, "master")
 	require.Contains(t, content, "my-plugin")
-	require.Contains(t, content, "plugin/my-plugin#3")
+	require.Contains(t, content, "@owner/my-plugin")
+	require.Contains(t, content, "3.0.0")
 }
 
 func TestWriteSummary_BadPath(t *testing.T) {
@@ -332,8 +333,10 @@ func TestBuildPluginsArray(t *testing.T) {
 	require.Equal(t, "development", p["category"])
 	// Source set correctly
 	src := p["source"].(map[string]interface{})
-	require.Equal(t, "github", src["source"])
-	require.Equal(t, "plugin/alpha#3", src["ref"])
+	require.Equal(t, "npm", src["source"])
+	require.Equal(t, "@test-owner/alpha", src["package"])
+	require.Equal(t, "3.0.0", src["version"])
+	require.Equal(t, "https://npm.pkg.github.com", src["registry"])
 }
 
 func TestBuildPluginsArray_WithMCP(t *testing.T) {
@@ -536,4 +539,10 @@ func TestRunUpdateMarketplace(t *testing.T) {
 	cmd := updateMarketplaceCmd
 	err = runUpdateMarketplace(cmd, nil)
 	require.NoError(t, err)
+}
+
+func TestSemverFromTag(t *testing.T) {
+	require.Equal(t, "42.0.0", semverFromTag("plugin/jq#42"))
+	require.Equal(t, "1.0.0", semverFromTag("plugin/foo#1"))
+	require.Equal(t, "1.0.0", semverFromTag("bad-tag"))
 }
