@@ -36,7 +36,13 @@ jobs:
     deploy-preview:
         needs: build
         if: always()
-        uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@main
+        permissions:
+            contents: write
+            pull-requests: write
+            pages: write
+            id-token: write
+            statuses: write
+        uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@4f248afac2702fab9d8bbffff53335b120dbf463
         with:
             artifact-name: npm-registry
         secrets: inherit
