@@ -66,6 +66,15 @@ jobs:
         with:
           artifact-name: marketplace-build-cli
 
+      - name: Build Go plugin
+        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+        uses: wow-look-at-my/go-toolchain@latest
+        with:
+          working-directory: plugins/${{ matrix.plugin }}
+          os: linux,darwin
+          arch: amd64,arm64
+          upload-artifacts: 'false'
+
       - name: Build
         run: marketplace-build build-plugin ${{ matrix.plugin }}
         env:

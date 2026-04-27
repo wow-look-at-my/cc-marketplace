@@ -31,15 +31,8 @@ func runTestPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("plugin not found: %s", pluginPath)
 	}
 
-	// Go plugins are tested by go-toolchain during build-plugin (vet + test + build).
-	// No need to re-run tests here.
-	if hasGoFiles(pluginPath) {
-		fmt.Printf("Testing %s\n", pluginName)
-		fmt.Printf("  (Go plugin — already tested by go-toolchain during build)\n")
-		return nil
-	}
-
+	// Go plugins are built and tested by the wow-look-at-my/go-toolchain action in CI.
 	fmt.Printf("Testing %s\n", pluginName)
-	fmt.Printf("  (no tests to run)\n")
+	fmt.Printf("  (no additional tests to run)\n")
 	return nil
 }
