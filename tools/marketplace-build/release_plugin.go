@@ -73,8 +73,8 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to cook plugin contents: %w", err)
 	}
 
-	// Generate package.json for GitHub Packages (npm) publishing
-	npmPackageName := fmt.Sprintf("@%s/%s", owner, pluginName)
+	// Generate package.json for npm registry publishing
+	npmPackageName := fmt.Sprintf("%s-%s", owner, pluginName)
 	npmVersion := fmt.Sprintf("%d.0.0", newVersion)
 	if err := writeNPMPackageJSON(tmpDir, npmPackageName, npmVersion); err != nil {
 		return fmt.Errorf("failed to write package.json: %w", err)
@@ -109,9 +109,6 @@ func writeNPMPackageJSON(dir, packageName, version string) error {
 	pkg := map[string]interface{}{
 		"name":    packageName,
 		"version": version,
-		"publishConfig": map[string]interface{}{
-			"registry": "https://npm.pkg.github.com",
-		},
 	}
 	if description != "" {
 		pkg["description"] = description

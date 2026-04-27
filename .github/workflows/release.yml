@@ -50,7 +50,6 @@ jobs:
     permissions:
       contents: write
       id-token: write
-      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -81,11 +80,6 @@ jobs:
 
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
-
-      - name: Publish to GitHub npm registry
-        run: |
-          echo "//npm.pkg.github.com/:_authToken=${{ github.token }}" >> ~/.npmrc
-          npm publish "${{ steps.release.outputs.source_dir }}" --registry https://npm.pkg.github.com
 
       - uses: wow-look-at-my-code/actions@orphan-release#latest
         with:
@@ -133,3 +127,34 @@ jobs:
           git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
           claude plugin marketplace add ${{ github.repository }}#${{ steps.marketplace.outputs.name }}#latest
           claude plugin marketplace list
+
+  pages:
+    needs: [prepare, build, update]
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      pages: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - name: Build npm registry
+        id: registry
+        run: marketplace-build build-npm-registry >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.registry.outputs.registry_dir }}
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

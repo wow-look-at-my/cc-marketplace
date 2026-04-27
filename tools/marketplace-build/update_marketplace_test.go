@@ -28,7 +28,7 @@ func TestWriteSummary(t *testing.T) {
 	require.Contains(t, content, "## Marketplace Updated")
 	require.Contains(t, content, "master")
 	require.Contains(t, content, "my-plugin")
-	require.Contains(t, content, "@owner/my-plugin")
+	require.Contains(t, content, "owner-my-plugin")
 	require.Contains(t, content, "3.0.0")
 }
 
@@ -334,9 +334,9 @@ func TestBuildPluginsArray(t *testing.T) {
 	// Source set correctly
 	src := p["source"].(map[string]interface{})
 	require.Equal(t, "npm", src["source"])
-	require.Equal(t, "@test-owner/alpha", src["package"])
+	require.Equal(t, "test-owner-alpha", src["package"])
 	require.Equal(t, "3.0.0", src["version"])
-	require.Equal(t, "https://npm.pkg.github.com", src["registry"])
+	require.Equal(t, "https://test-owner.github.io/test-repo", src["registry"])
 }
 
 func TestBuildPluginsArray_WithMCP(t *testing.T) {

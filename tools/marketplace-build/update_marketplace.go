@@ -127,12 +127,12 @@ func writeSummary(path string, pluginRefs map[string]string, owner, repo, branch
 	fmt.Fprintf(f, "## Marketplace Updated\n\n")
 	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)
 	fmt.Fprintf(f, "**Marketplace:** [marketplace.json](%s)\n\n", marketplaceURL)
-	fmt.Fprintf(f, "| Plugin | npm package | Version |\n")
-	fmt.Fprintf(f, "|--------|-------------|--------|\n")
+	fmt.Fprintf(f, "| Plugin | Package | Version |\n")
+	fmt.Fprintf(f, "|--------|---------|--------|\n")
 
 	for plugin, tag := range pluginRefs {
 		version := semverFromTag(tag)
-		pkgName := fmt.Sprintf("@%s/%s", owner, plugin)
+		pkgName := fmt.Sprintf("%s-%s", owner, plugin)
 		fmt.Fprintf(f, "| %s | `%s` | `%s` |\n", plugin, pkgName, version)
 	}
 }
@@ -198,16 +198,17 @@ func buildPluginsArray(pluginRefs map[string]string, existingMarketplace map[str
 		}
 	}
 
-	owner, _, _ := GetRepoInfo()
+	owner, repo, _ := GetRepoInfo()
+	pagesRegistry := fmt.Sprintf("https://%s.github.io/%s", owner, repo)
 
 	for pluginName, tagRef := range pluginRefs {
 		plugin := map[string]interface{}{
 			"name": pluginName,
 			"source": map[string]interface{}{
 				"source":   "npm",
-				"package":  fmt.Sprintf("@%s/%s", owner, pluginName),
+				"package":  fmt.Sprintf("%s-%s", owner, pluginName),
 				"version":  semverFromTag(tagRef),
-				"registry": "https://npm.pkg.github.com",
+				"registry": pagesRegistry,
 			},
 		}
 
