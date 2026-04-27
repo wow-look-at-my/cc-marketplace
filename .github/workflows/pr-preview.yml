@@ -1,0 +1,42 @@
+name: PR Preview
+
+on:
+    pull_request:
+        types: [opened, reopened, synchronize, closed]
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        if: github.event.action != 'closed'
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - uses: ./.github/actions/setup-marketplace-build
+
+            - name: Build npm registry
+              id: registry
+              run: marketplace-build build-npm-registry >> $GITHUB_OUTPUT
+
+            - name: Add marketplace.json to registry
+              run: |
+                  marketplace-build update-marketplace > /tmp/marketplace-out.txt
+                  src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
+                  cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: npm-registry
+                  path: ${{ steps.registry.outputs.registry_dir }}
+
+    deploy-preview:
+        needs: build
+        if: always()
+        uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@main
+        with:
+            artifact-name: npm-registry
+        secrets: inherit
