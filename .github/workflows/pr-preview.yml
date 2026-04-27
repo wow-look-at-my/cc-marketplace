@@ -5,9 +5,9 @@ on:
         types: [opened, reopened, synchronize, closed]
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
+    prepare:
         if: github.event.action != 'closed'
+        runs-on: ubuntu-latest
         permissions:
             contents: read
             id-token: write
@@ -17,6 +17,27 @@ jobs:
                   fetch-depth: 0
 
             - uses: ./.github/actions/setup-marketplace-build
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: marketplace-build-cli
+                  path: tools/marketplace-build/build/marketplace-build
+
+    build:
+        needs: prepare
+        if: github.event.action != 'closed'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - uses: ./.github/actions/setup-marketplace-build
+              with:
+                  artifact-name: marketplace-build-cli
 
             - name: Build npm registry
               id: registry
