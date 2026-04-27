@@ -1,0 +1,5 @@
+{
+  "description": "Rewrites Bash commands to remove unnecessary 2\u003e\u00261, || true, | head, | tail, and set -e",
+  "name": "wow-look-at-my-cleanup-bash-cmds",
+  "version": "13.0.0"
+}
