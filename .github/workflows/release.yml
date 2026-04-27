@@ -102,7 +102,7 @@ jobs:
 
   pages:
     needs: [prepare, build]
-    if: github.event_name == 'push' && !cancelled() && !failure()
+    if: '!cancelled() && !failure()'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
