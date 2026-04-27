@@ -1,0 +1,16 @@
+{
+	"author": {
+		"name": "wow-look-at-my-code"
+	},
+	"description": "MCP server wrapping jq for JSON filtering, querying, and transforming without Bash permission prompts",
+	"keywords": [
+		"jq",
+		"json",
+		"filter",
+		"query",
+		"mcp"
+	],
+	"mcpServers": "./.mcp.json",
+	"name": "jq",
+	"version": "12"
+}
