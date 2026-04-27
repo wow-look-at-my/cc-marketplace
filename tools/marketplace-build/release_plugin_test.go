@@ -32,6 +32,27 @@ func TestContainsTemplate(t *testing.T) {
 	}
 }
 
+func TestIsGoSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		want     bool
+	}{
+		{"go file", "hook.go", true},
+		{"go mod", "go.mod", true},
+		{"go sum", "go.sum", true},
+		{"yaml", "config.yaml", false},
+		{"json", "plugin.json", false},
+		{"md", "README.md", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, isGoSource(tt.filename))
+		})
+	}
+}
+
 func TestCookJSONForRelease_PluginJSON(t *testing.T) {
 	input := `{
 		"$schema": "../../schema.json",
@@ -104,6 +125,12 @@ func TestCookPluginForRelease(t *testing.T) {
 	// Non-JSON file in .claude-plugin
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".claude-plugin", "config.yaml"), []byte("key: val"), 0644))
 
+	// Go source files — should be skipped
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "cmd"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "cmd", "main.go"), []byte("package main"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module test"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "go.sum"), []byte(""), 0644))
+
 	meta := releaseMetadata{
 		SourceCommit: "abc123",
 		SourceURL:    "https://github.com/test/repo/tree/abc123/plugins/test",
@@ -146,6 +173,14 @@ func TestCookPluginForRelease(t *testing.T) {
 	data, err = os.ReadFile(filepath.Join(dstDir, ".claude-plugin", "config.yaml"))
 	require.NoError(t, err)
 	require.Equal(t, "key: val", string(data))
+
+	// Go source files skipped
+	_, err = os.Stat(filepath.Join(dstDir, "cmd", "main.go"))
+	require.True(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(dstDir, "go.mod"))
+	require.True(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(dstDir, "go.sum"))
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestWriteNPMPackageJSON(t *testing.T) {

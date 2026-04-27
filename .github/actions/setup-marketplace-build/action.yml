@@ -1,6 +1,12 @@
 name: Setup marketplace-build
 description: Build or restore cached marketplace-build CLI
 
+inputs:
+  artifact-name:
+    description: If set, download this artifact instead of building with go-toolchain
+    required: false
+    default: ''
+
 runs:
   using: composite
   steps:
@@ -11,8 +17,24 @@ runs:
     - uses: extractions/setup-just@v2
 
     - uses: wow-look-at-my/go-toolchain@latest
+      if: inputs.artifact-name == ''
       with:
         working-directory: "tools/marketplace-build"
 
-    - run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
+    - uses: actions/download-artifact@v4
+      if: inputs.artifact-name != ''
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: /tmp/marketplace-build-dl
+
+    - name: Install marketplace-build (from artifact)
+      if: inputs.artifact-name != ''
       shell: bash
+      run: |
+        chmod +x /tmp/marketplace-build-dl/marketplace-build
+        cp /tmp/marketplace-build-dl/marketplace-build /usr/local/bin/marketplace-build
+
+    - name: Install marketplace-build (from build)
+      if: inputs.artifact-name == ''
+      shell: bash
+      run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"

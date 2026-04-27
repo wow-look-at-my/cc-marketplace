@@ -149,8 +149,8 @@ func cookPluginForRelease(srcDir, dstDir string, version int, meta releaseMetada
 			return os.MkdirAll(dstPath, info.Mode())
 		}
 
-		// Skip .template. files
-		if containsTemplate(info.Name()) {
+		// Skip .template. files and Go source files (binaries are in build/)
+		if containsTemplate(info.Name()) || isGoSource(info.Name()) {
 			return nil
 		}
 
@@ -175,6 +175,10 @@ func cookPluginForRelease(srcDir, dstDir string, version int, meta releaseMetada
 
 func containsTemplate(filename string) bool {
 	return strings.Contains(filename, ".template.")
+}
+
+func isGoSource(filename string) bool {
+	return filepath.Ext(filename) == ".go" || filename == "go.mod" || filename == "go.sum"
 }
 
 func cookJSONForRelease(data []byte, version int, relPath string) ([]byte, error) {
