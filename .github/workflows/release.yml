@@ -130,7 +130,7 @@ jobs:
 
   pages:
     needs: [prepare, build, update]
-    if: ${{ !cancelled() && !failure() }}
+    if: ${{ !cancelled() && !failure() && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
