@@ -87,14 +87,18 @@ jobs:
 
       - name: Prepare Release
         id: release
+        if: github.event_name == 'push'
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
-      - uses: ./.github/actions/setup-claude-code
+      - if: github.event_name == 'push'
+        uses: ./.github/actions/setup-claude-code
 
       - name: Validate Plugin
+        if: github.event_name == 'push'
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - uses: wow-look-at-my-code/actions@orphan-release#latest
+      - if: github.event_name == 'push'
+        uses: wow-look-at-my-code/actions@orphan-release#latest
         with:
           source: ${{ steps.release.outputs.source_dir }}
           name: plugin/${{ matrix.plugin }}
@@ -131,49 +135,23 @@ jobs:
           src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
           cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: ${{ steps.registry.outputs.registry_dir }}
-
-      - name: Deploy Pages
-        id: deployment
-        if: github.ref == 'refs/heads/master'
-        uses: actions/deploy-pages@v4
-
-  pr-pages:
-    needs: prepare
-    if: github.event.action != '' && github.event.action != 'closed'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: ./.github/actions/setup-marketplace-build
-        with:
-          artifact-name: marketplace-build-cli
-
-      - name: Build npm registry
-        id: registry
-        run: marketplace-build build-npm-registry >> $GITHUB_OUTPUT
-
-      - name: Add marketplace.json to registry
-        run: |
-          marketplace-build update-marketplace > /tmp/marketplace-out.txt
-          src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
-          cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
-
       - uses: actions/upload-artifact@v4
         with:
           name: npm-registry
           path: ${{ steps.registry.outputs.registry_dir }}
 
+      - if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.registry.outputs.registry_dir }}
+
+      - name: Deploy Pages
+        id: deployment
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/deploy-pages@v4
+
   deploy-preview:
-    needs: pr-pages
+    needs: pages
     if: github.event.action != '' && always()
     permissions:
       contents: write
