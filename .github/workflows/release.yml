@@ -87,50 +87,9 @@ jobs:
           name: plugin/${{ matrix.plugin }}
           message: ${{ steps.release.outputs.message }}
 
-  update:
+  pages:
     needs: [prepare, build]
     if: ${{ !cancelled() && !failure() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: ./.github/actions/setup-marketplace-build
-
-      - name: Prepare Marketplace Update
-        id: marketplace
-        run: marketplace-build update-marketplace >> $GITHUB_OUTPUT
-
-      - uses: ./.github/actions/setup-claude-code
-
-      - name: Validate Marketplace
-        run: |
-          mkdir -p ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin
-          mv ${{ steps.marketplace.outputs.source_dir }}/marketplace.json ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin/marketplace.json
-          claude plugin validate ${{ steps.marketplace.outputs.source_dir }}
-
-      - uses: wow-look-at-my-code/actions@orphan-release#latest
-        with:
-          source: ${{ steps.marketplace.outputs.source_dir }}
-          name: ${{ steps.marketplace.outputs.name }}
-          message: ${{ steps.marketplace.outputs.message }}
-
-      - name: Verify marketplace install
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
-          claude plugin marketplace add ${{ github.repository }}#${{ steps.marketplace.outputs.name }}#latest
-          claude plugin marketplace list
-
-  pages:
-    needs: [prepare, build, update]
-    if: ${{ !cancelled() && !failure() && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -151,10 +110,17 @@ jobs:
         id: registry
         run: marketplace-build build-npm-registry >> $GITHUB_OUTPUT
 
+      - name: Add marketplace.json to registry
+        run: |
+          marketplace-build update-marketplace > /tmp/marketplace-out.txt
+          src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
+          cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ steps.registry.outputs.registry_dir }}
 
       - name: Deploy Pages
         id: deployment
+        if: github.ref == 'refs/heads/master'
         uses: actions/deploy-pages@v4
