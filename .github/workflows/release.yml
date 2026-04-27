@@ -25,7 +25,7 @@ jobs:
       - run: marketplace-build cleanup-branch ${{ github.event.ref }}
 
   prepare:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    if: github.event_name != 'delete' && github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -47,12 +47,11 @@ jobs:
           path: tools/marketplace-build/build/marketplace-build
 
       - id: matrix
-        if: github.event_name == 'push'
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
   build:
     needs: prepare
-    if: github.event_name == 'push' && needs.prepare.outputs.has_changes == 'true'
+    if: needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -143,7 +142,7 @@ jobs:
 
   pr-pages:
     needs: prepare
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    if: github.event.action != '' && github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -175,7 +174,7 @@ jobs:
 
   deploy-preview:
     needs: pr-pages
-    if: github.event_name == 'pull_request' && always()
+    if: github.event.action != '' && always()
     permissions:
       contents: write
       pull-requests: write
