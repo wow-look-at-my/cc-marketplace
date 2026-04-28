@@ -1,0 +1,5 @@
+{
+  "description": "Auto-approve readonly git and gh commands using JSON-driven rules",
+  "name": "wow-look-at-my-enhanced-auto-allow",
+  "version": "16.0.0"
+}
