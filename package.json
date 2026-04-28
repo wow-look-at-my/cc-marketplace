@@ -1,0 +1,5 @@
+{
+  "description": "Blocks the Write tool from overwriting existing files - forces use of Edit instead",
+  "name": "wow-look-at-my-no-overwrites",
+  "version": "14.0.0"
+}
