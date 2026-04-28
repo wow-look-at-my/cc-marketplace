@@ -1,0 +1,14 @@
+{
+	"author": {
+		"name": "wow-look-at-my-code"
+	},
+	"description": "Create organized, well-structured HTML demo pages with separate CSS and JS files",
+	"keywords": [
+		"html",
+		"demo",
+		"frontend",
+		"prototype"
+	],
+	"name": "html-demo",
+	"version": "14"
+}
