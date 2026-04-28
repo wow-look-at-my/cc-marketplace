@@ -21,7 +21,7 @@ runs:
         key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
 
     - uses: wow-look-at-my/go-toolchain@latest
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.cache.outputs.cache-hit != 'true' || hashFiles('tools/marketplace-build/build/marketplace-build') == ''
       with:
         working-directory: "tools/marketplace-build"
 
