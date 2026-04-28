@@ -1,0 +1,5 @@
+{
+  "description": "Fetch text content from URLs referenced with @https://... in prompts",
+  "name": "wow-look-at-my-prompt-url-fetch",
+  "version": "11.0.0"
+}

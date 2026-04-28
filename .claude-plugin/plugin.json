@@ -1,0 +1,26 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Fetch text content from URLs referenced with @https://... in prompts",
+	"hooks": {
+		"UserPromptSubmit": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/prompt-url-fetch",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"fetch",
+		"url",
+		"text",
+		"content"
+	],
+	"name": "prompt-url-fetch",
+	"version": "11"
+}
