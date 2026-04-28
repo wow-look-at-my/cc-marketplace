@@ -2,6 +2,7 @@ name: Release Plugins
 
 on:
   push:
+    branches: [master]
   delete:
   pull_request:
     types: [opened, reopened, synchronize, closed]
