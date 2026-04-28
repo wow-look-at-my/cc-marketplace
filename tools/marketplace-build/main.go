@@ -20,11 +20,12 @@ var prepareMatrixCmd = &cobra.Command{
 
 var updateMarketplaceCmd = &cobra.Command{
 	Use:   "update-marketplace",
-	Short: "Scan tags, update marketplace.json, create marketplace tag",
+	Short: "Build marketplace.json from cooked plugin artifacts",
 	RunE:  runUpdateMarketplace,
 }
 
 func init() {
+	updateMarketplaceCmd.Flags().StringVar(&updateMarketplaceInput, "input", "", "directory of cooked plugin subdirectories (one per plugin)")
 	rootCmd.AddCommand(prepareMatrixCmd)
 	rootCmd.AddCommand(updateMarketplaceCmd)
 }

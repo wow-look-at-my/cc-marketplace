@@ -48,7 +48,6 @@ func TestRunPrepareMatrix(t *testing.T) {
 	tmpDir := t.TempDir()
 	pluginsDir := filepath.Join(tmpDir, "plugins")
 
-	// Create two plugins: one included, one not
 	for _, tc := range []struct {
 		name    string
 		include bool
@@ -67,51 +66,23 @@ func TestRunPrepareMatrix(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "plugin.json"), data, 0644))
 	}
 
-	// Also create a non-directory file in plugins/
 	require.NoError(t, os.WriteFile(filepath.Join(pluginsDir, "README.md"), []byte("readme"), 0644))
 
 	origRoot := repoRoot
 	repoRoot = tmpDir
 	t.Cleanup(func() { repoRoot = origRoot })
 
-	// Mock git to return no tags (first build = has changes)
-	mockGitWithTags(t, nil)
-
 	err := runPrepareMatrix(prepareMatrixCmd, nil)
 	require.NoError(t, err)
 }
 
-func TestRunPrepareMatrix_InfraChanged(t *testing.T) {
+func TestRunPrepareMatrix_NoPluginsDir(t *testing.T) {
 	tmpDir := t.TempDir()
-	pluginsDir := filepath.Join(tmpDir, "plugins")
-
-	dir := filepath.Join(pluginsDir, "my-plugin", ".claude-plugin")
-	require.NoError(t, os.MkdirAll(dir, 0755))
-	pj := map[string]interface{}{
-		"name": "my-plugin",
-		"mh":   map[string]interface{}{"include_in_marketplace": true},
-	}
-	data, err := json.Marshal(pj)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "plugin.json"), data, 0644))
 
 	origRoot := repoRoot
 	repoRoot = tmpDir
 	t.Cleanup(func() { repoRoot = origRoot })
 
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/my-plugin#1\n", nil
-		}
-		if args[0] == "show" {
-			return `{"sourceCommit":"old123"}`, nil
-		}
-		if args[0] == "rev-list" {
-			return "1\n", nil // infra changed
-		}
-		return "", nil
-	})
-
-	err = runPrepareMatrix(prepareMatrixCmd, nil)
-	require.NoError(t, err)
+	err := runPrepareMatrix(prepareMatrixCmd, nil)
+	require.NotNil(t, err)
 }
