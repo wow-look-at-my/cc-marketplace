@@ -13,7 +13,7 @@ import (
 
 var releasePluginCmd = &cobra.Command{
 	Use:   "release-plugin [plugin-name]",
-	Short: "Prepare plugin for release (outputs source_dir, tag, message for orphan-tag action)",
+	Short: "Prepare plugin for release (cooks contents into a temp dir for artifact upload)",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runReleasePlugin,
 }
@@ -29,21 +29,14 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	repoRoot := getRepoRoot()
 	pluginPath := filepath.Join(repoRoot, "plugins", pluginName)
 
-	// Verify plugin exists
 	if _, err := os.Stat(pluginPath); os.IsNotExist(err) {
 		return fmt.Errorf("plugin not found: %s", pluginPath)
 	}
 
-	// Get current version and bump it
-	currentVersion, err := GetLatestTagVersion(pluginName)
-	if err != nil {
-		return fmt.Errorf("failed to get current version: %w", err)
-	}
-	newVersion := currentVersion + 1
+	newVersion := releaseVersion()
 
-	fmt.Fprintf(os.Stderr, "Preparing %s: %d -> %d\n", pluginName, currentVersion, newVersion)
+	fmt.Fprintf(os.Stderr, "Preparing %s: version %d\n", pluginName, newVersion)
 
-	// Get source commit SHA for change detection
 	sourceCommit, err := GetHeadSHA()
 	if err != nil {
 		return fmt.Errorf("failed to get HEAD SHA: %w", err)
@@ -56,12 +49,11 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	}
 	srcURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s/plugins/%s", owner, repo, sourceCommit, pluginName)
 
-	// Create temp directory for cooked plugin contents (NOT cleaned up - workflow uses it)
+	// Cook into a temp dir; the workflow uploads it as an artifact, so do not clean up.
 	tmpDir, err := os.MkdirTemp("", "plugin-release-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	// Note: NOT removing tmpDir - the orphan-tag action needs it
 
 	// Copy and cook plugin contents to temp directory
 	meta := releaseMetadata{
@@ -125,6 +117,18 @@ type releaseMetadata struct {
 	SourceCommit string `json:"sourceCommit"`
 	SourceURL    string `json:"sourceUrl"`
 	BuiltAt      string `json:"builtAt"`
+}
+
+// releaseVersion returns a monotonically increasing integer version for the
+// current build. Uses GITHUB_RUN_NUMBER when set (CI), otherwise 1.
+func releaseVersion() int {
+	if v := os.Getenv("GITHUB_RUN_NUMBER"); v != "" {
+		var n int
+		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 1
 }
 
 func cookPluginForRelease(srcDir, dstDir string, version int, meta releaseMetadata) error {

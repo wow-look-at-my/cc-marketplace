@@ -11,25 +11,26 @@ import (
 	"github.com/wow-look-at-my/testify/require"
 )
 
-func mockExtractTag(t *testing.T, contents map[string]map[string][]byte) {
+// makeCookedPluginWithFiles creates a fake cooked plugin directory at root/name
+// with package.json (version) and arbitrary files.
+func makeCookedPluginWithFiles(t *testing.T, root, name, version string, files map[string][]byte) string {
 	t.Helper()
-	orig := extractTagContents
-	t.Cleanup(func() { extractTagContents = orig })
+	dir := filepath.Join(root, name)
+	require.NoError(t, os.MkdirAll(dir, 0755))
 
-	extractTagContents = func(tag, destDir string) error {
-		files, ok := contents[tag]
-		if !ok {
-			return nil
-		}
-		for relPath, data := range files {
-			full := filepath.Join(destDir, relPath)
-			os.MkdirAll(filepath.Dir(full), 0755)
-			if err := os.WriteFile(full, data, 0755); err != nil {
-				return err
-			}
-		}
-		return nil
+	pkg := map[string]string{
+		"name":    "test-owner-" + name,
+		"version": version,
 	}
+	pkgData, _ := json.Marshal(pkg)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), pkgData, 0644))
+
+	for relPath, data := range files {
+		full := filepath.Join(dir, relPath)
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0755))
+		require.NoError(t, os.WriteFile(full, data, 0755))
+	}
+	return dir
 }
 
 func TestDetectPlatformBinaries(t *testing.T) {
@@ -103,24 +104,20 @@ func TestBuildMainPackageDir(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(mainDir)
 
-	// Platform binaries excluded
 	_, err = os.Stat(filepath.Join(mainDir, "build", "hook_linux_amd64"))
 	require.True(t, os.IsNotExist(err))
 	_, err = os.Stat(filepath.Join(mainDir, "build", "hook_darwin_arm64"))
 	require.True(t, os.IsNotExist(err))
 
-	// Wrapper rewritten
 	wrapper, err := os.ReadFile(filepath.Join(mainDir, "build", "hook"))
 	require.NoError(t, err)
 	require.Contains(t, string(wrapper), "node_modules/owner-test-")
 	require.NotContains(t, string(wrapper), "old wrapper")
 
-	// Other files present
 	data, err := os.ReadFile(filepath.Join(mainDir, "README.md"))
 	require.NoError(t, err)
 	require.Equal(t, "readme", string(data))
 
-	// package.json has optionalDependencies
 	pkgData, err := os.ReadFile(filepath.Join(mainDir, "package.json"))
 	require.NoError(t, err)
 	var pkg map[string]interface{}
@@ -147,7 +144,6 @@ func TestBuildPlatformPackageDir(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(platDir)
 
-	// Both linux_amd64 binaries present under bin/
 	hookData, err := os.ReadFile(filepath.Join(platDir, "bin", "hook"))
 	require.NoError(t, err)
 	require.Equal(t, "elf binary", string(hookData))
@@ -156,11 +152,9 @@ func TestBuildPlatformPackageDir(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "elf validate", string(valData))
 
-	// darwin binary NOT present
 	_, err = os.Stat(filepath.Join(platDir, "bin", "hook_darwin_arm64"))
 	require.True(t, os.IsNotExist(err))
 
-	// package.json with os/cpu
 	pkgData, err := os.ReadFile(filepath.Join(platDir, "package.json"))
 	require.NoError(t, err)
 	var pkg map[string]interface{}
@@ -171,127 +165,19 @@ func TestBuildPlatformPackageDir(t *testing.T) {
 	require.Equal(t, []interface{}{"x64"}, pkg["cpu"])
 }
 
-func TestRunBuildNPMRegistry_NoPlatformBinaries(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/jq#1",
-		"plugin/jq#latest",
+func runRegistryWithInput(t *testing.T, inputDir string) string {
+	t.Helper()
+	mockGit(t, func(args ...string) (string, error) {
+		if args[0] == "remote" {
+			return "https://github.com/test-owner/test-repo.git\n", nil
+		}
+		return "", fmt.Errorf("unexpected git call: %v", args)
 	})
 
-	mockExtractTag(t, map[string]map[string][]byte{
-		"plugin/jq#1": {
-			".claude-plugin/plugin.json": []byte(`{"name":"jq"}`),
-			"commands/jq.md":             []byte("jq command"),
-		},
-	})
+	origInput := buildNPMRegistryInput
+	buildNPMRegistryInput = inputDir
+	t.Cleanup(func() { buildNPMRegistryInput = origInput })
 
-	err := runBuildNPMRegistry(buildNPMRegistryCmd, nil)
-	require.NoError(t, err)
-}
-
-func TestRunBuildNPMRegistry_WithPlatformBinaries(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/hook#3",
-		"plugin/hook#latest",
-	})
-
-	mockExtractTag(t, map[string]map[string][]byte{
-		"plugin/hook#3": {
-			".claude-plugin/plugin.json":  []byte(`{"name":"hook"}`),
-			"build/hook":                  []byte("#!/bin/sh\nwrapper"),
-			"build/hook_linux_amd64":      []byte("elf"),
-			"build/hook_linux_arm64":      []byte("elf arm"),
-			"build/hook_darwin_amd64":     []byte("mach-o x64"),
-			"build/hook_darwin_arm64":     []byte("mach-o arm"),
-		},
-	})
-
-	err := runBuildNPMRegistry(buildNPMRegistryCmd, nil)
-	require.NoError(t, err)
-}
-
-func TestRunBuildNPMRegistry_PackumentStructure(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/myplugin#5",
-	})
-
-	orig := extractTagContents
-	t.Cleanup(func() { extractTagContents = orig })
-	extractTagContents = func(tag, destDir string) error {
-		os.MkdirAll(filepath.Join(destDir, "build"), 0755)
-		os.MkdirAll(filepath.Join(destDir, ".claude-plugin"), 0755)
-		os.WriteFile(filepath.Join(destDir, ".claude-plugin", "plugin.json"), []byte(`{"name":"myplugin"}`), 0644)
-		os.WriteFile(filepath.Join(destDir, "build", "hook"), []byte("#!/bin/sh"), 0755)
-		os.WriteFile(filepath.Join(destDir, "build", "hook_linux_amd64"), []byte("bin"), 0755)
-		os.WriteFile(filepath.Join(destDir, "build", "hook_darwin_arm64"), []byte("bin"), 0755)
-		return nil
-	}
-
-	err := runBuildNPMRegistry(buildNPMRegistryCmd, nil)
-	require.NoError(t, err)
-}
-
-func TestRunBuildNPMRegistry_TarballFails_SimplePkg(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/p#1"})
-	mockExtractTag(t, map[string]map[string][]byte{
-		"plugin/p#1": {".claude-plugin/plugin.json": []byte(`{"name":"p"}`)},
-	})
-	orig := createTarball
-	t.Cleanup(func() { createTarball = orig })
-	createTarball = func(_, _ string) error { return fmt.Errorf("tar failed") }
-
-	require.NoError(t, runBuildNPMRegistry(buildNPMRegistryCmd, nil))
-}
-
-func TestRunBuildNPMRegistry_TarballFails_PlatformPkg(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/p#1"})
-	mockExtractTag(t, map[string]map[string][]byte{
-		"plugin/p#1": {
-			".claude-plugin/plugin.json": []byte(`{"name":"p"}`),
-			"build/hook":                 []byte("#!/bin/sh"),
-			"build/hook_linux_amd64":     []byte("elf"),
-		},
-	})
-	orig := createTarball
-	t.Cleanup(func() { createTarball = orig })
-	createTarball = func(_, _ string) error { return fmt.Errorf("tar failed") }
-
-	require.NoError(t, runBuildNPMRegistry(buildNPMRegistryCmd, nil))
-}
-
-func TestRunBuildNPMRegistry_ExtractError(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/broken#1",
-	})
-
-	orig := extractTagContents
-	t.Cleanup(func() { extractTagContents = orig })
-	extractTagContents = func(tag, destDir string) error {
-		return fmt.Errorf("git archive failed")
-	}
-
-	err := runBuildNPMRegistry(buildNPMRegistryCmd, nil)
-	require.NoError(t, err)
-}
-
-func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/myplugin#2",
-	})
-
-	var capturedRegistryDir string
-	orig := extractTagContents
-	t.Cleanup(func() { extractTagContents = orig })
-	extractTagContents = func(tag, destDir string) error {
-		os.MkdirAll(filepath.Join(destDir, "build"), 0755)
-		os.MkdirAll(filepath.Join(destDir, ".claude-plugin"), 0755)
-		os.WriteFile(filepath.Join(destDir, ".claude-plugin", "plugin.json"), []byte(`{"name":"myplugin"}`), 0644)
-		os.WriteFile(filepath.Join(destDir, "build", "hook"), []byte("#!/bin/sh\nold"), 0755)
-		os.WriteFile(filepath.Join(destDir, "build", "hook_linux_amd64"), []byte("elf64"), 0755)
-		os.WriteFile(filepath.Join(destDir, "build", "hook_darwin_arm64"), []byte("macharm"), 0755)
-		return nil
-	}
-
-	// Capture stdout to get registry_dir
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -300,18 +186,58 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	os.Stdout = origStdout
 	require.NoError(t, err)
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, 8192)
 	n, _ := r.Read(buf)
 	output := string(buf[:n])
 	for _, line := range strings.Split(output, "\n") {
 		if strings.HasPrefix(line, "registry_dir=") {
-			capturedRegistryDir = strings.TrimPrefix(line, "registry_dir=")
+			return strings.TrimPrefix(line, "registry_dir=")
 		}
 	}
-	require.NotEmpty(t, capturedRegistryDir)
+	t.Fatal("registry_dir not found in output")
+	return ""
+}
 
-	// Main packument exists with optionalDependencies
-	mainPackument, err := os.ReadFile(filepath.Join(capturedRegistryDir, "test-owner-myplugin"))
+func TestRunBuildNPMRegistry_NoPlatformBinaries(t *testing.T) {
+	dir := t.TempDir()
+	makeCookedPluginWithFiles(t, dir, "jq", "1.0.0", map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"jq"}`),
+		"commands/jq.md":             []byte("jq command"),
+	})
+	registryDir := runRegistryWithInput(t, dir)
+
+	packument, err := os.ReadFile(filepath.Join(registryDir, "test-owner-jq"))
+	require.NoError(t, err)
+	var pkg map[string]interface{}
+	require.NoError(t, json.Unmarshal(packument, &pkg))
+	versions := pkg["versions"].(map[string]interface{})
+	require.Contains(t, versions, "1.0.0")
+}
+
+func TestRunBuildNPMRegistry_WithPlatformBinaries(t *testing.T) {
+	dir := t.TempDir()
+	makeCookedPluginWithFiles(t, dir, "hook", "3.0.0", map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"hook"}`),
+		"build/hook":                 []byte("#!/bin/sh\nwrapper"),
+		"build/hook_linux_amd64":     []byte("elf"),
+		"build/hook_linux_arm64":     []byte("elf arm"),
+		"build/hook_darwin_amd64":    []byte("mach-o x64"),
+		"build/hook_darwin_arm64":    []byte("mach-o arm"),
+	})
+	runRegistryWithInput(t, dir)
+}
+
+func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
+	dir := t.TempDir()
+	makeCookedPluginWithFiles(t, dir, "myplugin", "2.0.0", map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"myplugin"}`),
+		"build/hook":                 []byte("#!/bin/sh\nold"),
+		"build/hook_linux_amd64":     []byte("elf64"),
+		"build/hook_darwin_arm64":    []byte("macharm"),
+	})
+	registryDir := runRegistryWithInput(t, dir)
+
+	mainPackument, err := os.ReadFile(filepath.Join(registryDir, "test-owner-myplugin"))
 	require.NoError(t, err)
 	var mainPkg map[string]interface{}
 	require.NoError(t, json.Unmarshal(mainPackument, &mainPkg))
@@ -321,8 +247,7 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	require.Equal(t, "2.0.0", optDeps["test-owner-myplugin-linux-x64"])
 	require.Equal(t, "2.0.0", optDeps["test-owner-myplugin-darwin-arm64"])
 
-	// Platform packuments exist with os/cpu
-	linuxPkg, err := os.ReadFile(filepath.Join(capturedRegistryDir, "test-owner-myplugin-linux-x64"))
+	linuxPkg, err := os.ReadFile(filepath.Join(registryDir, "test-owner-myplugin-linux-x64"))
 	require.NoError(t, err)
 	var lp map[string]interface{}
 	require.NoError(t, json.Unmarshal(linuxPkg, &lp))
@@ -330,7 +255,7 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	require.Equal(t, []interface{}{"linux"}, lv["os"])
 	require.Equal(t, []interface{}{"x64"}, lv["cpu"])
 
-	darwinPkg, err := os.ReadFile(filepath.Join(capturedRegistryDir, "test-owner-myplugin-darwin-arm64"))
+	darwinPkg, err := os.ReadFile(filepath.Join(registryDir, "test-owner-myplugin-darwin-arm64"))
 	require.NoError(t, err)
 	var dp map[string]interface{}
 	require.NoError(t, json.Unmarshal(darwinPkg, &dp))
@@ -338,15 +263,72 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	require.Equal(t, []interface{}{"darwin"}, dv["os"])
 	require.Equal(t, []interface{}{"arm64"}, dv["cpu"])
 
-	// Main tarball exists
-	_, err = os.Stat(filepath.Join(capturedRegistryDir, "tarballs", "test-owner-myplugin", "test-owner-myplugin-2.0.0.tgz"))
+	_, err = os.Stat(filepath.Join(registryDir, "tarballs", "test-owner-myplugin", "test-owner-myplugin-2.0.0.tgz"))
 	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(registryDir, "tarballs", "test-owner-myplugin-linux-x64", "test-owner-myplugin-linux-x64-2.0.0.tgz"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(registryDir, "tarballs", "test-owner-myplugin-darwin-arm64", "test-owner-myplugin-darwin-arm64-2.0.0.tgz"))
+	require.NoError(t, err)
+}
 
-	// Platform tarballs exist
-	_, err = os.Stat(filepath.Join(capturedRegistryDir, "tarballs", "test-owner-myplugin-linux-x64", "test-owner-myplugin-linux-x64-2.0.0.tgz"))
-	require.NoError(t, err)
-	_, err = os.Stat(filepath.Join(capturedRegistryDir, "tarballs", "test-owner-myplugin-darwin-arm64", "test-owner-myplugin-darwin-arm64-2.0.0.tgz"))
-	require.NoError(t, err)
+func TestRunBuildNPMRegistry_TarballFails_SimplePkg(t *testing.T) {
+	dir := t.TempDir()
+	makeCookedPluginWithFiles(t, dir, "p", "1.0.0", map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"p"}`),
+	})
+
+	mockGit(t, func(args ...string) (string, error) {
+		if args[0] == "remote" {
+			return "https://github.com/test-owner/test-repo.git\n", nil
+		}
+		return "", fmt.Errorf("unexpected: %v", args)
+	})
+
+	orig := createTarball
+	t.Cleanup(func() { createTarball = orig })
+	createTarball = func(_, _ string) error { return fmt.Errorf("tar failed") }
+
+	origInput := buildNPMRegistryInput
+	buildNPMRegistryInput = dir
+	t.Cleanup(func() { buildNPMRegistryInput = origInput })
+
+	require.NoError(t, runBuildNPMRegistry(buildNPMRegistryCmd, nil))
+}
+
+func TestRunBuildNPMRegistry_TarballFails_PlatformPkg(t *testing.T) {
+	dir := t.TempDir()
+	makeCookedPluginWithFiles(t, dir, "p", "1.0.0", map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"p"}`),
+		"build/hook":                 []byte("#!/bin/sh"),
+		"build/hook_linux_amd64":     []byte("elf"),
+	})
+
+	mockGit(t, func(args ...string) (string, error) {
+		if args[0] == "remote" {
+			return "https://github.com/test-owner/test-repo.git\n", nil
+		}
+		return "", fmt.Errorf("unexpected: %v", args)
+	})
+
+	orig := createTarball
+	t.Cleanup(func() { createTarball = orig })
+	createTarball = func(_, _ string) error { return fmt.Errorf("tar failed") }
+
+	origInput := buildNPMRegistryInput
+	buildNPMRegistryInput = dir
+	t.Cleanup(func() { buildNPMRegistryInput = origInput })
+
+	require.NoError(t, runBuildNPMRegistry(buildNPMRegistryCmd, nil))
+}
+
+func TestRunBuildNPMRegistry_NoInputFlag(t *testing.T) {
+	origInput := buildNPMRegistryInput
+	buildNPMRegistryInput = ""
+	t.Cleanup(func() { buildNPMRegistryInput = origInput })
+
+	err := runBuildNPMRegistry(buildNPMRegistryCmd, nil)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "--input is required")
 }
 
 func TestBuildPlatformPackageDir_MissingBinary(t *testing.T) {
@@ -369,7 +351,6 @@ func TestBuildMainPackageDir_ErrorPaths(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(mainDir)
 
-	// Verify wrapper was rewritten
 	data, _ := os.ReadFile(filepath.Join(mainDir, "build", "hook"))
 	require.Contains(t, string(data), "pkg-${OS}-${ARCH}")
 }
@@ -392,51 +373,6 @@ func TestCreateTarball(t *testing.T) {
 func TestCreateTarball_BadSrcDir(t *testing.T) {
 	err := createTarball("/nonexistent", filepath.Join(t.TempDir(), "out.tgz"))
 	require.Error(t, err)
-}
-
-func TestRunBuildNPMRegistry_MultipleVersions(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/multi#1",
-		"plugin/multi#2",
-		"plugin/multi#3",
-		"plugin/multi#latest",
-	})
-
-	mockExtractTag(t, map[string]map[string][]byte{
-		"plugin/multi#1": {
-			".claude-plugin/plugin.json": []byte(`{"name":"multi"}`),
-			"commands/cmd.md":            []byte("cmd"),
-		},
-		"plugin/multi#2": {
-			".claude-plugin/plugin.json": []byte(`{"name":"multi"}`),
-			"commands/cmd.md":            []byte("cmd v2"),
-		},
-		"plugin/multi#3": {
-			".claude-plugin/plugin.json":  []byte(`{"name":"multi"}`),
-			"build/hook":                  []byte("#!/bin/sh"),
-			"build/hook_linux_amd64":      []byte("elf"),
-			"build/hook_darwin_arm64":     []byte("mach"),
-		},
-	})
-
-	err := runBuildNPMRegistry(buildNPMRegistryCmd, nil)
-	require.NoError(t, err)
-}
-
-func TestRunBuildNPMRegistry_AllExtractsFail(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/fail#1",
-		"plugin/fail#2",
-	})
-
-	orig := extractTagContents
-	t.Cleanup(func() { extractTagContents = orig })
-	extractTagContents = func(tag, destDir string) error {
-		return fmt.Errorf("archive broken")
-	}
-
-	err := runBuildNPMRegistry(buildNPMRegistryCmd, nil)
-	require.NoError(t, err)
 }
 
 func TestNpmPlatformName_UnknownArch(t *testing.T) {

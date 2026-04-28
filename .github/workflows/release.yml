@@ -36,8 +36,6 @@ jobs:
       has_changes: ${{ steps.matrix.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -76,24 +74,22 @@ jobs:
       - name: Test
         run: npx tsx .github/scripts/test-plugin.ts ${{ matrix.plugin }}
 
-      - name: Prepare Release
+      - name: Cook plugin
         id: release
-        if: github.event_name == 'push'
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
-      - if: github.event_name == 'push'
-        uses: ./.github/actions/setup-claude-code
+      - uses: ./.github/actions/setup-claude-code
 
       - name: Validate Plugin
-        if: github.event_name == 'push'
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - if: github.event_name == 'push'
-        uses: wow-look-at-my-code/actions@orphan-release#latest
+      - name: Upload cooked plugin
+        uses: actions/upload-artifact@v4
         with:
-          source: ${{ steps.release.outputs.source_dir }}
-          name: plugin/${{ matrix.plugin }}
-          message: ${{ steps.release.outputs.message }}
+          name: cooked-${{ matrix.plugin }}
+          path: ${{ steps.release.outputs.source_dir }}
+          if-no-files-found: error
+          retention-days: 1
 
   pages:
     needs: [prepare, build]
@@ -105,18 +101,31 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: ./.github/actions/setup-marketplace-build
 
+      - name: Download cooked plugins
+        uses: actions/download-artifact@v4
+        with:
+          path: cooked
+          pattern: cooked-*
+
+      - name: Strip cooked- artifact prefix
+        run: |
+          set -e
+          shopt -s nullglob
+          for d in cooked/cooked-*; do
+            name="${d#cooked/cooked-}"
+            mv "$d" "cooked/$name"
+          done
+
       - name: Build npm registry
         id: registry
-        run: marketplace-build build-npm-registry >> $GITHUB_OUTPUT
+        run: marketplace-build build-npm-registry --input cooked >> $GITHUB_OUTPUT
 
       - name: Add marketplace.json to registry
         run: |
-          marketplace-build update-marketplace > /tmp/marketplace-out.txt
+          marketplace-build update-marketplace --input cooked > /tmp/marketplace-out.txt
           src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
           cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
