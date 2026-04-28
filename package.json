@@ -1,0 +1,5 @@
+{
+  "description": "MCP server for Chrome DevTools Protocol - inspect, debug, and interact with Chrome browser pages",
+  "name": "wow-look-at-my-chrome-devtools",
+  "version": "17.0.0"
+}
