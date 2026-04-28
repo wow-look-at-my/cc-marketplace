@@ -13,14 +13,14 @@ runs:
     - uses: wow-look-at-my/actions@smart-cache#latest
       id: cache
       with:
-        path: tools/marketplace-build/build/marketplace-build
+        path: tools/marketplace-build/build/marketplace-build_linux_amd64
         key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
 
     - name: Check binary exists
       id: binary
       shell: bash
       run: |
-        if [ -f tools/marketplace-build/build/marketplace-build ]; then
+        if [ -f tools/marketplace-build/build/marketplace-build_linux_amd64 ]; then
           echo "exists=true" >> "$GITHUB_OUTPUT"
         fi
 
@@ -28,7 +28,9 @@ runs:
       if: steps.binary.outputs.exists != 'true'
       with:
         working-directory: "tools/marketplace-build"
+        os: linux
+        arch: amd64
 
     - name: Install marketplace-build
       shell: bash
-      run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
+      run: cp "tools/marketplace-build/build/marketplace-build_linux_amd64" "/usr/local/bin/marketplace-build"
