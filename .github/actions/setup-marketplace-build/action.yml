@@ -4,6 +4,10 @@ description: Build or restore cached marketplace-build CLI
 runs:
   using: composite
   steps:
+    - name: Install script dependencies
+      shell: bash
+      run: npm ci
+
     - name: Fetch tags
       shell: bash
       run: git fetch --tags --force

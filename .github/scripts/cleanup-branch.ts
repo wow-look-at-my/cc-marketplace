@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-const { execSync } = require("child_process");
+import { execSync } from "child_process";
 
 const branchName = process.argv[2];
 if (!branchName) {

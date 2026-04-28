@@ -1,7 +1,6 @@
-#!/usr/bin/env node
-const { execSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
+import { execSync } from "child_process";
+import { existsSync } from "fs";
+import { join } from "path";
 
 const pluginName = process.argv[2];
 if (!pluginName) {
@@ -12,9 +11,9 @@ if (!pluginName) {
 const repoRoot = execSync("git rev-parse --show-toplevel", {
   encoding: "utf8",
 }).trim();
-const pluginPath = path.join(repoRoot, "plugins", pluginName);
+const pluginPath = join(repoRoot, "plugins", pluginName);
 
-if (!fs.existsSync(pluginPath)) {
+if (!existsSync(pluginPath)) {
   console.error(`plugin not found: ${pluginPath}`);
   process.exit(1);
 }
