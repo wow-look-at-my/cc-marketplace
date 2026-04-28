@@ -60,8 +60,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/setup-marketplace-build
-        with:
-          artifact-name: marketplace-build-cli
 
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
@@ -117,8 +115,6 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-marketplace-build
-        with:
-          artifact-name: marketplace-build-cli
 
       - name: Build npm registry
         id: registry
