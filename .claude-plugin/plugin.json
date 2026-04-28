@@ -1,0 +1,28 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Blocks the Write tool from overwriting existing files - forces use of Edit instead",
+	"hooks": {
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-overwrites",
+						"type": "command"
+					}
+				],
+				"matcher": "Write"
+			}
+		]
+	},
+	"keywords": [
+		"write",
+		"edit",
+		"overwrite",
+		"guard",
+		"hook"
+	],
+	"name": "no-overwrites",
+	"version": "15"
+}
