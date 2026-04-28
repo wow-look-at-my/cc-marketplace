@@ -1,0 +1,10 @@
+{
+	"mcpServers": {
+		"chrome-devtools": {
+			"args": [
+				"chrome-devtools-mcp@latest"
+			],
+			"command": "npx"
+		}
+	}
+}
