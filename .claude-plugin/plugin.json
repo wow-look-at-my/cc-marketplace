@@ -1,0 +1,27 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Detects permission-seeking patterns in assistant messages and blocks the stop with a lecture about autonomy",
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/detect-permission-seeking",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"stop",
+		"permission",
+		"autonomy",
+		"behavior",
+		"hook"
+	],
+	"name": "detect-permission-seeking",
+	"version": "15"
+}
