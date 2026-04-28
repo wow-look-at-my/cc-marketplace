@@ -1,0 +1,28 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Blocks direct go build/test commands - use go-toolchain instead",
+	"hooks": {
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/recommend-go-toolchain",
+						"type": "command"
+					}
+				],
+				"matcher": "Bash"
+			}
+		]
+	},
+	"keywords": [
+		"go",
+		"build",
+		"test",
+		"toolchain",
+		"hook"
+	],
+	"name": "recommend-go-toolchain",
+	"version": "14"
+}
