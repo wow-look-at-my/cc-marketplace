@@ -1,0 +1,5 @@
+{
+  "description": "MCP server wrapping jq for JSON filtering, querying, and transforming without Bash permission prompts",
+  "name": "wow-look-at-my-jq",
+  "version": "13.0.0"
+}
