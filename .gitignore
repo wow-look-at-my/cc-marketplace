@@ -7,6 +7,12 @@ tools/*/marketplace-build
 plugins/*/bin/
 plugins/*/run
 plugins/*/crawl4ai-mcp
+plugins/cleanup-bash-cmds/cleanup-bash-cmds
+plugins/detect-permission-seeking/detect-permission-seeking
+plugins/jq/jq-mcp
+plugins/no-overwrites/no-overwrites
+plugins/prompt-url-fetch/prompt-url-fetch
+plugins/recommend-go-toolchain/recommend-go-toolchain
 .go-binary
 
 # Node
