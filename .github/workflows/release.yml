@@ -102,11 +102,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      id-token: write
-      pages: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,19 +124,9 @@ jobs:
           name: npm-registry
           path: ${{ steps.registry.outputs.registry_dir }}
 
-      - if: github.event_name == 'push'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ${{ steps.registry.outputs.registry_dir }}
-
-      - name: Deploy Pages
-        id: deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: actions/deploy-pages@v4
-
   deploy-preview:
     needs: pages
-    if: github.event.action != '' && always()
+    if: github.event_name != 'delete' && always()
     permissions:
       contents: write
       pull-requests: write
