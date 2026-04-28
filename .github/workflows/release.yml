@@ -86,13 +86,6 @@ jobs:
         if: github.event_name == 'push'
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - if: github.event_name == 'push'
-        uses: wow-look-at-my-code/actions@orphan-release#latest
-        with:
-          source: ${{ steps.release.outputs.source_dir }}
-          name: plugin/${{ matrix.plugin }}
-          message: ${{ steps.release.outputs.message }}
-
   pages:
     needs: [prepare, build]
     if: '!cancelled() && !failure()'
