@@ -20,8 +20,16 @@ runs:
         path: tools/marketplace-build/build/marketplace-build
         key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
 
+    - name: Check binary exists
+      id: binary
+      shell: bash
+      run: |
+        if [ -f tools/marketplace-build/build/marketplace-build ]; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        fi
+
     - uses: wow-look-at-my/go-toolchain@latest
-      if: steps.cache.outputs.cache-hit != 'true' || hashFiles('tools/marketplace-build/build/marketplace-build') == ''
+      if: steps.binary.outputs.exists != 'true'
       with:
         working-directory: "tools/marketplace-build"
 
