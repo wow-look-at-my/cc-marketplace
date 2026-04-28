@@ -38,3 +38,9 @@ runs:
       if: inputs.artifact-name == ''
       shell: bash
       run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
+
+    - uses: actions/upload-artifact@v4
+      if: inputs.artifact-name == ''
+      with:
+        name: marketplace-build-cli
+        path: tools/marketplace-build/build/marketplace-build

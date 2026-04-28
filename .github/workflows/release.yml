@@ -41,11 +41,6 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: marketplace-build-cli
-          path: tools/marketplace-build/build/marketplace-build
-
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
