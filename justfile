@@ -7,7 +7,7 @@ build:
 
 test:
 	cd tools/marketplace-build && go test -coverprofile=coverage.out ./...
-	./bin/marketplace-build test-plugins
+	node .github/scripts/test-plugins.js
 
 release *args:
 	./bin/marketplace-build {{args}} --dry-run

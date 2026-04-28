@@ -20,9 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/setup-marketplace-build
-
-      - run: marketplace-build cleanup-branch ${{ github.event.ref }}
+      - run: node .github/scripts/cleanup-branch.js ${{ github.event.ref }}
 
   prepare:
     if: github.event_name != 'delete' && github.event.action != 'closed'
@@ -71,12 +69,10 @@ jobs:
           upload-artifacts: 'false'
 
       - name: Build
-        run: marketplace-build build-plugin ${{ matrix.plugin }}
-        env:
-          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/build-plugin.js ${{ matrix.plugin }}
 
       - name: Test
-        run: marketplace-build test-plugin ${{ matrix.plugin }}
+        run: node .github/scripts/test-plugin.js ${{ matrix.plugin }}
 
       - name: Prepare Release
         id: release
