@@ -36,8 +36,6 @@ jobs:
       has_changes: ${{ steps.matrix.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -105,8 +103,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: ./.github/actions/setup-marketplace-build
 
