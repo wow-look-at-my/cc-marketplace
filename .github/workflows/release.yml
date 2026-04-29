@@ -2,7 +2,10 @@ name: Release Plugins
 
 on:
   push:
+    branches: [master]
   delete:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -18,12 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/setup-marketplace-build
-
-      - run: marketplace-build cleanup-branch ${{ github.event.ref }}
+      - run: npm ci
+      - run: npx tsx .github/scripts/cleanup-branch.ts ${{ github.event.ref }}
 
   prepare:
-    if: github.event_name == 'push'
+    if: github.event_name != 'delete' && github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -34,8 +36,6 @@ jobs:
       has_changes: ${{ steps.matrix.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -46,7 +46,7 @@ jobs:
     needs: prepare
     if: needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: write
       id-token: write
@@ -59,20 +59,22 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - uses: wow-look-at-my-code/actions@smart-cache#latest
+      - name: Build Go plugin
+        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+        uses: wow-look-at-my/go-toolchain@latest
         with:
-          path: ~/go/pkg/mod ~/.cache/go-build
-          key: go-${{ hashFiles('plugins/**/go.mod', 'plugins/**/go.sum') }}
+          working-directory: plugins/${{ matrix.plugin }}
+          os: linux,darwin
+          arch: amd64,arm64
+          upload-artifacts: 'false'
 
       - name: Build
-        run: marketplace-build build-plugin ${{ matrix.plugin }}
-        env:
-          GH_TOKEN: ${{ github.token }}
+        run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
 
       - name: Test
-        run: marketplace-build test-plugin ${{ matrix.plugin }}
+        run: npx tsx .github/scripts/test-plugin.ts ${{ matrix.plugin }}
 
-      - name: Prepare Release
+      - name: Cook plugin
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
@@ -81,49 +83,83 @@ jobs:
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - uses: wow-look-at-my-code/actions@orphan-release#latest
+      - name: Upload cooked plugin
+        uses: actions/upload-artifact@v4
         with:
-          source: ${{ steps.release.outputs.source_dir }}
-          name: plugin/${{ matrix.plugin }}
-          message: ${{ steps.release.outputs.message }}
+          name: cooked-${{ matrix.plugin }}
+          path: ${{ steps.release.outputs.source_dir }}
+          if-no-files-found: error
+          retention-days: 1
 
-  update:
+  pages:
     needs: [prepare, build]
-    if: ${{ !cancelled() && !failure() }}
+    if: '!cancelled() && !failure()'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Prepare Marketplace Update
-        id: marketplace
-        run: marketplace-build update-marketplace >> $GITHUB_OUTPUT
+      - name: Download cooked plugins
+        uses: actions/download-artifact@v4
+        with:
+          path: cooked
+          pattern: cooked-*
+
+      - name: Strip cooked- artifact prefix
+        run: |
+          set -e
+          shopt -s nullglob
+          for d in cooked/cooked-*; do
+            name="${d#cooked/cooked-}"
+            mv "$d" "cooked/$name"
+          done
+
+      - name: Compute registry base URL
+        id: base-url
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "url=https://wow-look-at-my.github.io/cc-marketplace/pr-preview/pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "url=https://wow-look-at-my.github.io/cc-marketplace" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build npm registry
+        id: registry
+        run: marketplace-build build-npm-registry --input cooked --base-url "${{ steps.base-url.outputs.url }}" >> $GITHUB_OUTPUT
+
+      - name: Add marketplace.json to registry
+        run: |
+          marketplace-build update-marketplace --input cooked --base-url "${{ steps.base-url.outputs.url }}" > /tmp/marketplace-out.txt
+          src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
+          cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
       - uses: ./.github/actions/setup-claude-code
 
-      - name: Validate Marketplace
+      - name: Validate marketplace
         run: |
-          mkdir -p ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin
-          mv ${{ steps.marketplace.outputs.source_dir }}/marketplace.json ${{ steps.marketplace.outputs.source_dir }}/.claude-plugin/marketplace.json
-          claude plugin validate ${{ steps.marketplace.outputs.source_dir }}
+          claude plugin validate "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
+          claude plugin marketplace add "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
-      - uses: wow-look-at-my-code/actions@orphan-release#latest
+      - uses: actions/upload-artifact@v4
         with:
-          source: ${{ steps.marketplace.outputs.source_dir }}
-          name: ${{ steps.marketplace.outputs.name }}
-          message: ${{ steps.marketplace.outputs.message }}
+          name: npm-registry
+          path: ${{ steps.registry.outputs.registry_dir }}
 
-      - name: Verify marketplace install
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
-          claude plugin marketplace add ${{ github.repository }}#${{ steps.marketplace.outputs.name }}#latest
-          claude plugin marketplace list
+  deploy-preview:
+    needs: pages
+    if: github.event_name != 'delete' && always()
+    permissions:
+      contents: write
+      pull-requests: write
+      pages: write
+      id-token: write
+      statuses: write
+    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@4f248afac2702fab9d8bbffff53335b120dbf463
+    with:
+      artifact-name: npm-registry
+    secrets: inherit

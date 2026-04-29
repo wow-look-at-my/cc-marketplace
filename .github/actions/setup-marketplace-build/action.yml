@@ -4,15 +4,33 @@ description: Build or restore cached marketplace-build CLI
 runs:
   using: composite
   steps:
-    - name: Fetch tags
+    - name: Install script dependencies
       shell: bash
-      run: git fetch --tags --force
+      run: npm ci
 
-    - uses: extractions/setup-just@v2
+    - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # https://github.com/extractions/setup-just/releases/tag/v4
+
+    - uses: wow-look-at-my/actions@smart-cache#latest
+      id: cache
+      with:
+        path: tools/marketplace-build/build/marketplace-build_linux_amd64
+        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
+
+    - name: Check binary exists
+      id: binary
+      shell: bash
+      run: |
+        if [ -f tools/marketplace-build/build/marketplace-build_linux_amd64 ]; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        fi
 
     - uses: wow-look-at-my/go-toolchain@latest
+      if: steps.binary.outputs.exists != 'true'
       with:
         working-directory: "tools/marketplace-build"
+        os: linux
+        arch: amd64
 
-    - run: cp "tools/marketplace-build/build/marketplace-build" "/usr/local/bin/marketplace-build"
+    - name: Install marketplace-build
       shell: bash
+      run: cp "tools/marketplace-build/build/marketplace-build_linux_amd64" "/usr/local/bin/marketplace-build"
