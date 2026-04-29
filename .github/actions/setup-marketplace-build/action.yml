@@ -4,6 +4,11 @@ description: Build or restore cached marketplace-build CLI
 runs:
   using: composite
   steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
     - name: Install script dependencies
       shell: bash
       run: npm ci

@@ -20,13 +20,24 @@ if (!existsSync(pluginPath)) {
 
 console.log(`Building ${pluginName}`);
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsForbiddenCommand(line: string, pattern: string): boolean {
+  const escapedPattern = escapeRegExp(pattern);
+  return new RegExp(`(?:^|\\s)${escapedPattern}(?:\\s|$)`).test(line);
+}
+
 const justfilePath = join(pluginPath, "justfile");
 if (existsSync(justfilePath)) {
   const forbidden = ["go build", "go test", "go-toolchain", "go-safe-build"];
   const lines = readFileSync(justfilePath, "utf8").split("\n");
   for (let i = 0; i < lines.length; i++) {
+    const trimmedLine = lines[i].trim();
+    if (trimmedLine === "" || trimmedLine.startsWith("#")) continue;
     for (const pat of forbidden) {
-      if (lines[i].includes(pat)) {
+      if (containsForbiddenCommand(trimmedLine, pat)) {
         console.error(`justfile:${i + 1}: forbidden command "${pat}"`);
         process.exit(1);
       }

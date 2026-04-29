@@ -225,8 +225,15 @@ func buildMainPackageDir(srcDir string, bins []platformBinary, pkgName, version 
 		"version":              version,
 		"optionalDependencies": optDeps,
 	}
-	data, _ := json.MarshalIndent(pkg, "", "  ")
-	os.WriteFile(filepath.Join(mainDir, "package.json"), data, 0644)
+	data, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		os.RemoveAll(mainDir)
+		return "", fmt.Errorf("marshal package.json for %s: %w", pkgName, err)
+	}
+	if err := os.WriteFile(filepath.Join(mainDir, "package.json"), data, 0644); err != nil {
+		os.RemoveAll(mainDir)
+		return "", fmt.Errorf("write package.json for %s: %w", pkgName, err)
+	}
 
 	return mainDir, nil
 }
@@ -268,8 +275,15 @@ func buildPlatformPackageDir(bins []platformBinary, goOS, goArch, platPkgName, v
 		"os":      []string{goOS},
 		"cpu":     []string{arch},
 	}
-	data, _ := json.MarshalIndent(pkg, "", "  ")
-	os.WriteFile(filepath.Join(platDir, "package.json"), data, 0644)
+	data, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		os.RemoveAll(platDir)
+		return "", fmt.Errorf("marshal package.json for %s: %w", platPkgName, err)
+	}
+	if err := os.WriteFile(filepath.Join(platDir, "package.json"), data, 0644); err != nil {
+		os.RemoveAll(platDir)
+		return "", fmt.Errorf("write package.json for %s: %w", platPkgName, err)
+	}
 
 	return platDir, nil
 }
@@ -277,7 +291,7 @@ func buildPlatformPackageDir(bins []platformBinary, goOS, goArch, platPkgName, v
 var createTarball = createTarballReal
 
 func createTarballReal(srcDir, outputPath string) error {
-	cmd := exec.Command("tar", "-czf", outputPath, "-C", srcDir, ".")
+	cmd := exec.Command("tar", "-czf", outputPath, "--transform", `s,^\./,package/,`, "-C", srcDir, ".")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s: %w", out, err)
 	}
@@ -400,10 +414,14 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		writePackument(tmpDir, pkgName, version, versions)
+		if err := writePackument(tmpDir, pkgName, version, versions); err != nil {
+			return err
+		}
 
 		for platPkgName, platVers := range platformVersions {
-			writePackument(tmpDir, platPkgName, version, platVers)
+			if err := writePackument(tmpDir, platPkgName, version, platVers); err != nil {
+				return err
+			}
 		}
 
 		fmt.Fprintf(os.Stderr, "  %s: %s", pkgName, version)
@@ -418,7 +436,7 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func writePackument(registryDir, pkgName, latestVersion string, versions map[string]interface{}) {
+func writePackument(registryDir, pkgName, latestVersion string, versions map[string]interface{}) error {
 	packument := map[string]interface{}{
 		"name": pkgName,
 		"dist-tags": map[string]interface{}{
@@ -426,6 +444,12 @@ func writePackument(registryDir, pkgName, latestVersion string, versions map[str
 		},
 		"versions": versions,
 	}
-	data, _ := json.MarshalIndent(packument, "", "  ")
-	os.WriteFile(filepath.Join(registryDir, pkgName), data, 0644)
+	data, err := json.MarshalIndent(packument, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal packument for %s: %w", pkgName, err)
+	}
+	if err := os.WriteFile(filepath.Join(registryDir, pkgName), data, 0644); err != nil {
+		return fmt.Errorf("write packument for %s: %w", pkgName, err)
+	}
+	return nil
 }

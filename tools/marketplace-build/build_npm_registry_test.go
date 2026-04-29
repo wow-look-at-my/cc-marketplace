@@ -387,7 +387,7 @@ func TestWritePackument(t *testing.T) {
 			"version": "1.0.0",
 		},
 	}
-	writePackument(dir, "test-pkg", "1.0.0", versions)
+	require.NoError(t, writePackument(dir, "test-pkg", "1.0.0", versions))
 
 	data, err := os.ReadFile(filepath.Join(dir, "test-pkg"))
 	require.NoError(t, err)
@@ -398,4 +398,13 @@ func TestWritePackument(t *testing.T) {
 
 	distTags := packument["dist-tags"].(map[string]interface{})
 	require.Equal(t, "1.0.0", distTags["latest"])
+}
+
+func TestWritePackument_BadDir(t *testing.T) {
+	versions := map[string]interface{}{
+		"1.0.0": map[string]interface{}{"name": "test-pkg", "version": "1.0.0"},
+	}
+	err := writePackument("/nonexistent/dir", "test-pkg", "1.0.0", versions)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "write packument")
 }
