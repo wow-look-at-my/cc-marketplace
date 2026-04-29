@@ -141,7 +141,9 @@ jobs:
       - uses: ./.github/actions/setup-claude-code
 
       - name: Validate marketplace
-        run: claude plugin validate "${{ steps.registry.outputs.registry_dir }}"
+        run: |
+          claude plugin validate "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
+          claude plugin marketplace add "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
       - uses: actions/upload-artifact@v4
         with:
