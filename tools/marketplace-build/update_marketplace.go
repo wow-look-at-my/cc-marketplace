@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -133,9 +134,10 @@ func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]in
 	owner, _, _ := GetRepoInfo()
 
 	for _, p := range plugins {
+		displayVersion := strings.SplitN(p.version, ".", 2)[0]
 		entry := map[string]interface{}{
 			"name":    p.name,
-			"version": p.version,
+			"version": displayVersion,
 			"source": map[string]interface{}{
 				"source":   "npm",
 				"package":  fmt.Sprintf("%s-%s", owner, p.name),
