@@ -119,15 +119,29 @@ jobs:
             mv "$d" "cooked/$name"
           done
 
+      - name: Compute registry base URL
+        id: base-url
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "url=https://wow-look-at-my.github.io/cc-marketplace/pr-preview/pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "url=https://wow-look-at-my.github.io/cc-marketplace" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build npm registry
         id: registry
-        run: marketplace-build build-npm-registry --input cooked >> $GITHUB_OUTPUT
+        run: marketplace-build build-npm-registry --input cooked --base-url "${{ steps.base-url.outputs.url }}" >> $GITHUB_OUTPUT
 
       - name: Add marketplace.json to registry
         run: |
-          marketplace-build update-marketplace --input cooked > /tmp/marketplace-out.txt
+          marketplace-build update-marketplace --input cooked --base-url "${{ steps.base-url.outputs.url }}" > /tmp/marketplace-out.txt
           src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
           cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
+
+      - uses: ./.github/actions/setup-claude-code
+
+      - name: Validate marketplace
+        run: claude plugin validate "${{ steps.registry.outputs.registry_dir }}"
 
       - uses: actions/upload-artifact@v4
         with:

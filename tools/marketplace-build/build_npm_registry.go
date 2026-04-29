@@ -79,6 +79,7 @@ type platformBinary struct {
 type platformKey struct{ os, arch string }
 
 var buildNPMRegistryInput string
+var buildNPMBaseURL string
 
 var buildNPMRegistryCmd = &cobra.Command{
 	Use:   "build-npm-registry",
@@ -88,6 +89,7 @@ var buildNPMRegistryCmd = &cobra.Command{
 
 func init() {
 	buildNPMRegistryCmd.Flags().StringVar(&buildNPMRegistryInput, "input", "", "directory of cooked plugin subdirectories (one per plugin)")
+	buildNPMRegistryCmd.Flags().StringVar(&buildNPMBaseURL, "base-url", "", "Base URL for tarball downloads (defaults to GitHub Pages URL)")
 	rootCmd.AddCommand(buildNPMRegistryCmd)
 }
 
@@ -294,7 +296,10 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	pagesBase := fmt.Sprintf("https://%s.github.io/%s", owner, repo)
+	pagesBase := buildNPMBaseURL
+	if pagesBase == "" {
+		pagesBase = fmt.Sprintf("https://%s.github.io/%s", owner, repo)
+	}
 
 	cookedPlugins, err := readCookedPlugins(buildNPMRegistryInput)
 	if err != nil {

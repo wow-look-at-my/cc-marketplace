@@ -125,7 +125,7 @@ func TestBuildPluginsArray(t *testing.T) {
 		},
 	}
 
-	result := buildPluginsArray(plugins, existing)
+	result := buildPluginsArray(plugins, existing, "https://test-owner.github.io/test-repo")
 	require.Len(t, result, 1)
 
 	p := result[0].(map[string]interface{})
@@ -157,7 +157,7 @@ func TestBuildPluginsArray_WithMCP(t *testing.T) {
 	plugins, err := readCookedPlugins(dir)
 	require.NoError(t, err)
 
-	result := buildPluginsArray(plugins, map[string]interface{}{})
+	result := buildPluginsArray(plugins, map[string]interface{}{}, "https://test-owner.github.io/test-repo")
 	require.Len(t, result, 1)
 
 	p := result[0].(map[string]interface{})

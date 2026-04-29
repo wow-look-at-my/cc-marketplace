@@ -10,6 +10,11 @@ import (
 )
 
 var updateMarketplaceInput string
+var updateMarketplaceBaseURL string
+
+func init() {
+	updateMarketplaceCmd.Flags().StringVar(&updateMarketplaceBaseURL, "base-url", "", "Base URL for npm registry (defaults to GitHub Pages URL)")
+}
 
 func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
@@ -44,7 +49,12 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update plugins array
-	plugins := buildPluginsArray(cookedPlugins, marketplace)
+	owner, repo, _ := GetRepoInfo()
+	pagesRegistry := updateMarketplaceBaseURL
+	if pagesRegistry == "" {
+		pagesRegistry = fmt.Sprintf("https://%s.github.io/%s", owner, repo)
+	}
+	plugins := buildPluginsArray(cookedPlugins, marketplace, pagesRegistry)
 	marketplace["plugins"] = plugins
 
 	// Marketplace version mirrors the build's run number for monotonicity.
@@ -78,7 +88,6 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	fmt.Printf("source_dir=%s\n", tmpDir)
 	fmt.Printf("message=Update marketplace for %s\n", branch)
 
-	owner, repo, _ := GetRepoInfo()
 	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
 		writeSummary(summaryPath, cookedPlugins, owner, repo, branch)
 	}
@@ -107,7 +116,7 @@ func writeSummary(path string, plugins []cookedPlugin, owner, repo, branch strin
 
 // buildPluginsArray creates the plugins array for marketplace.json from the
 // cooked plugin artifacts produced by `release-plugin`.
-func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]interface{}) []interface{} {
+func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]interface{}, pagesRegistry string) []interface{} {
 	var out []interface{}
 
 	existingPlugins := make(map[string]map[string]interface{})
@@ -121,8 +130,7 @@ func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]in
 		}
 	}
 
-	owner, repo, _ := GetRepoInfo()
-	pagesRegistry := fmt.Sprintf("https://%s.github.io/%s", owner, repo)
+	owner, _, _ := GetRepoInfo()
 
 	for _, p := range plugins {
 		entry := map[string]interface{}{
