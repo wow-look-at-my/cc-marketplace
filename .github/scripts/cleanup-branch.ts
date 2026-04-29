@@ -7,22 +7,12 @@ if (!branchName) {
 }
 
 const marketplaceTag = `marketplace/${branchName}`;
-const allTags = execSync('git tag -l "marketplace/*"', { encoding: "utf8" })
-  .trim()
-  .split("\n")
-  .filter(Boolean);
 
-const tag = allTags.find((t) => t === marketplaceTag);
-if (!tag) {
-  console.log(`No marketplace tag found for branch ${branchName}`);
-  process.exit(0);
-}
-
-console.log(`Cleaning up tag ${tag}`);
+console.log(`Cleaning up tag ${marketplaceTag}`);
 try {
-  execSync(`git push origin :refs/tags/${tag}`, { stdio: "inherit" });
+  execSync(`git push origin :refs/tags/${marketplaceTag}`, { stdio: "inherit" });
 } catch {}
 try {
-  execSync(`git tag -d ${tag}`, { stdio: "inherit" });
+  execSync(`git tag -d ${marketplaceTag}`, { stdio: "inherit" });
 } catch {}
 console.log(`Deleted marketplace tag for branch ${branchName}`);

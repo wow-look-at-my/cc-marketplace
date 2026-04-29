@@ -50,12 +50,15 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update plugins array
-	owner, repo, _ := GetRepoInfo()
+	owner, repo, err := GetRepoInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get repo info (set --base-url if not in a git repo): %w", err)
+	}
 	pagesRegistry := updateMarketplaceBaseURL
 	if pagesRegistry == "" {
 		pagesRegistry = fmt.Sprintf("https://%s.github.io/%s", owner, repo)
 	}
-	plugins := buildPluginsArray(cookedPlugins, marketplace, pagesRegistry)
+	plugins := buildPluginsArray(cookedPlugins, marketplace, pagesRegistry, owner)
 	marketplace["plugins"] = plugins
 
 	// Marketplace version mirrors the build's run number for monotonicity.
@@ -117,7 +120,7 @@ func writeSummary(path string, plugins []cookedPlugin, owner, repo, branch strin
 
 // buildPluginsArray creates the plugins array for marketplace.json from the
 // cooked plugin artifacts produced by `release-plugin`.
-func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]interface{}, pagesRegistry string) []interface{} {
+func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]interface{}, pagesRegistry, owner string) []interface{} {
 	var out []interface{}
 
 	existingPlugins := make(map[string]map[string]interface{})
@@ -130,8 +133,6 @@ func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]in
 			}
 		}
 	}
-
-	owner, _, _ := GetRepoInfo()
 
 	for _, p := range plugins {
 		displayVersion := strings.SplitN(p.version, ".", 2)[0]
