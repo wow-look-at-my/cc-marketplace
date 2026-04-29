@@ -134,7 +134,8 @@ func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]in
 
 	for _, p := range plugins {
 		entry := map[string]interface{}{
-			"name": p.name,
+			"name":    p.name,
+			"version": p.version,
 			"source": map[string]interface{}{
 				"source":   "npm",
 				"package":  fmt.Sprintf("%s-%s", owner, p.name),
