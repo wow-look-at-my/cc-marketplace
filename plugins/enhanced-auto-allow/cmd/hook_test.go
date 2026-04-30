@@ -213,7 +213,7 @@ func TestGhRunListAllowed(t *testing.T) {
 
 func TestFindPipeGrepAllowed(t *testing.T) {
 	loadTestRules(t)
-	decision, _ := evaluateCommand(`find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool`)
+	decision, _ := evaluateCommand(`find /home/user -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool`)
 	assert.Equal(t, "allow", decision, "find|grep file search should be allowed")
 }
 
@@ -225,7 +225,7 @@ func TestFindBasicAllowed(t *testing.T) {
 
 func TestFindExecGrepAllowed(t *testing.T) {
 	loadTestRules(t)
-	decision, _ := evaluateCommand(`find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;`)
+	decision, _ := evaluateCommand(`find /home/user/repos/some-project -name "*.h" -type f -exec grep -l "class SomeClassName" {} \;`)
 	assert.Equal(t, "allow", decision, "find -exec grep should be allowed")
 }
 
@@ -681,8 +681,8 @@ func TestCompoundCommands(t *testing.T) {
 		{"triple and", "git status && git diff && git log", "allow"},
 		{"semicolon", "git status; git diff", "allow"},
 		{"cd and git diff", "cd some/folder && git diff Config/DefaultEngine.ini", "allow"},
-		{"cd and git log piped to grep -E", `cd /home/mhaynie/repos/UnrealEngine && git log --all --oneline | grep -E "e97a553|684663"`, "allow"},
-		{"cd and git show --stat", "cd /home/mhaynie/repos/UnrealEngine && git show 60b658713bf7 --stat", "allow"},
+		{"cd and git log piped to grep -E", `cd /home/user/repos/some-project && git log --all --oneline | grep -E "aaaaaaa|bbbbbbb"`, "allow"},
+		{"cd and git show --stat", "cd /home/user/repos/some-project && git show 0000000000ab --stat", "allow"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
