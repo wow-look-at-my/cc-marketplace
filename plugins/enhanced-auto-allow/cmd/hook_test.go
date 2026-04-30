@@ -1,12 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
-	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/wow-look-at-my/testify/assert"
@@ -685,6 +681,7 @@ func TestCompoundCommands(t *testing.T) {
 		{"triple and", "git status && git diff && git log", "allow"},
 		{"semicolon", "git status; git diff", "allow"},
 		{"cd and git diff", "cd some/folder && git diff Config/DefaultEngine.ini", "allow"},
+		{"cd and git log piped to grep -E", `cd /home/mhaynie/repos/UnrealEngine && git log --all --oneline | grep -E "e97a553|684663"`, "allow"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -711,39 +708,4 @@ func TestReadAllowed(t *testing.T) {
 	var resp PermissionResponse
 	require.NoError(t, json.Unmarshal([]byte(output), &resp), "output was: %s", output)
 	assert.Equal(t, "allow", resp.HookSpecificOutput.Decision.Behavior, "Read should be allowed")
-}
-
-func getRepoRoot(t *testing.T) string {
-	t.Helper()
-	repoRoot := os.Getenv("REPO_ROOT")
-	if repoRoot == "" {
-		cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-		out, err := cmd.Output()
-		if err != nil {
-			t.Skip("Cannot find repo root")
-		}
-		repoRoot = string(bytes.TrimSpace(out))
-	}
-	return repoRoot
-}
-
-func loadTestRules(t *testing.T) {
-	t.Helper()
-	repoRoot := getRepoRoot(t)
-	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json")
-	data, err := os.ReadFile(rulesPath)
-	require.Nil(t, err, "Failed to read rules")
-	require.NoError(t, json.Unmarshal(data, &rules), "Failed to parse rules")
-}
-
-func captureOutput(f func()) string {
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	f()
-	w.Close()
-	os.Stdout = old
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
 }
