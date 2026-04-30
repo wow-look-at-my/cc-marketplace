@@ -1,0 +1,280 @@
+{
+  "metadata": {
+    "description": "Claude Code plugins by wow-look-at-my-code",
+    "pluginRoot": "./plugins",
+    "version": "1"
+  },
+  "name": "wow-cc-marketplace",
+  "owner": {
+    "name": "wow-look-at-my-code"
+  },
+  "plugins": [
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "Create organized, well-structured HTML demo pages with separate CSS and JS files",
+      "keywords": [
+        "html",
+        "demo",
+        "frontend",
+        "prototype"
+      ],
+      "name": "html-demo",
+      "source": {
+        "ref": "plugin/html-demo#16",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "16"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Blocks the Write tool from overwriting existing files - forces use of Edit instead",
+      "hooks": {
+        "PreToolUse": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/build/no-overwrites",
+                "type": "command"
+              }
+            ],
+            "matcher": "Write"
+          }
+        ]
+      },
+      "keywords": [
+        "write",
+        "edit",
+        "overwrite",
+        "guard",
+        "hook"
+      ],
+      "name": "no-overwrites",
+      "source": {
+        "ref": "plugin/no-overwrites#15",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "15"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Blocks direct go build/test commands - use go-toolchain instead",
+      "hooks": {
+        "PreToolUse": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/build/recommend-go-toolchain",
+                "type": "command"
+              }
+            ],
+            "matcher": "Bash"
+          }
+        ]
+      },
+      "keywords": [
+        "go",
+        "build",
+        "test",
+        "toolchain",
+        "hook"
+      ],
+      "name": "recommend-go-toolchain",
+      "source": {
+        "ref": "plugin/recommend-go-toolchain#15",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "15"
+    },
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "MCP server for Chrome DevTools Protocol - inspect, debug, and interact with Chrome browser pages",
+      "keywords": [
+        "chrome",
+        "devtools",
+        "browser",
+        "debugging",
+        "mcp"
+      ],
+      "mcpServers": "./.mcp.json",
+      "name": "chrome-devtools",
+      "source": {
+        "ref": "plugin/chrome-devtools#17",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "17"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "category": "development",
+      "description": "Rewrites Bash commands to remove unnecessary 2\u003e\u00261, || true, | head, | tail, and set -e",
+      "hooks": {
+        "PreToolUse": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/build/cleanup-bash-cmds",
+                "type": "command"
+              }
+            ],
+            "matcher": "Bash"
+          }
+        ]
+      },
+      "keywords": [
+        "bash",
+        "cleanup",
+        "rewrite",
+        "hook"
+      ],
+      "name": "cleanup-bash-cmds",
+      "source": {
+        "ref": "plugin/cleanup-bash-cmds#15",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "15"
+    },
+    {
+      "author": {
+        "name": "wow-look-at-my-code"
+      },
+      "category": "development",
+      "description": "MCP server wrapping jq for JSON filtering, querying, and transforming without Bash permission prompts",
+      "keywords": [
+        "jq",
+        "json",
+        "filter",
+        "query",
+        "mcp"
+      ],
+      "mcpServers": "./.mcp.json",
+      "name": "jq",
+      "source": {
+        "ref": "plugin/jq#13",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "13"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Fetch text content from URLs referenced with @https://... in prompts",
+      "hooks": {
+        "UserPromptSubmit": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/build/prompt-url-fetch",
+                "type": "command"
+              }
+            ]
+          }
+        ]
+      },
+      "keywords": [
+        "fetch",
+        "url",
+        "text",
+        "content"
+      ],
+      "name": "prompt-url-fetch",
+      "source": {
+        "ref": "plugin/prompt-url-fetch#12",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "12"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Detects permission-seeking patterns in assistant messages and blocks the stop with a lecture about autonomy",
+      "hooks": {
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/build/detect-permission-seeking",
+                "type": "command"
+              }
+            ]
+          }
+        ]
+      },
+      "keywords": [
+        "stop",
+        "permission",
+        "autonomy",
+        "behavior",
+        "hook"
+      ],
+      "name": "detect-permission-seeking",
+      "source": {
+        "ref": "plugin/detect-permission-seeking#15",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "15"
+    },
+    {
+      "author": {
+        "name": "mhaynie"
+      },
+      "description": "Auto-approve readonly git and gh commands using JSON-driven rules",
+      "hooks": {
+        "PermissionRequest": [
+          {
+            "hooks": [
+              {
+                "command": "${CLAUDE_PLUGIN_ROOT}/build/enhanced-auto-allow",
+                "type": "command"
+              }
+            ],
+            "matcher": "Bash|Read|Glob|Grep"
+          },
+          {
+            "hooks": [
+              {
+                "command": "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'",
+                "type": "command"
+              }
+            ],
+            "matcher": "mcp__claude_ai_GitHub_API__get_commit|mcp__claude_ai_GitHub_API__get_copilot_job_status|mcp__claude_ai_GitHub_API__get_file_contents|mcp__claude_ai_GitHub_API__get_label|mcp__claude_ai_GitHub_API__get_latest_release|mcp__claude_ai_GitHub_API__get_me|mcp__claude_ai_GitHub_API__get_release_by_tag|mcp__claude_ai_GitHub_API__get_tag|mcp__claude_ai_GitHub_API__get_team_members|mcp__claude_ai_GitHub_API__get_teams|mcp__claude_ai_GitHub_API__issue_read|mcp__claude_ai_GitHub_API__list_branches|mcp__claude_ai_GitHub_API__list_commits|mcp__claude_ai_GitHub_API__list_issue_types|mcp__claude_ai_GitHub_API__list_issues|mcp__claude_ai_GitHub_API__list_pull_requests|mcp__claude_ai_GitHub_API__list_releases|mcp__claude_ai_GitHub_API__list_tags|mcp__claude_ai_GitHub_API__pull_request_read|mcp__claude_ai_GitHub_API__search_code|mcp__claude_ai_GitHub_API__search_issues|mcp__claude_ai_GitHub_API__search_pull_requests|mcp__claude_ai_GitHub_API__search_repositories|mcp__claude_ai_GitHub_API__search_users"
+          }
+        ]
+      },
+      "keywords": [
+        "git",
+        "github",
+        "auto-allow",
+        "permissions"
+      ],
+      "name": "enhanced-auto-allow",
+      "source": {
+        "ref": "plugin/enhanced-auto-allow#16",
+        "repo": "wow-look-at-my/cc-marketplace",
+        "source": "github"
+      },
+      "version": "16"
+    }
+  ]
+}
