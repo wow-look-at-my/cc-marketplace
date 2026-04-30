@@ -682,6 +682,7 @@ func TestCompoundCommands(t *testing.T) {
 		{"semicolon", "git status; git diff", "allow"},
 		{"cd and git diff", "cd some/folder && git diff Config/DefaultEngine.ini", "allow"},
 		{"cd and git log piped to grep -E", `cd /home/mhaynie/repos/UnrealEngine && git log --all --oneline | grep -E "e97a553|684663"`, "allow"},
+		{"cd and git show --stat", "cd /home/mhaynie/repos/UnrealEngine && git show 60b658713bf7 --stat", "allow"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
