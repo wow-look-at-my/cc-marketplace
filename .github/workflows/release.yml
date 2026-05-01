@@ -119,22 +119,44 @@ jobs:
             mv "$d" "cooked/$name"
           done
 
-      - name: Compute registry base URL
+      - name: Fetch production version for PR preview
+        if: github.event_name == 'pull_request'
+        id: prod-version
+        run: |
+          PROD_VERSION=$(curl -sf \
+            "https://wow-look-at-my.github.io/cc-marketplace/wow-look-at-my-html-demo" \
+            | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
+          if [ -n "$PROD_VERSION" ]; then
+            echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Align cooked plugin versions to production
+        if: github.event_name == 'pull_request' && steps.prod-version.outputs.version != ''
+        run: |
+          PROD_VERSION="${{ steps.prod-version.outputs.version }}"
+          for pkg in cooked/*/package.json; do
+            jq --arg v "$PROD_VERSION" '.version = $v' "$pkg" > "$pkg.tmp" && mv "$pkg.tmp" "$pkg"
+          done
+
+      - name: Compute registry base URLs
         id: base-url
         run: |
+          ROOT_URL="https://wow-look-at-my.github.io/cc-marketplace"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "url=https://wow-look-at-my.github.io/cc-marketplace/pr-preview/pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "tarball-url=$ROOT_URL" >> $GITHUB_OUTPUT
+            echo "marketplace-url=$ROOT_URL/pr-preview/pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
           else
-            echo "url=https://wow-look-at-my.github.io/cc-marketplace" >> $GITHUB_OUTPUT
+            echo "tarball-url=$ROOT_URL" >> $GITHUB_OUTPUT
+            echo "marketplace-url=$ROOT_URL" >> $GITHUB_OUTPUT
           fi
 
       - name: Build npm registry
         id: registry
-        run: marketplace-build build-npm-registry --input cooked --base-url "${{ steps.base-url.outputs.url }}" >> $GITHUB_OUTPUT
+        run: marketplace-build build-npm-registry --input cooked --base-url "${{ steps.base-url.outputs.tarball-url }}" >> $GITHUB_OUTPUT
 
       - name: Add marketplace.json to registry
         run: |
-          marketplace-build update-marketplace --input cooked --base-url "${{ steps.base-url.outputs.url }}" > /tmp/marketplace-out.txt
+          marketplace-build update-marketplace --input cooked --base-url "${{ steps.base-url.outputs.marketplace-url }}" > /tmp/marketplace-out.txt
           src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
           cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
@@ -159,7 +181,8 @@ jobs:
       pages: write
       id-token: write
       statuses: write
-    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@4f248afac2702fab9d8bbffff53335b120dbf463
+    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@d29afe815a9e2de9d083c1f25361d85a540fb572
     with:
       artifact-name: npm-registry
+      shared-dirs: tarballs
     secrets: inherit
