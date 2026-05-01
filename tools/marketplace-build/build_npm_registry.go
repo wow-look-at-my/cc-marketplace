@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -298,6 +301,22 @@ func createTarballReal(srcDir, outputPath string) error {
 	return nil
 }
 
+var hashFile = hashFileReal
+
+// hashFileReal returns the lowercase hex-encoded SHA-256 digest of the file at path.
+func hashFileReal(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open %s for hashing: %w", path, err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("hash %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 
@@ -325,34 +344,49 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
+	tarballDir := filepath.Join(tmpDir, "tarballs")
+	if err := os.MkdirAll(tarballDir, 0755); err != nil {
+		return fmt.Errorf("failed to create tarball dir: %w", err)
+	}
+
 	for _, plugin := range cookedPlugins {
 		pluginName := plugin.name
 		pkgName := fmt.Sprintf("%s-%s", owner, pluginName)
 		version := plugin.version
-
-		tarballDir := filepath.Join(tmpDir, "tarballs", pkgName)
-		if err := os.MkdirAll(tarballDir, 0755); err != nil {
-			return fmt.Errorf("failed to create tarball dir for %s: %w", pkgName, err)
-		}
 
 		versions := make(map[string]interface{})
 		platformVersions := make(map[string]map[string]interface{})
 
 		platforms := detectPlatformBinaries(plugin.dir)
 
-		tarballName := fmt.Sprintf("%s-%s.tgz", pkgName, version)
-		tarballPath := filepath.Join(tarballDir, tarballName)
-		tarballURL := fmt.Sprintf("%s/tarballs/%s/%s", pagesBase, pkgName, tarballName)
+		// Create tarball to a temp file, hash it, then rename to content-addressed name.
+		tmpTarball := filepath.Join(tarballDir, fmt.Sprintf("tmp-%s.tgz", pkgName))
 
 		if len(platforms) == 0 {
-			if err := createTarball(plugin.dir, tarballPath); err != nil {
+			if err := createTarball(plugin.dir, tmpTarball); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to tar %s: %v\n", pluginName, err)
 				continue
 			}
+			hash, err := hashFile(tmpTarball)
+			if err != nil {
+				os.Remove(tmpTarball)
+				fmt.Fprintf(os.Stderr, "Warning: failed to hash tarball for %s: %v\n", pluginName, err)
+				continue
+			}
+			tarballName := hash + ".tgz"
+			tarballPath := filepath.Join(tarballDir, tarballName)
+			if err := os.Rename(tmpTarball, tarballPath); err != nil {
+				os.Remove(tmpTarball)
+				return fmt.Errorf("rename tarball for %s: %w", pkgName, err)
+			}
+			tarballURL := fmt.Sprintf("%s/tarballs/%s", pagesBase, tarballName)
 			versions[version] = map[string]interface{}{
 				"name":    pkgName,
 				"version": version,
-				"dist":    map[string]interface{}{"tarball": tarballURL},
+				"dist": map[string]interface{}{
+					"tarball": tarballURL,
+					"shasum":  hash,
+				},
 			}
 		} else {
 			mainDir, err := buildMainPackageDir(plugin.dir, platforms, pkgName, version)
@@ -360,11 +394,25 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(os.Stderr, "Warning: failed to build main pkg for %s: %v\n", pluginName, err)
 				continue
 			}
-			if err := createTarball(mainDir, tarballPath); err != nil {
+			if err := createTarball(mainDir, tmpTarball); err != nil {
 				os.RemoveAll(mainDir)
 				continue
 			}
 			os.RemoveAll(mainDir)
+
+			hash, err := hashFile(tmpTarball)
+			if err != nil {
+				os.Remove(tmpTarball)
+				fmt.Fprintf(os.Stderr, "Warning: failed to hash tarball for %s: %v\n", pluginName, err)
+				continue
+			}
+			tarballName := hash + ".tgz"
+			tarballPath := filepath.Join(tarballDir, tarballName)
+			if err := os.Rename(tmpTarball, tarballPath); err != nil {
+				os.Remove(tmpTarball)
+				return fmt.Errorf("rename tarball for %s: %w", pkgName, err)
+			}
+			tarballURL := fmt.Sprintf("%s/tarballs/%s", pagesBase, tarballName)
 
 			optDeps := map[string]string{}
 			for _, pk := range uniquePlatforms(platforms) {
@@ -373,7 +421,10 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 			versions[version] = map[string]interface{}{
 				"name":                 pkgName,
 				"version":              version,
-				"dist":                 map[string]interface{}{"tarball": tarballURL},
+				"dist": map[string]interface{}{
+					"tarball": tarballURL,
+					"shasum":  hash,
+				},
 				"optionalDependencies": optDeps,
 			}
 
@@ -385,17 +436,26 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 					continue
 				}
 
-				platTarballDir := filepath.Join(tmpDir, "tarballs", platPkgName)
-				os.MkdirAll(platTarballDir, 0755)
-				platTarballName := fmt.Sprintf("%s-%s.tgz", platPkgName, version)
-				platTarballPath := filepath.Join(platTarballDir, platTarballName)
-				platTarballURL := fmt.Sprintf("%s/tarballs/%s/%s", pagesBase, platPkgName, platTarballName)
-
-				if err := createTarball(platDir, platTarballPath); err != nil {
+				platTmpTarball := filepath.Join(tarballDir, fmt.Sprintf("tmp-%s.tgz", platPkgName))
+				if err := createTarball(platDir, platTmpTarball); err != nil {
 					os.RemoveAll(platDir)
 					continue
 				}
 				os.RemoveAll(platDir)
+
+				platHash, err := hashFile(platTmpTarball)
+				if err != nil {
+					os.Remove(platTmpTarball)
+					fmt.Fprintf(os.Stderr, "Warning: failed to hash platform tarball for %s: %v\n", platPkgName, err)
+					continue
+				}
+				platTarballName := platHash + ".tgz"
+				platTarballPath := filepath.Join(tarballDir, platTarballName)
+				if err := os.Rename(platTmpTarball, platTarballPath); err != nil {
+					os.Remove(platTmpTarball)
+					return fmt.Errorf("rename platform tarball for %s: %w", platPkgName, err)
+				}
+				platTarballURL := fmt.Sprintf("%s/tarballs/%s", pagesBase, platTarballName)
 
 				if platformVersions[platPkgName] == nil {
 					platformVersions[platPkgName] = make(map[string]interface{})
@@ -405,7 +465,10 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 					"version": version,
 					"os":      []string{pk.os},
 					"cpu":     []string{npmArch[pk.arch]},
-					"dist":    map[string]interface{}{"tarball": platTarballURL},
+					"dist": map[string]interface{}{
+						"tarball": platTarballURL,
+						"shasum":  platHash,
+					},
 				}
 			}
 		}
