@@ -159,37 +159,7 @@ jobs:
       pages: write
       id-token: write
       statuses: write
-    concurrency:
-      group: gh-pages-write
-      cancel-in-progress: false
     uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@4f248afac2702fab9d8bbffff53335b120dbf463
     with:
       artifact-name: npm-registry
     secrets: inherit
-
-  orphan-gh-pages:
-    needs: [deploy-preview]
-    if: github.event_name != 'delete' && needs.deploy-preview.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    concurrency:
-      group: gh-pages-write
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          fetch-depth: 1
-
-      - name: Squash gh-pages history into a single orphan commit
-        run: |
-          set -euo pipefail
-          git checkout --orphan fresh
-          git add -A
-          git -c user.email=actions@github.com \
-              -c user.name="github-actions[bot]" \
-              commit -m "Site snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          git branch -M fresh gh-pages
-          git push --force origin gh-pages
