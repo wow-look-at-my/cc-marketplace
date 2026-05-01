@@ -93,7 +93,7 @@ jobs:
 
   pages:
     needs: [prepare, build]
-    if: '!cancelled() && !failure()'
+    if: needs.build.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
