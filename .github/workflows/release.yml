@@ -50,6 +50,7 @@ jobs:
         uses: wow-look-at-my/actions@typescript#latest
         env:
           GH_TOKEN: ${{ github.token }}
+          NODE_PATH: ${{ github.workspace }}/node_modules
           CACHE_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/heads/{0}', github.ref_name) }}
         with:
           steps: ${{ toJSON(steps) }}
@@ -169,6 +170,8 @@ jobs:
       - name: Restore cached plugins
         if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
         uses: wow-look-at-my/actions@typescript#latest
+        env:
+          NODE_PATH: ${{ github.workspace }}/node_modules
         with:
           needs: ${{ toJSON(needs) }}
           script: |
