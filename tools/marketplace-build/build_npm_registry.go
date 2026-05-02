@@ -116,6 +116,22 @@ func npmWrapperScript(pkgName string) string {
 	return strings.Replace(npmWrapperTemplate, "PKG_PLACEHOLDER", pkgName, 1)
 }
 
+func writeWrappers(buildDir string, names map[string]bool, pkgName string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(buildDir, 0755); err != nil {
+		return err
+	}
+	wrapper := []byte(npmWrapperScript(pkgName))
+	for name := range names {
+		if err := os.WriteFile(filepath.Join(buildDir, name), wrapper, 0755); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func buildMainPackageDir(srcDir string, bins []platformBinary, pkgName, version string) (string, error) {
 	mainDir, err := os.MkdirTemp("", "npm-main-*")
 	if err != nil {
@@ -123,12 +139,9 @@ func buildMainPackageDir(srcDir string, bins []platformBinary, pkgName, version 
 	}
 
 	binPaths := map[string]bool{}
-	for _, b := range bins {
-		binPaths[b.path] = true
-	}
-
 	wrapperNames := map[string]bool{}
 	for _, b := range bins {
+		binPaths[b.path] = true
 		wrapperNames[b.name] = true
 	}
 
@@ -145,21 +158,23 @@ func buildMainPackageDir(srcDir string, bins []platformBinary, pkgName, version 
 		if binPaths[path] {
 			return nil
 		}
+		// Skip any pre-existing unsuffixed binary stub; we write the wrapper below.
+		if filepath.Dir(relPath) == "build" && wrapperNames[filepath.Base(relPath)] {
+			return nil
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
 		info, _ := d.Info()
-		mode := info.Mode()
-
-		if filepath.Dir(relPath) == "build" && wrapperNames[filepath.Base(relPath)] {
-			data = []byte(npmWrapperScript(pkgName))
-			mode = 0755
-		}
-
-		return os.WriteFile(dstPath, data, mode)
+		return os.WriteFile(dstPath, data, info.Mode())
 	})
 	if err != nil {
+		os.RemoveAll(mainDir)
+		return "", err
+	}
+
+	if err := writeWrappers(filepath.Join(mainDir, "build"), wrapperNames, pkgName); err != nil {
 		os.RemoveAll(mainDir)
 		return "", err
 	}

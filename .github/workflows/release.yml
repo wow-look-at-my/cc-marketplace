@@ -163,7 +163,7 @@ jobs:
       pages: write
       id-token: write
       statuses: write
-    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@4f248afac2702fab9d8bbffff53335b120dbf463
+    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@master
     with:
       artifact-name: npm-registry
     secrets: inherit
