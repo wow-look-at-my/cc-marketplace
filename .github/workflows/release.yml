@@ -59,8 +59,16 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Build Go plugin
+      - name: Cache Go plugin binaries
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+        uses: wow-look-at-my/actions@smart-cache#latest
+        id: go-cache
+        with:
+          path: plugins/${{ matrix.plugin }}/build
+          key: plugin-go-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin), format('plugins/{0}/go.mod', matrix.plugin), format('plugins/{0}/go.sum', matrix.plugin)) }}
+
+      - name: Build Go plugin
+        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' && steps.go-cache.outputs.cache-hit != 'true' }}
         uses: wow-look-at-my/go-toolchain@latest
         with:
           working-directory: plugins/${{ matrix.plugin }}
