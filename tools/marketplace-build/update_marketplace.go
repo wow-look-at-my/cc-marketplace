@@ -21,7 +21,7 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 
 	if updateMarketplaceInput == "" {
-		return fmt.Errorf("--input is required: directory of cooked plugin subdirectories")
+		return fmt.Errorf("--input is required: directory of packaged plugin subdirectories")
 	}
 
 	branch, err := GetCurrentBranch()
@@ -43,10 +43,10 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to parse marketplace.json: %w", err)
 	}
 
-	// Read cooked plugins from the artifact directory
-	cookedPlugins, err := readCookedPlugins(updateMarketplaceInput)
+	// Read packaged plugins from the artifact directory
+	packagedPlugins, err := readPackagedPlugins(updateMarketplaceInput)
 	if err != nil {
-		return fmt.Errorf("failed to read cooked plugins: %w", err)
+		return fmt.Errorf("failed to read packaged plugins: %w", err)
 	}
 
 	// Update plugins array
@@ -58,7 +58,7 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	if pagesRegistry == "" {
 		pagesRegistry = fmt.Sprintf("https://%s.github.io/%s", owner, repo)
 	}
-	plugins := buildPluginsArray(cookedPlugins, marketplace, pagesRegistry, owner)
+	plugins := buildPluginsArray(packagedPlugins, marketplace, pagesRegistry, owner)
 	marketplace["plugins"] = plugins
 
 	// Marketplace version mirrors the build's run number for monotonicity.
@@ -93,14 +93,14 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	fmt.Printf("message=Update marketplace for %s\n", branch)
 
 	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
-		writeSummary(summaryPath, cookedPlugins, owner, repo, branch)
+		writeSummary(summaryPath, packagedPlugins, owner, repo, branch)
 	}
 
 	fmt.Fprintf(os.Stderr, "Prepared marketplace update in %s\n", tmpDir)
 	return nil
 }
 
-func writeSummary(path string, plugins []cookedPlugin, owner, repo, branch string) {
+func writeSummary(path string, plugins []packagedPlugin, owner, repo, branch string) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
@@ -113,14 +113,13 @@ func writeSummary(path string, plugins []cookedPlugin, owner, repo, branch strin
 	fmt.Fprintf(f, "|--------|---------|--------|\n")
 
 	for _, p := range plugins {
-		pkgName := fmt.Sprintf("%s-%s", owner, p.name)
-		fmt.Fprintf(f, "| %s | `%s` | `%s` |\n", p.name, pkgName, p.version)
+		fmt.Fprintf(f, "| %s | `%s` | `%s` |\n", p.name, p.manifest.Name, p.manifest.Version)
 	}
 }
 
 // buildPluginsArray creates the plugins array for marketplace.json from the
-// cooked plugin artifacts produced by `release-plugin`.
-func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]interface{}, pagesRegistry, owner string) []interface{} {
+// packaged plugin artifacts produced by `package-plugin`.
+func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]interface{}, pagesRegistry, owner string) []interface{} {
 	var out []interface{}
 
 	existingPlugins := make(map[string]map[string]interface{})
@@ -135,19 +134,19 @@ func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]in
 	}
 
 	for _, p := range plugins {
-		displayVersion := strings.SplitN(p.version, ".", 2)[0]
+		displayVersion := strings.SplitN(p.manifest.Version, ".", 2)[0]
 		entry := map[string]interface{}{
 			"name":    p.name,
 			"version": displayVersion,
 			"source": map[string]interface{}{
 				"source":   "npm",
-				"package":  fmt.Sprintf("%s-%s", owner, p.name),
-				"version":  p.version,
+				"package":  p.manifest.Name,
+				"version":  p.manifest.Version,
 				"registry": pagesRegistry,
 			},
 		}
 
-		if pluginJSON, err := readCookedPluginJSON(p.dir); err == nil {
+		if pluginJSON := p.manifest.PluginJSON; pluginJSON != nil {
 			if desc, ok := pluginJSON["description"].(string); ok && desc != "" {
 				entry["description"] = desc
 			}
@@ -172,8 +171,8 @@ func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]in
 		}
 
 		if _, hasMCP := entry["mcpServers"]; !hasMCP {
-			if mcpServers := readCookedMCPServers(p.dir); mcpServers != nil {
-				entry["mcpServers"] = mcpServers
+			if servers := mcpServersFromManifest(p.manifest.MCPJSON); servers != nil {
+				entry["mcpServers"] = servers
 			}
 		}
 
@@ -193,33 +192,14 @@ func buildPluginsArray(plugins []cookedPlugin, existingMarketplace map[string]in
 	return out
 }
 
-// readCookedPluginJSON reads .claude-plugin/plugin.json from a cooked plugin dir.
-func readCookedPluginJSON(pluginDir string) (map[string]interface{}, error) {
-	data, err := os.ReadFile(filepath.Join(pluginDir, ".claude-plugin", "plugin.json"))
-	if err != nil {
-		return nil, err
-	}
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// readCookedMCPServers reads .mcp.json from a cooked plugin dir and returns the mcpServers map.
-func readCookedMCPServers(pluginDir string) map[string]interface{} {
-	data, err := os.ReadFile(filepath.Join(pluginDir, ".mcp.json"))
-	if err != nil {
+// mcpServersFromManifest extracts the mcpServers map from a manifest's MCPJSON
+// (the cooked .mcp.json contents). Returns nil if absent or malformed.
+func mcpServersFromManifest(mcpJSON map[string]interface{}) map[string]interface{} {
+	if mcpJSON == nil {
 		return nil
 	}
-	var mcpConfig map[string]interface{}
-	if err := json.Unmarshal(data, &mcpConfig); err != nil {
-		return nil
-	}
-	if servers, ok := mcpConfig["mcpServers"]; ok {
-		if serversMap, ok := servers.(map[string]interface{}); ok {
-			return serversMap
-		}
+	if servers, ok := mcpJSON["mcpServers"].(map[string]interface{}); ok {
+		return servers
 	}
 	return nil
 }
