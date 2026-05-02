@@ -28,11 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: write
       id-token: write
     outputs:
-      plugins: ${{ steps.matrix.outputs.plugins }}
-      has_changes: ${{ steps.matrix.outputs.has_changes }}
+      build_plugins: ${{ steps.split.outputs.build_plugins }}
+      cached_plugins: ${{ steps.split.outputs.cached_plugins }}
+      has_build: ${{ steps.split.outputs.has_build }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,9 +43,56 @@ jobs:
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
+      - name: Check plugin caches
+        id: split
+        if: steps.matrix.outputs.has_changes == 'true'
+        uses: wow-look-at-my/actions@typescript#latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NODE_PATH: ${{ github.workspace }}/node_modules
+          CACHE_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/heads/{0}', github.ref_name) }}
+        with:
+          steps: ${{ toJSON(steps) }}
+          script: |
+            const { hashFiles } = require('@actions/glob');
+            const plugins: string[] = JSON.parse(steps.matrix.outputs.plugins);
+            const repo = process.env.GITHUB_REPOSITORY;
+            const ref = process.env.CACHE_REF;
+
+            const buildPlugins: string[] = [];
+            const cachedPlugins: string[] = [];
+
+            for (const plugin of plugins) {
+              const hash = await hashFiles(`plugins/${plugin}/**`);
+              const key = `plugin-${plugin}-${hash}`;
+
+              let cached = false;
+              try {
+                const out = child_process.execSync(
+                  `gh api "repos/${repo}/actions/caches?key=${encodeURIComponent(key)}&ref=${encodeURIComponent(ref!)}" --jq ".actions_caches | length"`,
+                  { encoding: 'utf8' },
+                ).trim();
+                cached = parseInt(out, 10) > 0;
+              } catch {
+                cached = false;
+              }
+
+              if (cached) {
+                cachedPlugins.push(plugin);
+                core.info(`${plugin}: cached`);
+              } else {
+                buildPlugins.push(plugin);
+                core.info(`${plugin}: needs build`);
+              }
+            }
+
+            core.setOutput('build_plugins', JSON.stringify(buildPlugins));
+            core.setOutput('cached_plugins', JSON.stringify(cachedPlugins));
+            core.setOutput('has_build', String(buildPlugins.length > 0));
+
   build:
     needs: prepare
-    if: needs.prepare.outputs.has_changes == 'true'
+    if: needs.prepare.outputs.has_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -52,9 +101,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: ${{ fromJson(needs.prepare.outputs.plugins) }}
+        plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Compute plugin hash
+        id: hash
+        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}" >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -85,6 +138,12 @@ jobs:
       - name: Package plugin
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
+      - name: Save plugin cache
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/packaged-${{ matrix.plugin }}
+          key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
+
       - name: Upload packaged plugin
         uses: actions/upload-artifact@v4
         with:
@@ -107,13 +166,42 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Download packaged plugins
+      - name: Restore cached plugins
+        if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
+        uses: wow-look-at-my/actions@typescript#latest
+        env:
+          NODE_PATH: ${{ github.workspace }}/node_modules
+        with:
+          needs: ${{ toJSON(needs) }}
+          script: |
+            const { hashFiles } = require('@actions/glob');
+            const { restoreCache } = require('@actions/cache');
+            const plugins: string[] = JSON.parse(needs.prepare.outputs.cached_plugins);
+
+            fs.mkdirSync('packaged', { recursive: true });
+
+            for (const plugin of plugins) {
+              const hash = await hashFiles(`plugins/${plugin}/**`);
+              const key = `plugin-${plugin}-${hash}`;
+              const cachePath = `/tmp/packaged-${plugin}`;
+
+              core.info(`Restoring ${plugin}`);
+              const hit = await restoreCache([cachePath], key);
+              if (!hit) throw new Error(`Cache miss for ${plugin} (${key})`);
+
+              fs.renameSync(cachePath, `packaged/${plugin}`);
+              core.info(`  OK`);
+            }
+
+      - name: Download built plugins
+        if: needs.prepare.outputs.has_build == 'true'
         uses: actions/download-artifact@v4
         with:
           path: packaged
           pattern: packaged-*
 
       - name: Strip packaged- artifact prefix
+        if: needs.prepare.outputs.has_build == 'true'
         run: |
           set -e
           shopt -s nullglob
