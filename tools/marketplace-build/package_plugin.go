@@ -11,12 +11,16 @@ import (
 
 // pluginPackageManifest describes the npm tarballs produced for a single plugin
 // by `marketplace-build package-plugin`. The pages job uses it to know which
-// tarballs to publish and how to build the npm packument metadata.
+// tarballs to publish and how to build the npm packument metadata, and embeds
+// the cooked plugin.json + .mcp.json so update-marketplace doesn't need a
+// separate copy of the cooked tree.
 type pluginPackageManifest struct {
-	Name      string                    `json:"name"`
-	Version   string                    `json:"version"`
-	Main      manifestTarball           `json:"main"`
-	Platforms []manifestPlatformPackage `json:"platforms,omitempty"`
+	Name       string                    `json:"name"`
+	Version    string                    `json:"version"`
+	Main       manifestTarball           `json:"main"`
+	Platforms  []manifestPlatformPackage `json:"platforms,omitempty"`
+	PluginJSON map[string]interface{}    `json:"pluginJson,omitempty"`
+	MCPJSON    map[string]interface{}    `json:"mcpJson,omitempty"`
 }
 
 type manifestTarball struct {
@@ -94,6 +98,19 @@ func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 	manifest := pluginPackageManifest{
 		Name:    pkgName,
 		Version: version,
+	}
+
+	if data, err := os.ReadFile(filepath.Join(cookedDir, ".claude-plugin", "plugin.json")); err == nil {
+		var pj map[string]interface{}
+		if err := json.Unmarshal(data, &pj); err == nil {
+			manifest.PluginJSON = pj
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(cookedDir, ".mcp.json")); err == nil {
+		var mj map[string]interface{}
+		if err := json.Unmarshal(data, &mj); err == nil {
+			manifest.MCPJSON = mj
+		}
 	}
 
 	mainTarballRel := filepath.ToSlash(filepath.Join("tarballs", pkgName, fmt.Sprintf("%s-%s.tgz", pkgName, version)))

@@ -86,9 +86,6 @@ jobs:
       - name: Package plugin
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
-      - name: Archive cooked tree for marketplace metadata
-        run: tar -cf /tmp/packaged-${{ matrix.plugin }}/cooked.tar -C ${{ steps.release.outputs.source_dir }} .
-
       - name: Upload packaged plugin
         uses: actions/upload-artifact@v4
         with:
@@ -116,16 +113,12 @@ jobs:
           path: packaged
           pattern: packaged-*
 
-      - name: Strip packaged- artifact prefix and extract cooked trees
+      - name: Strip packaged- artifact prefix
         run: |
           set -e
           shopt -s nullglob
-          mkdir -p cooked
           for d in packaged/packaged-*; do
-            name="${d#packaged/packaged-}"
-            mv "$d" "packaged/$name"
-            mkdir -p "cooked/$name"
-            tar -xf "packaged/$name/cooked.tar" -C "cooked/$name"
+            mv "$d" "packaged/${d#packaged/packaged-}"
           done
 
       - name: Compute registry base URL
@@ -143,7 +136,7 @@ jobs:
 
       - name: Add marketplace.json to registry
         run: |
-          marketplace-build update-marketplace --input cooked --base-url "${{ steps.base-url.outputs.url }}" > /tmp/marketplace-out.txt
+          marketplace-build update-marketplace --input packaged --base-url "${{ steps.base-url.outputs.url }}" > /tmp/marketplace-out.txt
           src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
           cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 

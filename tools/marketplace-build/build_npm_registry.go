@@ -15,58 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// cookedPlugin represents a single plugin's cooked artifact directory
-// produced by `marketplace-build release-plugin`.
-type cookedPlugin struct {
-	name    string
-	dir     string
-	version string
-}
-
-// readCookedPlugins enumerates subdirectories of inputDir as cooked plugins.
-// Each subdirectory is expected to contain a package.json (with a version
-// field) and the cooked plugin tree.
-func readCookedPlugins(inputDir string) ([]cookedPlugin, error) {
-	entries, err := os.ReadDir(inputDir)
-	if err != nil {
-		return nil, fmt.Errorf("read input dir %s: %w", inputDir, err)
-	}
-
-	var plugins []cookedPlugin
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		pluginDir := filepath.Join(inputDir, e.Name())
-		pkgPath := filepath.Join(pluginDir, "package.json")
-		data, err := os.ReadFile(pkgPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (no package.json): %v\n", e.Name(), err)
-			continue
-		}
-		var pkg struct {
-			Name    string `json:"name"`
-			Version string `json:"version"`
-		}
-		if err := json.Unmarshal(data, &pkg); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (bad package.json): %v\n", e.Name(), err)
-			continue
-		}
-		if pkg.Version == "" {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (no version in package.json)\n", e.Name())
-			continue
-		}
-		plugins = append(plugins, cookedPlugin{
-			name:    e.Name(),
-			dir:     pluginDir,
-			version: pkg.Version,
-		})
-	}
-
-	sort.Slice(plugins, func(i, j int) bool { return plugins[i].name < plugins[j].name })
-	return plugins, nil
-}
-
 var npmArch = map[string]string{"amd64": "x64", "arm64": "arm64"}
 
 var platformBinaryPattern = regexp.MustCompile(`^(.+)_(linux|darwin)_(amd64|arm64)$`)
