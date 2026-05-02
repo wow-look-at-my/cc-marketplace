@@ -10,68 +10,70 @@ import (
 	"github.com/wow-look-at-my/testify/require"
 )
 
-// makeCookedPlugin creates a fake cooked plugin directory under root.
-// pluginJSON is the contents of .claude-plugin/plugin.json (must be valid JSON
-// or empty for none); mcpJSON is the .mcp.json contents (empty for none).
-func makeCookedPlugin(t *testing.T, root, name, version, pluginJSON, mcpJSON string) string {
+// makePackagedPlugin creates a fake packaged plugin directory under root by
+// running packagePluginToDir on a temp cooked dir built with the given
+// plugin.json + .mcp.json strings.
+func makePackagedPlugin(t *testing.T, root, name, version, pluginJSON, mcpJSON string) string {
 	t.Helper()
-	dir := filepath.Join(root, name)
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755))
 
+	cookedDir := t.TempDir()
 	pkg := map[string]string{
 		"name":    "test-owner-" + name,
 		"version": version,
 	}
 	pkgData, _ := json.Marshal(pkg)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), pkgData, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(cookedDir, "package.json"), pkgData, 0644))
 
 	if pluginJSON != "" {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(pluginJSON), 0644))
+		require.NoError(t, os.MkdirAll(filepath.Join(cookedDir, ".claude-plugin"), 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(cookedDir, ".claude-plugin", "plugin.json"), []byte(pluginJSON), 0644))
 	}
 	if mcpJSON != "" {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(mcpJSON), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(cookedDir, ".mcp.json"), []byte(mcpJSON), 0644))
 	}
-	return dir
+
+	outDir := filepath.Join(root, name)
+	require.NoError(t, packagePluginToDir(cookedDir, "test-owner-"+name, version, outDir))
+	return outDir
 }
 
-func TestReadCookedPlugins(t *testing.T) {
+func TestReadPackagedPlugins(t *testing.T) {
 	dir := t.TempDir()
-	makeCookedPlugin(t, dir, "alpha", "5.0.0", `{"name":"alpha"}`, "")
-	makeCookedPlugin(t, dir, "beta", "1.0.0", `{"name":"beta"}`, "")
-	// Stray file should be skipped.
+	makePackagedPlugin(t, dir, "alpha", "5.0.0", `{"name":"alpha"}`, "")
+	makePackagedPlugin(t, dir, "beta", "1.0.0", `{"name":"beta"}`, "")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "stray.txt"), []byte("nope"), 0644))
 
-	plugins, err := readCookedPlugins(dir)
+	plugins, err := readPackagedPlugins(dir)
 	require.NoError(t, err)
 	require.Len(t, plugins, 2)
 	require.Equal(t, "alpha", plugins[0].name)
-	require.Equal(t, "5.0.0", plugins[0].version)
+	require.Equal(t, "5.0.0", plugins[0].manifest.Version)
 	require.Equal(t, "beta", plugins[1].name)
-	require.Equal(t, "1.0.0", plugins[1].version)
+	require.Equal(t, "1.0.0", plugins[1].manifest.Version)
 }
 
-func TestReadCookedPlugins_NoPackageJSON(t *testing.T) {
+func TestReadPackagedPlugins_NoManifest(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "broken"), 0755))
 
-	plugins, err := readCookedPlugins(dir)
+	plugins, err := readPackagedPlugins(dir)
 	require.NoError(t, err)
 	require.Empty(t, plugins)
 }
 
-func TestReadCookedPlugins_BadPackageJSON(t *testing.T) {
+func TestReadPackagedPlugins_BadManifest(t *testing.T) {
 	dir := t.TempDir()
 	pluginDir := filepath.Join(dir, "broken")
 	require.NoError(t, os.MkdirAll(pluginDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "package.json"), []byte("{not json"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte("{not json"), 0644))
 
-	plugins, err := readCookedPlugins(dir)
+	plugins, err := readPackagedPlugins(dir)
 	require.NoError(t, err)
 	require.Empty(t, plugins)
 }
 
-func TestReadCookedPlugins_MissingDir(t *testing.T) {
-	_, err := readCookedPlugins("/nonexistent/dir/xyz")
+func TestReadPackagedPlugins_MissingDir(t *testing.T) {
+	_, err := readPackagedPlugins("/nonexistent/dir/xyz")
 	require.NotNil(t, err)
 }
 
@@ -79,8 +81,14 @@ func TestWriteSummary(t *testing.T) {
 	dir := t.TempDir()
 	summaryPath := filepath.Join(dir, "summary.md")
 
-	plugins := []cookedPlugin{
-		{name: "my-plugin", version: "3.0.0"},
+	plugins := []packagedPlugin{
+		{
+			name: "my-plugin",
+			manifest: pluginPackageManifest{
+				Name:    "owner-my-plugin",
+				Version: "3.0.0",
+			},
+		},
 	}
 
 	writeSummary(summaryPath, plugins, "owner", "repo", "master")
@@ -109,10 +117,10 @@ func TestBuildPluginsArray(t *testing.T) {
 	})
 
 	dir := t.TempDir()
-	makeCookedPlugin(t, dir, "alpha", "3.0.0",
+	makePackagedPlugin(t, dir, "alpha", "3.0.0",
 		`{"name":"alpha","description":"Alpha plugin","version":"3","keywords":["test"],"author":{"name":"Dev"}}`, "")
 
-	plugins, err := readCookedPlugins(dir)
+	plugins, err := readPackagedPlugins(dir)
 	require.NoError(t, err)
 	require.Len(t, plugins, 1)
 
@@ -150,11 +158,11 @@ func TestBuildPluginsArray_WithMCP(t *testing.T) {
 	})
 
 	dir := t.TempDir()
-	makeCookedPlugin(t, dir, "beta", "1.0.0",
+	makePackagedPlugin(t, dir, "beta", "1.0.0",
 		`{"name":"beta"}`,
 		`{"mcpServers":{"myserver":{"command":"./server"}}}`)
 
-	plugins, err := readCookedPlugins(dir)
+	plugins, err := readPackagedPlugins(dir)
 	require.NoError(t, err)
 
 	result := buildPluginsArray(plugins, map[string]interface{}{}, "https://test-owner.github.io/test-repo", "test-owner")
@@ -168,53 +176,19 @@ func TestBuildPluginsArray_WithMCP(t *testing.T) {
 	require.True(t, hasMyServer)
 }
 
-func TestReadCookedPluginJSON(t *testing.T) {
-	dir := t.TempDir()
-	makeCookedPlugin(t, dir, "test", "1.0.0", `{"name":"test","description":"A plugin"}`, "")
-	result, err := readCookedPluginJSON(filepath.Join(dir, "test"))
-	require.NoError(t, err)
-	require.Equal(t, "test", result["name"])
-	require.Equal(t, "A plugin", result["description"])
-}
+func TestMcpServersFromManifest(t *testing.T) {
+	require.Nil(t, mcpServersFromManifest(nil))
+	require.Nil(t, mcpServersFromManifest(map[string]interface{}{"other": "data"}))
 
-func TestReadCookedPluginJSON_Missing(t *testing.T) {
-	_, err := readCookedPluginJSON("/nonexistent")
-	require.NotNil(t, err)
-}
-
-func TestReadCookedPluginJSON_BadJSON(t *testing.T) {
-	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, ".claude-plugin")
-	require.NoError(t, os.MkdirAll(pluginDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte("{bad"), 0644))
-	_, err := readCookedPluginJSON(dir)
-	require.NotNil(t, err)
-}
-
-func TestReadCookedMCPServers(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".mcp.json"),
-		[]byte(`{"mcpServers":{"srv":{"command":"./srv"}}}`), 0644))
-	servers := readCookedMCPServers(dir)
+	mcp := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"srv": map[string]interface{}{"command": "./srv"},
+		},
+	}
+	servers := mcpServersFromManifest(mcp)
 	require.NotNil(t, servers)
-	_, hasSrv := servers["srv"]
-	require.True(t, hasSrv)
-}
-
-func TestReadCookedMCPServers_NoFile(t *testing.T) {
-	require.Nil(t, readCookedMCPServers(t.TempDir()))
-}
-
-func TestReadCookedMCPServers_BadJSON(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte("{bad"), 0644))
-	require.Nil(t, readCookedMCPServers(dir))
-}
-
-func TestReadCookedMCPServers_NoServersKey(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(`{"other":"data"}`), 0644))
-	require.Nil(t, readCookedMCPServers(dir))
+	_, ok := servers["srv"]
+	require.True(t, ok)
 }
 
 func TestRunUpdateMarketplace(t *testing.T) {
@@ -235,8 +209,8 @@ func TestRunUpdateMarketplace(t *testing.T) {
 	repoRoot = tmpDir
 	t.Cleanup(func() { repoRoot = origRoot })
 
-	cookedDir := t.TempDir()
-	makeCookedPlugin(t, cookedDir, "alpha", "1.0.0", `{"name":"alpha","description":"Alpha"}`, "")
+	packagedDir := t.TempDir()
+	makePackagedPlugin(t, packagedDir, "alpha", "1.0.0", `{"name":"alpha","description":"Alpha"}`, "")
 
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "rev-parse" && args[1] == "--abbrev-ref" {
@@ -249,7 +223,7 @@ func TestRunUpdateMarketplace(t *testing.T) {
 	})
 
 	origInput := updateMarketplaceInput
-	updateMarketplaceInput = cookedDir
+	updateMarketplaceInput = packagedDir
 	t.Cleanup(func() { updateMarketplaceInput = origInput })
 
 	err = runUpdateMarketplace(updateMarketplaceCmd, nil)
