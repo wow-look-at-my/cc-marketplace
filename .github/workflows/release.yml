@@ -152,6 +152,7 @@ jobs:
         with:
           name: npm-registry
           path: ${{ steps.registry.outputs.registry_dir }}
+          compression-level: 0
 
   deploy-preview:
     needs: pages
