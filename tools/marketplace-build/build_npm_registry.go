@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -13,58 +14,6 @@ import (
 
 	"github.com/spf13/cobra"
 )
-
-// cookedPlugin represents a single plugin's cooked artifact directory
-// produced by `marketplace-build release-plugin`.
-type cookedPlugin struct {
-	name    string
-	dir     string
-	version string
-}
-
-// readCookedPlugins enumerates subdirectories of inputDir as cooked plugins.
-// Each subdirectory is expected to contain a package.json (with a version
-// field) and the cooked plugin tree.
-func readCookedPlugins(inputDir string) ([]cookedPlugin, error) {
-	entries, err := os.ReadDir(inputDir)
-	if err != nil {
-		return nil, fmt.Errorf("read input dir %s: %w", inputDir, err)
-	}
-
-	var plugins []cookedPlugin
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		pluginDir := filepath.Join(inputDir, e.Name())
-		pkgPath := filepath.Join(pluginDir, "package.json")
-		data, err := os.ReadFile(pkgPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (no package.json): %v\n", e.Name(), err)
-			continue
-		}
-		var pkg struct {
-			Name    string `json:"name"`
-			Version string `json:"version"`
-		}
-		if err := json.Unmarshal(data, &pkg); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (bad package.json): %v\n", e.Name(), err)
-			continue
-		}
-		if pkg.Version == "" {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (no version in package.json)\n", e.Name())
-			continue
-		}
-		plugins = append(plugins, cookedPlugin{
-			name:    e.Name(),
-			dir:     pluginDir,
-			version: pkg.Version,
-		})
-	}
-
-	sort.Slice(plugins, func(i, j int) bool { return plugins[i].name < plugins[j].name })
-	return plugins, nil
-}
 
 var npmArch = map[string]string{"amd64": "x64", "arm64": "arm64"}
 
@@ -88,7 +37,7 @@ var buildNPMRegistryCmd = &cobra.Command{
 }
 
 func init() {
-	buildNPMRegistryCmd.Flags().StringVar(&buildNPMRegistryInput, "input", "", "directory of cooked plugin subdirectories (one per plugin)")
+	buildNPMRegistryCmd.Flags().StringVar(&buildNPMRegistryInput, "input", "", "directory of packaged plugin subdirectories (one per plugin, each containing manifest.json + tarballs/)")
 	buildNPMRegistryCmd.Flags().StringVar(&buildNPMBaseURL, "base-url", "", "Base URL for tarball downloads (defaults to GitHub Pages URL)")
 	rootCmd.AddCommand(buildNPMRegistryCmd)
 }
@@ -291,18 +240,82 @@ func buildPlatformPackageDir(bins []platformBinary, goOS, goArch, platPkgName, v
 var createTarball = createTarballReal
 
 func createTarballReal(srcDir, outputPath string) error {
-	cmd := exec.Command("tar", "-czf", outputPath, "--transform", `s,^\./,package/,`, "-C", srcDir, ".")
+	cmd := exec.Command("bash", "-c",
+		`set -eo pipefail; tar -cf - --transform 's,^\./,package/,' -C "$1" . | gzip -9 > "$2"`,
+		"--", srcDir, outputPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s: %w", out, err)
 	}
 	return nil
 }
 
+// readPackagedPlugins enumerates subdirectories of inputDir as packaged plugins.
+// Each subdirectory must contain a manifest.json (output of `package-plugin`)
+// alongside the tarballs/ tree it references.
+func readPackagedPlugins(inputDir string) ([]packagedPlugin, error) {
+	entries, err := os.ReadDir(inputDir)
+	if err != nil {
+		return nil, fmt.Errorf("read input dir %s: %w", inputDir, err)
+	}
+
+	var plugins []packagedPlugin
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(inputDir, e.Name())
+		data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: skipping %s (no manifest.json): %v\n", e.Name(), err)
+			continue
+		}
+		var m pluginPackageManifest
+		if err := json.Unmarshal(data, &m); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: skipping %s (bad manifest.json): %v\n", e.Name(), err)
+			continue
+		}
+		if m.Name == "" || m.Version == "" || m.Main.Tarball == "" {
+			fmt.Fprintf(os.Stderr, "Warning: skipping %s (manifest missing name/version/main): %v\n", e.Name(), err)
+			continue
+		}
+		plugins = append(plugins, packagedPlugin{name: e.Name(), dir: dir, manifest: m})
+	}
+
+	sort.Slice(plugins, func(i, j int) bool { return plugins[i].name < plugins[j].name })
+	return plugins, nil
+}
+
+type packagedPlugin struct {
+	name     string
+	dir      string
+	manifest pluginPackageManifest
+}
+
+func copyTarball(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
 func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 
 	if buildNPMRegistryInput == "" {
-		return fmt.Errorf("--input is required: directory of cooked plugin subdirectories")
+		return fmt.Errorf("--input is required: directory of packaged plugin subdirectories")
 	}
 
 	owner, repo, err := GetRepoInfo()
@@ -315,9 +328,9 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 		pagesBase = fmt.Sprintf("https://%s.github.io/%s", owner, repo)
 	}
 
-	cookedPlugins, err := readCookedPlugins(buildNPMRegistryInput)
+	plugins, err := readPackagedPlugins(buildNPMRegistryInput)
 	if err != nil {
-		return fmt.Errorf("failed to read cooked plugins: %w", err)
+		return fmt.Errorf("failed to read packaged plugins: %w", err)
 	}
 
 	tmpDir, err := os.MkdirTemp("", "npm-registry-*")
@@ -325,108 +338,57 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
-	for _, plugin := range cookedPlugins {
-		pluginName := plugin.name
-		pkgName := fmt.Sprintf("%s-%s", owner, pluginName)
-		version := plugin.version
+	for _, plugin := range plugins {
+		m := plugin.manifest
+		pkgName := m.Name
+		version := m.Version
 
-		tarballDir := filepath.Join(tmpDir, "tarballs", pkgName)
-		if err := os.MkdirAll(tarballDir, 0755); err != nil {
-			return fmt.Errorf("failed to create tarball dir for %s: %w", pkgName, err)
-		}
-
-		versions := make(map[string]interface{})
-		platformVersions := make(map[string]map[string]interface{})
-
-		platforms := detectPlatformBinaries(plugin.dir)
-
-		tarballName := fmt.Sprintf("%s-%s.tgz", pkgName, version)
-		tarballPath := filepath.Join(tarballDir, tarballName)
-		tarballURL := fmt.Sprintf("%s/tarballs/%s/%s", pagesBase, pkgName, tarballName)
-
-		if len(platforms) == 0 {
-			if err := createTarball(plugin.dir, tarballPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to tar %s: %v\n", pluginName, err)
-				continue
-			}
-			versions[version] = map[string]interface{}{
-				"name":    pkgName,
-				"version": version,
-				"dist":    map[string]interface{}{"tarball": tarballURL},
-			}
-		} else {
-			mainDir, err := buildMainPackageDir(plugin.dir, platforms, pkgName, version)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to build main pkg for %s: %v\n", pluginName, err)
-				continue
-			}
-			if err := createTarball(mainDir, tarballPath); err != nil {
-				os.RemoveAll(mainDir)
-				continue
-			}
-			os.RemoveAll(mainDir)
-
-			optDeps := map[string]string{}
-			for _, pk := range uniquePlatforms(platforms) {
-				optDeps[pkgName+"-"+npmPlatformName(pk.os, pk.arch)] = version
-			}
-			versions[version] = map[string]interface{}{
-				"name":                 pkgName,
-				"version":              version,
-				"dist":                 map[string]interface{}{"tarball": tarballURL},
-				"optionalDependencies": optDeps,
-			}
-
-			for _, pk := range uniquePlatforms(platforms) {
-				platPkgName := pkgName + "-" + npmPlatformName(pk.os, pk.arch)
-				platDir, err := buildPlatformPackageDir(platforms, pk.os, pk.arch, platPkgName, version)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to build platform pkg %s: %v\n", platPkgName, err)
-					continue
-				}
-
-				platTarballDir := filepath.Join(tmpDir, "tarballs", platPkgName)
-				os.MkdirAll(platTarballDir, 0755)
-				platTarballName := fmt.Sprintf("%s-%s.tgz", platPkgName, version)
-				platTarballPath := filepath.Join(platTarballDir, platTarballName)
-				platTarballURL := fmt.Sprintf("%s/tarballs/%s/%s", pagesBase, platPkgName, platTarballName)
-
-				if err := createTarball(platDir, platTarballPath); err != nil {
-					os.RemoveAll(platDir)
-					continue
-				}
-				os.RemoveAll(platDir)
-
-				if platformVersions[platPkgName] == nil {
-					platformVersions[platPkgName] = make(map[string]interface{})
-				}
-				platformVersions[platPkgName][version] = map[string]interface{}{
-					"name":    platPkgName,
-					"version": version,
-					"os":      []string{pk.os},
-					"cpu":     []string{npmArch[pk.arch]},
-					"dist":    map[string]interface{}{"tarball": platTarballURL},
-				}
-			}
-		}
-
-		if len(versions) == 0 {
+		mainSrc := filepath.Join(plugin.dir, filepath.FromSlash(m.Main.Tarball))
+		mainDst := filepath.Join(tmpDir, filepath.FromSlash(m.Main.Tarball))
+		if err := copyTarball(mainSrc, mainDst); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to copy main tarball for %s: %v\n", pkgName, err)
 			continue
 		}
 
-		if err := writePackument(tmpDir, pkgName, version, versions); err != nil {
+		mainEntry := map[string]interface{}{
+			"name":    pkgName,
+			"version": version,
+			"dist":    map[string]interface{}{"tarball": fmt.Sprintf("%s/%s", pagesBase, m.Main.Tarball)},
+		}
+		if len(m.Platforms) > 0 {
+			optDeps := map[string]string{}
+			for _, p := range m.Platforms {
+				optDeps[p.Name] = version
+			}
+			mainEntry["optionalDependencies"] = optDeps
+		}
+
+		if err := writePackument(tmpDir, pkgName, version, map[string]interface{}{version: mainEntry}); err != nil {
 			return err
 		}
 
-		for platPkgName, platVers := range platformVersions {
-			if err := writePackument(tmpDir, platPkgName, version, platVers); err != nil {
+		for _, p := range m.Platforms {
+			platSrc := filepath.Join(plugin.dir, filepath.FromSlash(p.Tarball))
+			platDst := filepath.Join(tmpDir, filepath.FromSlash(p.Tarball))
+			if err := copyTarball(platSrc, platDst); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to copy platform tarball %s: %v\n", p.Name, err)
+				continue
+			}
+			platEntry := map[string]interface{}{
+				"name":    p.Name,
+				"version": version,
+				"os":      []string{p.OS},
+				"cpu":     []string{p.CPU},
+				"dist":    map[string]interface{}{"tarball": fmt.Sprintf("%s/%s", pagesBase, p.Tarball)},
+			}
+			if err := writePackument(tmpDir, p.Name, version, map[string]interface{}{version: platEntry}); err != nil {
 				return err
 			}
 		}
 
 		fmt.Fprintf(os.Stderr, "  %s: %s", pkgName, version)
-		if len(platformVersions) > 0 {
-			fmt.Fprintf(os.Stderr, " + %d platform packages", len(platformVersions))
+		if len(m.Platforms) > 0 {
+			fmt.Fprintf(os.Stderr, " + %d platform packages", len(m.Platforms))
 		}
 		fmt.Fprintln(os.Stderr)
 	}

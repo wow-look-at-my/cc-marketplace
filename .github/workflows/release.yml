@@ -83,11 +83,15 @@ jobs:
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - name: Upload cooked plugin
+      - name: Package plugin
+        run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
+
+      - name: Upload packaged plugin
         uses: actions/upload-artifact@v4
         with:
-          name: cooked-${{ matrix.plugin }}
-          path: ${{ steps.release.outputs.source_dir }}
+          name: packaged-${{ matrix.plugin }}
+          path: /tmp/packaged-${{ matrix.plugin }}
+          compression-level: 0
           if-no-files-found: error
           retention-days: 1
 
@@ -104,19 +108,18 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Download cooked plugins
+      - name: Download packaged plugins
         uses: actions/download-artifact@v4
         with:
-          path: cooked
-          pattern: cooked-*
+          path: packaged
+          pattern: packaged-*
 
-      - name: Strip cooked- artifact prefix
+      - name: Strip packaged- artifact prefix
         run: |
           set -e
           shopt -s nullglob
-          for d in cooked/cooked-*; do
-            name="${d#cooked/cooked-}"
-            mv "$d" "cooked/$name"
+          for d in packaged/packaged-*; do
+            mv "$d" "packaged/${d#packaged/packaged-}"
           done
 
       - name: Compute registry base URL
@@ -130,11 +133,11 @@ jobs:
 
       - name: Build npm registry
         id: registry
-        run: marketplace-build build-npm-registry --input cooked --base-url "${{ steps.base-url.outputs.url }}" >> $GITHUB_OUTPUT
+        run: marketplace-build build-npm-registry --input packaged --base-url "${{ steps.base-url.outputs.url }}" >> $GITHUB_OUTPUT
 
       - name: Add marketplace.json to registry
         run: |
-          marketplace-build update-marketplace --input cooked --base-url "${{ steps.base-url.outputs.url }}" > /tmp/marketplace-out.txt
+          marketplace-build update-marketplace --input packaged --base-url "${{ steps.base-url.outputs.url }}" > /tmp/marketplace-out.txt
           src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
           cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
@@ -149,6 +152,7 @@ jobs:
         with:
           name: npm-registry
           path: ${{ steps.registry.outputs.registry_dir }}
+          compression-level: 0
 
   deploy-preview:
     needs: pages
