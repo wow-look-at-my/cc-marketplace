@@ -84,13 +84,13 @@ jobs:
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
       - name: Archive cooked plugin
-        run: tar -czf /tmp/cooked-${{ matrix.plugin }}.tar.gz -C ${{ steps.release.outputs.source_dir }} .
+        run: tar -cf /tmp/cooked-${{ matrix.plugin }}.tar -C ${{ steps.release.outputs.source_dir }} .
 
       - name: Upload cooked plugin
         uses: actions/upload-artifact@v4
         with:
           name: cooked-${{ matrix.plugin }}
-          path: /tmp/cooked-${{ matrix.plugin }}.tar.gz
+          path: /tmp/cooked-${{ matrix.plugin }}.tar
           if-no-files-found: error
           retention-days: 1
 
@@ -121,7 +121,7 @@ jobs:
           for d in cooked-archives/cooked-*; do
             name="${d#cooked-archives/cooked-}"
             mkdir -p "cooked/$name"
-            tar -xzf "$d/cooked-$name.tar.gz" -C "cooked/$name"
+            tar -xf "$d/cooked-$name.tar" -C "cooked/$name"
           done
 
       - name: Compute registry base URL
