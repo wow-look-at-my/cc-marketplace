@@ -29,13 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: read
       contents: write
       id-token: write
     outputs:
-      build_plugins: ${{ steps.split.outputs.build_plugins }}
-      cached_plugins: ${{ steps.split.outputs.cached_plugins }}
-      has_build: ${{ steps.split.outputs.has_build }}
+      plugins: ${{ steps.matrix.outputs.plugins }}
+      has_changes: ${{ steps.matrix.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,73 +42,9 @@ jobs:
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
-      - name: Check plugin caches
-        id: split
-        if: steps.matrix.outputs.has_changes == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Replicate hashFiles() algorithm:
-          # 1. Find all files matching glob, sorted by path
-          # 2. SHA-256 each file content -> 64-char hex
-          # 3. Concatenate all hashes (no separator)
-          # 4. SHA-256 of concatenation -> final hash
-          plugin_hash() {
-            local dir="plugins/$1"
-            local concat=""
-            while IFS= read -r -d '' file; do
-              concat+=$(sha256sum "$file" | cut -c1-64)
-            done < <(find "$dir" -type f -print0 | LC_ALL=C sort -z)
-            printf '%s' "$concat" | sha256sum | cut -c1-64
-          }
-
-          ref="refs/heads/${{ github.ref_name }}"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ref="refs/pull/${{ github.event.pull_request.number }}/merge"
-          fi
-
-          build_plugins=()
-          cached_plugins=()
-
-          # URL-encode ref (slashes are fine in query strings, but be explicit)
-          encoded_ref=$(jq -rn --arg s "$ref" '$s|@uri')
-
-          for plugin in $(echo '${{ steps.matrix.outputs.plugins }}' | jq -r '.[]'); do
-            hash=$(plugin_hash "$plugin")
-            key="plugin-${plugin}-${hash}"
-            encoded_key=$(jq -rn --arg s "$key" '$s|@uri')
-
-            # Check if cache exists via REST API. Use URL query params (not -f
-            # which can ambiguously become POST body) and parse with jq.
-            response=$(gh api "repos/${{ github.repository }}/actions/caches?key=${encoded_key}&ref=${encoded_ref}" 2>/dev/null || echo '{"actions_caches":[]}')
-            count=$(echo "$response" | jq -r '.actions_caches | length' 2>/dev/null || echo "0")
-            [ -z "$count" ] && count=0
-
-            if [ "$count" -gt 0 ]; then
-              cached_plugins+=("$plugin")
-            else
-              build_plugins+=("$plugin")
-            fi
-          done
-
-          # Output JSON arrays
-          build_json=$(printf '%s\n' "${build_plugins[@]}" | jq -R . | jq -sc .)
-          cached_json=$(printf '%s\n' "${cached_plugins[@]}" | jq -R . | jq -sc .)
-
-          # Handle empty arrays
-          [ "$build_json" = '[""]' ] && build_json='[]'
-          [ "$cached_json" = '[""]' ] && cached_json='[]'
-
-          echo "build_plugins=$build_json" >> "$GITHUB_OUTPUT"
-          echo "cached_plugins=$cached_json" >> "$GITHUB_OUTPUT"
-          echo "has_build=$([ "$build_json" != '[]' ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-
-          echo "Build: $build_json"
-          echo "Cached: $cached_json"
-
   build:
     needs: prepare
-    if: needs.prepare.outputs.has_build == 'true'
+    if: needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -119,14 +53,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
+        plugin: ${{ fromJson(needs.prepare.outputs.plugins) }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore plugin cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/packaged-${{ matrix.plugin }}
+          key: plugin-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}
+
       - uses: ./.github/actions/setup-marketplace-build
+        if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Build Go plugin
-        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+        if: ${{ steps.cache.outputs.cache-hit != 'true' && hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
         uses: wow-look-at-my/go-toolchain@latest
         with:
           working-directory: plugins/${{ matrix.plugin }}
@@ -135,24 +77,31 @@ jobs:
           upload-artifacts: 'false'
 
       - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
 
       - name: Test
+        if: steps.cache.outputs.cache-hit != 'true'
         run: npx tsx .github/scripts/test-plugin.ts ${{ matrix.plugin }}
 
       - name: Cook plugin
+        if: steps.cache.outputs.cache-hit != 'true'
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/setup-claude-code
+        if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Validate Plugin
+        if: steps.cache.outputs.cache-hit != 'true'
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
       - name: Package plugin
+        if: steps.cache.outputs.cache-hit != 'true'
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
       - name: Save plugin cache
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
@@ -180,28 +129,13 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Restore cached plugins
-        if: needs.prepare.outputs.cached_plugins != '[]'
-        run: npx tsx .github/scripts/restore-plugin-caches.ts '${{ needs.prepare.outputs.cached_plugins }}'
-
-      - name: Move restored plugins to packaged dir
-        if: needs.prepare.outputs.cached_plugins != '[]'
-        run: |
-          set -e
-          mkdir -p packaged
-          for plugin in $(echo '${{ needs.prepare.outputs.cached_plugins }}' | jq -r '.[]'); do
-            mv "/tmp/packaged-${plugin}" "packaged/${plugin}"
-          done
-
-      - name: Download built plugins
-        if: needs.prepare.outputs.has_build == 'true'
+      - name: Download packaged plugins
         uses: actions/download-artifact@v4
         with:
           path: packaged
           pattern: packaged-*
 
       - name: Strip packaged- artifact prefix
-        if: needs.prepare.outputs.has_build == 'true'
         run: |
           set -e
           shopt -s nullglob
