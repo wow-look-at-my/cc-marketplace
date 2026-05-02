@@ -91,6 +91,7 @@ jobs:
         with:
           name: packaged-${{ matrix.plugin }}
           path: /tmp/packaged-${{ matrix.plugin }}
+          compression-level: 0
           if-no-files-found: error
           retention-days: 1
 
