@@ -35,7 +35,6 @@ jobs:
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       has_build: ${{ steps.split.outputs.has_build }}
-      has_cached: ${{ steps.split.outputs.has_cached }}
     steps:
       - uses: actions/checkout@v4
 
@@ -99,39 +98,9 @@ jobs:
           echo "build_plugins=$build_json" >> "$GITHUB_OUTPUT"
           echo "cached_plugins=$cached_json" >> "$GITHUB_OUTPUT"
           echo "has_build=$([ "$build_json" != '[]' ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "has_cached=$([ "$cached_json" != '[]' ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
           echo "Build: $build_json"
           echo "Cached: $cached_json"
-
-  restore-cached:
-    needs: prepare
-    if: needs.prepare.outputs.has_cached == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        plugin: ${{ fromJson(needs.prepare.outputs.cached_plugins) }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: plugins/${{ matrix.plugin }}
-
-      - uses: actions/cache/restore@v4
-        id: cache
-        with:
-          path: /tmp/packaged-${{ matrix.plugin }}
-          key: plugin-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}
-          fail-on-cache-miss: true
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: packaged-${{ matrix.plugin }}
-          path: /tmp/packaged-${{ matrix.plugin }}
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 1
 
   build:
     needs: prepare
@@ -193,7 +162,7 @@ jobs:
           retention-days: 1
 
   pages:
-    needs: [prepare, restore-cached, build]
+    needs: [prepare, build]
     if: '!cancelled() && !failure()'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -205,13 +174,28 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Download packaged plugins
+      - name: Restore cached plugins
+        if: needs.prepare.outputs.cached_plugins != '[]'
+        run: npx tsx .github/scripts/restore-plugin-caches.ts '${{ needs.prepare.outputs.cached_plugins }}'
+
+      - name: Move restored plugins to packaged dir
+        if: needs.prepare.outputs.cached_plugins != '[]'
+        run: |
+          set -e
+          mkdir -p packaged
+          for plugin in $(echo '${{ needs.prepare.outputs.cached_plugins }}' | jq -r '.[]'); do
+            mv "/tmp/packaged-${plugin}" "packaged/${plugin}"
+          done
+
+      - name: Download built plugins
+        if: needs.prepare.outputs.has_build == 'true'
         uses: actions/download-artifact@v4
         with:
           path: packaged
           pattern: packaged-*
 
       - name: Strip packaged- artifact prefix
+        if: needs.prepare.outputs.has_build == 'true'
         run: |
           set -e
           shopt -s nullglob
