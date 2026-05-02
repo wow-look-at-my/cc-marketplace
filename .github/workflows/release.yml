@@ -57,18 +57,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/setup-marketplace-build
-
-      - name: Cache Go plugin binaries
-        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+      - name: Cache packaged plugin
         uses: wow-look-at-my/actions@smart-cache#latest
-        id: go-cache
+        id: plugin-cache
         with:
-          path: plugins/${{ matrix.plugin }}/build
-          key: plugin-go-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin), format('plugins/{0}/go.mod', matrix.plugin), format('plugins/{0}/go.sum', matrix.plugin)) }}
+          path: /tmp/packaged-${{ matrix.plugin }}
+          key: plugin-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}
+
+      - uses: ./.github/actions/setup-marketplace-build
+        if: steps.plugin-cache.outputs.cache-hit != 'true'
 
       - name: Build Go plugin
-        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' && steps.go-cache.outputs.cache-hit != 'true' }}
+        if: ${{ steps.plugin-cache.outputs.cache-hit != 'true' && hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
         uses: wow-look-at-my/go-toolchain@latest
         with:
           working-directory: plugins/${{ matrix.plugin }}
@@ -77,21 +77,27 @@ jobs:
           upload-artifacts: 'false'
 
       - name: Build
+        if: steps.plugin-cache.outputs.cache-hit != 'true'
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
 
       - name: Test
+        if: steps.plugin-cache.outputs.cache-hit != 'true'
         run: npx tsx .github/scripts/test-plugin.ts ${{ matrix.plugin }}
 
       - name: Cook plugin
+        if: steps.plugin-cache.outputs.cache-hit != 'true'
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/setup-claude-code
+        if: steps.plugin-cache.outputs.cache-hit != 'true'
 
       - name: Validate Plugin
+        if: steps.plugin-cache.outputs.cache-hit != 'true'
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
       - name: Package plugin
+        if: steps.plugin-cache.outputs.cache-hit != 'true'
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
       - name: Upload packaged plugin
