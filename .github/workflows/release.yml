@@ -47,11 +47,48 @@ jobs:
       - name: Check plugin caches
         id: split
         if: steps.matrix.outputs.has_changes == 'true'
+        uses: wow-look-at-my/actions@typescript#latest
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           CACHE_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/heads/{0}', github.ref_name) }}
-        run: npx tsx .github/scripts/check-plugin-caches.ts '${{ steps.matrix.outputs.plugins }}'
+        with:
+          steps: ${{ toJSON(steps) }}
+          script: |
+            const { hashFiles } = require('@actions/glob');
+            const plugins: string[] = JSON.parse(steps.matrix.outputs.plugins);
+            const repo = process.env.GITHUB_REPOSITORY;
+            const ref = process.env.CACHE_REF;
+
+            const buildPlugins: string[] = [];
+            const cachedPlugins: string[] = [];
+
+            for (const plugin of plugins) {
+              const hash = await hashFiles(`plugins/${plugin}/**`);
+              const key = `plugin-${plugin}-${hash}`;
+
+              let cached = false;
+              try {
+                const out = child_process.execSync(
+                  `gh api "repos/${repo}/actions/caches?key=${encodeURIComponent(key)}&ref=${encodeURIComponent(ref!)}" --jq ".actions_caches | length"`,
+                  { encoding: 'utf8' },
+                ).trim();
+                cached = parseInt(out, 10) > 0;
+              } catch {
+                cached = false;
+              }
+
+              if (cached) {
+                cachedPlugins.push(plugin);
+                core.info(`${plugin}: cached`);
+              } else {
+                buildPlugins.push(plugin);
+                core.info(`${plugin}: needs build`);
+              }
+            }
+
+            core.setOutput('build_plugins', JSON.stringify(buildPlugins));
+            core.setOutput('cached_plugins', JSON.stringify(cachedPlugins));
+            core.setOutput('has_build', String(buildPlugins.length > 0));
 
   build:
     needs: prepare
@@ -131,16 +168,28 @@ jobs:
 
       - name: Restore cached plugins
         if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
-        run: npx tsx .github/scripts/restore-plugin-caches.ts '${{ needs.prepare.outputs.cached_plugins }}'
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          needs: ${{ toJSON(needs) }}
+          script: |
+            const { hashFiles } = require('@actions/glob');
+            const { restoreCache } = require('@actions/cache');
+            const plugins: string[] = JSON.parse(needs.prepare.outputs.cached_plugins);
 
-      - name: Move restored plugins to packaged dir
-        if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
-        run: |
-          set -e
-          mkdir -p packaged
-          for plugin in $(echo '${{ needs.prepare.outputs.cached_plugins }}' | jq -r '.[]'); do
-            mv "/tmp/packaged-${plugin}" "packaged/${plugin}"
-          done
+            fs.mkdirSync('packaged', { recursive: true });
+
+            for (const plugin of plugins) {
+              const hash = await hashFiles(`plugins/${plugin}/**`);
+              const key = `plugin-${plugin}-${hash}`;
+              const cachePath = `/tmp/packaged-${plugin}`;
+
+              core.info(`Restoring ${plugin}`);
+              const hit = await restoreCache([cachePath], key);
+              if (!hit) throw new Error(`Cache miss for ${plugin} (${key})`);
+
+              fs.renameSync(cachePath, `packaged/${plugin}`);
+              core.info(`  OK`);
+            }
 
       - name: Download built plugins
         if: needs.prepare.outputs.has_build == 'true'
