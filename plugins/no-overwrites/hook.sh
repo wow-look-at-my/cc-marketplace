@@ -2,6 +2,8 @@
 # PreToolUse hook: blocks Write from overwriting an existing file.
 # Reads the hook event JSON from stdin. Exits 2 with a stderr message to block.
 
+set -euo pipefail
+
 file_path=$(jq -r 'if .tool_name == "Write" then .tool_input.file_path // empty else empty end' 2>/dev/null) || exit 0
 
 if [ -z "$file_path" ] || [ ! -e "$file_path" ]; then
