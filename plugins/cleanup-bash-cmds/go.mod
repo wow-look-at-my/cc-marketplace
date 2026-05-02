@@ -1,4 +1,4 @@
-module prompt-url-fetch
+module cleanup-bash-cmds
 
 go 1.23
 

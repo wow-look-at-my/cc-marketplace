@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/wow-look-at-my/testify/assert"
 )
 
 // Mock HTTP client for testing
 type mockClient struct {
-	headFunc func(url string) (*http.Response, error)
-	getFunc  func(url string) (*http.Response, error)
+	headFunc	func(url string) (*http.Response, error)
+	getFunc		func(url string) (*http.Response, error)
 }
 
 func (m *mockClient) Head(url string) (*http.Response, error) {
@@ -26,46 +26,46 @@ func (m *mockClient) Get(url string) (*http.Response, error) {
 
 func mockResponse(body string, contentType string) *http.Response {
 	return &http.Response{
-		Body:   io.NopCloser(strings.NewReader(body)),
-		Header: http.Header{"Content-Type": []string{contentType}},
+		Body:	io.NopCloser(strings.NewReader(body)),
+		Header:	http.Header{"Content-Type": []string{contentType}},
 	}
 }
 
 func TestNormalizeURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name		string
+		input		string
+		expected	string
 	}{
 		{
-			name:     "git ssh url",
-			input:    "git@github.com:owner/repo.git",
-			expected: "https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
+			name:		"git ssh url",
+			input:		"git@github.com:owner/repo.git",
+			expected:	"https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
 		},
 		{
-			name:     "https github url with .git",
-			input:    "https://github.com/owner/repo.git",
-			expected: "https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
+			name:		"https github url with .git",
+			input:		"https://github.com/owner/repo.git",
+			expected:	"https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
 		},
 		{
-			name:     "https github url without .git",
-			input:    "https://github.com/owner/repo",
-			expected: "https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
+			name:		"https github url without .git",
+			input:		"https://github.com/owner/repo",
+			expected:	"https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
 		},
 		{
-			name:     "https github url with trailing slash",
-			input:    "https://github.com/owner/repo/",
-			expected: "https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
+			name:		"https github url with trailing slash",
+			input:		"https://github.com/owner/repo/",
+			expected:	"https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
 		},
 		{
-			name:     "regular https url passthrough",
-			input:    "https://example.com/file.txt",
-			expected: "https://example.com/file.txt",
+			name:		"regular https url passthrough",
+			input:		"https://example.com/file.txt",
+			expected:	"https://example.com/file.txt",
 		},
 		{
-			name:     "github url with subpath passthrough",
-			input:    "https://github.com/owner/repo/blob/main/file.txt",
-			expected: "https://github.com/owner/repo/blob/main/file.txt",
+			name:		"github url with subpath passthrough",
+			input:		"https://github.com/owner/repo/blob/main/file.txt",
+			expected:	"https://github.com/owner/repo/blob/main/file.txt",
 		},
 	}
 
@@ -79,34 +79,34 @@ func TestNormalizeURL(t *testing.T) {
 
 func TestExtractURLs(t *testing.T) {
 	tests := []struct {
-		name     string
-		prompt   string
-		expected []string
+		name		string
+		prompt		string
+		expected	[]string
 	}{
 		{
-			name:     "no urls",
-			prompt:   "hello world",
-			expected: []string{},
+			name:		"no urls",
+			prompt:		"hello world",
+			expected:	[]string{},
 		},
 		{
-			name:     "single https url",
-			prompt:   "check @https://example.com/file.txt please",
-			expected: []string{"https://example.com/file.txt"},
+			name:		"single https url",
+			prompt:		"check @https://example.com/file.txt please",
+			expected:	[]string{"https://example.com/file.txt"},
 		},
 		{
-			name:     "multiple urls",
-			prompt:   "compare @https://a.com and @https://b.com",
-			expected: []string{"https://a.com", "https://b.com"},
+			name:		"multiple urls",
+			prompt:		"compare @https://a.com and @https://b.com",
+			expected:	[]string{"https://a.com", "https://b.com"},
 		},
 		{
-			name:     "git ssh url",
-			prompt:   "look at @git@github.com:owner/repo.git",
-			expected: []string{"git@github.com:owner/repo.git"},
+			name:		"git ssh url",
+			prompt:		"look at @git@github.com:owner/repo.git",
+			expected:	[]string{"git@github.com:owner/repo.git"},
 		},
 		{
-			name:     "url without @ prefix ignored",
-			prompt:   "visit https://example.com",
-			expected: []string{},
+			name:		"url without @ prefix ignored",
+			prompt:		"visit https://example.com",
+			expected:	[]string{},
 		},
 	}
 
@@ -123,45 +123,45 @@ func TestExtractURLs(t *testing.T) {
 
 func TestFetchURL(t *testing.T) {
 	tests := []struct {
-		name        string
-		url         string
-		headResp    *http.Response
-		headErr     error
-		getResp     *http.Response
-		getErr      error
-		wantContain string
+		name		string
+		url		string
+		headResp	*http.Response
+		headErr		error
+		getResp		*http.Response
+		getErr		error
+		wantContain	string
 	}{
 		{
-			name:        "connection error",
-			url:         "https://example.com",
-			headErr:     errors.New("connection refused"),
-			wantContain: "[Error: Could not connect to",
+			name:		"connection error",
+			url:		"https://example.com",
+			headErr:	errors.New("connection refused"),
+			wantContain:	"[Error: Could not connect to",
 		},
 		{
-			name:        "empty content type",
-			url:         "https://example.com",
-			headResp:    mockResponse("", ""),
-			wantContain: "[Error: Could not determine content type",
+			name:		"empty content type",
+			url:		"https://example.com",
+			headResp:	mockResponse("", ""),
+			wantContain:	"[Error: Could not determine content type",
 		},
 		{
-			name:        "non-text content type",
-			url:         "https://example.com/image.png",
-			headResp:    mockResponse("", "image/png"),
-			wantContain: "non-text MIME type: image/png",
+			name:		"non-text content type",
+			url:		"https://example.com/image.png",
+			headResp:	mockResponse("", "image/png"),
+			wantContain:	"non-text MIME type: image/png",
 		},
 		{
-			name:        "successful fetch",
-			url:         "https://example.com/file.txt",
-			headResp:    mockResponse("", "text/plain"),
-			getResp:     mockResponse("hello world", "text/plain"),
-			wantContain: "hello world",
+			name:		"successful fetch",
+			url:		"https://example.com/file.txt",
+			headResp:	mockResponse("", "text/plain"),
+			getResp:	mockResponse("hello world", "text/plain"),
+			wantContain:	"hello world",
 		},
 		{
-			name:        "get error after successful head",
-			url:         "https://example.com/file.txt",
-			headResp:    mockResponse("", "text/plain"),
-			getErr:      errors.New("timeout"),
-			wantContain: "[Failed to fetch",
+			name:		"get error after successful head",
+			url:		"https://example.com/file.txt",
+			headResp:	mockResponse("", "text/plain"),
+			getErr:		errors.New("timeout"),
+			wantContain:	"[Failed to fetch",
 		},
 	}
 
@@ -210,41 +210,41 @@ func TestFetchURLSkipWhenNearLimit(t *testing.T) {
 		},
 	}
 
-	totalChars := maxChars - 500 // only 500 chars remaining
+	totalChars := maxChars - 500	// only 500 chars remaining
 	result := fetchURL("https://example.com", client, &totalChars)
 	assert.Contains(t, result, "[Skipped: exceeded")
 }
 
 func TestProcessInput(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		wantContain string
+		name		string
+		input		string
+		wantContain	string
 	}{
 		{
-			name:        "invalid json",
-			input:       "not json",
-			wantContain: "{}",
+			name:		"invalid json",
+			input:		"not json",
+			wantContain:	"{}",
 		},
 		{
-			name:        "wrong event type",
-			input:       `{"hook_event_name":"PreToolUse","prompt":"@https://example.com"}`,
-			wantContain: "{}",
+			name:		"wrong event type",
+			input:		`{"hook_event_name":"PreToolUse","prompt":"@https://example.com"}`,
+			wantContain:	"{}",
 		},
 		{
-			name:        "empty prompt",
-			input:       `{"hook_event_name":"UserPromptSubmit","prompt":""}`,
-			wantContain: "{}",
+			name:		"empty prompt",
+			input:		`{"hook_event_name":"UserPromptSubmit","prompt":""}`,
+			wantContain:	"{}",
 		},
 		{
-			name:        "no urls in prompt",
-			input:       `{"hook_event_name":"UserPromptSubmit","prompt":"hello world"}`,
-			wantContain: "{}",
+			name:		"no urls in prompt",
+			input:		`{"hook_event_name":"UserPromptSubmit","prompt":"hello world"}`,
+			wantContain:	"{}",
 		},
 		{
-			name:        "valid prompt with url",
-			input:       `{"hook_event_name":"UserPromptSubmit","prompt":"check @https://example.com"}`,
-			wantContain: "additionalContext",
+			name:		"valid prompt with url",
+			input:		`{"hook_event_name":"UserPromptSubmit","prompt":"check @https://example.com"}`,
+			wantContain:	"additionalContext",
 		},
 	}
 
