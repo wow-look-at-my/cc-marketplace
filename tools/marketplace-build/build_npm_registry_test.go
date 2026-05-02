@@ -90,7 +90,8 @@ func TestBuildMainPackageDir(t *testing.T) {
 	os.MkdirAll(filepath.Join(srcDir, "build"), 0755)
 	os.MkdirAll(filepath.Join(srcDir, ".claude-plugin"), 0755)
 
-	os.WriteFile(filepath.Join(srcDir, "build", "hook"), []byte("#!/bin/sh\nold wrapper"), 0755)
+	// No unsuffixed build/hook placeholder: buildMainPackageDir must synthesize
+	// the wrapper from the per-platform binaries alone.
 	os.WriteFile(filepath.Join(srcDir, "build", "hook_linux_amd64"), []byte("elf binary"), 0755)
 	os.WriteFile(filepath.Join(srcDir, "build", "hook_darwin_arm64"), []byte("mach-o binary"), 0755)
 	os.WriteFile(filepath.Join(srcDir, ".claude-plugin", "plugin.json"), []byte(`{"name":"test"}`), 0644)
@@ -111,7 +112,6 @@ func TestBuildMainPackageDir(t *testing.T) {
 	wrapper, err := os.ReadFile(filepath.Join(mainDir, "build", "hook"))
 	require.NoError(t, err)
 	require.Contains(t, string(wrapper), "node_modules/owner-test-")
-	require.NotContains(t, string(wrapper), "old wrapper")
 
 	data, err := os.ReadFile(filepath.Join(mainDir, "README.md"))
 	require.NoError(t, err)
@@ -126,6 +126,70 @@ func TestBuildMainPackageDir(t *testing.T) {
 	optDeps := pkg["optionalDependencies"].(map[string]interface{})
 	require.Equal(t, "1.0.0", optDeps["owner-test-linux-x64"])
 	require.Equal(t, "1.0.0", optDeps["owner-test-darwin-arm64"])
+}
+
+func TestBuildMainPackageDir_OverwritesStalePlaceholder(t *testing.T) {
+	srcDir := t.TempDir()
+	os.MkdirAll(filepath.Join(srcDir, "build"), 0755)
+	os.WriteFile(filepath.Join(srcDir, "build", "hook"), []byte("stale placeholder"), 0755)
+	os.WriteFile(filepath.Join(srcDir, "build", "hook_linux_amd64"), []byte("elf"), 0755)
+
+	bins := detectPlatformBinaries(srcDir)
+	mainDir, err := buildMainPackageDir(srcDir, bins, "owner-test", "1.0.0")
+	require.NoError(t, err)
+	defer os.RemoveAll(mainDir)
+
+	wrapper, err := os.ReadFile(filepath.Join(mainDir, "build", "hook"))
+	require.NoError(t, err)
+	require.Contains(t, string(wrapper), "node_modules/owner-test-")
+	require.NotContains(t, string(wrapper), "stale placeholder")
+}
+
+func TestWriteWrappers_NoBinaries(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, writeWrappers(filepath.Join(dir, "build"), nil, "owner-test"))
+
+	_, err := os.Stat(filepath.Join(dir, "build"))
+	require.True(t, os.IsNotExist(err), "no build/ should be created when there are no binaries")
+}
+
+func TestWriteWrappers_MkdirFails(t *testing.T) {
+	dir := t.TempDir()
+	// Place a regular file where MkdirAll wants to create a directory.
+	blocker := filepath.Join(dir, "build")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a dir"), 0644))
+
+	err := writeWrappers(filepath.Join(blocker, "nested"), map[string]bool{"hook": true}, "owner-test")
+	require.Error(t, err)
+}
+
+func TestWriteWrappers_WriteFails(t *testing.T) {
+	dir := t.TempDir()
+	buildDir := filepath.Join(dir, "build")
+	require.NoError(t, os.MkdirAll(buildDir, 0755))
+	// A directory at build/hook will make WriteFile fail.
+	require.NoError(t, os.MkdirAll(filepath.Join(buildDir, "hook"), 0755))
+
+	err := writeWrappers(buildDir, map[string]bool{"hook": true}, "owner-test")
+	require.Error(t, err)
+}
+
+func TestBuildMainPackageDir_MultipleBinaries(t *testing.T) {
+	srcDir := t.TempDir()
+	os.MkdirAll(filepath.Join(srcDir, "build"), 0755)
+	os.WriteFile(filepath.Join(srcDir, "build", "hook_linux_amd64"), []byte("elf"), 0755)
+	os.WriteFile(filepath.Join(srcDir, "build", "validate_linux_amd64"), []byte("elf"), 0755)
+
+	bins := detectPlatformBinaries(srcDir)
+	mainDir, err := buildMainPackageDir(srcDir, bins, "owner-test", "1.0.0")
+	require.NoError(t, err)
+	defer os.RemoveAll(mainDir)
+
+	for _, name := range []string{"hook", "validate"} {
+		wrapper, err := os.ReadFile(filepath.Join(mainDir, "build", name))
+		require.NoError(t, err)
+		require.Contains(t, string(wrapper), "node_modules/owner-test-")
+	}
 }
 
 func TestBuildPlatformPackageDir(t *testing.T) {

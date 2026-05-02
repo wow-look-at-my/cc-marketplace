@@ -1,6 +1,6 @@
 import { execSync } from "child_process";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readdirSync, readFileSync } from "fs";
+import { basename, dirname, join } from "path";
 
 const pluginName = process.argv[2];
 if (!pluginName) {
@@ -77,6 +77,23 @@ interface PluginJson {
   hooks?: Record<string, HookMatcher[]>;
 }
 
+const platformBinaryPattern = /^(.+)_(linux|darwin)_(amd64|arm64)$/;
+
+function hookBinaryExists(rel: string): boolean {
+  const abs = join(pluginPath, rel);
+  if (existsSync(abs)) return true;
+  // Go-toolchain emits per-platform binaries (e.g. hook_linux_amd64) instead of
+  // a single unsuffixed file. Accept the hook path if any sibling matches.
+  const dir = dirname(abs);
+  const base = basename(abs);
+  if (!existsSync(dir)) return false;
+  for (const entry of readdirSync(dir)) {
+    const m = entry.match(platformBinaryPattern);
+    if (m && m[1] === base) return true;
+  }
+  return false;
+}
+
 const pluginJsonPath = join(pluginPath, ".claude-plugin", "plugin.json");
 if (existsSync(pluginJsonPath)) {
   const pj: PluginJson = JSON.parse(readFileSync(pluginJsonPath, "utf8"));
@@ -92,7 +109,7 @@ if (existsSync(pluginJsonPath)) {
           let rel = cmd.slice(prefix.length);
           const sp = rel.indexOf(" ");
           if (sp !== -1) rel = rel.slice(0, sp);
-          if (!existsSync(join(pluginPath, rel))) {
+          if (!hookBinaryExists(rel)) {
             missing.push(`  ${rel} (from: ${cmd})`);
           }
         }
