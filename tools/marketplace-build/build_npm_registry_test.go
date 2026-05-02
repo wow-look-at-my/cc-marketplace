@@ -11,26 +11,25 @@ import (
 	"github.com/wow-look-at-my/testify/require"
 )
 
-// makeCookedPluginWithFiles creates a fake cooked plugin directory at root/name
-// with package.json (version) and arbitrary files.
-func makeCookedPluginWithFiles(t *testing.T, root, name, version string, files map[string][]byte) string {
+// makePackagedPluginFromCooked builds a packaged plugin dir at root/name by
+// running packagePluginToDir on a temp cooked dir built from `files`.
+func makePackagedPluginFromCooked(t *testing.T, root, name, version string, files map[string][]byte) string {
 	t.Helper()
-	dir := filepath.Join(root, name)
-	require.NoError(t, os.MkdirAll(dir, 0755))
-
+	cookedDir := t.TempDir()
 	pkg := map[string]string{
 		"name":    "test-owner-" + name,
 		"version": version,
 	}
 	pkgData, _ := json.Marshal(pkg)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), pkgData, 0644))
-
+	require.NoError(t, os.WriteFile(filepath.Join(cookedDir, "package.json"), pkgData, 0644))
 	for relPath, data := range files {
-		full := filepath.Join(dir, relPath)
+		full := filepath.Join(cookedDir, relPath)
 		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0755))
 		require.NoError(t, os.WriteFile(full, data, 0755))
 	}
-	return dir
+	outDir := filepath.Join(root, name)
+	require.NoError(t, packagePluginToDir(cookedDir, "test-owner-"+name, version, outDir))
+	return outDir
 }
 
 func TestDetectPlatformBinaries(t *testing.T) {
@@ -200,7 +199,7 @@ func runRegistryWithInput(t *testing.T, inputDir string) string {
 
 func TestRunBuildNPMRegistry_NoPlatformBinaries(t *testing.T) {
 	dir := t.TempDir()
-	makeCookedPluginWithFiles(t, dir, "jq", "1.0.0", map[string][]byte{
+	makePackagedPluginFromCooked(t, dir, "jq", "1.0.0", map[string][]byte{
 		".claude-plugin/plugin.json": []byte(`{"name":"jq"}`),
 		"commands/jq.md":             []byte("jq command"),
 	})
@@ -212,11 +211,14 @@ func TestRunBuildNPMRegistry_NoPlatformBinaries(t *testing.T) {
 	require.NoError(t, json.Unmarshal(packument, &pkg))
 	versions := pkg["versions"].(map[string]interface{})
 	require.Contains(t, versions, "1.0.0")
+
+	_, err = os.Stat(filepath.Join(registryDir, "tarballs", "test-owner-jq", "test-owner-jq-1.0.0.tgz"))
+	require.NoError(t, err)
 }
 
 func TestRunBuildNPMRegistry_WithPlatformBinaries(t *testing.T) {
 	dir := t.TempDir()
-	makeCookedPluginWithFiles(t, dir, "hook", "3.0.0", map[string][]byte{
+	makePackagedPluginFromCooked(t, dir, "hook", "3.0.0", map[string][]byte{
 		".claude-plugin/plugin.json": []byte(`{"name":"hook"}`),
 		"build/hook":                 []byte("#!/bin/sh\nwrapper"),
 		"build/hook_linux_amd64":     []byte("elf"),
@@ -229,7 +231,7 @@ func TestRunBuildNPMRegistry_WithPlatformBinaries(t *testing.T) {
 
 func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	dir := t.TempDir()
-	makeCookedPluginWithFiles(t, dir, "myplugin", "2.0.0", map[string][]byte{
+	makePackagedPluginFromCooked(t, dir, "myplugin", "2.0.0", map[string][]byte{
 		".claude-plugin/plugin.json": []byte(`{"name":"myplugin"}`),
 		"build/hook":                 []byte("#!/bin/sh\nold"),
 		"build/hook_linux_amd64":     []byte("elf64"),
@@ -271,54 +273,43 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestRunBuildNPMRegistry_TarballFails_SimplePkg(t *testing.T) {
+func TestRunBuildNPMRegistry_BadManifest(t *testing.T) {
 	dir := t.TempDir()
-	makeCookedPluginWithFiles(t, dir, "p", "1.0.0", map[string][]byte{
-		".claude-plugin/plugin.json": []byte(`{"name":"p"}`),
-	})
+	pluginDir := filepath.Join(dir, "broken")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte("{not json"), 0644))
 
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "remote" {
-			return "https://github.com/test-owner/test-repo.git\n", nil
-		}
-		return "", fmt.Errorf("unexpected: %v", args)
-	})
-
-	orig := createTarball
-	t.Cleanup(func() { createTarball = orig })
-	createTarball = func(_, _ string) error { return fmt.Errorf("tar failed") }
-
-	origInput := buildNPMRegistryInput
-	buildNPMRegistryInput = dir
-	t.Cleanup(func() { buildNPMRegistryInput = origInput })
-
-	require.NoError(t, runBuildNPMRegistry(buildNPMRegistryCmd, nil))
+	registryDir := runRegistryWithInput(t, dir)
+	// Bad manifest is logged and skipped; no packument written.
+	_, err := os.Stat(filepath.Join(registryDir, "test-owner-broken"))
+	require.True(t, os.IsNotExist(err))
 }
 
-func TestRunBuildNPMRegistry_TarballFails_PlatformPkg(t *testing.T) {
+func TestRunBuildNPMRegistry_NoManifest(t *testing.T) {
 	dir := t.TempDir()
-	makeCookedPluginWithFiles(t, dir, "p", "1.0.0", map[string][]byte{
-		".claude-plugin/plugin.json": []byte(`{"name":"p"}`),
-		"build/hook":                 []byte("#!/bin/sh"),
-		"build/hook_linux_amd64":     []byte("elf"),
-	})
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "empty"), 0755))
 
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "remote" {
-			return "https://github.com/test-owner/test-repo.git\n", nil
-		}
-		return "", fmt.Errorf("unexpected: %v", args)
-	})
+	registryDir := runRegistryWithInput(t, dir)
+	_, err := os.Stat(filepath.Join(registryDir, "test-owner-empty"))
+	require.True(t, os.IsNotExist(err))
+}
 
-	orig := createTarball
-	t.Cleanup(func() { createTarball = orig })
-	createTarball = func(_, _ string) error { return fmt.Errorf("tar failed") }
+func TestRunBuildNPMRegistry_MissingTarball(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "p")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+	manifest := pluginPackageManifest{
+		Name:    "test-owner-p",
+		Version: "1.0.0",
+		Main:    manifestTarball{Tarball: "tarballs/test-owner-p/test-owner-p-1.0.0.tgz"},
+	}
+	data, _ := json.MarshalIndent(manifest, "", "  ")
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "manifest.json"), data, 0644))
 
-	origInput := buildNPMRegistryInput
-	buildNPMRegistryInput = dir
-	t.Cleanup(func() { buildNPMRegistryInput = origInput })
-
-	require.NoError(t, runBuildNPMRegistry(buildNPMRegistryCmd, nil))
+	// Missing tarball is logged as a warning and the plugin is skipped without error.
+	registryDir := runRegistryWithInput(t, dir)
+	_, err := os.Stat(filepath.Join(registryDir, "test-owner-p"))
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestRunBuildNPMRegistry_NoInputFlag(t *testing.T) {
@@ -329,6 +320,38 @@ func TestRunBuildNPMRegistry_NoInputFlag(t *testing.T) {
 	err := runBuildNPMRegistry(buildNPMRegistryCmd, nil)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "--input is required")
+}
+
+func TestCopyTarball(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	src := filepath.Join(srcDir, "in.tgz")
+	require.NoError(t, os.WriteFile(src, []byte("payload"), 0644))
+
+	dst := filepath.Join(dstDir, "nested", "out.tgz")
+	require.NoError(t, copyTarball(src, dst))
+
+	data, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Equal(t, "payload", string(data))
+}
+
+func TestCopyTarball_MissingSrc(t *testing.T) {
+	err := copyTarball(filepath.Join(t.TempDir(), "missing"), filepath.Join(t.TempDir(), "out"))
+	require.Error(t, err)
+}
+
+func TestCopyTarball_BadDst(t *testing.T) {
+	srcDir := t.TempDir()
+	src := filepath.Join(srcDir, "in")
+	require.NoError(t, os.WriteFile(src, []byte("x"), 0644))
+
+	// Writing to a path under a regular file fails because mkdir can't create the parent.
+	blocker := filepath.Join(srcDir, "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0644))
+
+	err := copyTarball(src, filepath.Join(blocker, "child", "out"))
+	require.Error(t, err)
 }
 
 func TestBuildPlatformPackageDir_MissingBinary(t *testing.T) {
