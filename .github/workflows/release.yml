@@ -32,8 +32,10 @@ jobs:
       contents: write
       id-token: write
     outputs:
-      plugins: ${{ steps.matrix.outputs.plugins }}
-      has_changes: ${{ steps.matrix.outputs.has_changes }}
+      build_plugins: ${{ steps.split.outputs.build_plugins }}
+      cached_plugins: ${{ steps.split.outputs.cached_plugins }}
+      has_build: ${{ steps.split.outputs.has_build }}
+      has_cached: ${{ steps.split.outputs.has_cached }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,9 +44,98 @@ jobs:
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
+      - name: Check plugin caches
+        id: split
+        if: steps.matrix.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Replicate hashFiles() algorithm:
+          # 1. Find all files matching glob, sorted by path
+          # 2. SHA-256 each file content -> 64-char hex
+          # 3. Concatenate all hashes (no separator)
+          # 4. SHA-256 of concatenation -> final hash
+          plugin_hash() {
+            local dir="plugins/$1"
+            local concat=""
+            while IFS= read -r -d '' file; do
+              concat+=$(sha256sum "$file" | cut -c1-64)
+            done < <(find "$dir" -type f -print0 | LC_ALL=C sort -z)
+            printf '%s' "$concat" | sha256sum | cut -c1-64
+          }
+
+          ref="refs/heads/${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ref="refs/pull/${{ github.event.pull_request.number }}/merge"
+          fi
+
+          build_plugins=()
+          cached_plugins=()
+
+          for plugin in $(echo '${{ steps.matrix.outputs.plugins }}' | jq -r '.[]'); do
+            hash=$(plugin_hash "$plugin")
+            key="plugin-${plugin}-${hash}"
+
+            # Check if cache exists via REST API
+            count=$(gh api "repos/${{ github.repository }}/actions/caches" \
+              --jq "[.actions_caches[] | select(.key == \"$key\")] | length" \
+              -f key="$key" -f ref="$ref" 2>/dev/null || echo "0")
+
+            if [ "$count" -gt "0" ]; then
+              cached_plugins+=("$plugin")
+            else
+              build_plugins+=("$plugin")
+            fi
+          done
+
+          # Output JSON arrays
+          build_json=$(printf '%s\n' "${build_plugins[@]}" | jq -R . | jq -sc .)
+          cached_json=$(printf '%s\n' "${cached_plugins[@]}" | jq -R . | jq -sc .)
+
+          # Handle empty arrays
+          [ "$build_json" = '[""]' ] && build_json='[]'
+          [ "$cached_json" = '[""]' ] && cached_json='[]'
+
+          echo "build_plugins=$build_json" >> "$GITHUB_OUTPUT"
+          echo "cached_plugins=$cached_json" >> "$GITHUB_OUTPUT"
+          echo "has_build=$([ "$build_json" != '[]' ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "has_cached=$([ "$cached_json" != '[]' ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+          echo "Build: $build_json"
+          echo "Cached: $cached_json"
+
+  restore-cached:
+    needs: prepare
+    if: needs.prepare.outputs.has_cached == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJson(needs.prepare.outputs.cached_plugins) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: plugins/${{ matrix.plugin }}
+
+      - uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: /tmp/packaged-${{ matrix.plugin }}
+          key: plugin-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}
+          fail-on-cache-miss: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-${{ matrix.plugin }}
+          path: /tmp/packaged-${{ matrix.plugin }}
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+
   build:
     needs: prepare
-    if: needs.prepare.outputs.has_changes == 'true'
+    if: needs.prepare.outputs.has_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -53,22 +144,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: ${{ fromJson(needs.prepare.outputs.plugins) }}
+        plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache packaged plugin
-        uses: wow-look-at-my/actions@smart-cache#latest
-        id: plugin-cache
-        with:
-          path: /tmp/packaged-${{ matrix.plugin }}
-          key: plugin-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}
-
       - uses: ./.github/actions/setup-marketplace-build
-        if: steps.plugin-cache.outputs.cache-hit != 'true'
 
       - name: Build Go plugin
-        if: ${{ steps.plugin-cache.outputs.cache-hit != 'true' && hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
         uses: wow-look-at-my/go-toolchain@latest
         with:
           working-directory: plugins/${{ matrix.plugin }}
@@ -77,28 +160,28 @@ jobs:
           upload-artifacts: 'false'
 
       - name: Build
-        if: steps.plugin-cache.outputs.cache-hit != 'true'
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
 
       - name: Test
-        if: steps.plugin-cache.outputs.cache-hit != 'true'
         run: npx tsx .github/scripts/test-plugin.ts ${{ matrix.plugin }}
 
       - name: Cook plugin
-        if: steps.plugin-cache.outputs.cache-hit != 'true'
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/setup-claude-code
-        if: steps.plugin-cache.outputs.cache-hit != 'true'
 
       - name: Validate Plugin
-        if: steps.plugin-cache.outputs.cache-hit != 'true'
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
       - name: Package plugin
-        if: steps.plugin-cache.outputs.cache-hit != 'true'
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
+
+      - name: Save plugin cache
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/packaged-${{ matrix.plugin }}
+          key: plugin-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}
 
       - name: Upload packaged plugin
         uses: actions/upload-artifact@v4
@@ -110,7 +193,7 @@ jobs:
           retention-days: 1
 
   pages:
-    needs: [prepare, build]
+    needs: [prepare, restore-cached, build]
     if: '!cancelled() && !failure()'
     runs-on: ubuntu-latest
     timeout-minutes: 10
