@@ -240,7 +240,9 @@ func buildPlatformPackageDir(bins []platformBinary, goOS, goArch, platPkgName, v
 var createTarball = createTarballReal
 
 func createTarballReal(srcDir, outputPath string) error {
-	cmd := exec.Command("tar", "-czf", outputPath, "--transform", `s,^\./,package/,`, "-C", srcDir, ".")
+	cmd := exec.Command("bash", "-c",
+		`set -eo pipefail; tar -cf - --transform 's,^\./,package/,' -C "$1" . | gzip -9 > "$2"`,
+		"--", srcDir, outputPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s: %w", out, err)
 	}
