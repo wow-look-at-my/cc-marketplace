@@ -83,14 +83,17 @@ jobs:
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - name: Archive cooked plugin
-        run: tar -cf /tmp/cooked-${{ matrix.plugin }}.tar -C ${{ steps.release.outputs.source_dir }} .
+      - name: Package plugin
+        run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
-      - name: Upload cooked plugin
+      - name: Archive cooked tree for marketplace metadata
+        run: tar -cf /tmp/packaged-${{ matrix.plugin }}/cooked.tar -C ${{ steps.release.outputs.source_dir }} .
+
+      - name: Upload packaged plugin
         uses: actions/upload-artifact@v4
         with:
-          name: cooked-${{ matrix.plugin }}
-          path: /tmp/cooked-${{ matrix.plugin }}.tar
+          name: packaged-${{ matrix.plugin }}
+          path: /tmp/packaged-${{ matrix.plugin }}
           if-no-files-found: error
           retention-days: 1
 
@@ -107,21 +110,22 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Download cooked plugins
+      - name: Download packaged plugins
         uses: actions/download-artifact@v4
         with:
-          path: cooked-archives
-          pattern: cooked-*
+          path: packaged
+          pattern: packaged-*
 
-      - name: Extract cooked plugins
+      - name: Strip packaged- artifact prefix and extract cooked trees
         run: |
           set -e
           shopt -s nullglob
           mkdir -p cooked
-          for d in cooked-archives/cooked-*; do
-            name="${d#cooked-archives/cooked-}"
+          for d in packaged/packaged-*; do
+            name="${d#packaged/packaged-}"
+            mv "$d" "packaged/$name"
             mkdir -p "cooked/$name"
-            tar -xf "$d/cooked-$name.tar" -C "cooked/$name"
+            tar -xf "packaged/$name/cooked.tar" -C "cooked/$name"
           done
 
       - name: Compute registry base URL
@@ -135,7 +139,7 @@ jobs:
 
       - name: Build npm registry
         id: registry
-        run: marketplace-build build-npm-registry --input cooked --base-url "${{ steps.base-url.outputs.url }}" >> $GITHUB_OUTPUT
+        run: marketplace-build build-npm-registry --input packaged --base-url "${{ steps.base-url.outputs.url }}" >> $GITHUB_OUTPUT
 
       - name: Add marketplace.json to registry
         run: |
