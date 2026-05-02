@@ -88,6 +88,7 @@ jobs:
         with:
           name: cooked-${{ matrix.plugin }}
           path: ${{ steps.release.outputs.source_dir }}
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
 
