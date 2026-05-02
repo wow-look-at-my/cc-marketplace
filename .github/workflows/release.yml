@@ -51,7 +51,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           CACHE_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/heads/{0}', github.ref_name) }}
-        run: npx tsx .github/scripts/check-plugin-caches.ts '${{ steps.matrix.outputs.plugins }}' >> $GITHUB_OUTPUT
+        run: npx tsx .github/scripts/check-plugin-caches.ts '${{ steps.matrix.outputs.plugins }}'
 
   build:
     needs: prepare

@@ -1,11 +1,21 @@
 import { hashFiles } from "@actions/glob";
+import { appendFileSync } from "fs";
 import { execSync } from "child_process";
+
+const outputFile = process.env.GITHUB_OUTPUT;
+function setOutput(key: string, value: string) {
+  if (outputFile) {
+    appendFileSync(outputFile, `${key}=${value}\n`);
+  } else {
+    console.log(`${key}=${value}`);
+  }
+}
 
 const plugins = JSON.parse(process.argv[2] || "[]") as string[];
 if (plugins.length === 0) {
-  console.log("build_plugins=[]");
-  console.log("cached_plugins=[]");
-  console.log("has_build=false");
+  setOutput("build_plugins", "[]");
+  setOutput("cached_plugins", "[]");
+  setOutput("has_build", "false");
   process.exit(0);
 }
 
@@ -39,6 +49,6 @@ for (const plugin of plugins) {
   }
 }
 
-console.log(`build_plugins=${JSON.stringify(buildPlugins)}`);
-console.log(`cached_plugins=${JSON.stringify(cachedPlugins)}`);
-console.log(`has_build=${buildPlugins.length > 0}`);
+setOutput("build_plugins", JSON.stringify(buildPlugins));
+setOutput("cached_plugins", JSON.stringify(cachedPlugins));
+setOutput("has_build", String(buildPlugins.length > 0));
