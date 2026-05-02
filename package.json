@@ -2,6 +2,8 @@
   "private": true,
   "type": "module",
   "devDependencies": {
+    "@actions/cache": "^6.0.0",
+    "@actions/glob": "^0.7.0",
     "@types/node": "^22.0.0",
     "tsx": "^4.0.0",
     "typescript": "^6.0.3"

@@ -29,11 +29,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: write
       id-token: write
     outputs:
-      plugins: ${{ steps.matrix.outputs.plugins }}
-      has_changes: ${{ steps.matrix.outputs.has_changes }}
+      build_plugins: ${{ steps.split.outputs.build_plugins }}
+      cached_plugins: ${{ steps.split.outputs.cached_plugins }}
+      has_build: ${{ steps.split.outputs.has_build }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,9 +44,18 @@ jobs:
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
+      - name: Check plugin caches
+        id: split
+        if: steps.matrix.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CACHE_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/heads/{0}', github.ref_name) }}
+        run: npx tsx .github/scripts/check-plugin-caches.ts '${{ steps.matrix.outputs.plugins }}' >> $GITHUB_OUTPUT
+
   build:
     needs: prepare
-    if: needs.prepare.outputs.has_changes == 'true'
+    if: needs.prepare.outputs.has_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -53,22 +64,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: ${{ fromJson(needs.prepare.outputs.plugins) }}
+        plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore plugin cache
-        id: cache
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/packaged-${{ matrix.plugin }}
-          key: plugin-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}
+      - name: Compute plugin hash
+        id: hash
+        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}" >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/setup-marketplace-build
-        if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Build Go plugin
-        if: ${{ steps.cache.outputs.cache-hit != 'true' && hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
         uses: wow-look-at-my/go-toolchain@latest
         with:
           working-directory: plugins/${{ matrix.plugin }}
@@ -77,35 +84,28 @@ jobs:
           upload-artifacts: 'false'
 
       - name: Build
-        if: steps.cache.outputs.cache-hit != 'true'
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
 
       - name: Test
-        if: steps.cache.outputs.cache-hit != 'true'
         run: npx tsx .github/scripts/test-plugin.ts ${{ matrix.plugin }}
 
       - name: Cook plugin
-        if: steps.cache.outputs.cache-hit != 'true'
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/setup-claude-code
-        if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Validate Plugin
-        if: steps.cache.outputs.cache-hit != 'true'
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
       - name: Package plugin
-        if: steps.cache.outputs.cache-hit != 'true'
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
       - name: Save plugin cache
-        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
-          key: plugin-${{ matrix.plugin }}-${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}
+          key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
 
       - name: Upload packaged plugin
         uses: actions/upload-artifact@v4
@@ -129,13 +129,28 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Download packaged plugins
+      - name: Restore cached plugins
+        if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
+        run: npx tsx .github/scripts/restore-plugin-caches.ts '${{ needs.prepare.outputs.cached_plugins }}'
+
+      - name: Move restored plugins to packaged dir
+        if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
+        run: |
+          set -e
+          mkdir -p packaged
+          for plugin in $(echo '${{ needs.prepare.outputs.cached_plugins }}' | jq -r '.[]'); do
+            mv "/tmp/packaged-${plugin}" "packaged/${plugin}"
+          done
+
+      - name: Download built plugins
+        if: needs.prepare.outputs.has_build == 'true'
         uses: actions/download-artifact@v4
         with:
           path: packaged
           pattern: packaged-*
 
       - name: Strip packaged- artifact prefix
+        if: needs.prepare.outputs.has_build == 'true'
         run: |
           set -e
           shopt -s nullglob
