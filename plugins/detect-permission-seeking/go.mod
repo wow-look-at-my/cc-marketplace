@@ -1,4 +1,4 @@
-module prompt-url-fetch
+module detect-permission-seeking
 
 go 1.23
 

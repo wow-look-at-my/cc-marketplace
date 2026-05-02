@@ -5,21 +5,93 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/wow-look-at-my/testify/require"
 )
 
+// makePackagedPlugin creates a fake packaged plugin directory under root by
+// running packagePluginToDir on a temp cooked dir built with the given
+// plugin.json + .mcp.json strings.
+func makePackagedPlugin(t *testing.T, root, name, version, pluginJSON, mcpJSON string) string {
+	t.Helper()
+
+	cookedDir := t.TempDir()
+	pkg := map[string]string{
+		"name":    "test-owner-" + name,
+		"version": version,
+	}
+	pkgData, _ := json.Marshal(pkg)
+	require.NoError(t, os.WriteFile(filepath.Join(cookedDir, "package.json"), pkgData, 0644))
+
+	if pluginJSON != "" {
+		require.NoError(t, os.MkdirAll(filepath.Join(cookedDir, ".claude-plugin"), 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(cookedDir, ".claude-plugin", "plugin.json"), []byte(pluginJSON), 0644))
+	}
+	if mcpJSON != "" {
+		require.NoError(t, os.WriteFile(filepath.Join(cookedDir, ".mcp.json"), []byte(mcpJSON), 0644))
+	}
+
+	outDir := filepath.Join(root, name)
+	require.NoError(t, packagePluginToDir(cookedDir, "test-owner-"+name, version, outDir))
+	return outDir
+}
+
+func TestReadPackagedPlugins(t *testing.T) {
+	dir := t.TempDir()
+	makePackagedPlugin(t, dir, "alpha", "5.0.0", `{"name":"alpha"}`, "")
+	makePackagedPlugin(t, dir, "beta", "1.0.0", `{"name":"beta"}`, "")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stray.txt"), []byte("nope"), 0644))
+
+	plugins, err := readPackagedPlugins(dir)
+	require.NoError(t, err)
+	require.Len(t, plugins, 2)
+	require.Equal(t, "alpha", plugins[0].name)
+	require.Equal(t, "5.0.0", plugins[0].manifest.Version)
+	require.Equal(t, "beta", plugins[1].name)
+	require.Equal(t, "1.0.0", plugins[1].manifest.Version)
+}
+
+func TestReadPackagedPlugins_NoManifest(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "broken"), 0755))
+
+	plugins, err := readPackagedPlugins(dir)
+	require.NoError(t, err)
+	require.Empty(t, plugins)
+}
+
+func TestReadPackagedPlugins_BadManifest(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "broken")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte("{not json"), 0644))
+
+	plugins, err := readPackagedPlugins(dir)
+	require.NoError(t, err)
+	require.Empty(t, plugins)
+}
+
+func TestReadPackagedPlugins_MissingDir(t *testing.T) {
+	_, err := readPackagedPlugins("/nonexistent/dir/xyz")
+	require.NotNil(t, err)
+}
+
 func TestWriteSummary(t *testing.T) {
 	dir := t.TempDir()
 	summaryPath := filepath.Join(dir, "summary.md")
 
-	pluginRefs := map[string]string{
-		"my-plugin": "plugin/my-plugin#3",
+	plugins := []packagedPlugin{
+		{
+			name: "my-plugin",
+			manifest: pluginPackageManifest{
+				Name:    "owner-my-plugin",
+				Version: "3.0.0",
+			},
+		},
 	}
 
-	writeSummary(summaryPath, pluginRefs, "owner", "repo", "master")
+	writeSummary(summaryPath, plugins, "owner", "repo", "master")
 
 	data, err := os.ReadFile(summaryPath)
 	require.NoError(t, err)
@@ -28,289 +100,29 @@ func TestWriteSummary(t *testing.T) {
 	require.Contains(t, content, "## Marketplace Updated")
 	require.Contains(t, content, "master")
 	require.Contains(t, content, "my-plugin")
-	require.Contains(t, content, "plugin/my-plugin#3")
+	require.Contains(t, content, "owner-my-plugin")
+	require.Contains(t, content, "3.0.0")
 }
 
 func TestWriteSummary_BadPath(t *testing.T) {
-	// Should not panic on bad path
 	writeSummary("/nonexistent/dir/summary.md", nil, "o", "r", "b")
 }
 
-func TestBumpMarketplaceVersion_NoExistingTag(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		return "", fmt.Errorf("tag not found")
-	})
-	v := bumpMarketplaceVersion("feature-branch")
-	require.Equal(t, 1, v)
-}
-
-func TestBumpMarketplaceVersion_ExistingStringVersion(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return `{"metadata":{"version":"5"}}`, nil
-		}
-		return "", nil
-	})
-	v := bumpMarketplaceVersion("master")
-	require.Equal(t, 6, v)
-}
-
-func TestBumpMarketplaceVersion_ExistingFloatVersion(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return `{"metadata":{"version":10}}`, nil
-		}
-		return "", nil
-	})
-	v := bumpMarketplaceVersion("master")
-	require.Equal(t, 11, v)
-}
-
-func TestBumpMarketplaceVersion_NoMetadata(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return `{"name":"marketplace"}`, nil
-		}
-		return "", nil
-	})
-	v := bumpMarketplaceVersion("master")
-	require.Equal(t, 1, v)
-}
-
-func TestBumpMarketplaceVersion_InvalidJSON(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return "{bad json", nil
-		}
-		return "", nil
-	})
-	v := bumpMarketplaceVersion("master")
-	require.Equal(t, 1, v)
-}
-
-func TestBumpMarketplaceVersion_BranchTag(t *testing.T) {
-	// For non-master branches, should use marketplace/{branch}#latest tag
-	var requestedTag string
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			requestedTag = args[1]
-			return "", fmt.Errorf("not found")
-		}
-		return "", nil
-	})
-	bumpMarketplaceVersion("feature-x")
-	require.Contains(t, requestedTag, "marketplace/feature-x#latest")
-}
-
-func TestGetPluginRefs(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/alpha#1",
-		"plugin/alpha#3",
-		"plugin/alpha#2",
-		"plugin/beta#1",
-		"plugin/beta#latest",
-	})
-
-	refs, err := getPluginRefs("owner", "repo")
-	require.NoError(t, err)
-	require.Len(t, refs, 2)
-	require.Equal(t, "plugin/alpha#3", refs["alpha"])
-	require.Equal(t, "plugin/beta#1", refs["beta"])
-}
-
-func TestGetPluginRefs_SkipsBranchTags(t *testing.T) {
-	mockGitWithTags(t, []string{
-		"plugin/alpha#1",
-		"plugin/alpha/feature#1", // branch-specific, should be skipped (3 path parts)
-	})
-
-	refs, err := getPluginRefs("owner", "repo")
-	require.NoError(t, err)
-	require.Len(t, refs, 1)
-	require.Contains(t, refs, "alpha")
-}
-
-func TestGetPluginRefs_Empty(t *testing.T) {
-	mockGitWithTags(t, nil)
-	refs, err := getPluginRefs("owner", "repo")
-	require.NoError(t, err)
-	require.Empty(t, refs)
-}
-
-func TestCleanupLegacyPluginTags_AtFormat(t *testing.T) {
-	var deletedTags []string
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/foo@v1\nplugin/foo@v2\nplugin/bar#1\n", nil
-		}
-		if args[0] == "push" && strings.HasPrefix(args[2], ":refs/tags/") {
-			deletedTags = append(deletedTags, strings.TrimPrefix(args[2], ":refs/tags/"))
-			return "", nil
-		}
-		if args[0] == "tag" && args[1] == "-d" {
-			return "", nil
-		}
-		return "", nil
-	})
-
-	err := cleanupLegacyPluginTags()
-	require.NoError(t, err)
-	require.Contains(t, deletedTags, "plugin/foo@v1")
-	require.Contains(t, deletedTags, "plugin/foo@v2")
-	require.Len(t, deletedTags, 2)
-}
-
-func TestCleanupLegacyPluginTags_SlashVFormat(t *testing.T) {
-	var deletedTags []string
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/foo/v1\nplugin/foo/v2\nplugin/bar#1\n", nil
-		}
-		if args[0] == "push" {
-			deletedTags = append(deletedTags, strings.TrimPrefix(args[2], ":refs/tags/"))
-			return "", nil
-		}
-		if args[0] == "tag" && args[1] == "-d" {
-			return "", nil
-		}
-		return "", nil
-	})
-
-	err := cleanupLegacyPluginTags()
-	require.NoError(t, err)
-	require.Contains(t, deletedTags, "plugin/foo/v1")
-	require.Contains(t, deletedTags, "plugin/foo/v2")
-}
-
-func TestCleanupLegacyPluginTags_None(t *testing.T) {
-	mockGitWithTags(t, []string{"plugin/foo#1", "plugin/bar#2"})
-	err := cleanupLegacyPluginTags()
-	require.NoError(t, err)
-}
-
-func TestCleanupStaleBranchTags(t *testing.T) {
-	var deletedTags []string
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "marketplace/feature-x\nmarketplace/feature-y\n", nil
-		}
-		if args[0] == "ls-remote" {
-			// feature-x exists, feature-y doesn't
-			branch := args[3]
-			if branch == "feature-x" {
-				return "abc123\trefs/heads/feature-x\n", nil
-			}
-			return "", nil
-		}
-		if args[0] == "push" {
-			deletedTags = append(deletedTags, strings.TrimPrefix(args[2], ":refs/tags/"))
-			return "", nil
-		}
-		if args[0] == "tag" && args[1] == "-d" {
-			return "", nil
-		}
-		return "", nil
-	})
-
-	err := cleanupStaleBranchTags()
-	require.NoError(t, err)
-	require.Len(t, deletedTags, 1)
-	require.Equal(t, "marketplace/feature-y", deletedTags[0])
-}
-
-func TestCleanupStaleBranchTags_NoneStale(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" {
-			return "", nil
-		}
-		return "", nil
-	})
-	err := cleanupStaleBranchTags()
-	require.NoError(t, err)
-}
-
-func TestCleanupStalePluginTags(t *testing.T) {
-	// Set up a temp plugins dir with one plugin
-	tmpDir := t.TempDir()
-	pluginDir := filepath.Join(tmpDir, "plugins", "existing-plugin", ".claude-plugin")
-	require.NoError(t, os.MkdirAll(pluginDir, 0755))
-	pj := `{"name":"existing-plugin","mh":{"include_in_marketplace":true}}`
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(pj), 0644))
-
-	// Override repoRoot
-	origRoot := repoRoot
-	repoRoot = tmpDir
-	t.Cleanup(func() { repoRoot = origRoot })
-
-	var deletedTags []string
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			prefix := ""
-			if len(args) >= 3 {
-				prefix = strings.TrimSuffix(args[2], "*")
-			}
-			allTags := []string{
-				"plugin/existing-plugin#1",
-				"plugin/existing-plugin#2",
-				"plugin/existing-plugin#3",
-				"plugin/existing-plugin#4",
-				"plugin/existing-plugin#5",
-				"plugin/removed-plugin#1",
-				"plugin/removed-plugin#2",
-			}
-			var matching []string
-			for _, tag := range allTags {
-				if prefix == "" || strings.HasPrefix(tag, prefix) {
-					matching = append(matching, tag)
-				}
-			}
-			if len(matching) == 0 {
-				return "", nil
-			}
-			return strings.Join(matching, "\n"), nil
-		}
-		if args[0] == "push" {
-			deletedTags = append(deletedTags, strings.TrimPrefix(args[2], ":refs/tags/"))
-			return "", nil
-		}
-		if args[0] == "tag" && args[1] == "-d" {
-			return "", nil
-		}
-		return "", nil
-	})
-
-	err := cleanupStalePluginTags()
-	require.NoError(t, err)
-
-	// removed-plugin tags should be deleted (all of them + #latest)
-	require.Contains(t, deletedTags, "plugin/removed-plugin#1")
-	require.Contains(t, deletedTags, "plugin/removed-plugin#2")
-	require.Contains(t, deletedTags, "plugin/removed-plugin#latest")
-
-	// existing-plugin: has 5 versions, keep top 3 (5,4,3), prune 1,2
-	require.Contains(t, deletedTags, "plugin/existing-plugin#1")
-	require.Contains(t, deletedTags, "plugin/existing-plugin#2")
-}
-
 func TestBuildPluginsArray(t *testing.T) {
-	mockGitWithTags(t, nil, func(args ...string) (string, error) {
+	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "remote" {
 			return "https://github.com/test-owner/test-repo.git\n", nil
 		}
-		if args[0] == "show" {
-			if strings.Contains(args[1], "plugin.json") {
-				return `{"name":"alpha","description":"Alpha plugin","version":"3","keywords":["test"],"author":{"name":"Dev"}}`, nil
-			}
-			if strings.Contains(args[1], ".mcp.json") {
-				return "", fmt.Errorf("not found")
-			}
-		}
 		return "", nil
 	})
 
-	pluginRefs := map[string]string{
-		"alpha": "plugin/alpha#3",
-	}
+	dir := t.TempDir()
+	makePackagedPlugin(t, dir, "alpha", "3.0.0",
+		`{"name":"alpha","description":"Alpha plugin","version":"3","keywords":["test"],"author":{"name":"Dev"}}`, "")
+
+	plugins, err := readPackagedPlugins(dir)
+	require.NoError(t, err)
+	require.Len(t, plugins, 1)
 
 	existing := map[string]interface{}{
 		"plugins": []interface{}{
@@ -321,41 +133,42 @@ func TestBuildPluginsArray(t *testing.T) {
 		},
 	}
 
-	plugins := buildPluginsArray(pluginRefs, existing)
-	require.Len(t, plugins, 1)
+	result := buildPluginsArray(plugins, existing, "https://test-owner.github.io/test-repo", "test-owner")
+	require.Len(t, result, 1)
 
-	p := plugins[0].(map[string]interface{})
+	p := result[0].(map[string]interface{})
 	require.Equal(t, "alpha", p["name"])
 	require.Equal(t, "Alpha plugin", p["description"])
 	require.Equal(t, "3", p["version"])
-	// Preserved from existing
 	require.Equal(t, "development", p["category"])
-	// Source set correctly
+
 	src := p["source"].(map[string]interface{})
-	require.Equal(t, "github", src["source"])
-	require.Equal(t, "plugin/alpha#3", src["ref"])
+	require.Equal(t, "npm", src["source"])
+	require.Equal(t, "test-owner-alpha", src["package"])
+	require.Equal(t, "3.0.0", src["version"])
+	require.Equal(t, "https://test-owner.github.io/test-repo", src["registry"])
 }
 
 func TestBuildPluginsArray_WithMCP(t *testing.T) {
-	mockGitWithTags(t, nil, func(args ...string) (string, error) {
+	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "remote" {
 			return "https://github.com/test-owner/test-repo.git\n", nil
-		}
-		if args[0] == "show" {
-			if strings.Contains(args[1], "plugin.json") {
-				return `{"name":"beta"}`, nil
-			}
-			if strings.Contains(args[1], ".mcp.json") {
-				return `{"mcpServers":{"myserver":{"command":"./server"}}}`, nil
-			}
 		}
 		return "", nil
 	})
 
-	plugins := buildPluginsArray(map[string]string{"beta": "plugin/beta#1"}, map[string]interface{}{})
-	require.Len(t, plugins, 1)
+	dir := t.TempDir()
+	makePackagedPlugin(t, dir, "beta", "1.0.0",
+		`{"name":"beta"}`,
+		`{"mcpServers":{"myserver":{"command":"./server"}}}`)
 
-	p := plugins[0].(map[string]interface{})
+	plugins, err := readPackagedPlugins(dir)
+	require.NoError(t, err)
+
+	result := buildPluginsArray(plugins, map[string]interface{}{}, "https://test-owner.github.io/test-repo", "test-owner")
+	require.Len(t, result, 1)
+
+	p := result[0].(map[string]interface{})
 	mcpServers, ok := p["mcpServers"]
 	require.True(t, ok)
 	servers := mcpServers.(map[string]interface{})
@@ -363,139 +176,22 @@ func TestBuildPluginsArray_WithMCP(t *testing.T) {
 	require.True(t, hasMyServer)
 }
 
-func TestReadPluginJSONFromTag(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "show" {
-			return `{"name":"test","description":"A plugin"}`, nil
-		}
-		return "", nil
-	})
+func TestMcpServersFromManifest(t *testing.T) {
+	require.Nil(t, mcpServersFromManifest(nil))
+	require.Nil(t, mcpServersFromManifest(map[string]interface{}{"other": "data"}))
 
-	result, err := readPluginJSONFromTag("plugin/test#1")
-	require.NoError(t, err)
-	require.Equal(t, "test", result["name"])
-	require.Equal(t, "A plugin", result["description"])
-}
-
-func TestReadPluginJSONFromTag_Error(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		return "", fmt.Errorf("not found")
-	})
-	_, err := readPluginJSONFromTag("bad-tag")
-	require.NotNil(t, err)
-}
-
-func TestReadPluginJSONFromTag_InvalidJSON(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		return "{bad", nil
-	})
-	_, err := readPluginJSONFromTag("v1")
-	require.NotNil(t, err)
-}
-
-func TestReadMCPFromTag(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		return `{"mcpServers":{"srv":{"command":"./srv"}}}`, nil
-	})
-	servers := readMCPFromTag("v1")
+	mcp := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"srv": map[string]interface{}{"command": "./srv"},
+		},
+	}
+	servers := mcpServersFromManifest(mcp)
 	require.NotNil(t, servers)
-	_, hasSrv := servers["srv"]
-	require.True(t, hasSrv)
-}
-
-func TestReadMCPFromTag_NoFile(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		return "", fmt.Errorf("not found")
-	})
-	require.Nil(t, readMCPFromTag("v1"))
-}
-
-func TestReadMCPFromTag_InvalidJSON(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		return "{bad", nil
-	})
-	require.Nil(t, readMCPFromTag("v1"))
-}
-
-func TestReadMCPFromTag_NoServersKey(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		return `{"other":"data"}`, nil
-	})
-	require.Nil(t, readMCPFromTag("v1"))
-}
-
-func TestGetOldestPluginTagCommit_NoTags(t *testing.T) {
-	mockGitWithTags(t, nil)
-	commit := getOldestPluginTagCommit()
-	require.Empty(t, commit)
-}
-
-func TestGetOldestPluginTagCommit_WithTags(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/a#1\nplugin/a#2\nplugin/a#latest\n", nil
-		}
-		if args[0] == "show" {
-			if strings.Contains(args[1], "#1:") {
-				return `{"sourceCommit":"oldest111"}`, nil
-			}
-			if strings.Contains(args[1], "#2:") {
-				return `{"sourceCommit":"newer222"}`, nil
-			}
-		}
-		if args[0] == "merge-base" {
-			// oldest111 is ancestor of newer222
-			if args[2] == "oldest111" {
-				return "", nil // success = is ancestor
-			}
-			return "", fmt.Errorf("not ancestor")
-		}
-		return "", nil
-	})
-
-	commit := getOldestPluginTagCommit()
-	require.Equal(t, "oldest111", commit)
-}
-
-func TestHasInfraChanges_NoTags(t *testing.T) {
-	mockGitWithTags(t, nil)
-	require.False(t, hasInfraChanges("/tmp/repo"))
-}
-
-func TestHasInfraChanges_WithChanges(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/a#1\n", nil
-		}
-		if args[0] == "show" {
-			return `{"sourceCommit":"abc123"}`, nil
-		}
-		if args[0] == "rev-list" {
-			return "2\n", nil // 2 commits changed infra
-		}
-		return "", nil
-	})
-	require.True(t, hasInfraChanges("/tmp/repo"))
-}
-
-func TestHasInfraChanges_NoChanges(t *testing.T) {
-	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "plugin/a#1\n", nil
-		}
-		if args[0] == "show" {
-			return `{"sourceCommit":"abc123"}`, nil
-		}
-		if args[0] == "rev-list" {
-			return "0\n", nil
-		}
-		return "", nil
-	})
-	require.False(t, hasInfraChanges("/tmp/repo"))
+	_, ok := servers["srv"]
+	require.True(t, ok)
 }
 
 func TestRunUpdateMarketplace(t *testing.T) {
-	// Set up temp repo structure
 	tmpDir := t.TempDir()
 	claudePluginDir := filepath.Join(tmpDir, ".claude-plugin")
 	require.NoError(t, os.MkdirAll(claudePluginDir, 0755))
@@ -513,27 +209,33 @@ func TestRunUpdateMarketplace(t *testing.T) {
 	repoRoot = tmpDir
 	t.Cleanup(func() { repoRoot = origRoot })
 
+	packagedDir := t.TempDir()
+	makePackagedPlugin(t, packagedDir, "alpha", "1.0.0", `{"name":"alpha","description":"Alpha"}`, "")
+
 	mockGit(t, func(args ...string) (string, error) {
-		if args[0] == "tag" && args[1] == "-l" {
-			return "", nil // no tags
-		}
 		if args[0] == "rev-parse" && args[1] == "--abbrev-ref" {
 			return "master\n", nil
 		}
 		if args[0] == "remote" {
 			return "https://github.com/owner/repo.git\n", nil
 		}
-		if args[0] == "ls-remote" {
-			return "", nil
-		}
-		if args[0] == "push" {
-			return "", nil
-		}
-		return "", nil
+		return "", fmt.Errorf("unexpected git call: %v", args)
 	})
 
-	// Use cobra command
-	cmd := updateMarketplaceCmd
-	err = runUpdateMarketplace(cmd, nil)
+	origInput := updateMarketplaceInput
+	updateMarketplaceInput = packagedDir
+	t.Cleanup(func() { updateMarketplaceInput = origInput })
+
+	err = runUpdateMarketplace(updateMarketplaceCmd, nil)
 	require.NoError(t, err)
+}
+
+func TestRunUpdateMarketplace_NoInputFlag(t *testing.T) {
+	origInput := updateMarketplaceInput
+	updateMarketplaceInput = ""
+	t.Cleanup(func() { updateMarketplaceInput = origInput })
+
+	err := runUpdateMarketplace(updateMarketplaceCmd, nil)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "--input is required")
 }
