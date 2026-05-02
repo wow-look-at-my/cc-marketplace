@@ -29,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: write
       id-token: write
     outputs:
@@ -71,16 +72,21 @@ jobs:
           build_plugins=()
           cached_plugins=()
 
+          # URL-encode ref (slashes are fine in query strings, but be explicit)
+          encoded_ref=$(jq -rn --arg s "$ref" '$s|@uri')
+
           for plugin in $(echo '${{ steps.matrix.outputs.plugins }}' | jq -r '.[]'); do
             hash=$(plugin_hash "$plugin")
             key="plugin-${plugin}-${hash}"
+            encoded_key=$(jq -rn --arg s "$key" '$s|@uri')
 
-            # Check if cache exists via REST API
-            count=$(gh api "repos/${{ github.repository }}/actions/caches" \
-              --jq "[.actions_caches[] | select(.key == \"$key\")] | length" \
-              -f key="$key" -f ref="$ref" 2>/dev/null || echo "0")
+            # Check if cache exists via REST API. Use URL query params (not -f
+            # which can ambiguously become POST body) and parse with jq.
+            response=$(gh api "repos/${{ github.repository }}/actions/caches?key=${encoded_key}&ref=${encoded_ref}" 2>/dev/null || echo '{"actions_caches":[]}')
+            count=$(echo "$response" | jq -r '.actions_caches | length' 2>/dev/null || echo "0")
+            [ -z "$count" ] && count=0
 
-            if [ "$count" -gt "0" ]; then
+            if [ "$count" -gt 0 ]; then
               cached_plugins+=("$plugin")
             else
               build_plugins+=("$plugin")
