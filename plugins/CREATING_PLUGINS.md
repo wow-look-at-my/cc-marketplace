@@ -145,8 +145,8 @@ prebuild:
 
 The marketplace builder runs in this order:
 
-1. `just prebuild` (if recipe exists in justfile)
-2. **go-toolchain** (automatically invoked if any `.go` files are found in the plugin directory — downloads from `https://github.com/wow-look-at-my/go-toolchain/releases/latest`)
+1. **go-toolchain** (CI runs `wow-look-at-my/go-toolchain@latest` action if any `.go` files are found — builds cross-platform binaries for linux/darwin × amd64/arm64)
+2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
 See `example-plugin/justfile.template` for examples.

@@ -381,6 +381,33 @@ func TestSortRedirectPassthrough(t *testing.T) {
 	assert.Equal(t, "", decision, "sort with redirect should passthrough")
 }
 
+func TestSafeRedirectAllowed(t *testing.T) {
+	loadTestRules(t)
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"stdout to /tmp", "ls > /tmp/out.txt", "allow"},
+		{"stdout append to /tmp", "ls >> /tmp/out.txt", "allow"},
+		{"stdout to /dev/null", "ls > /dev/null", "allow"},
+		{"stdout to nested /tmp", "ls > /tmp/sub/out.txt", "allow"},
+		{"stderr to /tmp", "ls 2> /tmp/err.txt", "allow"},
+		{"all to /tmp", "ls &> /tmp/out.txt", "allow"},
+		{"all append to /tmp", "ls &>> /tmp/out.txt", "allow"},
+		{"stdout to /etc passthrough", "ls > /etc/foo.txt", ""},
+		{"stdout to relative passthrough", "ls > out.txt", ""},
+		{"traversal out of /tmp passthrough", "ls > /tmp/../etc/passwd", ""},
+		{"gh api to /tmp with stderr silenced and piped with wc", `gh api --hostname github.com -H "Accept: application/vnd.github.raw+json" "repos/hagezi/dns-blocklists/contents/wildcard/pro.mini-onlydomains.txt" 2>/dev/null > /tmp/hagezi.txt && wc -l /tmp/hagezi.txt`, "allow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, _ := evaluateCommand(tt.command)
+			assert.Equal(t, tt.expected, decision, "evaluateCommand(%q)", tt.command)
+		})
+	}
+}
+
 func TestEchoPipeAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("echo hello | grep hello")
