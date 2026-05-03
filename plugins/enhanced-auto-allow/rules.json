@@ -1,6 +1,41 @@
 {
 	"commands": [
 		{
+			"name": "_meta",
+			"description": "Non-matching node for cross-cutting tests (compounds, redirects, pipes, passthrough)",
+			"tests": {
+				"git status && git diff": "allow",
+				"git status && python --version": "",
+				"git status || git diff": "allow",
+				"git fetch origin latest && git show HEAD": "allow",
+				"ls && cat file.txt": "allow",
+				"git status && gh run view 123": "deny",
+				"git status && git diff && git log": "allow",
+				"git status; git diff": "allow",
+				"cd some/folder && git diff Config/DefaultEngine.ini": "allow",
+				"git log $(echo test)": "",
+				"git log | python": "",
+				"python --version": "",
+				"echo foo > file.txt": "",
+				"echo foo >> file.txt": "",
+				"sort input.txt > output.txt": "",
+				"ls > /tmp/out.txt": "allow",
+				"ls >> /tmp/out.txt": "allow",
+				"ls > /dev/null": "allow",
+				"ls > /tmp/sub/out.txt": "allow",
+				"ls 2> /tmp/err.txt": "allow",
+				"ls &> /tmp/out.txt": "allow",
+				"ls &>> /tmp/out.txt": "allow",
+				"ls > /etc/foo.txt": "",
+				"ls > out.txt": "",
+				"ls > /tmp/../etc/passwd": "",
+				"gh api --hostname github.com -H \"Accept: application/vnd.github.raw+json\" \"repos/hagezi/dns-blocklists/contents/wildcard/pro.mini-onlydomains.txt\" 2>/dev/null > /tmp/hagezi.txt && wc -l /tmp/hagezi.txt": "allow",
+				"echo hello | grep hello": "allow",
+				"git log | head": "allow",
+				"git show 54d7aa918a94 --stat && echo \"---\" && git show 54d7aa918a94 -- path/to/file.cpp": "allow"
+			}
+		},
+		{
 			"name": [
 				"ls",
 				"cat",
@@ -95,7 +130,18 @@
 				"rg"
 			],
 			"description": "Auto-approve readonly inspection commands",
-			"allowedFlags": "*"
+			"allowedFlags": "*",
+			"tests": {
+				"pkg-config --cflags openssl": "allow",
+				"pkg-config --libs openssl": "allow",
+				"pkg-config --modversion openssl": "allow",
+				"pkg-config --list-all": "allow",
+				"pkg-config --exists libcurl": "allow",
+				"pkgconf --cflags openssl": "allow",
+				"pkg_config --libs openssl": "allow",
+				"which node": "allow",
+				"which git node python": "allow"
+			}
 		},
 		{
 			"name": "yq",
@@ -106,7 +152,8 @@
 		{
 			"name": "mount",
 			"description": "Auto-approve bare mount (lists mounted filesystems)",
-			"bareOnly": true
+			"bareOnly": true,
+			"tests": {"mount": "allow", "mount /dev/sda1 /mnt": "", "mount -t ext4 /dev/sda1 /mnt": ""}
 		},
 		{
 			"name": "find",
@@ -120,12 +167,20 @@
 				"-execdir",
 				"-ok",
 				"-okdir"
-			]
+			],
+			"tests": {
+				"find . -name '*.go' -type f": "allow",
+				"find /home/mhaynie -type f -name \"*decode*\" -o -name \"*parse*\" 2>/dev/null | grep -i tool": "allow",
+				"find /home/mhaynie/repos/UnrealEngine -name \"*.h\" -type f -exec grep -l \"class FSkeletalMeshSceneProxy\" {} \\;": "allow",
+				"find . -name '*.tmp' -exec rm {} \\;": "",
+				"find . -name '*.tmp' -delete": ""
+			}
 		},
 		{
 			"name": "grep",
 			"description": "Auto-approve grep (read-only search)",
-			"allowedFlags": "*"
+			"allowedFlags": "*",
+			"tests": {"grep -ri 'TODO' src/": "allow"}
 		},
 		{
 			"name": ["awk", "gawk", "nawk", "mawk"],
@@ -174,7 +229,8 @@
 				"-p",
 				"--print-cache",
 				"-v"
-			]
+			],
+			"tests": {"ldconfig -p": "allow", "ldconfig --print-cache": "allow", "ldconfig": ""}
 		},
 		{
 			"name": "go",
@@ -188,7 +244,15 @@
 					],
 					"allowedFlags": "*"
 				}
-			]
+			],
+			"tests": {
+				"go version": "allow",
+				"go env GOPATH": "allow",
+				"go doc fmt": "allow",
+				"go doc fmt.Println": "allow",
+				"go doc -all fmt": "allow",
+				"go build ./...": ""
+			}
 		},
 		{
 			"name": "git",
@@ -219,7 +283,13 @@
 						"name-rev",
 						"merge-base"
 					],
-					"allowedFlags": "*"
+					"allowedFlags": "*",
+					"tests": {
+						"git status": "allow",
+						"git diff": "allow",
+						"git log --oneline -10": "allow",
+						"git status 2>&1": "allow"
+					}
 				},
 				{
 					"name": "branch",
@@ -232,7 +302,8 @@
 						"--all",
 						"--remotes",
 						"--verbose"
-					]
+					],
+					"tests": {"git branch -a": "allow", "git branch -d feature": ""}
 				},
 				{
 					"name": "tag",
@@ -257,7 +328,8 @@
 							],
 							"allowedFlags": "*"
 						}
-					]
+					],
+					"tests": {"git remote -v": "allow", "git remote show origin": "allow"}
 				},
 				{
 					"name": "submodule",
@@ -266,7 +338,8 @@
 							"name": "status",
 							"allowedFlags": "*"
 						}
-					]
+					],
+					"tests": {"git submodule status": "allow", "git submodule status --recursive": "allow", "git submodule update --init": ""}
 				},
 				{
 					"name": "config",
@@ -279,14 +352,22 @@
 						"--get-color",
 						"--get-colorbool",
 						"-l"
-					]
+					],
+					"tests": {
+						"git config --get user.email": "allow",
+						"git config --list": "allow",
+						"git config --local --list 2>&1": "allow",
+						"git config --get-urlmatch http https://example.com": "allow",
+						"git config user.email foo@bar.com": ""
+					}
 				},
 				{
 					"name": "replace",
 					"requiredFlags": [
 						"-l",
 						"--list"
-					]
+					],
+					"tests": {"git replace -l 2>&1": "allow", "git replace --list": "allow", "git replace abc123 def456": ""}
 				},
 				{
 					"name": "commit-graph",
@@ -295,14 +376,16 @@
 							"name": "verify",
 							"allowedFlags": "*"
 						}
-					]
+					],
+					"tests": {"git commit-graph verify": "allow", "git commit-graph write": ""}
 				},
 				{
 					"name": "push",
 					"requiredFlags": [
 						"--dry-run",
 						"-n"
-					]
+					],
+					"tests": {"git push --dry-run origin main": "allow", "git push -n origin main": "allow", "git push origin main": ""}
 				}
 			]
 		},
@@ -318,7 +401,12 @@
 								"view",
 								"list"
 							],
-							"allowedFlags": "*"
+							"allowedFlags": "*",
+							"tests": {
+								"gh repo view wow-look-at-my/go-toolchain": "allow",
+								"gh repo view wow-look-at-my/go-toolchain --json name,description": "allow",
+								"gh repo list": "allow"
+							}
 						}
 					]
 				},
@@ -346,7 +434,8 @@
 								"diff",
 								"checks"
 							],
-							"allowedFlags": "*"
+							"allowedFlags": "*",
+							"tests": {"gh pr list": "allow", "gh pr view 123": "allow", "gh pr create": ""}
 						}
 					]
 				},
@@ -361,7 +450,12 @@
 								"list",
 								"view"
 							],
-							"allowedFlags": "*"
+							"allowedFlags": "*",
+							"tests": {
+								"gh release list": "allow",
+								"gh release list -R owner/repo": "allow",
+								"gh release view v1.0.0": "allow"
+							}
 						}
 					]
 				},
@@ -379,7 +473,8 @@
 							],
 							"denyWithMessage": "Use 'gh wait-ci' instead for checking CI status"
 						}
-					]
+					],
+					"tests": {"gh run list": "allow", "gh run view 123": "deny", "gh run watch 123": "deny"}
 				},
 				{
 					"name": "search",
@@ -398,7 +493,8 @@
 				},
 				{
 					"name": "browse",
-					"allowedFlags": "*"
+					"allowedFlags": "*",
+					"tests": {"gh browse": "allow"}
 				},
 				{
 					"name": [
@@ -435,7 +531,8 @@
 						"allowed": [
 							"GET"
 						]
-					}
+					},
+					"tests": {"gh api /repos/owner/repo": "allow", "gh api -X POST /repos/owner/repo": ""}
 				}
 			]
 		},
@@ -504,7 +601,27 @@
 				"-v",
 				"--help",
 				"-h"
-			]
+			],
+			"tests": {
+				"claude mcp list": "allow",
+				"claude mcp --help": "allow",
+				"claude mcp get server-name": "allow",
+				"claude mcp add my-server -- npx server": "",
+				"claude mcp remove my-server": "",
+				"claude --version": "allow",
+				"claude --help": "allow",
+				"claude plugin list": "allow",
+				"claude plugin marketplace list": "allow",
+				"claude plugin install some-plugin": "",
+				"claude config list": "allow",
+				"claude config get key": "allow",
+				"claude config set key value": "",
+				"claude plugin --help": "allow",
+				"claude hook --help": "allow",
+				"claude plugin marketplace add --help": "allow",
+				"claude whatever -h": "allow",
+				"claude hook list": ""
+			}
 		},
 		{
 			"name": "just",
@@ -517,7 +634,12 @@
 				"--evaluate",
 				"--help",
 				"-h"
-			]
+			],
+			"tests": {
+				"just --list": "allow",
+				"just --list 2>/dev/null || echo \"no justfile\"": "allow",
+				"just build": ""
+			}
 		},
 		{
 			"name": "docker",
@@ -529,7 +651,18 @@
 					"subcommands": [
 						{
 							"name": "run",
-							"requiredFlags": ["--rm"]
+							"requiredFlags": ["--rm"],
+							"tests": {
+								"docker compose run --rm myservice": "allow",
+								"docker compose run --rm myservice bash": "allow",
+								"docker compose -f docker-compose.yml run --rm myservice": "allow",
+								"docker compose --file docker-compose.yml run --rm myservice": "allow",
+								"docker compose -f compose.yml -p myproject run --rm myservice": "allow",
+								"docker compose -f compose.yml run myservice --rm": "allow",
+								"docker compose run myservice": "",
+								"docker compose up": "",
+								"docker compose down": ""
+							}
 						}
 					]
 				}
@@ -542,7 +675,12 @@
 			"subcommands": [
 				{
 					"name": "run",
-					"requiredFlags": ["--rm"]
+					"requiredFlags": ["--rm"],
+					"tests": {
+						"docker-compose run --rm myservice": "allow",
+						"docker-compose -f docker-compose.yml run --rm myservice": "allow",
+						"docker-compose run myservice": ""
+					}
 				}
 			]
 		},
@@ -561,7 +699,8 @@
 						"config",
 						"version"
 					],
-					"allowedFlags": "*"
+					"allowedFlags": "*",
+					"tests": {"docker-compose ps": "allow"}
 				}
 			]
 		},
@@ -823,7 +962,12 @@
 								"config",
 								"version"
 							],
-							"allowedFlags": "*"
+							"allowedFlags": "*",
+							"tests": {
+								"docker compose ps": "allow",
+								"docker compose ps --all": "allow",
+								"docker compose -f docker-compose.yml ps": "allow"
+							}
 						}
 					]
 				}
