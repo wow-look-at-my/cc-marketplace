@@ -36,6 +36,7 @@ jobs:
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       has_build: ${{ steps.split.outputs.has_build }}
+      prod_version: ${{ steps.prod-version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
 
@@ -91,6 +92,17 @@ jobs:
             core.setOutput('cached_plugins', JSON.stringify(cachedPlugins));
             core.setOutput('has_build', String(buildPlugins.length > 0));
 
+      - name: Fetch production version for PR preview
+        if: github.event_name == 'pull_request'
+        id: prod-version
+        run: |
+          PROD_VERSION=$(curl -sf \
+            "https://wow-look-at-my.github.io/cc-marketplace/wow-look-at-my-html-demo" \
+            | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
+          if [ -n "$PROD_VERSION" ]; then
+            echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
+          fi
+
   build:
     needs: prepare
     if: needs.prepare.outputs.has_build == 'true'
@@ -130,6 +142,13 @@ jobs:
       - name: Cook plugin
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
+
+      - name: Align plugin version to production
+        if: needs.prepare.outputs.prod_version != ''
+        run: |
+          jq --arg v "${{ needs.prepare.outputs.prod_version }}" '.version = $v' \
+            "${{ steps.release.outputs.source_dir }}/package.json" > /tmp/pkg-aligned.json && \
+          mv /tmp/pkg-aligned.json "${{ steps.release.outputs.source_dir }}/package.json"
 
       - uses: ./.github/actions/setup-claude-code
 
@@ -208,25 +227,6 @@ jobs:
           shopt -s nullglob
           for d in packaged/packaged-*; do
             mv "$d" "packaged/${d#packaged/packaged-}"
-          done
-
-      - name: Fetch production version for PR preview
-        if: github.event_name == 'pull_request'
-        id: prod-version
-        run: |
-          PROD_VERSION=$(curl -sf \
-            "https://wow-look-at-my.github.io/cc-marketplace/wow-look-at-my-html-demo" \
-            | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
-          if [ -n "$PROD_VERSION" ]; then
-            echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Align packaged plugin versions to production
-        if: github.event_name == 'pull_request' && steps.prod-version.outputs.version != ''
-        run: |
-          PROD_VERSION="${{ steps.prod-version.outputs.version }}"
-          for pkg in packaged/*/package.json; do
-            jq --arg v "$PROD_VERSION" '.version = $v' "$pkg" > "$pkg.tmp" && mv "$pkg.tmp" "$pkg"
           done
 
       - name: Compute registry base URLs
