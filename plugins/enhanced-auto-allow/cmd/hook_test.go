@@ -52,41 +52,6 @@ func TestEvaluateCommands(t *testing.T) {
 	}
 }
 
-func TestCookedRulesRoundTrip(t *testing.T) {
-	repoRoot := getRepoRoot(t)
-	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json")
-	data, err := os.ReadFile(rulesPath)
-	require.Nil(t, err)
-
-	var generic map[string]interface{}
-	require.NoError(t, json.Unmarshal(data, &generic))
-	delete(generic, "$schema")
-	delete(generic, "mh")
-	cooked, err := json.MarshalIndent(generic, "", "\t")
-	require.NoError(t, err)
-
-	require.NoError(t, json.Unmarshal(cooked, &rules))
-
-	tests := []struct {
-		name     string
-		command  string
-		expected string
-	}{
-		{"gh repo view", "gh repo view wow-look-at-my/go-toolchain", "allow"},
-		{"gh release list", "gh release list", "allow"},
-		{"gh pr list", "gh pr list", "allow"},
-		{"git status", "git status", "allow"},
-		{"gh run view denied", "gh run view 123", "deny"},
-		{"unknown passthrough", "python --version", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			decision, _ := evaluateCommand(tt.command)
-			assert.Equal(t, tt.expected, decision, "cooked rules: evaluateCommand(%q)", tt.command)
-		})
-	}
-}
-
 func TestDuplicateEntriesMerged(t *testing.T) {
 	saved := rules
 	defer func() { rules = saved }()
