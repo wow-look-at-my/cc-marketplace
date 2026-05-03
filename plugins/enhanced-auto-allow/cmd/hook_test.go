@@ -731,6 +731,62 @@ func TestReadAllowed(t *testing.T) {
 	assert.Equal(t, "allow", resp.HookSpecificOutput.Decision.Behavior, "Read should be allowed")
 }
 
+// TestEndToEndGhRepoView builds the binary and exercises it end-to-end via
+// stdin/stdout, the same way the real hook runs.
+func TestEndToEndGhRepoView(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+	pluginDir := filepath.Join(repoRoot, "plugins/enhanced-auto-allow")
+
+	buildDir := filepath.Join(pluginDir, "build")
+	os.MkdirAll(buildDir, 0o755)
+	binaryPath := filepath.Join(buildDir, "enhanced-auto-allow-test")
+	defer os.Remove(binaryPath)
+
+	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/")
+	cmd.Dir = pluginDir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "build failed: %s", out)
+
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{"gh repo view", "gh repo view wow-look-at-my/go-toolchain", "allow"},
+		{"gh repo view --json", "gh repo view wow-look-at-my/go-toolchain --json name,description", "allow"},
+		{"gh release list", "gh release list", "allow"},
+		{"gh release list -R", "gh release list -R owner/repo", "allow"},
+		{"gh pr list (known good)", "gh pr list", "allow"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := HookInput{
+				HookEventName: "PermissionRequest",
+				ToolName:      "Bash",
+				ToolInput:     ToolInput{Command: tt.command},
+			}
+			inputBytes, _ := json.Marshal(input)
+
+			cmd := exec.Command(binaryPath)
+			cmd.Stdin = bytes.NewReader(inputBytes)
+			output, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("binary exited with error: %v, output: %s", err, output)
+			}
+
+			if len(output) == 0 {
+				t.Fatalf("binary produced no output (passthrough) for %q — expected %s", tt.command, tt.expected)
+			}
+
+			var resp PermissionResponse
+			require.NoError(t, json.Unmarshal(output, &resp), "output was: %s", output)
+			assert.Equal(t, tt.expected, resp.HookSpecificOutput.Decision.Behavior,
+				"end-to-end: %q should be %s", tt.command, tt.expected)
+		})
+	}
+}
+
 func getRepoRoot(t *testing.T) string {
 	t.Helper()
 	repoRoot := os.Getenv("REPO_ROOT")
