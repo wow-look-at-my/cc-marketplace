@@ -255,8 +255,10 @@ jobs:
           REGISTRY="${{ steps.registry.outputs.registry_dir }}"
           cp site/index.html "$REGISTRY/index.html"
           cd "$REGISTRY"
-          find . -type f -not -name 'files.json' -printf '{"path":"%P","size":%s}\n' \
-            | sort | jq -s '.' > files.json
+          find . -type f -not -name 'files.json' -printf '%P\t%s\n' \
+            | sort \
+            | jq -Rn '[inputs | split("\t") | {path: .[0], size: (.[1] | tonumber)}]' \
+            > files.json
 
       - uses: ./.github/actions/setup-claude-code
 
