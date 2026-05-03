@@ -25,7 +25,6 @@ jobs:
       - run: npx tsx .github/scripts/cleanup-branch.ts ${{ github.event.ref }}
 
   prepare:
-    if: github.event_name != 'delete' && github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
