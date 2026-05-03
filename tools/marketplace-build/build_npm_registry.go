@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -264,6 +266,22 @@ func createTarballReal(srcDir, outputPath string) error {
 	return nil
 }
 
+var hashFile = hashFileReal
+
+// hashFileReal returns the lowercase hex-encoded SHA-256 digest of the file at path.
+func hashFileReal(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open %s for hashing: %w", path, err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("hash %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 // readPackagedPlugins enumerates subdirectories of inputDir as packaged plugins.
 // Each subdirectory must contain a manifest.json (output of `package-plugin`)
 // alongside the tarballs/ tree it references.
@@ -353,22 +371,37 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
+	tarballDir := filepath.Join(tmpDir, "tarballs")
+	if err := os.MkdirAll(tarballDir, 0755); err != nil {
+		return fmt.Errorf("failed to create tarball dir: %w", err)
+	}
+
 	for _, plugin := range plugins {
 		m := plugin.manifest
 		pkgName := m.Name
 		version := m.Version
 
+		// Copy main tarball to a flat content-addressed pool.
 		mainSrc := filepath.Join(plugin.dir, filepath.FromSlash(m.Main.Tarball))
-		mainDst := filepath.Join(tmpDir, filepath.FromSlash(m.Main.Tarball))
-		if err := copyTarball(mainSrc, mainDst); err != nil {
+		mainHash, err := hashFile(mainSrc)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to hash main tarball for %s: %v\n", pkgName, err)
+			continue
+		}
+		mainTarballName := mainHash + ".tgz"
+		if err := copyTarball(mainSrc, filepath.Join(tarballDir, mainTarballName)); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to copy main tarball for %s: %v\n", pkgName, err)
 			continue
 		}
+		mainTarballURL := fmt.Sprintf("%s/tarballs/%s", pagesBase, mainTarballName)
 
 		mainEntry := map[string]interface{}{
 			"name":    pkgName,
 			"version": version,
-			"dist":    map[string]interface{}{"tarball": fmt.Sprintf("%s/%s", pagesBase, m.Main.Tarball)},
+			"dist": map[string]interface{}{
+				"tarball": mainTarballURL,
+				"shasum":  mainHash,
+			},
 		}
 		if len(m.Platforms) > 0 {
 			optDeps := map[string]string{}
@@ -384,17 +417,26 @@ func runBuildNPMRegistry(cmd *cobra.Command, args []string) error {
 
 		for _, p := range m.Platforms {
 			platSrc := filepath.Join(plugin.dir, filepath.FromSlash(p.Tarball))
-			platDst := filepath.Join(tmpDir, filepath.FromSlash(p.Tarball))
-			if err := copyTarball(platSrc, platDst); err != nil {
+			platHash, err := hashFile(platSrc)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to hash platform tarball %s: %v\n", p.Name, err)
+				continue
+			}
+			platTarballName := platHash + ".tgz"
+			if err := copyTarball(platSrc, filepath.Join(tarballDir, platTarballName)); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to copy platform tarball %s: %v\n", p.Name, err)
 				continue
 			}
+			platTarballURL := fmt.Sprintf("%s/tarballs/%s", pagesBase, platTarballName)
 			platEntry := map[string]interface{}{
 				"name":    p.Name,
 				"version": version,
 				"os":      []string{p.OS},
 				"cpu":     []string{p.CPU},
-				"dist":    map[string]interface{}{"tarball": fmt.Sprintf("%s/%s", pagesBase, p.Tarball)},
+				"dist": map[string]interface{}{
+					"tarball": platTarballURL,
+					"shasum":  platHash,
+				},
 			}
 			if err := writePackument(tmpDir, p.Name, version, map[string]interface{}{version: platEntry}); err != nil {
 				return err
