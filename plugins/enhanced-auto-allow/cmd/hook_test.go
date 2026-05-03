@@ -13,8 +13,6 @@ import (
 	"github.com/wow-look-at-my/testify/require"
 )
 
-// Note: Schema validation is handled by plugin.bats during build
-
 func TestGitStatusAllowed(t *testing.T) {
 	loadTestRules(t)
 	decision, _ := evaluateCommand("git status")
@@ -730,11 +728,13 @@ func getRepoRoot(t *testing.T) string {
 func loadTestRules(t *testing.T) {
 	t.Helper()
 	repoRoot := getRepoRoot(t)
-	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json")
+	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml")
 	data, err := os.ReadFile(rulesPath)
-	require.Nil(t, err, "Failed to read rules")
-	require.NoError(t, json.Unmarshal(data, &rules), "Failed to parse rules")
+	require.Nil(t, err, "Failed to read rules.xml")
+	rules, err = loadXMLRules(data)
+	require.NoError(t, err, "Failed to parse rules.xml")
 }
+
 
 func captureOutput(f func()) string {
 	old := os.Stdout

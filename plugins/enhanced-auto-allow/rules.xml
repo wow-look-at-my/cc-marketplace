@@ -66,6 +66,43 @@
   <cmd name="pkg-config" allowedFlags="*"/>
   <cmd name="pkgconf" allowedFlags="*"/>
   <cmd name="pkg_config" allowedFlags="*"/>
+  <cmd name="dig" allowedFlags="*"/>
+  <cmd name="base64" allowedFlags="*"/>
+  <cmd name="md5sum" allowedFlags="*"/>
+  <cmd name="sha1sum" allowedFlags="*"/>
+  <cmd name="sha256sum" allowedFlags="*"/>
+  <cmd name="sha384sum" allowedFlags="*"/>
+  <cmd name="sha512sum" allowedFlags="*"/>
+  <cmd name="b2sum" allowedFlags="*"/>
+  <cmd name="cksum" allowedFlags="*"/>
+  <cmd name="sum" allowedFlags="*"/>
+  <cmd name="xxd" allowedFlags="*"/>
+  <cmd name="jq" allowedFlags="*"/>
+  <cmd name="nproc" allowedFlags="*"/>
+  <cmd name="free" allowedFlags="*"/>
+  <cmd name="lscpu" allowedFlags="*"/>
+  <cmd name="lsblk" allowedFlags="*"/>
+  <cmd name="fd" allowedFlags="*"/>
+  <cmd name="fdfind" allowedFlags="*"/>
+  <cmd name="readelf" allowedFlags="*"/>
+  <cmd name="objdump" allowedFlags="*"/>
+  <cmd name="nm" allowedFlags="*"/>
+  <cmd name="size" allowedFlags="*"/>
+  <cmd name="ldd" allowedFlags="*"/>
+  <cmd name="ar" allowedFlags="*"/>
+  <cmd name="addr2line" allowedFlags="*"/>
+  <cmd name="rg" allowedFlags="*"/>
+
+  <!-- yq -->
+  <cmd name="yq" allowedFlags="*">
+    <deniedFlags>
+      <flag name="-i" />
+      <flag name="--in-place" />
+    </deniedFlags>
+  </cmd>
+
+  <!-- mount (bare only = no arguments) -->
+  <cmd name="mount" bareOnly="true"/>
 
   <!-- find -->
   <cmd name="find" allowedFlags="*">
@@ -82,6 +119,45 @@
 
   <!-- grep -->
   <cmd name="grep" allowedFlags="*"/>
+
+  <!-- awk -->
+  <cmd name="awk,gawk,nawk,mawk" allowedFlags="*">
+    <flagsWithValue>
+      <flag name="-F" />
+      <flag name="--field-separator" />
+      <flag name="-v" />
+      <flag name="--assign" />
+      <flag name="-e" />
+      <flag name="--source" />
+    </flagsWithValue>
+    <deniedFlags>
+      <flag name="-f" />
+      <flag name="--file" />
+      <flag name="-E" />
+      <flag name="-i" />
+      <flag name="--include" />
+      <flag name="-l" />
+      <flag name="--load" />
+      <flag name="-D" />
+      <flag name="--debug" />
+      <flag name="-o" />
+      <flag name="--pretty-print" />
+      <flag name="-p" />
+      <flag name="--profile" />
+    </deniedFlags>
+    <denyArgSubstrings>
+      <value>system(</value>
+      <value>system (</value>
+      <value>getline</value>
+      <value>@include</value>
+      <value>@load</value>
+      <value>>></value>
+      <value>>"</value>
+      <value>> "</value>
+      <value>|"</value>
+      <value>| "</value>
+    </denyArgSubstrings>
+  </cmd>
 
   <!-- ldconfig -->
   <cmd name="ldconfig">
@@ -290,7 +366,7 @@
     </requiredFlags>
   </cmd>
 
-  <!-- docker compose run --rm -->
+  <!-- docker compose run (requires rm flag) -->
   <cmd name="docker" description="docker compose run --rm">
     <subcmd name="compose">
       <flagsWithValue>
@@ -311,7 +387,7 @@
     </subcmd>
   </cmd>
 
-  <!-- docker-compose run --rm -->
+  <!-- docker-compose run (requires rm flag) -->
   <cmd name="docker-compose" description="docker-compose run --rm">
     <flagsWithValue>
       <flag name="-f" />
@@ -484,6 +560,68 @@
       <subcmd name="version" allowedFlags="*"/>
     </subcmd>
   </cmd>
+
+  <!-- apt -->
+  <cmd name="apt">
+    <subcmd name="list" allowedFlags="*"/>
+    <subcmd name="show" allowedFlags="*"/>
+    <subcmd name="search" allowedFlags="*"/>
+    <subcmd name="depends" allowedFlags="*"/>
+    <subcmd name="rdepends" allowedFlags="*"/>
+    <subcmd name="policy" allowedFlags="*"/>
+    <subcmd name="madison" allowedFlags="*"/>
+  </cmd>
+
+  <!-- apt-cache -->
+  <cmd name="apt-cache">
+    <subcmd name="search" allowedFlags="*"/>
+    <subcmd name="show" allowedFlags="*"/>
+    <subcmd name="showpkg" allowedFlags="*"/>
+    <subcmd name="showsrc" allowedFlags="*"/>
+    <subcmd name="depends" allowedFlags="*"/>
+    <subcmd name="rdepends" allowedFlags="*"/>
+    <subcmd name="policy" allowedFlags="*"/>
+    <subcmd name="madison" allowedFlags="*"/>
+    <subcmd name="pkgnames" allowedFlags="*"/>
+    <subcmd name="dump" allowedFlags="*"/>
+    <subcmd name="dumpavail" allowedFlags="*"/>
+    <subcmd name="stats" allowedFlags="*"/>
+    <subcmd name="unmet" allowedFlags="*"/>
+    <subcmd name="dotty" allowedFlags="*"/>
+    <subcmd name="xvcg" allowedFlags="*"/>
+  </cmd>
+
+  <!-- apt-mark -->
+  <cmd name="apt-mark">
+    <subcmd name="showmanual" allowedFlags="*"/>
+    <subcmd name="showauto" allowedFlags="*"/>
+    <subcmd name="showhold" allowedFlags="*"/>
+    <subcmd name="showinstall" allowedFlags="*"/>
+    <subcmd name="showremove" allowedFlags="*"/>
+    <subcmd name="showpurge" allowedFlags="*"/>
+  </cmd>
+
+  <!-- dpkg -->
+  <cmd name="dpkg">
+    <requiredFlags>
+      <flag name="-L" />
+      <flag name="--listfiles" />
+      <flag name="-l" />
+      <flag name="--list" />
+      <flag name="-s" />
+      <flag name="--status" />
+      <flag name="-p" />
+      <flag name="--print-avail" />
+      <flag name="-S" />
+      <flag name="--search" />
+      <flag name="--get-selections" />
+      <flag name="--print-architecture" />
+      <flag name="--print-foreign-architectures" />
+    </requiredFlags>
+  </cmd>
+
+  <!-- dpkg-query -->
+  <cmd name="dpkg-query" allowedFlags="*"/>
 
   <!-- brew -->
   <cmd name="brew">
