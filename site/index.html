@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>wow-cc-marketplace</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+    /* Header */
+    header { padding-bottom: 2rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 1.9rem; font-family: monospace; color: var(--accent); }
+    .subtitle { color: var(--muted); margin-top: 0.4rem; }
+    .install-box {
+      display: flex; align-items: center; gap: 0.75rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.85rem 1.1rem; margin-top: 1.25rem;
+    }
+    .install-box code {
+      flex: 1; font-size: 0.83rem; color: var(--green);
+      font-family: monospace; word-break: break-all;
+    }
+    .copy-btn {
+      background: var(--accent); color: #0d1117; border: none;
+      padding: 0.3rem 0.7rem; border-radius: 4px; cursor: pointer;
+      font-size: 0.78rem; font-weight: 700; white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .copy-btn:hover { opacity: 0.82; }
+    .copy-btn.copied { background: var(--green); }
+
+    /* Sections */
+    h2 {
+      font-size: 1.1rem; margin: 2rem 0 1rem;
+      padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+    }
+
+    /* Plugin cards */
+    .plugins-grid { display: grid; gap: 0.85rem; }
+    .plugin-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1.1rem 1.25rem;
+      transition: border-color 0.15s;
+    }
+    .plugin-card:hover { border-color: var(--accent); }
+    .plugin-name { font-size: 1rem; font-weight: 700; color: var(--accent); font-family: monospace; }
+    .plugin-desc { color: var(--muted); margin: 0.35rem 0 0.7rem; font-size: 0.88rem; }
+    .plugin-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .badge {
+      font-size: 0.72rem; padding: 0.15rem 0.45rem;
+      border-radius: 12px; border: 1px solid var(--border); color: var(--muted);
+    }
+    .badge-cat { border-color: var(--accent); color: var(--accent); }
+    .badge-ver { margin-left: auto; }
+    .plugin-install {
+      margin-top: 0.7rem; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.35rem 0.7rem;
+      font-size: 0.78rem; color: var(--green); font-family: monospace;
+    }
+
+    /* File tree */
+    .tree-stats { color: var(--muted); font-size: 0.82rem; margin-bottom: 0.6rem; }
+    .filetree {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden;
+    }
+    .file-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.38rem 1rem; border-bottom: 1px solid var(--border);
+      font-size: 0.82rem; font-family: monospace;
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-row:hover { background: rgba(88,166,255,0.05); }
+    .file-icon { width: 1.2rem; flex-shrink: 0; text-align: center; color: var(--muted); }
+    .file-name { flex: 1; }
+    .file-name a { color: var(--text); text-decoration: none; }
+    .file-name a:hover { color: var(--accent); }
+    .file-size { color: var(--muted); font-size: 0.73rem; text-align: right; min-width: 5rem; }
+    .dir-header { cursor: pointer; user-select: none; }
+    .dir-header .file-name { color: var(--accent); font-weight: 700; }
+    .dir-toggle { transition: transform 0.15s; display: inline-block; }
+    .dir-header.open .dir-toggle { transform: rotate(90deg); }
+    .dir-children { display: none; }
+    .dir-children.open { display: block; }
+    .dir-children .file-row { padding-left: 2.4rem; }
+
+    footer {
+      margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 0.78rem; text-align: center;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    #status { text-align: center; padding: 3rem; color: var(--muted); }
+    .err { color: #f85149; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>wow-cc-marketplace</h1>
+    <p class="subtitle">Claude Code plugins by wow-look-at-my-code</p>
+    <div class="install-box">
+      <code id="install-cmd">claude plugin marketplace add https://wow-look-at-my.github.io/cc-marketplace/marketplace.json</code>
+      <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+    </div>
+  </header>
+
+  <div id="content"><div id="status">Loading&hellip;</div></div>
+
+  <footer>
+    <a href="marketplace.json">marketplace.json</a> &middot;
+    <a href="files.json">files.json</a> &middot;
+    <a href="https://github.com/wow-look-at-my/cc-marketplace">GitHub</a> &middot;
+    <a href="https://docs.anthropic.com/en/docs/claude-code/plugins">Plugin Docs</a>
+  </footer>
+</div>
+<script>
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+
+function copyInstall(btn) {
+  const text = document.getElementById('install-cmd').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function toggleDir(id) {
+  const hdr = document.getElementById('dh-' + id);
+  const kids = document.getElementById('dc-' + id);
+  hdr.classList.toggle('open');
+  kids.classList.toggle('open');
+}
+
+function renderPlugins(plugins) {
+  if (!plugins || !plugins.length) {
+    return '<p style="color:var(--muted)">No plugins found.</p>';
+  }
+  return '<div class="plugins-grid">' + plugins.map(p => `
+    <div class="plugin-card">
+      <div class="plugin-name">${esc(p.name)}</div>
+      ${p.description ? `<div class="plugin-desc">${esc(p.description)}</div>` : ''}
+      <div class="plugin-meta">
+        ${p.category ? `<span class="badge badge-cat">${esc(p.category)}</span>` : ''}
+        ${(p.keywords || []).map(k => `<span class="badge">${esc(k)}</span>`).join('')}
+        ${p.version ? `<span class="badge badge-ver">v${esc(p.version)}</span>` : ''}
+      </div>
+      <div class="plugin-install">claude plugin install ${esc(p.name)}</div>
+    </div>
+  `).join('') + '</div>';
+}
+
+function renderTree(files) {
+  const rootFiles = [];
+  const dirs = {};
+
+  for (const f of files) {
+    const slash = f.path.indexOf('/');
+    if (slash === -1) {
+      rootFiles.push(f);
+    } else {
+      const dir = f.path.slice(0, slash);
+      const rest = f.path.slice(slash + 1);
+      if (!dirs[dir]) dirs[dir] = [];
+      dirs[dir].push({ path: f.path, short: rest, size: f.size });
+    }
+  }
+
+  let total = files.reduce((s, f) => s + (f.size || 0), 0);
+  let html = '<div class="filetree">';
+
+  for (const f of rootFiles) {
+    html += `<div class="file-row">
+      <span class="file-icon">&#128196;</span>
+      <span class="file-name"><a href="${esc(f.path)}">${esc(f.path)}</a></span>
+      <span class="file-size">${fmtSize(f.size || 0)}</span>
+    </div>`;
+  }
+
+  let idx = 0;
+  for (const [dir, entries] of Object.entries(dirs).sort()) {
+    const id = idx++;
+    const dirSize = entries.reduce((s, f) => s + (f.size || 0), 0);
+    html += `
+    <div class="file-row dir-header" id="dh-${id}" onclick="toggleDir(${id})">
+      <span class="file-icon"><span class="dir-toggle">&#9658;</span></span>
+      <span class="file-name">${esc(dir)}/</span>
+      <span class="file-size">${entries.length} files &middot; ${fmtSize(dirSize)}</span>
+    </div>
+    <div class="dir-children" id="dc-${id}">
+      ${entries.sort((a, b) => a.short.localeCompare(b.short)).map(f => `
+        <div class="file-row">
+          <span class="file-icon">&#128196;</span>
+          <span class="file-name"><a href="${esc(f.path)}">${esc(f.short)}</a></span>
+          <span class="file-size">${fmtSize(f.size || 0)}</span>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  html += '</div>';
+  return `<div class="tree-stats">${files.length} files &middot; ${fmtSize(total)} total</div>` + html;
+}
+
+async function load() {
+  const content = document.getElementById('content');
+  const [mktResult, filesResult] = await Promise.allSettled([
+    fetch('./marketplace.json').then(r => { if (!r.ok) throw r.status; return r.json(); }),
+    fetch('./files.json').then(r => { if (!r.ok) throw r.status; return r.json(); }),
+  ]);
+
+  let html = '';
+
+  if (mktResult.status === 'fulfilled') {
+    const mkt = mktResult.value;
+    const plugins = mkt.plugins || [];
+    html += `<h2>Plugins (${plugins.length})</h2>` + renderPlugins(plugins);
+  } else {
+    html += '<p class="err">Could not load marketplace.json: ' + esc(String(mktResult.reason)) + '</p>';
+  }
+
+  if (filesResult.status === 'fulfilled') {
+    html += '<h2>Deployed Files</h2>' + renderTree(filesResult.value);
+  } else {
+    html += '<p style="color:var(--muted);margin-top:1rem">File listing unavailable (files.json not found).</p>';
+  }
+
+  content.innerHTML = html;
+}
+
+load();
+</script>
+</body>
+</html>
