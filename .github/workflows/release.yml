@@ -19,7 +19,7 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - run: npm ci
       - run: npx tsx .github/scripts/cleanup-branch.ts ${{ github.event.ref }}
@@ -37,7 +37,7 @@ jobs:
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       has_build: ${{ steps.split.outputs.has_build }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -104,7 +104,7 @@ jobs:
       matrix:
         plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Compute plugin hash
         id: hash
@@ -163,7 +163,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-marketplace-build
 
