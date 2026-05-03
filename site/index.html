@@ -107,7 +107,6 @@
     footer a { color: var(--accent); text-decoration: none; }
     footer a:hover { text-decoration: underline; }
     #status { text-align: center; padding: 3rem; color: var(--muted); }
-    .err { color: #f85149; }
   </style>
 </head>
 <body>
@@ -233,28 +232,15 @@ function renderTree(files) {
 
 async function load() {
   const content = document.getElementById('content');
-  const [mktResult, filesResult] = await Promise.allSettled([
-    fetch('./marketplace.json').then(r => { if (!r.ok) throw r.status; return r.json(); }),
-    fetch('./files.json').then(r => { if (!r.ok) throw r.status; return r.json(); }),
+  const [mkt, files] = await Promise.all([
+    fetch('./marketplace.json').then(r => r.json()),
+    fetch('./files.json').then(r => r.json()),
   ]);
 
-  let html = '';
-
-  if (mktResult.status === 'fulfilled') {
-    const mkt = mktResult.value;
-    const plugins = mkt.plugins || [];
-    html += `<h2>Plugins (${plugins.length})</h2>` + renderPlugins(plugins);
-  } else {
-    html += '<p class="err">Could not load marketplace.json: ' + esc(String(mktResult.reason)) + '</p>';
-  }
-
-  if (filesResult.status === 'fulfilled') {
-    html += '<h2>Deployed Files</h2>' + renderTree(filesResult.value);
-  } else {
-    html += '<p style="color:var(--muted);margin-top:1rem">File listing unavailable (files.json not found).</p>';
-  }
-
-  content.innerHTML = html;
+  const plugins = mkt.plugins || [];
+  content.innerHTML =
+    `<h2>Plugins (${plugins.length})</h2>` + renderPlugins(plugins) +
+    '<h2>Deployed Files</h2>' + renderTree(files);
 }
 
 load();
