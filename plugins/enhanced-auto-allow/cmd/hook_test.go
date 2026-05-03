@@ -15,27 +15,41 @@ import (
 
 // Note: Schema validation is handled by plugin.bats during build
 
-type rulesWithTestcases struct {
-	Testcases []struct {
-		Name     string `json:"name"`
-		Command  string `json:"command"`
-		Expected string `json:"expected"`
-	} `json:"testcases"`
-}
-
-func TestEvaluateCommands(t *testing.T) {
-	loadTestRules(t)
-
+func loadTestcases(t *testing.T) []struct{ Command, Expected string } {
+	t.Helper()
 	repoRoot := getRepoRoot(t)
 	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json"))
 	require.NoError(t, err)
 
-	var r rulesWithTestcases
-	require.NoError(t, json.Unmarshal(data, &r))
-	require.NotEmpty(t, r.Testcases)
+	var raw struct {
+		Testcases []json.RawMessage `json:"testcases"`
+	}
+	require.NoError(t, json.Unmarshal(data, &raw))
+	require.NotEmpty(t, raw.Testcases)
 
-	for _, tt := range r.Testcases {
-		t.Run(tt.Name, func(t *testing.T) {
+	type testCase = struct{ Command, Expected string }
+	var cases []testCase
+	for _, entry := range raw.Testcases {
+		var s string
+		if json.Unmarshal(entry, &s) == nil {
+			cases = append(cases, testCase{s, "allow"})
+			continue
+		}
+		var obj struct {
+			Tests map[string]string `json:"tests"`
+		}
+		require.NoError(t, json.Unmarshal(entry, &obj), "bad testcase entry: %s", entry)
+		for cmd, expected := range obj.Tests {
+			cases = append(cases, testCase{cmd, expected})
+		}
+	}
+	return cases
+}
+
+func TestEvaluateCommands(t *testing.T) {
+	loadTestRules(t)
+	for _, tt := range loadTestcases(t) {
+		t.Run(tt.Command, func(t *testing.T) {
 			decision, _ := evaluateCommand(tt.Command)
 			assert.Equal(t, tt.Expected, decision, "evaluateCommand(%q)", tt.Command)
 		})
