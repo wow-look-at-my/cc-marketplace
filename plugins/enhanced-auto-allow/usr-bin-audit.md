@@ -39,7 +39,7 @@
 - [ ] `avconvert`
 - [ ] `avmediainfo`
 - [ ] `avmetareadwrite`
-- [ ] `awk`
+- [x] `awk`
 - [ ] `b64decode`
 - [ ] `b64encode`
 - [ ] `banner`
