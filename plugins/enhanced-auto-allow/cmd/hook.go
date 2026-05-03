@@ -39,6 +39,7 @@ type CommandNode struct {
 	FlagsWithValue    []string         `json:"flagsWithValue,omitempty"`
 	HelpAlwaysAllowed bool             `json:"helpAlwaysAllowed,omitempty"`
 	BareOnly          bool             `json:"bareOnly,omitempty"`
+	DenyArgSubstrings []string         `json:"denyArgSubstrings,omitempty"`
 	Subcommands       []CommandNode    `json:"subcommands,omitempty"`
 }
 
@@ -163,6 +164,20 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 	// Check deny with message first
 	if node.DenyWithMessage != "" {
 		return "deny", node.DenyWithMessage
+	}
+
+	// If any argument contains a denied substring, this node does not match.
+	// Used for tools that accept script arguments (awk, sed, etc.) where
+	// dangerous features (system(), getline, I/O redirection) appear as
+	// substrings of the script body.
+	if len(node.DenyArgSubstrings) > 0 {
+		for _, arg := range args {
+			for _, substr := range node.DenyArgSubstrings {
+				if strings.Contains(arg, substr) {
+					return "", ""
+				}
+			}
+		}
 	}
 
 	// Check required flags
@@ -502,6 +517,10 @@ func hasAnyFlag(args []string, flags []string) bool {
 	}
 	for _, arg := range args {
 		if flagSet[arg] {
+			return true
+		}
+		// Also match --flag=value form.
+		if idx := strings.Index(arg, "="); idx > 0 && flagSet[arg[:idx]] {
 			return true
 		}
 	}
