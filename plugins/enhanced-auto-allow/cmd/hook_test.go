@@ -15,40 +15,41 @@ import (
 
 // Note: Schema validation is handled by plugin.bats during build
 
-func loadTestcases(t *testing.T) []struct{ Command, Expected string } {
+type testCommandNode struct {
+	Tests       map[string]string `json:"tests,omitempty"`
+	Subcommands []testCommandNode `json:"subcommands,omitempty"`
+}
+
+func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 	t.Helper()
 	repoRoot := getRepoRoot(t)
 	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json"))
 	require.NoError(t, err)
 
 	var raw struct {
-		Testcases []json.RawMessage `json:"testcases"`
+		Commands []testCommandNode `json:"commands"`
 	}
 	require.NoError(t, json.Unmarshal(data, &raw))
-	require.NotEmpty(t, raw.Testcases)
 
 	type testCase = struct{ Command, Expected string }
 	var cases []testCase
-	for _, entry := range raw.Testcases {
-		var s string
-		if json.Unmarshal(entry, &s) == nil {
-			cases = append(cases, testCase{s, "allow"})
-			continue
-		}
-		var obj struct {
-			Tests map[string]string `json:"tests"`
-		}
-		require.NoError(t, json.Unmarshal(entry, &obj), "bad testcase entry: %s", entry)
-		for cmd, expected := range obj.Tests {
-			cases = append(cases, testCase{cmd, expected})
+	var walk func([]testCommandNode)
+	walk = func(nodes []testCommandNode) {
+		for _, node := range nodes {
+			for cmd, expected := range node.Tests {
+				cases = append(cases, testCase{cmd, expected})
+			}
+			walk(node.Subcommands)
 		}
 	}
+	walk(raw.Commands)
+	require.NotEmpty(t, cases, "no embedded tests found in rules.json")
 	return cases
 }
 
 func TestEvaluateCommands(t *testing.T) {
 	loadTestRules(t)
-	for _, tt := range loadTestcases(t) {
+	for _, tt := range loadEmbeddedTests(t) {
 		t.Run(tt.Command, func(t *testing.T) {
 			decision, _ := evaluateCommand(tt.Command)
 			assert.Equal(t, tt.Expected, decision, "evaluateCommand(%q)", tt.Command)
@@ -68,7 +69,6 @@ func TestCookedRulesRoundTrip(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &generic))
 	delete(generic, "$schema")
 	delete(generic, "mh")
-	delete(generic, "testcases")
 	cooked, err := json.MarshalIndent(generic, "", "\t")
 	require.NoError(t, err)
 
