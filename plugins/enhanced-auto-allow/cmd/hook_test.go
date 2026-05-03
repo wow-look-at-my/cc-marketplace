@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"io"
 	"os"
 	"os/exec"
@@ -13,35 +14,31 @@ import (
 	"github.com/wow-look-at-my/testify/require"
 )
 
-type testCommandNode struct {
-	Tests       map[string]string `json:"tests,omitempty"`
-	Subcommands []testCommandNode `json:"subcommands,omitempty"`
-}
-
 func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 	t.Helper()
 	repoRoot := getRepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json"))
+	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))
 	require.NoError(t, err)
 
-	var raw struct {
-		Commands []testCommandNode `json:"commands"`
-	}
-	require.NoError(t, json.Unmarshal(data, &raw))
+	var xr xmlRules
+	require.NoError(t, xml.Unmarshal(data, &xr))
 
 	type testCase = struct{ Command, Expected string }
 	var cases []testCase
-	var walk func([]testCommandNode)
-	walk = func(nodes []testCommandNode) {
-		for _, node := range nodes {
-			for cmd, expected := range node.Tests {
-				cases = append(cases, testCase{cmd, expected})
+	for _, tt := range xr.Tests {
+		cases = append(cases, testCase{tt.Command, tt.Expected})
+	}
+	var walk func([]xmlCommand)
+	walk = func(cmds []xmlCommand) {
+		for _, cmd := range cmds {
+			for _, tt := range cmd.Tests {
+				cases = append(cases, testCase{tt.Command, tt.Expected})
 			}
-			walk(node.Subcommands)
+			walk(cmd.Subcommands)
 		}
 	}
-	walk(raw.Commands)
-	require.NotEmpty(t, cases, "no embedded tests found in rules.json")
+	walk(xr.Commands)
+	require.NotEmpty(t, cases, "no embedded tests found in rules.xml")
 	return cases
 }
 

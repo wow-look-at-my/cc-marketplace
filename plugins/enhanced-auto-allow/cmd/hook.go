@@ -52,8 +52,14 @@ type RequireFlagRule struct {
 
 // XML parsing types
 
+type xmlTest struct {
+	Command  string `xml:"cmd,attr"`
+	Expected string `xml:"expect,attr"`
+}
+
 type xmlRules struct {
 	XMLName  xml.Name     `xml:"rules"`
+	Tests    []xmlTest    `xml:"test"`
 	Commands []xmlCommand `xml:"cmd"`
 }
 
@@ -64,6 +70,7 @@ type xmlCommand struct {
 	DenyWithMessage   string          `xml:"denyWithMessage,attr,omitempty"`
 	HelpAlwaysAllowed bool            `xml:"helpAlwaysAllowed,attr,omitempty"`
 	BareOnly          bool            `xml:"bareOnly,attr,omitempty"`
+	Tests             []xmlTest       `xml:"test"`
 	AllowedFlags      *xmlFlagList    `xml:"allowedFlags"`
 	DeniedFlags       *xmlFlagList    `xml:"deniedFlags"`
 	ExecFlags         *xmlFlagList    `xml:"execFlags"`

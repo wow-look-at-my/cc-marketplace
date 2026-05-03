@@ -1,5 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rules>
+  <!-- Cross-cutting tests: compounds, redirects, pipes, passthrough -->
+  <test cmd="git status &amp;&amp; git diff" expect="allow"/>
+  <test cmd="git status &amp;&amp; python --version" expect=""/>
+  <test cmd="git status || git diff" expect="allow"/>
+  <test cmd="git fetch origin latest &amp;&amp; git show HEAD" expect="allow"/>
+  <test cmd="ls &amp;&amp; cat file.txt" expect="allow"/>
+  <test cmd="git status &amp;&amp; gh run view 123" expect="deny"/>
+  <test cmd="git status &amp;&amp; git diff &amp;&amp; git log" expect="allow"/>
+  <test cmd="git status; git diff" expect="allow"/>
+  <test cmd="cd some/folder &amp;&amp; git diff Config/DefaultEngine.ini" expect="allow"/>
+  <test cmd="git log $(echo test)" expect=""/>
+  <test cmd="git log | python" expect=""/>
+  <test cmd="python --version" expect=""/>
+  <test cmd="echo foo > file.txt" expect=""/>
+  <test cmd="echo foo >> file.txt" expect=""/>
+  <test cmd="sort input.txt > output.txt" expect=""/>
+  <test cmd="ls > /tmp/out.txt" expect="allow"/>
+  <test cmd="ls >> /tmp/out.txt" expect="allow"/>
+  <test cmd="ls > /dev/null" expect="allow"/>
+  <test cmd="ls > /tmp/sub/out.txt" expect="allow"/>
+  <test cmd="ls 2> /tmp/err.txt" expect="allow"/>
+  <test cmd="ls &amp;> /tmp/out.txt" expect="allow"/>
+  <test cmd="ls &amp;>> /tmp/out.txt" expect="allow"/>
+  <test cmd="ls > /etc/foo.txt" expect=""/>
+  <test cmd="ls > out.txt" expect=""/>
+  <test cmd="ls > /tmp/../etc/passwd" expect=""/>
+  <test cmd='gh api --hostname github.com -H "Accept: application/vnd.github.raw+json" "repos/hagezi/dns-blocklists/contents/wildcard/pro.mini-onlydomains.txt" 2>/dev/null > /tmp/hagezi.txt &amp;&amp; wc -l /tmp/hagezi.txt' expect="allow"/>
+  <test cmd="echo hello | grep hello" expect="allow"/>
+  <test cmd="git log | head" expect="allow"/>
+  <test cmd='git show 54d7aa918a94 --stat &amp;&amp; echo "---" &amp;&amp; git show 54d7aa918a94 -- path/to/file.cpp' expect="allow"/>
+
   <!-- Readonly inspection commands -->
   <cmd name="ls" allowedFlags="*"/>
   <cmd name="cat" allowedFlags="*"/>
@@ -20,7 +51,10 @@
   <cmd name="id" allowedFlags="*"/>
   <cmd name="groups" allowedFlags="*"/>
   <cmd name="pgrep" allowedFlags="*"/>
-  <cmd name="which" allowedFlags="*"/>
+  <cmd name="which" allowedFlags="*">
+    <test cmd="which node" expect="allow"/>
+    <test cmd="which git node python" expect="allow"/>
+  </cmd>
   <cmd name="whereis" allowedFlags="*"/>
   <cmd name="readlink" allowedFlags="*"/>
   <cmd name="basename" allowedFlags="*"/>
@@ -63,9 +97,19 @@
   <cmd name="seq" allowedFlags="*"/>
   <cmd name="realpath" allowedFlags="*"/>
   <cmd name="cd" allowedFlags="*"/>
-  <cmd name="pkg-config" allowedFlags="*"/>
-  <cmd name="pkgconf" allowedFlags="*"/>
-  <cmd name="pkg_config" allowedFlags="*"/>
+  <cmd name="pkg-config" allowedFlags="*">
+    <test cmd="pkg-config --cflags openssl" expect="allow"/>
+    <test cmd="pkg-config --libs openssl" expect="allow"/>
+    <test cmd="pkg-config --modversion openssl" expect="allow"/>
+    <test cmd="pkg-config --list-all" expect="allow"/>
+    <test cmd="pkg-config --exists libcurl" expect="allow"/>
+  </cmd>
+  <cmd name="pkgconf" allowedFlags="*">
+    <test cmd="pkgconf --cflags openssl" expect="allow"/>
+  </cmd>
+  <cmd name="pkg_config" allowedFlags="*">
+    <test cmd="pkg_config --libs openssl" expect="allow"/>
+  </cmd>
   <cmd name="dig" allowedFlags="*"/>
   <cmd name="base64" allowedFlags="*"/>
   <cmd name="md5sum" allowedFlags="*"/>
@@ -101,11 +145,20 @@
     </deniedFlags>
   </cmd>
 
-  <!-- mount (bare only = no arguments) -->
-  <cmd name="mount" bareOnly="true"/>
+  <!-- mount -->
+  <cmd name="mount" bareOnly="true">
+    <test cmd="mount" expect="allow"/>
+    <test cmd="mount /dev/sda1 /mnt" expect=""/>
+    <test cmd="mount -t ext4 /dev/sda1 /mnt" expect=""/>
+  </cmd>
 
   <!-- find -->
   <cmd name="find" allowedFlags="*">
+    <test cmd="find . -name '*.go' -type f" expect="allow"/>
+    <test cmd='find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool' expect="allow"/>
+    <test cmd='find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;' expect="allow"/>
+    <test cmd="find . -name '*.tmp' -exec rm {} \;" expect=""/>
+    <test cmd="find . -name '*.tmp' -delete" expect=""/>
     <deniedFlags>
       <flag name="-delete" />
     </deniedFlags>
@@ -118,7 +171,9 @@
   </cmd>
 
   <!-- grep -->
-  <cmd name="grep" allowedFlags="*"/>
+  <cmd name="grep" allowedFlags="*">
+    <test cmd="grep -ri 'TODO' src/" expect="allow"/>
+  </cmd>
 
   <!-- awk -->
   <cmd name="awk,gawk,nawk,mawk" allowedFlags="*">
@@ -161,6 +216,9 @@
 
   <!-- ldconfig -->
   <cmd name="ldconfig">
+    <test cmd="ldconfig -p" expect="allow"/>
+    <test cmd="ldconfig --print-cache" expect="allow"/>
+    <test cmd="ldconfig" expect=""/>
     <requiredFlags>
       <flag name="-p" />
       <flag name="--print-cache" />
@@ -170,6 +228,12 @@
 
   <!-- go -->
   <cmd name="go">
+    <test cmd="go version" expect="allow"/>
+    <test cmd="go env GOPATH" expect="allow"/>
+    <test cmd="go doc fmt" expect="allow"/>
+    <test cmd="go doc fmt.Println" expect="allow"/>
+    <test cmd="go doc -all fmt" expect="allow"/>
+    <test cmd="go build ./..." expect=""/>
     <subcmd name="version" allowedFlags="*"/>
     <subcmd name="env" allowedFlags="*"/>
     <subcmd name="doc" allowedFlags="*"/>
@@ -177,6 +241,10 @@
 
   <!-- git -->
   <cmd name="git">
+    <test cmd="git status" expect="allow"/>
+    <test cmd="git diff" expect="allow"/>
+    <test cmd="git log --oneline -10" expect="allow"/>
+    <test cmd="git status 2>&amp;1" expect="allow"/>
     <subcmd name="status" allowedFlags="*"/>
     <subcmd name="diff" allowedFlags="*"/>
     <subcmd name="log" allowedFlags="*"/>
@@ -200,6 +268,8 @@
     <subcmd name="name-rev" allowedFlags="*"/>
     <subcmd name="merge-base" allowedFlags="*"/>
     <subcmd name="branch">
+      <test cmd="git branch -a" expect="allow"/>
+      <test cmd="git branch -d feature" expect=""/>
       <allowedFlags>
         <flag name="-a" />
         <flag name="-r" />
@@ -220,6 +290,8 @@
       </allowedFlags>
     </subcmd>
     <subcmd name="remote">
+      <test cmd="git remote -v" expect="allow"/>
+      <test cmd="git remote show origin" expect="allow"/>
       <allowedFlags>
         <flag name="-v" />
         <flag name="--verbose" />
@@ -228,9 +300,17 @@
       <subcmd name="get-url" allowedFlags="*"/>
     </subcmd>
     <subcmd name="submodule">
+      <test cmd="git submodule status" expect="allow"/>
+      <test cmd="git submodule status --recursive" expect="allow"/>
+      <test cmd="git submodule update --init" expect=""/>
       <subcmd name="status" allowedFlags="*"/>
     </subcmd>
     <subcmd name="config">
+      <test cmd="git config --get user.email" expect="allow"/>
+      <test cmd="git config --list" expect="allow"/>
+      <test cmd="git config --local --list 2>&amp;1" expect="allow"/>
+      <test cmd="git config --get-urlmatch http https://example.com" expect="allow"/>
+      <test cmd="git config user.email foo@bar.com" expect=""/>
       <requiredFlags>
         <flag name="--get" />
         <flag name="--list" />
@@ -243,15 +323,23 @@
       </requiredFlags>
     </subcmd>
     <subcmd name="replace">
+      <test cmd="git replace -l 2>&amp;1" expect="allow"/>
+      <test cmd="git replace --list" expect="allow"/>
+      <test cmd="git replace abc123 def456" expect=""/>
       <requiredFlags>
         <flag name="-l" />
         <flag name="--list" />
       </requiredFlags>
     </subcmd>
     <subcmd name="commit-graph">
+      <test cmd="git commit-graph verify" expect="allow"/>
+      <test cmd="git commit-graph write" expect=""/>
       <subcmd name="verify" allowedFlags="*"/>
     </subcmd>
     <subcmd name="push">
+      <test cmd="git push --dry-run origin main" expect="allow"/>
+      <test cmd="git push -n origin main" expect="allow"/>
+      <test cmd="git push origin main" expect=""/>
       <requiredFlags>
         <flag name="--dry-run" />
         <flag name="-n" />
@@ -262,6 +350,9 @@
   <!-- gh (GitHub CLI) -->
   <cmd name="gh">
     <subcmd name="repo">
+      <test cmd="gh repo view wow-look-at-my/go-toolchain" expect="allow"/>
+      <test cmd="gh repo view wow-look-at-my/go-toolchain --json name,description" expect="allow"/>
+      <test cmd="gh repo list" expect="allow"/>
       <subcmd name="view" allowedFlags="*"/>
       <subcmd name="list" allowedFlags="*"/>
     </subcmd>
@@ -271,6 +362,9 @@
       <subcmd name="status" allowedFlags="*"/>
     </subcmd>
     <subcmd name="pr">
+      <test cmd="gh pr list" expect="allow"/>
+      <test cmd="gh pr view 123" expect="allow"/>
+      <test cmd="gh pr create" expect=""/>
       <subcmd name="list" allowedFlags="*"/>
       <subcmd name="view" allowedFlags="*"/>
       <subcmd name="status" allowedFlags="*"/>
@@ -278,6 +372,9 @@
       <subcmd name="checks" allowedFlags="*"/>
     </subcmd>
     <subcmd name="release">
+      <test cmd="gh release list" expect="allow"/>
+      <test cmd="gh release list -R owner/repo" expect="allow"/>
+      <test cmd="gh release view v1.0.0" expect="allow"/>
       <subcmd name="list" allowedFlags="*"/>
       <subcmd name="view" allowedFlags="*"/>
     </subcmd>
@@ -286,6 +383,9 @@
       <subcmd name="view" allowedFlags="*"/>
     </subcmd>
     <subcmd name="run">
+      <test cmd="gh run list" expect="allow"/>
+      <test cmd="gh run view 123" expect="deny"/>
+      <test cmd="gh run watch 123" expect="deny"/>
       <subcmd name="list" allowedFlags="*"/>
       <subcmd name="view" denyWithMessage="Use 'gh wait-ci' instead for checking CI status"/>
       <subcmd name="watch" denyWithMessage="Use 'gh wait-ci' instead for checking CI status"/>
@@ -297,7 +397,9 @@
       <subcmd name="commits" allowedFlags="*"/>
       <subcmd name="code" allowedFlags="*"/>
     </subcmd>
-    <subcmd name="browse" allowedFlags="*"/>
+    <subcmd name="browse" allowedFlags="*">
+      <test cmd="gh browse" expect="allow"/>
+    </subcmd>
     <subcmd name="label">
       <subcmd name="list" allowedFlags="*"/>
     </subcmd>
@@ -309,6 +411,8 @@
       <subcmd name="view" allowedFlags="*"/>
     </subcmd>
     <subcmd name="api">
+      <test cmd="gh api /repos/owner/repo" expect="allow"/>
+      <test cmd="gh api -X POST /repos/owner/repo" expect=""/>
       <requireFlagValue default="GET">
         <flag name="-X" />
         <flag name="--method" />
@@ -319,6 +423,24 @@
 
   <!-- claude CLI -->
   <cmd name="claude" helpAlwaysAllowed="true">
+    <test cmd="claude --version" expect="allow"/>
+    <test cmd="claude --help" expect="allow"/>
+    <test cmd="claude mcp list" expect="allow"/>
+    <test cmd="claude mcp --help" expect="allow"/>
+    <test cmd="claude mcp get server-name" expect="allow"/>
+    <test cmd="claude mcp add my-server -- npx server" expect=""/>
+    <test cmd="claude mcp remove my-server" expect=""/>
+    <test cmd="claude plugin list" expect="allow"/>
+    <test cmd="claude plugin marketplace list" expect="allow"/>
+    <test cmd="claude plugin install some-plugin" expect=""/>
+    <test cmd="claude config list" expect="allow"/>
+    <test cmd="claude config get key" expect="allow"/>
+    <test cmd="claude config set key value" expect=""/>
+    <test cmd="claude plugin --help" expect="allow"/>
+    <test cmd="claude hook --help" expect="allow"/>
+    <test cmd="claude plugin marketplace add --help" expect="allow"/>
+    <test cmd="claude whatever -h" expect="allow"/>
+    <test cmd="claude hook list" expect=""/>
     <allowedFlags>
       <flag name="--version" />
       <flag name="-v" />
@@ -355,6 +477,9 @@
 
   <!-- just -->
   <cmd name="just">
+    <test cmd="just --list" expect="allow"/>
+    <test cmd='just --list 2>/dev/null || echo "no justfile"' expect="allow"/>
+    <test cmd="just build" expect=""/>
     <requiredFlags>
       <flag name="--list" />
       <flag name="-l" />
@@ -380,6 +505,15 @@
         <flag name="--ansi" />
       </flagsWithValue>
       <subcmd name="run">
+        <test cmd="docker compose run --rm myservice" expect="allow"/>
+        <test cmd="docker compose run --rm myservice bash" expect="allow"/>
+        <test cmd="docker compose -f docker-compose.yml run --rm myservice" expect="allow"/>
+        <test cmd="docker compose --file docker-compose.yml run --rm myservice" expect="allow"/>
+        <test cmd="docker compose -f compose.yml -p myproject run --rm myservice" expect="allow"/>
+        <test cmd="docker compose -f compose.yml run myservice --rm" expect="allow"/>
+        <test cmd="docker compose run myservice" expect=""/>
+        <test cmd="docker compose up" expect=""/>
+        <test cmd="docker compose down" expect=""/>
         <requiredFlags>
           <flag name="--rm" />
         </requiredFlags>
@@ -400,6 +534,9 @@
       <flag name="--ansi" />
     </flagsWithValue>
     <subcmd name="run">
+      <test cmd="docker-compose run --rm myservice" expect="allow"/>
+      <test cmd="docker-compose -f docker-compose.yml run --rm myservice" expect="allow"/>
+      <test cmd="docker-compose run myservice" expect=""/>
       <requiredFlags>
         <flag name="--rm" />
       </requiredFlags>
@@ -408,6 +545,7 @@
 
   <!-- docker-compose readonly -->
   <cmd name="docker-compose" description="readonly docker-compose">
+    <test cmd="docker-compose ps" expect="allow"/>
     <flagsWithValue>
       <flag name="-f" />
       <flag name="--file" />
@@ -541,6 +679,9 @@
       <subcmd name="version" allowedFlags="*"/>
     </subcmd>
     <subcmd name="compose">
+      <test cmd="docker compose ps" expect="allow"/>
+      <test cmd="docker compose ps --all" expect="allow"/>
+      <test cmd="docker compose -f docker-compose.yml ps" expect="allow"/>
       <flagsWithValue>
         <flag name="-f" />
         <flag name="--file" />
