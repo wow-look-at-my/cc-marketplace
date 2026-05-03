@@ -273,7 +273,7 @@ jobs:
       pages: write
       id-token: write
       statuses: write
-    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@5b404ad5f6fe2d9c7e113c7ceb71b7a3e3c00e99
+    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@master
     with:
       artifact-name: npm-registry
       shared-dirs: tarballs
