@@ -1,0 +1,800 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rules>
+  <!-- Cross-cutting tests: compounds, redirects, pipes, passthrough -->
+  <test cmd="git status &amp;&amp; git diff" expect="allow"/>
+  <test cmd="git status &amp;&amp; python --version" expect=""/>
+  <test cmd="git status || git diff" expect="allow"/>
+  <test cmd="git fetch origin latest &amp;&amp; git show HEAD" expect="allow"/>
+  <test cmd="ls &amp;&amp; cat file.txt" expect="allow"/>
+  <test cmd="git status &amp;&amp; gh run view 123" expect="deny"/>
+  <test cmd="git status &amp;&amp; git diff &amp;&amp; git log" expect="allow"/>
+  <test cmd="git status; git diff" expect="allow"/>
+  <test cmd="cd some/folder &amp;&amp; git diff Config/DefaultEngine.ini" expect="allow"/>
+  <test cmd="git log $(echo test)" expect=""/>
+  <test cmd="git log | python" expect=""/>
+  <test cmd="python --version" expect=""/>
+  <test cmd="echo foo > file.txt" expect=""/>
+  <test cmd="echo foo >> file.txt" expect=""/>
+  <test cmd="sort input.txt > output.txt" expect=""/>
+  <test cmd="ls > /tmp/out.txt" expect="allow"/>
+  <test cmd="ls >> /tmp/out.txt" expect="allow"/>
+  <test cmd="ls > /dev/null" expect="allow"/>
+  <test cmd="ls > /tmp/sub/out.txt" expect="allow"/>
+  <test cmd="ls 2> /tmp/err.txt" expect="allow"/>
+  <test cmd="ls &amp;> /tmp/out.txt" expect="allow"/>
+  <test cmd="ls &amp;>> /tmp/out.txt" expect="allow"/>
+  <test cmd="ls > /etc/foo.txt" expect=""/>
+  <test cmd="ls > out.txt" expect=""/>
+  <test cmd="ls > /tmp/../etc/passwd" expect=""/>
+  <test cmd='gh api --hostname github.com -H "Accept: application/vnd.github.raw+json" "repos/hagezi/dns-blocklists/contents/wildcard/pro.mini-onlydomains.txt" 2>/dev/null > /tmp/hagezi.txt &amp;&amp; wc -l /tmp/hagezi.txt' expect="allow"/>
+  <test cmd="echo hello | grep hello" expect="allow"/>
+  <test cmd="git log | head" expect="allow"/>
+  <test cmd='git show 54d7aa918a94 --stat &amp;&amp; echo "---" &amp;&amp; git show 54d7aa918a94 -- path/to/file.cpp' expect="allow"/>
+
+  <!-- Readonly inspection commands -->
+  <cmd name="ls" allowedFlags="*"/>
+  <cmd name="cat" allowedFlags="*"/>
+  <cmd name="head" allowedFlags="*"/>
+  <cmd name="tail" allowedFlags="*"/>
+  <cmd name="file" allowedFlags="*"/>
+  <cmd name="wc" allowedFlags="*"/>
+  <cmd name="stat" allowedFlags="*"/>
+  <cmd name="du" allowedFlags="*"/>
+  <cmd name="df" allowedFlags="*"/>
+  <cmd name="uname" allowedFlags="*"/>
+  <cmd name="uptime" allowedFlags="*"/>
+  <cmd name="sw_vers" allowedFlags="*"/>
+  <cmd name="arch" allowedFlags="*"/>
+  <cmd name="hostinfo" allowedFlags="*"/>
+  <cmd name="vm_stat" allowedFlags="*"/>
+  <cmd name="whoami" allowedFlags="*"/>
+  <cmd name="id" allowedFlags="*"/>
+  <cmd name="groups" allowedFlags="*"/>
+  <cmd name="pgrep" allowedFlags="*"/>
+  <cmd name="which" allowedFlags="*">
+    <test cmd="which node" expect="allow"/>
+    <test cmd="which git node python" expect="allow"/>
+  </cmd>
+  <cmd name="whereis" allowedFlags="*"/>
+  <cmd name="readlink" allowedFlags="*"/>
+  <cmd name="basename" allowedFlags="*"/>
+  <cmd name="dirname" allowedFlags="*"/>
+  <cmd name="printenv" allowedFlags="*"/>
+  <cmd name="shasum" allowedFlags="*"/>
+  <cmd name="md5" allowedFlags="*"/>
+  <cmd name="strings" allowedFlags="*"/>
+  <cmd name="hexdump" allowedFlags="*"/>
+  <cmd name="od" allowedFlags="*"/>
+  <cmd name="mdfind" allowedFlags="*"/>
+  <cmd name="mdls" allowedFlags="*"/>
+  <cmd name="locate" allowedFlags="*"/>
+  <cmd name="echo" allowedFlags="*"/>
+  <cmd name="printf" allowedFlags="*"/>
+  <cmd name="true" allowedFlags="*"/>
+  <cmd name="false" allowedFlags="*"/>
+  <cmd name="test" allowedFlags="*"/>
+  <cmd name="[" allowedFlags="*"/>
+  <cmd name="date" allowedFlags="*"/>
+  <cmd name="hostname" allowedFlags="*"/>
+  <cmd name="pwd" allowedFlags="*"/>
+  <cmd name="env" allowedFlags="*"/>
+  <cmd name="sort" allowedFlags="*"/>
+  <cmd name="uniq" allowedFlags="*"/>
+  <cmd name="tr" allowedFlags="*"/>
+  <cmd name="cut" allowedFlags="*"/>
+  <cmd name="diff" allowedFlags="*"/>
+  <cmd name="comm" allowedFlags="*"/>
+  <cmd name="join" allowedFlags="*"/>
+  <cmd name="paste" allowedFlags="*"/>
+  <cmd name="column" allowedFlags="*"/>
+  <cmd name="expand" allowedFlags="*"/>
+  <cmd name="unexpand" allowedFlags="*"/>
+  <cmd name="fold" allowedFlags="*"/>
+  <cmd name="fmt" allowedFlags="*"/>
+  <cmd name="nl" allowedFlags="*"/>
+  <cmd name="rev" allowedFlags="*"/>
+  <cmd name="tac" allowedFlags="*"/>
+  <cmd name="seq" allowedFlags="*"/>
+  <cmd name="realpath" allowedFlags="*"/>
+  <cmd name="cd" allowedFlags="*"/>
+  <cmd name="pkg-config" allowedFlags="*">
+    <test cmd="pkg-config --cflags openssl" expect="allow"/>
+    <test cmd="pkg-config --libs openssl" expect="allow"/>
+    <test cmd="pkg-config --modversion openssl" expect="allow"/>
+    <test cmd="pkg-config --list-all" expect="allow"/>
+    <test cmd="pkg-config --exists libcurl" expect="allow"/>
+  </cmd>
+  <cmd name="pkgconf" allowedFlags="*">
+    <test cmd="pkgconf --cflags openssl" expect="allow"/>
+  </cmd>
+  <cmd name="pkg_config" allowedFlags="*">
+    <test cmd="pkg_config --libs openssl" expect="allow"/>
+  </cmd>
+  <cmd name="dig" allowedFlags="*"/>
+  <cmd name="base64" allowedFlags="*"/>
+  <cmd name="md5sum" allowedFlags="*"/>
+  <cmd name="sha1sum" allowedFlags="*"/>
+  <cmd name="sha256sum" allowedFlags="*"/>
+  <cmd name="sha384sum" allowedFlags="*"/>
+  <cmd name="sha512sum" allowedFlags="*"/>
+  <cmd name="b2sum" allowedFlags="*"/>
+  <cmd name="cksum" allowedFlags="*"/>
+  <cmd name="sum" allowedFlags="*"/>
+  <cmd name="xxd" allowedFlags="*"/>
+  <cmd name="jq" allowedFlags="*"/>
+  <cmd name="nproc" allowedFlags="*"/>
+  <cmd name="free" allowedFlags="*"/>
+  <cmd name="lscpu" allowedFlags="*"/>
+  <cmd name="lsblk" allowedFlags="*"/>
+  <cmd name="fd" allowedFlags="*"/>
+  <cmd name="fdfind" allowedFlags="*"/>
+  <cmd name="readelf" allowedFlags="*"/>
+  <cmd name="objdump" allowedFlags="*"/>
+  <cmd name="nm" allowedFlags="*"/>
+  <cmd name="size" allowedFlags="*"/>
+  <cmd name="ldd" allowedFlags="*"/>
+  <cmd name="ar" allowedFlags="*"/>
+  <cmd name="addr2line" allowedFlags="*"/>
+  <cmd name="rg" allowedFlags="*"/>
+
+  <!-- yq -->
+  <cmd name="yq" allowedFlags="*">
+    <deniedFlags>
+      <flag name="-i" />
+      <flag name="--in-place" />
+    </deniedFlags>
+  </cmd>
+
+  <!-- mount -->
+  <cmd name="mount" bareOnly="true">
+    <test cmd="mount" expect="allow"/>
+    <test cmd="mount /dev/sda1 /mnt" expect=""/>
+    <test cmd="mount -t ext4 /dev/sda1 /mnt" expect=""/>
+  </cmd>
+
+  <!-- find -->
+  <cmd name="find" allowedFlags="*">
+    <test cmd="find . -name '*.go' -type f" expect="allow"/>
+    <test cmd='find /home/mhaynie -type f -name "*decode*" -o -name "*parse*" 2>/dev/null | grep -i tool' expect="allow"/>
+    <test cmd='find /home/mhaynie/repos/UnrealEngine -name "*.h" -type f -exec grep -l "class FSkeletalMeshSceneProxy" {} \;' expect="allow"/>
+    <test cmd="find . -name '*.tmp' -exec rm {} \;" expect=""/>
+    <test cmd="find . -name '*.tmp' -delete" expect=""/>
+    <deniedFlags>
+      <flag name="-delete" />
+    </deniedFlags>
+    <execFlags>
+      <flag name="-exec" />
+      <flag name="-execdir" />
+      <flag name="-ok" />
+      <flag name="-okdir" />
+    </execFlags>
+  </cmd>
+
+  <!-- grep -->
+  <cmd name="grep" allowedFlags="*">
+    <test cmd="grep -ri 'TODO' src/" expect="allow"/>
+  </cmd>
+
+  <!-- awk -->
+  <cmd name="awk,gawk,nawk,mawk" allowedFlags="*">
+    <flagsWithValue>
+      <flag name="-F" />
+      <flag name="--field-separator" />
+      <flag name="-v" />
+      <flag name="--assign" />
+      <flag name="-e" />
+      <flag name="--source" />
+    </flagsWithValue>
+    <deniedFlags>
+      <flag name="-f" />
+      <flag name="--file" />
+      <flag name="-E" />
+      <flag name="-i" />
+      <flag name="--include" />
+      <flag name="-l" />
+      <flag name="--load" />
+      <flag name="-D" />
+      <flag name="--debug" />
+      <flag name="-o" />
+      <flag name="--pretty-print" />
+      <flag name="-p" />
+      <flag name="--profile" />
+    </deniedFlags>
+    <denyArgSubstrings>
+      <value>system(</value>
+      <value>system (</value>
+      <value>getline</value>
+      <value>@include</value>
+      <value>@load</value>
+      <value>>></value>
+      <value>>"</value>
+      <value>> "</value>
+      <value>|"</value>
+      <value>| "</value>
+    </denyArgSubstrings>
+  </cmd>
+
+  <!-- ldconfig -->
+  <cmd name="ldconfig">
+    <test cmd="ldconfig -p" expect="allow"/>
+    <test cmd="ldconfig --print-cache" expect="allow"/>
+    <test cmd="ldconfig" expect=""/>
+    <requiredFlags>
+      <flag name="-p" />
+      <flag name="--print-cache" />
+      <flag name="-v" />
+    </requiredFlags>
+  </cmd>
+
+  <!-- go -->
+  <cmd name="go">
+    <test cmd="go version" expect="allow"/>
+    <test cmd="go env GOPATH" expect="allow"/>
+    <test cmd="go doc fmt" expect="allow"/>
+    <test cmd="go doc fmt.Println" expect="allow"/>
+    <test cmd="go doc -all fmt" expect="allow"/>
+    <test cmd="go build ./..." expect=""/>
+    <subcmd name="version" allowedFlags="*"/>
+    <subcmd name="env" allowedFlags="*"/>
+    <subcmd name="doc" allowedFlags="*"/>
+  </cmd>
+
+  <!-- git -->
+  <cmd name="git">
+    <test cmd="git status" expect="allow"/>
+    <test cmd="git diff" expect="allow"/>
+    <test cmd="git log --oneline -10" expect="allow"/>
+    <test cmd="git status 2>&amp;1" expect="allow"/>
+    <subcmd name="status" allowedFlags="*"/>
+    <subcmd name="diff" allowedFlags="*"/>
+    <subcmd name="log" allowedFlags="*"/>
+    <subcmd name="show" allowedFlags="*"/>
+    <subcmd name="fetch" allowedFlags="*"/>
+    <subcmd name="ls-files" allowedFlags="*"/>
+    <subcmd name="ls-tree" allowedFlags="*"/>
+    <subcmd name="ls-remote" allowedFlags="*"/>
+    <subcmd name="rev-parse" allowedFlags="*"/>
+    <subcmd name="rev-list" allowedFlags="*"/>
+    <subcmd name="describe" allowedFlags="*"/>
+    <subcmd name="blame" allowedFlags="*"/>
+    <subcmd name="shortlog" allowedFlags="*"/>
+    <subcmd name="whatchanged" allowedFlags="*"/>
+    <subcmd name="reflog" allowedFlags="*"/>
+    <subcmd name="count-objects" allowedFlags="*"/>
+    <subcmd name="fsck" allowedFlags="*"/>
+    <subcmd name="verify-pack" allowedFlags="*"/>
+    <subcmd name="cat-file" allowedFlags="*"/>
+    <subcmd name="for-each-ref" allowedFlags="*"/>
+    <subcmd name="name-rev" allowedFlags="*"/>
+    <subcmd name="merge-base" allowedFlags="*"/>
+    <subcmd name="branch">
+      <test cmd="git branch -a" expect="allow"/>
+      <test cmd="git branch -d feature" expect=""/>
+      <allowedFlags>
+        <flag name="-a" />
+        <flag name="-r" />
+        <flag name="-v" />
+        <flag name="-vv" />
+        <flag name="--list" />
+        <flag name="--all" />
+        <flag name="--remotes" />
+        <flag name="--verbose" />
+      </allowedFlags>
+    </subcmd>
+    <subcmd name="tag">
+      <allowedFlags>
+        <flag name="-l" />
+        <flag name="-n" />
+        <flag name="--list" />
+        <flag name="--sort" />
+      </allowedFlags>
+    </subcmd>
+    <subcmd name="remote">
+      <test cmd="git remote -v" expect="allow"/>
+      <test cmd="git remote show origin" expect="allow"/>
+      <allowedFlags>
+        <flag name="-v" />
+        <flag name="--verbose" />
+      </allowedFlags>
+      <subcmd name="show" allowedFlags="*"/>
+      <subcmd name="get-url" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="submodule">
+      <test cmd="git submodule status" expect="allow"/>
+      <test cmd="git submodule status --recursive" expect="allow"/>
+      <test cmd="git submodule update --init" expect=""/>
+      <subcmd name="status" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="config">
+      <test cmd="git config --get user.email" expect="allow"/>
+      <test cmd="git config --list" expect="allow"/>
+      <test cmd="git config --local --list 2>&amp;1" expect="allow"/>
+      <test cmd="git config --get-urlmatch http https://example.com" expect="allow"/>
+      <test cmd="git config user.email foo@bar.com" expect=""/>
+      <requiredFlags>
+        <flag name="--get" />
+        <flag name="--list" />
+        <flag name="--get-all" />
+        <flag name="--get-regexp" />
+        <flag name="--get-urlmatch" />
+        <flag name="--get-color" />
+        <flag name="--get-colorbool" />
+        <flag name="-l" />
+      </requiredFlags>
+    </subcmd>
+    <subcmd name="replace">
+      <test cmd="git replace -l 2>&amp;1" expect="allow"/>
+      <test cmd="git replace --list" expect="allow"/>
+      <test cmd="git replace abc123 def456" expect=""/>
+      <requiredFlags>
+        <flag name="-l" />
+        <flag name="--list" />
+      </requiredFlags>
+    </subcmd>
+    <subcmd name="commit-graph">
+      <test cmd="git commit-graph verify" expect="allow"/>
+      <test cmd="git commit-graph write" expect=""/>
+      <subcmd name="verify" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="push">
+      <test cmd="git push --dry-run origin main" expect="allow"/>
+      <test cmd="git push -n origin main" expect="allow"/>
+      <test cmd="git push origin main" expect=""/>
+      <requiredFlags>
+        <flag name="--dry-run" />
+        <flag name="-n" />
+      </requiredFlags>
+    </subcmd>
+  </cmd>
+
+  <!-- gh (GitHub CLI) -->
+  <cmd name="gh">
+    <subcmd name="repo">
+      <test cmd="gh repo view wow-look-at-my/go-toolchain" expect="allow"/>
+      <test cmd="gh repo view wow-look-at-my/go-toolchain --json name,description" expect="allow"/>
+      <test cmd="gh repo list" expect="allow"/>
+      <subcmd name="view" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="issue">
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="view" allowedFlags="*"/>
+      <subcmd name="status" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="pr">
+      <test cmd="gh pr list" expect="allow"/>
+      <test cmd="gh pr view 123" expect="allow"/>
+      <test cmd="gh pr create" expect=""/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="view" allowedFlags="*"/>
+      <subcmd name="status" allowedFlags="*"/>
+      <subcmd name="diff" allowedFlags="*"/>
+      <subcmd name="checks" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="release">
+      <test cmd="gh release list" expect="allow"/>
+      <test cmd="gh release list -R owner/repo" expect="allow"/>
+      <test cmd="gh release view v1.0.0" expect="allow"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="view" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="workflow">
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="view" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="run">
+      <test cmd="gh run list" expect="allow"/>
+      <test cmd="gh run view 123" expect="deny"/>
+      <test cmd="gh run watch 123" expect="deny"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="view" denyWithMessage="Use 'gh wait-ci' instead for checking CI status"/>
+      <subcmd name="watch" denyWithMessage="Use 'gh wait-ci' instead for checking CI status"/>
+    </subcmd>
+    <subcmd name="search">
+      <subcmd name="repos" allowedFlags="*"/>
+      <subcmd name="issues" allowedFlags="*"/>
+      <subcmd name="prs" allowedFlags="*"/>
+      <subcmd name="commits" allowedFlags="*"/>
+      <subcmd name="code" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="browse" allowedFlags="*">
+      <test cmd="gh browse" expect="allow"/>
+    </subcmd>
+    <subcmd name="label">
+      <subcmd name="list" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="cache">
+      <subcmd name="list" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="gist">
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="view" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="api">
+      <test cmd="gh api /repos/owner/repo" expect="allow"/>
+      <test cmd="gh api -X POST /repos/owner/repo" expect=""/>
+      <requireFlagValue default="GET">
+        <flag name="-X" />
+        <flag name="--method" />
+        <allowed>GET</allowed>
+      </requireFlagValue>
+    </subcmd>
+  </cmd>
+
+  <!-- claude CLI -->
+  <cmd name="claude" helpAlwaysAllowed="true">
+    <test cmd="claude --version" expect="allow"/>
+    <test cmd="claude --help" expect="allow"/>
+    <test cmd="claude mcp list" expect="allow"/>
+    <test cmd="claude mcp --help" expect="allow"/>
+    <test cmd="claude mcp get server-name" expect="allow"/>
+    <test cmd="claude mcp add my-server -- npx server" expect=""/>
+    <test cmd="claude mcp remove my-server" expect=""/>
+    <test cmd="claude plugin list" expect="allow"/>
+    <test cmd="claude plugin marketplace list" expect="allow"/>
+    <test cmd="claude plugin install some-plugin" expect=""/>
+    <test cmd="claude config list" expect="allow"/>
+    <test cmd="claude config get key" expect="allow"/>
+    <test cmd="claude config set key value" expect=""/>
+    <test cmd="claude plugin --help" expect="allow"/>
+    <test cmd="claude hook --help" expect="allow"/>
+    <test cmd="claude plugin marketplace add --help" expect="allow"/>
+    <test cmd="claude whatever -h" expect="allow"/>
+    <test cmd="claude hook list" expect=""/>
+    <allowedFlags>
+      <flag name="--version" />
+      <flag name="-v" />
+      <flag name="--help" />
+      <flag name="-h" />
+    </allowedFlags>
+    <subcmd name="mcp">
+      <allowedFlags>
+        <flag name="--help" />
+        <flag name="-h" />
+      </allowedFlags>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="get" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="plugin">
+      <allowedFlags>
+        <flag name="--help" />
+        <flag name="-h" />
+      </allowedFlags>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="marketplace">
+        <subcmd name="list" allowedFlags="*"/>
+      </subcmd>
+    </subcmd>
+    <subcmd name="config">
+      <allowedFlags>
+        <flag name="--help" />
+        <flag name="-h" />
+      </allowedFlags>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="get" allowedFlags="*"/>
+    </subcmd>
+  </cmd>
+
+  <!-- just -->
+  <cmd name="just">
+    <test cmd="just --list" expect="allow"/>
+    <test cmd='just --list 2>/dev/null || echo "no justfile"' expect="allow"/>
+    <test cmd="just build" expect=""/>
+    <requiredFlags>
+      <flag name="--list" />
+      <flag name="-l" />
+      <flag name="--summary" />
+      <flag name="--dump" />
+      <flag name="--evaluate" />
+      <flag name="--help" />
+      <flag name="-h" />
+    </requiredFlags>
+  </cmd>
+
+  <!-- docker compose run (requires rm flag) -->
+  <cmd name="docker" description="docker compose run --rm">
+    <subcmd name="compose">
+      <flagsWithValue>
+        <flag name="-f" />
+        <flag name="--file" />
+        <flag name="-p" />
+        <flag name="--project-name" />
+        <flag name="--env-file" />
+        <flag name="--profile" />
+        <flag name="--progress" />
+        <flag name="--ansi" />
+      </flagsWithValue>
+      <subcmd name="run">
+        <test cmd="docker compose run --rm myservice" expect="allow"/>
+        <test cmd="docker compose run --rm myservice bash" expect="allow"/>
+        <test cmd="docker compose -f docker-compose.yml run --rm myservice" expect="allow"/>
+        <test cmd="docker compose --file docker-compose.yml run --rm myservice" expect="allow"/>
+        <test cmd="docker compose -f compose.yml -p myproject run --rm myservice" expect="allow"/>
+        <test cmd="docker compose -f compose.yml run myservice --rm" expect="allow"/>
+        <test cmd="docker compose run myservice" expect=""/>
+        <test cmd="docker compose up" expect=""/>
+        <test cmd="docker compose down" expect=""/>
+        <requiredFlags>
+          <flag name="--rm" />
+        </requiredFlags>
+      </subcmd>
+    </subcmd>
+  </cmd>
+
+  <!-- docker-compose run (requires rm flag) -->
+  <cmd name="docker-compose" description="docker-compose run --rm">
+    <flagsWithValue>
+      <flag name="-f" />
+      <flag name="--file" />
+      <flag name="-p" />
+      <flag name="--project-name" />
+      <flag name="--env-file" />
+      <flag name="--profile" />
+      <flag name="--progress" />
+      <flag name="--ansi" />
+    </flagsWithValue>
+    <subcmd name="run">
+      <test cmd="docker-compose run --rm myservice" expect="allow"/>
+      <test cmd="docker-compose -f docker-compose.yml run --rm myservice" expect="allow"/>
+      <test cmd="docker-compose run myservice" expect=""/>
+      <requiredFlags>
+        <flag name="--rm" />
+      </requiredFlags>
+    </subcmd>
+  </cmd>
+
+  <!-- docker-compose readonly -->
+  <cmd name="docker-compose" description="readonly docker-compose">
+    <test cmd="docker-compose ps" expect="allow"/>
+    <flagsWithValue>
+      <flag name="-f" />
+      <flag name="--file" />
+      <flag name="-p" />
+      <flag name="--project-name" />
+      <flag name="--env-file" />
+      <flag name="--profile" />
+      <flag name="--progress" />
+      <flag name="--ansi" />
+    </flagsWithValue>
+    <subcmd name="ls" allowedFlags="*"/>
+    <subcmd name="ps" allowedFlags="*"/>
+    <subcmd name="top" allowedFlags="*"/>
+    <subcmd name="images" allowedFlags="*"/>
+    <subcmd name="logs" allowedFlags="*"/>
+    <subcmd name="config" allowedFlags="*"/>
+    <subcmd name="version" allowedFlags="*"/>
+  </cmd>
+
+  <!-- zpool -->
+  <cmd name="zpool">
+    <subcmd name="list" allowedFlags="*"/>
+    <subcmd name="status" allowedFlags="*"/>
+    <subcmd name="history" allowedFlags="*"/>
+    <subcmd name="get" allowedFlags="*"/>
+    <subcmd name="iostat" allowedFlags="*"/>
+    <subcmd name="events" allowedFlags="*"/>
+  </cmd>
+
+  <!-- zfs -->
+  <cmd name="zfs">
+    <subcmd name="list" allowedFlags="*"/>
+    <subcmd name="get" allowedFlags="*"/>
+    <subcmd name="diff" allowedFlags="*"/>
+    <subcmd name="holds" allowedFlags="*"/>
+  </cmd>
+
+  <!-- docker readonly -->
+  <cmd name="docker" description="readonly docker">
+    <subcmd name="inspect" allowedFlags="*"/>
+    <subcmd name="ps" allowedFlags="*"/>
+    <subcmd name="images" allowedFlags="*"/>
+    <subcmd name="logs" allowedFlags="*"/>
+    <subcmd name="version" allowedFlags="*"/>
+    <subcmd name="info" allowedFlags="*"/>
+    <subcmd name="top" allowedFlags="*"/>
+    <subcmd name="port" allowedFlags="*"/>
+    <subcmd name="diff" allowedFlags="*"/>
+    <subcmd name="history" allowedFlags="*"/>
+    <subcmd name="stats" allowedFlags="*"/>
+    <subcmd name="events" allowedFlags="*"/>
+    <subcmd name="search" allowedFlags="*"/>
+    <subcmd name="image">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+      <subcmd name="history" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="container">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+      <subcmd name="logs" allowedFlags="*"/>
+      <subcmd name="top" allowedFlags="*"/>
+      <subcmd name="stats" allowedFlags="*"/>
+      <subcmd name="port" allowedFlags="*"/>
+      <subcmd name="diff" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="network">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="volume">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="context">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="show" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="config">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="secret">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="service">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+      <subcmd name="logs" allowedFlags="*"/>
+      <subcmd name="ps" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="node">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+      <subcmd name="ps" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="stack">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="ps" allowedFlags="*"/>
+      <subcmd name="services" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="plugin">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="list" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="system">
+      <subcmd name="info" allowedFlags="*"/>
+      <subcmd name="df" allowedFlags="*"/>
+      <subcmd name="events" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="manifest">
+      <subcmd name="inspect" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="buildx">
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="inspect" allowedFlags="*"/>
+      <subcmd name="du" allowedFlags="*"/>
+      <subcmd name="version" allowedFlags="*"/>
+    </subcmd>
+    <subcmd name="compose">
+      <test cmd="docker compose ps" expect="allow"/>
+      <test cmd="docker compose ps --all" expect="allow"/>
+      <test cmd="docker compose -f docker-compose.yml ps" expect="allow"/>
+      <flagsWithValue>
+        <flag name="-f" />
+        <flag name="--file" />
+        <flag name="-p" />
+        <flag name="--project-name" />
+        <flag name="--env-file" />
+        <flag name="--profile" />
+        <flag name="--progress" />
+        <flag name="--ansi" />
+      </flagsWithValue>
+      <subcmd name="ls" allowedFlags="*"/>
+      <subcmd name="ps" allowedFlags="*"/>
+      <subcmd name="top" allowedFlags="*"/>
+      <subcmd name="images" allowedFlags="*"/>
+      <subcmd name="logs" allowedFlags="*"/>
+      <subcmd name="config" allowedFlags="*"/>
+      <subcmd name="version" allowedFlags="*"/>
+    </subcmd>
+  </cmd>
+
+  <!-- apt -->
+  <cmd name="apt">
+    <subcmd name="list" allowedFlags="*"/>
+    <subcmd name="show" allowedFlags="*"/>
+    <subcmd name="search" allowedFlags="*"/>
+    <subcmd name="depends" allowedFlags="*"/>
+    <subcmd name="rdepends" allowedFlags="*"/>
+    <subcmd name="policy" allowedFlags="*"/>
+    <subcmd name="madison" allowedFlags="*"/>
+  </cmd>
+
+  <!-- apt-cache -->
+  <cmd name="apt-cache">
+    <subcmd name="search" allowedFlags="*"/>
+    <subcmd name="show" allowedFlags="*"/>
+    <subcmd name="showpkg" allowedFlags="*"/>
+    <subcmd name="showsrc" allowedFlags="*"/>
+    <subcmd name="depends" allowedFlags="*"/>
+    <subcmd name="rdepends" allowedFlags="*"/>
+    <subcmd name="policy" allowedFlags="*"/>
+    <subcmd name="madison" allowedFlags="*"/>
+    <subcmd name="pkgnames" allowedFlags="*"/>
+    <subcmd name="dump" allowedFlags="*"/>
+    <subcmd name="dumpavail" allowedFlags="*"/>
+    <subcmd name="stats" allowedFlags="*"/>
+    <subcmd name="unmet" allowedFlags="*"/>
+    <subcmd name="dotty" allowedFlags="*"/>
+    <subcmd name="xvcg" allowedFlags="*"/>
+  </cmd>
+
+  <!-- apt-mark -->
+  <cmd name="apt-mark">
+    <subcmd name="showmanual" allowedFlags="*"/>
+    <subcmd name="showauto" allowedFlags="*"/>
+    <subcmd name="showhold" allowedFlags="*"/>
+    <subcmd name="showinstall" allowedFlags="*"/>
+    <subcmd name="showremove" allowedFlags="*"/>
+    <subcmd name="showpurge" allowedFlags="*"/>
+  </cmd>
+
+  <!-- dpkg -->
+  <cmd name="dpkg">
+    <requiredFlags>
+      <flag name="-L" />
+      <flag name="--listfiles" />
+      <flag name="-l" />
+      <flag name="--list" />
+      <flag name="-s" />
+      <flag name="--status" />
+      <flag name="-p" />
+      <flag name="--print-avail" />
+      <flag name="-S" />
+      <flag name="--search" />
+      <flag name="--get-selections" />
+      <flag name="--print-architecture" />
+      <flag name="--print-foreign-architectures" />
+    </requiredFlags>
+  </cmd>
+
+  <!-- dpkg-query -->
+  <cmd name="dpkg-query" allowedFlags="*"/>
+
+  <!-- brew -->
+  <cmd name="brew">
+    <subcmd name="list" allowedFlags="*"/>
+    <subcmd name="ls" allowedFlags="*"/>
+    <subcmd name="info" allowedFlags="*"/>
+    <subcmd name="search" allowedFlags="*"/>
+    <subcmd name="config" allowedFlags="*"/>
+    <subcmd name="doctor" allowedFlags="*"/>
+    <subcmd name="deps" allowedFlags="*"/>
+    <subcmd name="uses" allowedFlags="*"/>
+    <subcmd name="outdated" allowedFlags="*"/>
+    <subcmd name="leaves" allowedFlags="*"/>
+    <subcmd name="desc" allowedFlags="*"/>
+    <subcmd name="cat" allowedFlags="*"/>
+    <subcmd name="home" allowedFlags="*"/>
+    <subcmd name="log" allowedFlags="*"/>
+    <subcmd name="options" allowedFlags="*"/>
+    <subcmd name="formula" allowedFlags="*"/>
+    <subcmd name="--version" allowedFlags="*"/>
+    <subcmd name="--prefix" allowedFlags="*"/>
+    <subcmd name="--cellar" allowedFlags="*"/>
+    <subcmd name="--repository" allowedFlags="*"/>
+    <subcmd name="--cache" allowedFlags="*"/>
+    <subcmd name="analytics" allowedFlags="*"/>
+    <subcmd name="commands" allowedFlags="*"/>
+    <subcmd name="which-formula" allowedFlags="*"/>
+    <subcmd name="tap-info" allowedFlags="*"/>
+    <subcmd name="style" allowedFlags="*"/>
+    <subcmd name="shellenv" allowedFlags="*"/>
+    <subcmd name="tap">
+      <allowedFlags/>
+    </subcmd>
+  </cmd>
+</rules>

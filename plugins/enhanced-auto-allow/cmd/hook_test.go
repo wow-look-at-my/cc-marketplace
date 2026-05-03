@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"io"
 	"os"
 	"os/exec"
@@ -13,37 +14,31 @@ import (
 	"github.com/wow-look-at-my/testify/require"
 )
 
-// Note: Schema validation is handled by plugin.bats during build
-
-type testCommandNode struct {
-	Tests       map[string]string `json:"tests,omitempty"`
-	Subcommands []testCommandNode `json:"subcommands,omitempty"`
-}
-
 func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 	t.Helper()
 	repoRoot := getRepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json"))
+	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))
 	require.NoError(t, err)
 
-	var raw struct {
-		Commands []testCommandNode `json:"commands"`
-	}
-	require.NoError(t, json.Unmarshal(data, &raw))
+	var xr xmlRules
+	require.NoError(t, xml.Unmarshal(data, &xr))
 
 	type testCase = struct{ Command, Expected string }
 	var cases []testCase
-	var walk func([]testCommandNode)
-	walk = func(nodes []testCommandNode) {
-		for _, node := range nodes {
-			for cmd, expected := range node.Tests {
-				cases = append(cases, testCase{cmd, expected})
+	for _, tt := range xr.Tests {
+		cases = append(cases, testCase{tt.Command, tt.Expected})
+	}
+	var walk func([]xmlCommand)
+	walk = func(cmds []xmlCommand) {
+		for _, cmd := range cmds {
+			for _, tt := range cmd.Tests {
+				cases = append(cases, testCase{tt.Command, tt.Expected})
 			}
-			walk(node.Subcommands)
+			walk(cmd.Subcommands)
 		}
 	}
-	walk(raw.Commands)
-	require.NotEmpty(t, cases, "no embedded tests found in rules.json")
+	walk(xr.Commands)
+	require.NotEmpty(t, cases, "no embedded tests found in rules.xml")
 	return cases
 }
 
@@ -53,43 +48,6 @@ func TestEvaluateCommands(t *testing.T) {
 		t.Run(tt.Command, func(t *testing.T) {
 			decision, _ := evaluateCommand(tt.Command)
 			assert.Equal(t, tt.Expected, decision, "evaluateCommand(%q)", tt.Command)
-		})
-	}
-}
-
-// TestCookedRulesRoundTrip simulates the cookJSONForRelease transformation
-// that marketplace-build applies to rules.json before releasing.
-func TestCookedRulesRoundTrip(t *testing.T) {
-	repoRoot := getRepoRoot(t)
-	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json")
-	data, err := os.ReadFile(rulesPath)
-	require.Nil(t, err)
-
-	var generic map[string]interface{}
-	require.NoError(t, json.Unmarshal(data, &generic))
-	delete(generic, "$schema")
-	delete(generic, "mh")
-	cooked, err := json.MarshalIndent(generic, "", "\t")
-	require.NoError(t, err)
-
-	require.NoError(t, json.Unmarshal(cooked, &rules))
-
-	tests := []struct {
-		name     string
-		command  string
-		expected string
-	}{
-		{"gh repo view", "gh repo view wow-look-at-my/go-toolchain", "allow"},
-		{"gh release list", "gh release list", "allow"},
-		{"gh pr list", "gh pr list", "allow"},
-		{"git status", "git status", "allow"},
-		{"gh run view denied", "gh run view 123", "deny"},
-		{"unknown passthrough", "python --version", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			decision, _ := evaluateCommand(tt.command)
-			assert.Equal(t, tt.expected, decision, "cooked rules: evaluateCommand(%q)", tt.command)
 		})
 	}
 }
@@ -238,10 +196,11 @@ func getRepoRoot(t *testing.T) string {
 func loadTestRules(t *testing.T) {
 	t.Helper()
 	repoRoot := getRepoRoot(t)
-	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.json")
+	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml")
 	data, err := os.ReadFile(rulesPath)
-	require.Nil(t, err, "Failed to read rules")
-	require.NoError(t, json.Unmarshal(data, &rules), "Failed to parse rules")
+	require.Nil(t, err, "Failed to read rules.xml")
+	rules, err = loadXMLRules(data)
+	require.NoError(t, err, "Failed to parse rules.xml")
 }
 
 func captureOutput(f func()) string {
