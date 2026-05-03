@@ -250,6 +250,16 @@ jobs:
           src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
           cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
+      - name: Add site index and file listing to registry
+        run: |
+          REGISTRY="${{ steps.registry.outputs.registry_dir }}"
+          cp site/index.html "$REGISTRY/index.html"
+          cd "$REGISTRY"
+          find . -type f -not -name 'files.json' -printf '%P\t%s\n' \
+            | sort \
+            | jq -Rn '[inputs | split("\t") | {path: .[0], size: (.[1] | tonumber)}]' \
+            > files.json
+
       - uses: ./.github/actions/setup-claude-code
 
       - name: Validate marketplace
