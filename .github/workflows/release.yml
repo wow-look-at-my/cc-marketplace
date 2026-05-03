@@ -265,7 +265,7 @@ jobs:
 
   deploy-preview:
     needs: pages
-    if: github.event_name != 'delete'
+    if: always() && github.event_name != 'delete'
     permissions:
       contents: write
       pull-requests: write
