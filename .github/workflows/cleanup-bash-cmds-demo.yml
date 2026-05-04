@@ -21,6 +21,7 @@ jobs:
           os: linux
           arch: amd64
           upload-artifacts: 'false'
+          codeql: 'false'
 
       - name: Stage hook binary at the path plugin.json expects
         run: |
