@@ -1,0 +1,84 @@
+name: cleanup-bash-cmds demo
+
+on:
+  push:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build hook binary
+        uses: wow-look-at-my/go-toolchain@latest
+        with:
+          working-directory: plugins/cleanup-bash-cmds
+          os: linux
+          arch: amd64
+          upload-artifacts: 'false'
+          codeql: 'false'
+
+      - name: Stage hook binary at the path plugin.json expects
+        run: |
+          set -euxo pipefail
+          src=plugins/cleanup-bash-cmds/build/cleanup-bash-cmds_linux_amd64
+          dst=plugins/cleanup-bash-cmds/build/cleanup-bash-cmds
+          cp "$src" "$dst"
+          chmod +x "$dst"
+          ls -la plugins/cleanup-bash-cmds/build/
+
+      - uses: ./.github/actions/setup-claude-code
+
+      - name: Run Claude with the cleanup-bash-cmds plugin loaded
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_WOW }}
+          CLEANUP_BASH_CMDS_LOG: ${{ runner.temp }}/hook.log
+        run: |
+          : > "$CLEANUP_BASH_CMDS_LOG"
+          claude -p "Run exactly this Bash command and report the output: seq 1 10 | head -3" \
+            --plugin-dir ./plugins/cleanup-bash-cmds \
+            --allowedTools "Bash" \
+            --permission-mode bypassPermissions \
+            > "${{ runner.temp }}/claude.stdout" \
+            2> "${{ runner.temp }}/claude.stderr" || true
+
+      - name: Claude stdout
+        run: |
+          echo "::group::Claude stdout"
+          cat "${{ runner.temp }}/claude.stdout" || true
+          echo "::endgroup::"
+
+      - name: Claude stderr
+        run: |
+          echo "::group::Claude stderr"
+          cat "${{ runner.temp }}/claude.stderr" || true
+          echo "::endgroup::"
+
+      - name: Hook rewrite log
+        run: |
+          echo "::group::cleanup-bash-cmds hook log"
+          cat "${{ runner.temp }}/hook.log" || echo "(empty)"
+          echo "::endgroup::"
+
+      - name: Assert the hook rewrote the trailing | head
+        run: |
+          set -euo pipefail
+          log="${{ runner.temp }}/hook.log"
+          if ! [ -s "$log" ]; then
+            echo "::error::hook log file is empty -- the hook never fired"
+            exit 1
+          fi
+          if ! grep -q 'REWRITE' "$log"; then
+            echo "::error::hook log has no REWRITE entries"
+            exit 1
+          fi
+          if ! grep -q 'cleaned="seq 1 10"' "$log"; then
+            echo "::error::expected the trailing | head to be stripped"
+            exit 1
+          fi
+          echo "OK: hook stripped the trailing | head as expected"

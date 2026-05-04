@@ -32,7 +32,7 @@
     {
       "name": "cleanup-bash-cmds",
       "source": "./cleanup-bash-cmds",
-      "description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, | head, | tail, and set -e",
+      "description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
       "category": "development",
       "keywords": ["bash", "cleanup", "rewrite", "hook"]
     }

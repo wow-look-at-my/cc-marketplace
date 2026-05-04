@@ -39,6 +39,7 @@ var (
 	leadingSetEAnd      = regexp.MustCompile(`^set\s+-e\s*&&\s*`)
 	trailingHead        = regexp.MustCompile(`\s*\|\s*head(\s+[^\s|]+)*\s*$`)
 	trailingTail        = regexp.MustCompile(`\s*\|\s*tail(\s+[^\s|]+)*\s*$`)
+	trailingGrep        = regexp.MustCompile(`\s*\|\s*grep(\s+[^\s|]+)*\s*$`)
 )
 
 // cleanCommand applies cleanup rules to a bash command, removing unnecessary
@@ -55,12 +56,29 @@ func cleanCommand(cmd string) string {
 		cmd = trailingDevNull.ReplaceAllString(cmd, "")
 		cmd = trailingHead.ReplaceAllString(cmd, "")
 		cmd = trailingTail.ReplaceAllString(cmd, "")
+		cmd = trailingGrep.ReplaceAllString(cmd, "")
 		cmd = strings.TrimSpace(cmd)
 		if cmd == prev {
 			break
 		}
 	}
 	return cmd
+}
+
+// logRewrite appends a record of a command rewrite to the path in
+// CLEANUP_BASH_CMDS_LOG, if set. Errors are silently ignored so that
+// log misconfiguration never breaks the hook.
+func logRewrite(original, cleaned string) {
+	path := os.Getenv("CLEANUP_BASH_CMDS_LOG")
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintf(f, "REWRITE\toriginal=%q\tcleaned=%q\n", original, cleaned)
 }
 
 // evaluate processes a PreToolUse hook input and returns the exit code,
@@ -84,6 +102,8 @@ func evaluate(input []byte) (int, string, string) {
 	if cleaned == cmd {
 		return 0, "", ""
 	}
+
+	logRewrite(cmd, cleaned)
 
 	out := HookOutput{
 		HookSpecificOutput: HookSpecificOutput{
