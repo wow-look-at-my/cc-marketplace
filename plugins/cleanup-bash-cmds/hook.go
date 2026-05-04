@@ -65,6 +65,22 @@ func cleanCommand(cmd string) string {
 	return cmd
 }
 
+// logRewrite appends a record of a command rewrite to the path in
+// CLEANUP_BASH_CMDS_LOG, if set. Errors are silently ignored so that
+// log misconfiguration never breaks the hook.
+func logRewrite(original, cleaned string) {
+	path := os.Getenv("CLEANUP_BASH_CMDS_LOG")
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "REWRITE\toriginal=%q\tcleaned=%q\n", original, cleaned)
+}
+
 // evaluate processes a PreToolUse hook input and returns the exit code,
 // stderr message, and stdout JSON (if the command was rewritten).
 func evaluate(input []byte) (int, string, string) {
@@ -86,6 +102,8 @@ func evaluate(input []byte) (int, string, string) {
 	if cleaned == cmd {
 		return 0, "", ""
 	}
+
+	logRewrite(cmd, cleaned)
 
 	out := HookOutput{
 		HookSpecificOutput: HookSpecificOutput{

@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -252,6 +254,68 @@ func TestInvalidJSONPassthrough(t *testing.T) {
 	code, _, stdout := evaluate([]byte("not json"))
 	assert.Equal(t, 0, code)
 	assert.Empty(t, stdout)
+}
+
+func TestLogRewriteWritesToFile(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "hook.log")
+	t.Setenv("CLEANUP_BASH_CMDS_LOG", logPath)
+
+	input := HookInput{
+		HookEventName: "PreToolUse",
+		ToolName:      "Bash",
+		ToolInput:     ToolInput{Command: "ls | grep foo"},
+	}
+	runEvaluate(t, input)
+
+	data, err := os.ReadFile(logPath)
+	require.Nil(t, err)
+	assert.Contains(t, string(data), `original="ls | grep foo"`)
+	assert.Contains(t, string(data), `cleaned="ls"`)
+}
+
+func TestLogRewriteAppendsAcrossInvocations(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "hook.log")
+	t.Setenv("CLEANUP_BASH_CMDS_LOG", logPath)
+
+	for _, cmd := range []string{"ls | grep foo", "git log | head -5"} {
+		runEvaluate(t, HookInput{
+			HookEventName: "PreToolUse",
+			ToolName:      "Bash",
+			ToolInput:     ToolInput{Command: cmd},
+		})
+	}
+
+	data, err := os.ReadFile(logPath)
+	require.Nil(t, err)
+	assert.Equal(t, 2, strings.Count(string(data), "REWRITE\t"))
+}
+
+func TestLogRewriteSkippedWhenEnvUnset(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "hook.log")
+	t.Setenv("CLEANUP_BASH_CMDS_LOG", "")
+
+	runEvaluate(t, HookInput{
+		HookEventName: "PreToolUse",
+		ToolName:      "Bash",
+		ToolInput:     ToolInput{Command: "ls | grep foo"},
+	})
+
+	_, err := os.Stat(logPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestLogRewriteSkippedWhenNoChange(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "hook.log")
+	t.Setenv("CLEANUP_BASH_CMDS_LOG", logPath)
+
+	runEvaluate(t, HookInput{
+		HookEventName: "PreToolUse",
+		ToolName:      "Bash",
+		ToolInput:     ToolInput{Command: "git status"},
+	})
+
+	_, err := os.Stat(logPath)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestRunFromReader(t *testing.T) {
