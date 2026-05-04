@@ -1,7 +1,7 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "cleanup-bash-cmds",
-	"description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, | head, | tail, and set -e",
+	"description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
 	"author": {
 		"name": "mhaynie"
 	},

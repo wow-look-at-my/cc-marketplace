@@ -39,6 +39,7 @@ var (
 	leadingSetEAnd      = regexp.MustCompile(`^set\s+-e\s*&&\s*`)
 	trailingHead        = regexp.MustCompile(`\s*\|\s*head(\s+[^\s|]+)*\s*$`)
 	trailingTail        = regexp.MustCompile(`\s*\|\s*tail(\s+[^\s|]+)*\s*$`)
+	trailingGrep        = regexp.MustCompile(`\s*\|\s*grep(\s+[^\s|]+)*\s*$`)
 )
 
 // cleanCommand applies cleanup rules to a bash command, removing unnecessary
@@ -55,6 +56,7 @@ func cleanCommand(cmd string) string {
 		cmd = trailingDevNull.ReplaceAllString(cmd, "")
 		cmd = trailingHead.ReplaceAllString(cmd, "")
 		cmd = trailingTail.ReplaceAllString(cmd, "")
+		cmd = trailingGrep.ReplaceAllString(cmd, "")
 		cmd = strings.TrimSpace(cmd)
 		if cmd == prev {
 			break
