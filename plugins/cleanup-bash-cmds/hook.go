@@ -77,8 +77,8 @@ func logRewrite(original, cleaned string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	fmt.Fprintf(f, "REWRITE\toriginal=%q\tcleaned=%q\n", original, cleaned)
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintf(f, "REWRITE\toriginal=%q\tcleaned=%q\n", original, cleaned)
 }
 
 // evaluate processes a PreToolUse hook input and returns the exit code,
