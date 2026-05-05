@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -168,9 +170,102 @@ func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 
 	manifest.Main = manifestTarball{Tarball: mainTarballRel}
 
+	if err := validateMainTarball(mainTarballPath, manifest.PluginJSON); err != nil {
+		return fmt.Errorf("main tarball validation failed: %w", err)
+	}
+
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
 	return os.WriteFile(filepath.Join(outDir, "manifest.json"), data, 0644)
+}
+
+// validateMainTarball extracts the main tarball and verifies that required files
+// are present. If the plugin declares hooks, .claude-plugin/plugin.json must be
+// in the tarball — without it Claude Code cannot register the hooks at runtime.
+var validateMainTarball = validateMainTarballReal
+
+func validateMainTarballReal(tarballPath string, pluginJSON map[string]interface{}) error {
+	if pluginJSON == nil {
+		return nil
+	}
+
+	contents, err := tarballContents(tarballPath)
+	if err != nil {
+		return fmt.Errorf("list tarball: %w", err)
+	}
+
+	fileSet := make(map[string]bool, len(contents))
+	for _, f := range contents {
+		fileSet[f] = true
+	}
+
+	if !fileSet["package/.claude-plugin/plugin.json"] {
+		return fmt.Errorf("tarball is missing .claude-plugin/plugin.json — plugin will have no metadata at runtime")
+	}
+
+	if hooks, ok := pluginJSON["hooks"]; ok && hooks != nil {
+		hooksMap, ok := hooks.(map[string]interface{})
+		if ok && len(hooksMap) > 0 {
+			for _, matchers := range hooksMap {
+				matchersList, ok := matchers.([]interface{})
+				if !ok {
+					continue
+				}
+				for _, m := range matchersList {
+					matcher, ok := m.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					hooksList, ok := matcher["hooks"].([]interface{})
+					if !ok {
+						continue
+					}
+					for _, h := range hooksList {
+						hook, ok := h.(map[string]interface{})
+						if !ok {
+							continue
+						}
+						cmd, _ := hook["command"].(string)
+						if cmd == "" {
+							continue
+						}
+						const prefix = "${CLAUDE_PLUGIN_ROOT}/"
+						if !strings.HasPrefix(cmd, prefix) {
+							continue
+						}
+						rel := cmd[len(prefix):]
+						if sp := strings.IndexByte(rel, ' '); sp != -1 {
+							rel = rel[:sp]
+						}
+						tarPath := "package/" + rel
+						if !fileSet[tarPath] {
+							return fmt.Errorf("tarball is missing hook binary %q (from command: %s)", rel, cmd)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+var tarballContents = tarballContentsReal
+
+func tarballContentsReal(path string) ([]string, error) {
+	cmd := exec.Command("tar", "-tzf", path)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("tar -tzf %s: %w", path, err)
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSuffix(line, "/")
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	return files, nil
 }
