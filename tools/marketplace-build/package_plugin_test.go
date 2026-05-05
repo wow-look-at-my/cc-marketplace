@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/wow-look-at-my/testify/require"
@@ -219,6 +221,143 @@ func TestPackagePluginToDir_TarballFails_Platform(t *testing.T) {
 	err := packagePluginToDir(cookedDir, "owner-x", "1.0.0", outDir)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "create platform tarball")
+}
+
+func TestValidateMainTarball_MissingPluginJSON(t *testing.T) {
+	orig := tarballContents
+	t.Cleanup(func() { tarballContents = orig })
+	tarballContents = func(_ string) ([]string, error) {
+		return []string{"package/package.json", "package/build/hook", "package/mh.plugin.json"}, nil
+	}
+
+	pluginJSON := map[string]interface{}{
+		"name": "test",
+		"hooks": map[string]interface{}{
+			"PreToolUse": []interface{}{
+				map[string]interface{}{
+					"matcher": "Bash",
+					"hooks": []interface{}{
+						map[string]interface{}{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/build/hook"},
+					},
+				},
+			},
+		},
+	}
+
+	err := validateMainTarballReal("/fake.tgz", pluginJSON)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing .claude-plugin/plugin.json")
+}
+
+func TestValidateMainTarball_MissingHookBinary(t *testing.T) {
+	orig := tarballContents
+	t.Cleanup(func() { tarballContents = orig })
+	tarballContents = func(_ string) ([]string, error) {
+		return []string{"package/package.json", "package/.claude-plugin/plugin.json", "package/mh.plugin.json"}, nil
+	}
+
+	pluginJSON := map[string]interface{}{
+		"name": "test",
+		"hooks": map[string]interface{}{
+			"PreToolUse": []interface{}{
+				map[string]interface{}{
+					"matcher": "Bash",
+					"hooks": []interface{}{
+						map[string]interface{}{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/build/hook"},
+					},
+				},
+			},
+		},
+	}
+
+	err := validateMainTarballReal("/fake.tgz", pluginJSON)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing hook binary")
+}
+
+func TestValidateMainTarball_Passes(t *testing.T) {
+	orig := tarballContents
+	t.Cleanup(func() { tarballContents = orig })
+	tarballContents = func(_ string) ([]string, error) {
+		return []string{
+			"package/package.json",
+			"package/.claude-plugin/plugin.json",
+			"package/build/hook",
+			"package/mh.plugin.json",
+		}, nil
+	}
+
+	pluginJSON := map[string]interface{}{
+		"name": "test",
+		"hooks": map[string]interface{}{
+			"PreToolUse": []interface{}{
+				map[string]interface{}{
+					"matcher": "Bash",
+					"hooks": []interface{}{
+						map[string]interface{}{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/build/hook"},
+					},
+				},
+			},
+		},
+	}
+
+	err := validateMainTarballReal("/fake.tgz", pluginJSON)
+	require.NoError(t, err)
+}
+
+func TestValidateMainTarball_NoHooksSkipsValidation(t *testing.T) {
+	orig := tarballContents
+	t.Cleanup(func() { tarballContents = orig })
+	tarballContents = func(_ string) ([]string, error) {
+		return []string{"package/package.json", "package/.claude-plugin/plugin.json"}, nil
+	}
+
+	pluginJSON := map[string]interface{}{"name": "test"}
+	err := validateMainTarballReal("/fake.tgz", pluginJSON)
+	require.NoError(t, err)
+}
+
+func TestValidateMainTarball_NilPluginJSON(t *testing.T) {
+	err := validateMainTarballReal("/fake.tgz", nil)
+	require.NoError(t, err)
+}
+
+func TestPackagePluginToDir_MainTarballContainsPluginJSON(t *testing.T) {
+	cookedDir := makeCookedDirForPackaging(t, "owner-hook", "3.0.0", map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"hook","hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${CLAUDE_PLUGIN_ROOT}/build/hook"}]}]}}`),
+		"build/hook":                 []byte("#!/bin/sh\nold"),
+		"build/hook_linux_amd64":     []byte("elf-linux"),
+		"build/hook_darwin_arm64":    []byte("mach-darwin"),
+		"mh.plugin.json":            []byte(`{"sourceCommit":"abc"}`),
+	})
+	outDir := t.TempDir()
+
+	require.NoError(t, packagePluginToDir(cookedDir, "owner-hook", "3.0.0", outDir))
+
+	mainTarball := filepath.Join(outDir, "tarballs", "owner-hook", "owner-hook-3.0.0.tgz")
+	files := listTarballContents(t, mainTarball)
+
+	require.Contains(t, files, "package/.claude-plugin/plugin.json",
+		"main tarball must contain .claude-plugin/plugin.json for hooks to work")
+	require.Contains(t, files, "package/mh.plugin.json")
+	require.Contains(t, files, "package/build/hook",
+		"main tarball must contain the wrapper script in build/")
+	require.NotContains(t, files, "package/build/hook_linux_amd64",
+		"main tarball must not contain platform-specific binaries")
+}
+
+func listTarballContents(t *testing.T, path string) []string {
+	t.Helper()
+	out, err := exec.Command("tar", "-tzf", path).Output()
+	require.NoError(t, err, "failed to list tarball contents")
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSuffix(line, "/")
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	return files
 }
 
 var errStub = stubError("stub")

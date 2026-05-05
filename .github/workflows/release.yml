@@ -62,10 +62,11 @@ jobs:
 
             const buildPlugins: string[] = [];
             const cachedPlugins: string[] = [];
+            const toolHash = await hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod');
 
             for (const plugin of plugins) {
               const hash = await hashFiles(`plugins/${plugin}/**`);
-              const key = `plugin-${plugin}-${hash}`;
+              const key = `plugin-${plugin}-${hash}-${toolHash}`;
 
               let cached = false;
               try {
@@ -119,7 +120,7 @@ jobs:
 
       - name: Compute plugin hash
         id: hash
-        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin)) }}" >> $GITHUB_OUTPUT
+        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod') }}" >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -198,10 +199,11 @@ jobs:
             const plugins: string[] = JSON.parse(needs.prepare.outputs.cached_plugins);
 
             fs.mkdirSync('packaged', { recursive: true });
+            const toolHash = await hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod');
 
             for (const plugin of plugins) {
               const hash = await hashFiles(`plugins/${plugin}/**`);
-              const key = `plugin-${plugin}-${hash}`;
+              const key = `plugin-${plugin}-${hash}-${toolHash}`;
               const cachePath = `/tmp/packaged-${plugin}`;
 
               core.info(`Restoring ${plugin}`);
