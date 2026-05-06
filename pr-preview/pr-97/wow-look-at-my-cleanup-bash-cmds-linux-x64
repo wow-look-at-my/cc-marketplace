@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-cleanup-bash-cmds-linux-x64",
+  "versions": {
+    "621.0.0": {
+      "cpu": [
+        "x64"
+      ],
+      "dist": {
+        "shasum": "35e0e9c63a4ed5b2b27aaed746b6757d7878b37a08ad65d31493402d0792fd87",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/35e0e9c63a4ed5b2b27aaed746b6757d7878b37a08ad65d31493402d0792fd87.tgz"
+      },
+      "name": "wow-look-at-my-cleanup-bash-cmds-linux-x64",
+      "os": [
+        "linux"
+      ],
+      "version": "621.0.0"
+    }
+  }
+}

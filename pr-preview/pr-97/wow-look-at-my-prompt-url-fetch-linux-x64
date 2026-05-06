@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-prompt-url-fetch-linux-x64",
+  "versions": {
+    "621.0.0": {
+      "cpu": [
+        "x64"
+      ],
+      "dist": {
+        "shasum": "01f54c122efd05e5a3f424c3d0fadd332be2cd3a6c64573460550e9ad6baf619",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/01f54c122efd05e5a3f424c3d0fadd332be2cd3a6c64573460550e9ad6baf619.tgz"
+      },
+      "name": "wow-look-at-my-prompt-url-fetch-linux-x64",
+      "os": [
+        "linux"
+      ],
+      "version": "621.0.0"
+    }
+  }
+}

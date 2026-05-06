@@ -1,0 +1,16 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-html-demo",
+  "versions": {
+    "621.0.0": {
+      "dist": {
+        "shasum": "fae6b0e81d663f63ff6318cdbed48c6e0faf32410b4b9e3258f9ddc6888c0366",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/fae6b0e81d663f63ff6318cdbed48c6e0faf32410b4b9e3258f9ddc6888c0366.tgz"
+      },
+      "name": "wow-look-at-my-html-demo",
+      "version": "621.0.0"
+    }
+  }
+}

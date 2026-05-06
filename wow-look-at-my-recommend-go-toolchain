@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-recommend-go-toolchain",
+  "versions": {
+    "621.0.0": {
+      "dist": {
+        "shasum": "f8e98bb431dc3a9d7f2ebcd98d327518dbea326809cf4899ca3deecef18b100b",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/f8e98bb431dc3a9d7f2ebcd98d327518dbea326809cf4899ca3deecef18b100b.tgz"
+      },
+      "name": "wow-look-at-my-recommend-go-toolchain",
+      "optionalDependencies": {
+        "wow-look-at-my-recommend-go-toolchain-darwin-arm64": "621.0.0",
+        "wow-look-at-my-recommend-go-toolchain-darwin-x64": "621.0.0",
+        "wow-look-at-my-recommend-go-toolchain-linux-arm64": "621.0.0",
+        "wow-look-at-my-recommend-go-toolchain-linux-x64": "621.0.0"
+      },
+      "version": "621.0.0"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-detect-permission-seeking",
+  "versions": {
+    "621.0.0": {
+      "dist": {
+        "shasum": "bbefea5808144139bf2325b10a106b624ac91dfe3287872ec29cf4a4c8dee874",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/bbefea5808144139bf2325b10a106b624ac91dfe3287872ec29cf4a4c8dee874.tgz"
+      },
+      "name": "wow-look-at-my-detect-permission-seeking",
+      "optionalDependencies": {
+        "wow-look-at-my-detect-permission-seeking-darwin-arm64": "621.0.0",
+        "wow-look-at-my-detect-permission-seeking-darwin-x64": "621.0.0",
+        "wow-look-at-my-detect-permission-seeking-linux-arm64": "621.0.0",
+        "wow-look-at-my-detect-permission-seeking-linux-x64": "621.0.0"
+      },
+      "version": "621.0.0"
+    }
+  }
+}

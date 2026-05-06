@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-enhanced-auto-allow",
+  "versions": {
+    "621.0.0": {
+      "dist": {
+        "shasum": "febfb72ebefd3b67eb79edc474a74c2d2c59546c0abc3ff0784d45d6e443537e",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/febfb72ebefd3b67eb79edc474a74c2d2c59546c0abc3ff0784d45d6e443537e.tgz"
+      },
+      "name": "wow-look-at-my-enhanced-auto-allow",
+      "optionalDependencies": {
+        "wow-look-at-my-enhanced-auto-allow-darwin-arm64": "621.0.0",
+        "wow-look-at-my-enhanced-auto-allow-darwin-x64": "621.0.0",
+        "wow-look-at-my-enhanced-auto-allow-linux-arm64": "621.0.0",
+        "wow-look-at-my-enhanced-auto-allow-linux-x64": "621.0.0"
+      },
+      "version": "621.0.0"
+    }
+  }
+}
