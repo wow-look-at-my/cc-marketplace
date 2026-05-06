@@ -65,6 +65,10 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to cook plugin contents: %w", err)
 	}
 
+	if err := validateHooksPreserved(pluginPath, tmpDir); err != nil {
+		return fmt.Errorf("hook validation failed: %w", err)
+	}
+
 	// Generate package.json for npm registry publishing
 	npmPackageName := fmt.Sprintf("%s-%s", owner, pluginName)
 	npmVersion := fmt.Sprintf("%d.0.0", newVersion)
@@ -183,6 +187,64 @@ func containsTemplate(filename string) bool {
 
 func isGoSource(filename string) bool {
 	return filepath.Ext(filename) == ".go" || filename == "go.mod" || filename == "go.sum"
+}
+
+// validateHooksPreserved checks that hooks defined in the source plugin.json
+// survive the cook process. Prevents regressions where hook configuration is
+// silently dropped, leaving the plugin unable to register hooks at runtime.
+func validateHooksPreserved(srcDir, dstDir string) error {
+	srcPath := filepath.Join(srcDir, ".claude-plugin", "plugin.json")
+	srcData, err := os.ReadFile(srcPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read source plugin.json: %w", err)
+	}
+
+	var srcJSON map[string]interface{}
+	if err := json.Unmarshal(srcData, &srcJSON); err != nil {
+		return nil
+	}
+
+	srcHooks, ok := srcJSON["hooks"]
+	if !ok || srcHooks == nil {
+		return nil
+	}
+
+	srcHooksMap, ok := srcHooks.(map[string]interface{})
+	if !ok || len(srcHooksMap) == 0 {
+		return nil
+	}
+
+	dstPath := filepath.Join(dstDir, ".claude-plugin", "plugin.json")
+	dstData, err := os.ReadFile(dstPath)
+	if err != nil {
+		return fmt.Errorf("source plugin.json defines hooks but cooked plugin.json is missing — hooks will not register at runtime")
+	}
+
+	var dstJSON map[string]interface{}
+	if err := json.Unmarshal(dstData, &dstJSON); err != nil {
+		return fmt.Errorf("cooked plugin.json is invalid JSON — hooks will not register at runtime: %w", err)
+	}
+
+	dstHooks, ok := dstJSON["hooks"]
+	if !ok || dstHooks == nil {
+		return fmt.Errorf("source plugin.json defines hooks but cooked plugin.json does not — hooks will not register at runtime")
+	}
+
+	dstHooksMap, ok := dstHooks.(map[string]interface{})
+	if !ok || len(dstHooksMap) == 0 {
+		return fmt.Errorf("source plugin.json defines hooks but cooked plugin.json has empty hooks — hooks will not register at runtime")
+	}
+
+	for event := range srcHooksMap {
+		if _, ok := dstHooksMap[event]; !ok {
+			return fmt.Errorf("source plugin.json defines %q hooks but cooked plugin.json does not — hook will not register at runtime", event)
+		}
+	}
+
+	return nil
 }
 
 func cookJSONForRelease(data []byte, version int, relPath string) ([]byte, error) {
