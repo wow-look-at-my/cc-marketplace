@@ -183,6 +183,154 @@ func TestCookPluginForRelease(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 }
 
+func TestCookPluginForRelease_PreservesHooks(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, ".claude-plugin"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "build"), 0755))
+
+	pluginJSON := `{
+		"$schema": "../../schema.json",
+		"name": "cleanup-bash-cmds",
+		"hooks": {
+			"PreToolUse": [{
+				"matcher": "Bash",
+				"hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/build/hook"}]
+			}]
+		},
+		"mh": {"include_in_marketplace": true}
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".claude-plugin", "plugin.json"), []byte(pluginJSON), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "build", "hook"), []byte("#!/bin/sh"), 0755))
+
+	meta := releaseMetadata{SourceCommit: "abc123", SourceURL: "https://example.com", BuiltAt: "2026-01-01T00:00:00Z"}
+	require.NoError(t, cookPluginForRelease(srcDir, dstDir, 42, meta))
+
+	pj, err := os.ReadFile(filepath.Join(dstDir, ".claude-plugin", "plugin.json"))
+	require.NoError(t, err)
+
+	var obj map[string]interface{}
+	require.NoError(t, json.Unmarshal(pj, &obj))
+
+	hooks, ok := obj["hooks"]
+	require.True(t, ok, "cooked plugin.json must preserve hooks")
+
+	hooksMap, ok := hooks.(map[string]interface{})
+	require.True(t, ok)
+	_, hasPreToolUse := hooksMap["PreToolUse"]
+	require.True(t, hasPreToolUse, "cooked plugin.json must preserve PreToolUse hooks")
+}
+
+func TestValidateHooksPreserved_SourceHasHooks_CookedPreserves(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, ".claude-plugin"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dstDir, ".claude-plugin"), 0755))
+
+	hooks := `{
+		"name": "test",
+		"hooks": {
+			"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo"}]}]
+		}
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".claude-plugin", "plugin.json"), []byte(hooks), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, ".claude-plugin", "plugin.json"), []byte(hooks), 0644))
+
+	require.NoError(t, validateHooksPreserved(srcDir, dstDir))
+}
+
+func TestValidateHooksPreserved_SourceHasHooks_CookedMissing(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, ".claude-plugin"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dstDir, ".claude-plugin"), 0755))
+
+	srcJSON := `{
+		"name": "test",
+		"hooks": {
+			"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo"}]}]
+		}
+	}`
+	dstJSON := `{"name": "test"}`
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".claude-plugin", "plugin.json"), []byte(srcJSON), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, ".claude-plugin", "plugin.json"), []byte(dstJSON), 0644))
+
+	err := validateHooksPreserved(srcDir, dstDir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "hooks will not register")
+}
+
+func TestValidateHooksPreserved_SourceHasHooks_CookedMissingEvent(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, ".claude-plugin"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dstDir, ".claude-plugin"), 0755))
+
+	srcJSON := `{
+		"name": "test",
+		"hooks": {
+			"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo"}]}],
+			"PostToolUse": [{"hooks": [{"type": "command", "command": "echo"}]}]
+		}
+	}`
+	dstJSON := `{
+		"name": "test",
+		"hooks": {
+			"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo"}]}]
+		}
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".claude-plugin", "plugin.json"), []byte(srcJSON), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, ".claude-plugin", "plugin.json"), []byte(dstJSON), 0644))
+
+	err := validateHooksPreserved(srcDir, dstDir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "PostToolUse")
+}
+
+func TestValidateHooksPreserved_NoHooksInSource(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, ".claude-plugin"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dstDir, ".claude-plugin"), 0755))
+
+	noHooks := `{"name": "test"}`
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".claude-plugin", "plugin.json"), []byte(noHooks), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, ".claude-plugin", "plugin.json"), []byte(noHooks), 0644))
+
+	require.NoError(t, validateHooksPreserved(srcDir, dstDir))
+}
+
+func TestValidateHooksPreserved_NoPluginJSONInSource(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	require.NoError(t, validateHooksPreserved(srcDir, dstDir))
+}
+
+func TestValidateHooksPreserved_CookedPluginJSONMissing(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, ".claude-plugin"), 0755))
+
+	srcJSON := `{
+		"name": "test",
+		"hooks": {
+			"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo"}]}]
+		}
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".claude-plugin", "plugin.json"), []byte(srcJSON), 0644))
+
+	err := validateHooksPreserved(srcDir, dstDir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cooked plugin.json is missing")
+}
+
 func TestWriteNPMPackageJSON(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755))
