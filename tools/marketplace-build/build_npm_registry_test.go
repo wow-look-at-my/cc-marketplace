@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,8 +15,8 @@ import (
 	"github.com/wow-look-at-my/testify/require"
 )
 
-// hashTgzPattern matches content-addressed tarball filenames: 64 hex chars + .tgz
-var hashTgzPattern = regexp.MustCompile(`^[0-9a-f]{64}\.tgz$`)
+// hashTgzPattern matches content-addressed tarball filenames: 40 hex chars (SHA-1) + .tgz
+var hashTgzPattern = regexp.MustCompile(`^[0-9a-f]{40}\.tgz$`)
 
 // makePackagedPluginFromCooked builds a packaged plugin dir at root/name by
 // running packagePluginToDir on a temp cooked dir built from `files`.
@@ -285,7 +288,7 @@ func TestRunBuildNPMRegistry_NoPlatformBinaries(t *testing.T) {
 	dist := v["dist"].(map[string]interface{})
 	shasum, ok := dist["shasum"].(string)
 	require.True(t, ok, "dist must contain shasum")
-	require.Regexp(t, `^[0-9a-f]{64}$`, shasum)
+	require.Regexp(t, `^[0-9a-f]{40}$`, shasum)
 
 	tarballURL := dist["tarball"].(string)
 	require.Contains(t, tarballURL, "/tarballs/"+shasum+".tgz")
@@ -331,7 +334,7 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	mainDist := v["dist"].(map[string]interface{})
 	mainShasum, ok := mainDist["shasum"].(string)
 	require.True(t, ok, "main dist must contain shasum")
-	require.Regexp(t, `^[0-9a-f]{64}$`, mainShasum)
+	require.Regexp(t, `^[0-9a-f]{40}$`, mainShasum)
 	mainURL := mainDist["tarball"].(string)
 	require.Contains(t, mainURL, "/tarballs/"+mainShasum+".tgz")
 	require.NotContains(t, mainURL, "/tarballs/test-owner-myplugin/")
@@ -347,7 +350,7 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	linuxDist := lv["dist"].(map[string]interface{})
 	linuxShasum, ok := linuxDist["shasum"].(string)
 	require.True(t, ok, "linux dist must contain shasum")
-	require.Regexp(t, `^[0-9a-f]{64}$`, linuxShasum)
+	require.Regexp(t, `^[0-9a-f]{40}$`, linuxShasum)
 
 	// Verify darwin platform packument.
 	darwinPkg, err := os.ReadFile(filepath.Join(registryDir, "test-owner-myplugin-darwin-arm64"))
@@ -360,7 +363,7 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	darwinDist := dv["dist"].(map[string]interface{})
 	darwinShasum, ok := darwinDist["shasum"].(string)
 	require.True(t, ok, "darwin dist must contain shasum")
-	require.Regexp(t, `^[0-9a-f]{64}$`, darwinShasum)
+	require.Regexp(t, `^[0-9a-f]{40}$`, darwinShasum)
 
 	// Verify tarballs are in flat directory (no per-package subdirs).
 	tarballDir := filepath.Join(registryDir, "tarballs")
@@ -546,13 +549,82 @@ func TestHashFileReal(t *testing.T) {
 
 	hash, err := hashFileReal(path)
 	require.NoError(t, err)
-	// sha256("hello world") = b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
-	require.Equal(t, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", hash)
+	// sha1("hello world") = 2aae6c35c94fcfb415dbe95f408b9ce91ee846ed
+	require.Equal(t, "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed", hash)
 }
 
 func TestHashFileReal_NotFound(t *testing.T) {
 	_, err := hashFileReal("/nonexistent/file")
 	require.Error(t, err)
+}
+
+// sha1Hex computes SHA-1 of a file independently of hashFileReal.
+func sha1Hex(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	h := sha1.New()
+	io.Copy(h, f)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// TestRegistryShasumMatchesTarball builds a registry and verifies that the
+// shasum in each packument matches an independent SHA-1 of the on-disk tarball.
+// This catches algorithm mismatches (e.g. accidentally using SHA-256).
+func TestRegistryShasumMatchesTarball(t *testing.T) {
+	dir := t.TempDir()
+	makePackagedPluginFromCooked(t, dir, "verify", "1.0.0", map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"verify"}`),
+		"commands/hello.md":          []byte("hello"),
+	})
+	registryDir := runRegistryWithInput(t, dir)
+
+	packument, err := os.ReadFile(filepath.Join(registryDir, "test-owner-verify"))
+	require.NoError(t, err)
+	var pkg map[string]interface{}
+	require.NoError(t, json.Unmarshal(packument, &pkg))
+	v := pkg["versions"].(map[string]interface{})["1.0.0"].(map[string]interface{})
+	dist := v["dist"].(map[string]interface{})
+	shasum := dist["shasum"].(string)
+
+	tarballPath := filepath.Join(registryDir, "tarballs", shasum+".tgz")
+	require.FileExists(t, tarballPath)
+	require.Equal(t, shasum, sha1Hex(tarballPath), "packument shasum must be SHA-1 of the tarball")
+	require.Len(t, shasum, 40, "SHA-1 hex digest is 40 chars, not 64")
+}
+
+// TestRegistryShasumMatchesTarball_WithPlatforms verifies shasum cross-check
+// for both the main package and platform-specific packages.
+func TestRegistryShasumMatchesTarball_WithPlatforms(t *testing.T) {
+	dir := t.TempDir()
+	makePackagedPluginFromCooked(t, dir, "xplat", "1.0.0", map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"xplat"}`),
+		"build/hook":                 []byte("#!/bin/sh\nwrapper"),
+		"build/hook_linux_amd64":     []byte("elf"),
+		"build/hook_darwin_arm64":    []byte("mach-o"),
+	})
+	registryDir := runRegistryWithInput(t, dir)
+
+	for _, pkgName := range []string{
+		"test-owner-xplat",
+		"test-owner-xplat-linux-x64",
+		"test-owner-xplat-darwin-arm64",
+	} {
+		data, err := os.ReadFile(filepath.Join(registryDir, pkgName))
+		require.NoError(t, err, "packument for %s", pkgName)
+		var pkg map[string]interface{}
+		require.NoError(t, json.Unmarshal(data, &pkg))
+		v := pkg["versions"].(map[string]interface{})["1.0.0"].(map[string]interface{})
+		dist := v["dist"].(map[string]interface{})
+		shasum := dist["shasum"].(string)
+
+		tarballPath := filepath.Join(registryDir, "tarballs", shasum+".tgz")
+		require.FileExists(t, tarballPath, "%s tarball must exist", pkgName)
+		require.Equal(t, shasum, sha1Hex(tarballPath), "%s shasum must be SHA-1 of tarball", pkgName)
+		require.Len(t, shasum, 40, "%s SHA-1 hex digest must be 40 chars", pkgName)
+	}
 }
 
 func TestRunBuildNPMRegistry_HashFails_SimplePkg(t *testing.T) {
