@@ -283,23 +283,37 @@ jobs:
     permissions:
       actions: read
     steps:
-      - name: Wait for older runs to finish deploying
+      - name: Wait for other deploy-preview jobs to finish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           while true; do
-            blockers=$(gh api "repos/${{ github.repository }}/actions/workflows/release.yml/runs" \
+            blocked=false
+
+            for rid in $(gh api "repos/${{ github.repository }}/actions/workflows/release.yml/runs?per_page=100" \
               --jq '[.workflow_runs[] | select(
                 (.status == "in_progress" or .status == "queued" or .status == "waiting") and
-                .id < ${{ github.run_id }}
-              )] | length')
+                .id != ${{ github.run_id }}
+              )] | .[].id'); do
 
-            if [ "$blockers" -eq 0 ]; then
-              echo "No older runs active. Proceeding to deploy."
+              n=$(gh api "repos/${{ github.repository }}/actions/runs/${rid}/jobs" \
+                --jq '[.jobs[] | select(
+                  .name == "deploy-preview / preview" and
+                  (.status == "in_progress" or .status == "queued" or .status == "waiting")
+                )] | length')
+
+              if [ "$n" -gt 0 ]; then
+                echo "Run ${rid} has an active deploy-preview, waiting..."
+                blocked=true
+                break
+              fi
+            done
+
+            if [ "$blocked" = "false" ]; then
+              echo "No active deploy-preview jobs. Proceeding."
               break
             fi
 
-            echo "Waiting for $blockers older run(s) to finish..."
             sleep 10
           done
 
