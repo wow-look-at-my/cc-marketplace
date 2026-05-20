@@ -13,7 +13,7 @@ import (
 )
 
 // hashTgzPattern matches content-addressed tarball filenames: 64 hex chars + .tgz
-var hashTgzPattern = regexp.MustCompile(`^[0-9a-f]{64}\.tgz$`)
+var hashTgzPattern = regexp.MustCompile(`^[0-9a-f]{40}\.tgz$`)
 
 // makePackagedPluginFromCooked builds a packaged plugin dir at root/name by
 // running packagePluginToDir on a temp cooked dir built from `files`.
@@ -285,7 +285,7 @@ func TestRunBuildNPMRegistry_NoPlatformBinaries(t *testing.T) {
 	dist := v["dist"].(map[string]interface{})
 	shasum, ok := dist["shasum"].(string)
 	require.True(t, ok, "dist must contain shasum")
-	require.Regexp(t, `^[0-9a-f]{64}$`, shasum)
+	require.Regexp(t, `^[0-9a-f]{40}$`, shasum)
 
 	tarballURL := dist["tarball"].(string)
 	require.Contains(t, tarballURL, "/tarballs/"+shasum+".tgz")
@@ -331,7 +331,7 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	mainDist := v["dist"].(map[string]interface{})
 	mainShasum, ok := mainDist["shasum"].(string)
 	require.True(t, ok, "main dist must contain shasum")
-	require.Regexp(t, `^[0-9a-f]{64}$`, mainShasum)
+	require.Regexp(t, `^[0-9a-f]{40}$`, mainShasum)
 	mainURL := mainDist["tarball"].(string)
 	require.Contains(t, mainURL, "/tarballs/"+mainShasum+".tgz")
 	require.NotContains(t, mainURL, "/tarballs/test-owner-myplugin/")
@@ -347,7 +347,7 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	linuxDist := lv["dist"].(map[string]interface{})
 	linuxShasum, ok := linuxDist["shasum"].(string)
 	require.True(t, ok, "linux dist must contain shasum")
-	require.Regexp(t, `^[0-9a-f]{64}$`, linuxShasum)
+	require.Regexp(t, `^[0-9a-f]{40}$`, linuxShasum)
 
 	// Verify darwin platform packument.
 	darwinPkg, err := os.ReadFile(filepath.Join(registryDir, "test-owner-myplugin-darwin-arm64"))
@@ -360,7 +360,7 @@ func TestRunBuildNPMRegistry_VerifyPlatformOutput(t *testing.T) {
 	darwinDist := dv["dist"].(map[string]interface{})
 	darwinShasum, ok := darwinDist["shasum"].(string)
 	require.True(t, ok, "darwin dist must contain shasum")
-	require.Regexp(t, `^[0-9a-f]{64}$`, darwinShasum)
+	require.Regexp(t, `^[0-9a-f]{40}$`, darwinShasum)
 
 	// Verify tarballs are in flat directory (no per-package subdirs).
 	tarballDir := filepath.Join(registryDir, "tarballs")
@@ -546,8 +546,8 @@ func TestHashFileReal(t *testing.T) {
 
 	hash, err := hashFileReal(path)
 	require.NoError(t, err)
-	// sha256("hello world") = b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
-	require.Equal(t, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", hash)
+	// sha1("hello world") = 2aae6c35c94fcfb415dbe95f408b9ce91ee846ed
+	require.Equal(t, "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed", hash)
 }
 
 func TestHashFileReal_NotFound(t *testing.T) {
