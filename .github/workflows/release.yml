@@ -8,8 +8,7 @@ on:
     types: [opened, reopened, synchronize]
 
 concurrency:
-  group: release-${{ github.event_name == 'pull_request' && 'pr' || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: release-${{ github.ref }}
 
 jobs:
   cleanup:
@@ -276,8 +275,36 @@ jobs:
           path: ${{ steps.registry.outputs.registry_dir }}
           compression-level: 0
 
-  deploy-preview:
+  deploy-gate:
     needs: pages
+    if: github.event_name != 'delete'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for older runs to finish deploying
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while true; do
+            blockers=$(gh api "repos/${{ github.repository }}/actions/workflows/release.yml/runs" \
+              --jq '[.workflow_runs[] | select(
+                (.status == "in_progress" or .status == "queued" or .status == "waiting") and
+                .id < ${{ github.run_id }}
+              )] | length')
+
+            if [ "$blockers" -eq 0 ]; then
+              echo "No older runs active. Proceeding to deploy."
+              break
+            fi
+
+            echo "Waiting for $blockers older run(s) to finish..."
+            sleep 10
+          done
+
+  deploy-preview:
+    needs: deploy-gate
     if: github.event_name != 'delete'
     permissions:
       contents: write
