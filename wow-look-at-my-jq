@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "639.0.0"
+  },
+  "name": "wow-look-at-my-jq",
+  "versions": {
+    "639.0.0": {
+      "dist": {
+        "shasum": "a0626e9bd4832ba91dd25aa77451a5caf6dbb132",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/a0626e9bd4832ba91dd25aa77451a5caf6dbb132.tgz"
+      },
+      "name": "wow-look-at-my-jq",
+      "optionalDependencies": {
+        "wow-look-at-my-jq-darwin-arm64": "639.0.0",
+        "wow-look-at-my-jq-darwin-x64": "639.0.0",
+        "wow-look-at-my-jq-linux-arm64": "639.0.0",
+        "wow-look-at-my-jq-linux-x64": "639.0.0"
+      },
+      "version": "639.0.0"
+    }
+  }
+}

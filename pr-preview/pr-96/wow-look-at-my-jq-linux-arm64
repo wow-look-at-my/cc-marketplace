@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-jq-linux-arm64",
+  "versions": {
+    "621.0.0": {
+      "cpu": [
+        "arm64"
+      ],
+      "dist": {
+        "shasum": "5e7e1ffa78da11aa886dce1d5b841e6163999982911453a8d25c972f9eaf5256",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/5e7e1ffa78da11aa886dce1d5b841e6163999982911453a8d25c972f9eaf5256.tgz"
+      },
+      "name": "wow-look-at-my-jq-linux-arm64",
+      "os": [
+        "linux"
+      ],
+      "version": "621.0.0"
+    }
+  }
+}

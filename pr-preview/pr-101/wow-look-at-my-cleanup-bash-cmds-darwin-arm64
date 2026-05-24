@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "639.0.0"
+  },
+  "name": "wow-look-at-my-cleanup-bash-cmds-darwin-arm64",
+  "versions": {
+    "639.0.0": {
+      "cpu": [
+        "arm64"
+      ],
+      "dist": {
+        "shasum": "db69277a6447ebedd6ac1ae373480cb12433751a",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/db69277a6447ebedd6ac1ae373480cb12433751a.tgz"
+      },
+      "name": "wow-look-at-my-cleanup-bash-cmds-darwin-arm64",
+      "os": [
+        "darwin"
+      ],
+      "version": "639.0.0"
+    }
+  }
+}

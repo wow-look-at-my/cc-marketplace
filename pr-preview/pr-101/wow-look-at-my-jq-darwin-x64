@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "639.0.0"
+  },
+  "name": "wow-look-at-my-jq-darwin-x64",
+  "versions": {
+    "639.0.0": {
+      "cpu": [
+        "x64"
+      ],
+      "dist": {
+        "shasum": "8ed71e3d422c3e6986444f1daa60a3654f3bf5f2",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/8ed71e3d422c3e6986444f1daa60a3654f3bf5f2.tgz"
+      },
+      "name": "wow-look-at-my-jq-darwin-x64",
+      "os": [
+        "darwin"
+      ],
+      "version": "639.0.0"
+    }
+  }
+}

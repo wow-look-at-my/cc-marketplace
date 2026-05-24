@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-recommend-go-toolchain-linux-arm64",
+  "versions": {
+    "621.0.0": {
+      "cpu": [
+        "arm64"
+      ],
+      "dist": {
+        "shasum": "0ab9f4ad40aef7c3221dfcc737ba2470d10ad020",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/0ab9f4ad40aef7c3221dfcc737ba2470d10ad020.tgz"
+      },
+      "name": "wow-look-at-my-recommend-go-toolchain-linux-arm64",
+      "os": [
+        "linux"
+      ],
+      "version": "621.0.0"
+    }
+  }
+}

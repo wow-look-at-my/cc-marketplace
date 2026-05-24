@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-prompt-url-fetch-darwin-x64",
+  "versions": {
+    "621.0.0": {
+      "cpu": [
+        "x64"
+      ],
+      "dist": {
+        "shasum": "39942078961a785ffdb80a558a6a7eef66b3348a",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/39942078961a785ffdb80a558a6a7eef66b3348a.tgz"
+      },
+      "name": "wow-look-at-my-prompt-url-fetch-darwin-x64",
+      "os": [
+        "darwin"
+      ],
+      "version": "621.0.0"
+    }
+  }
+}

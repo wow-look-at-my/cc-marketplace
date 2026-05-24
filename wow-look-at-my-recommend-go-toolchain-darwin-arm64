@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "639.0.0"
+  },
+  "name": "wow-look-at-my-recommend-go-toolchain-darwin-arm64",
+  "versions": {
+    "639.0.0": {
+      "cpu": [
+        "arm64"
+      ],
+      "dist": {
+        "shasum": "02292dfd6e12916cd7e9467ba9f2420c3f3a976a",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/02292dfd6e12916cd7e9467ba9f2420c3f3a976a.tgz"
+      },
+      "name": "wow-look-at-my-recommend-go-toolchain-darwin-arm64",
+      "os": [
+        "darwin"
+      ],
+      "version": "639.0.0"
+    }
+  }
+}

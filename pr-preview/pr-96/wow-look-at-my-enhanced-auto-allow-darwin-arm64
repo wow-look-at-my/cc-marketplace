@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-enhanced-auto-allow-darwin-arm64",
+  "versions": {
+    "621.0.0": {
+      "cpu": [
+        "arm64"
+      ],
+      "dist": {
+        "shasum": "21a20b571d2a1fd14e31eb6cb8dfc0c2da07d68b3f83a36f26fda81f8e1301ce",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/21a20b571d2a1fd14e31eb6cb8dfc0c2da07d68b3f83a36f26fda81f8e1301ce.tgz"
+      },
+      "name": "wow-look-at-my-enhanced-auto-allow-darwin-arm64",
+      "os": [
+        "darwin"
+      ],
+      "version": "621.0.0"
+    }
+  }
+}

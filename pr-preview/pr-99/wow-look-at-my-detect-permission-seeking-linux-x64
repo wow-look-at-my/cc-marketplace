@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-detect-permission-seeking-linux-x64",
+  "versions": {
+    "621.0.0": {
+      "cpu": [
+        "x64"
+      ],
+      "dist": {
+        "shasum": "66b77fdbfedd5de7d2b8c04f1e985fad2f1c28c8",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/66b77fdbfedd5de7d2b8c04f1e985fad2f1c28c8.tgz"
+      },
+      "name": "wow-look-at-my-detect-permission-seeking-linux-x64",
+      "os": [
+        "linux"
+      ],
+      "version": "621.0.0"
+    }
+  }
+}

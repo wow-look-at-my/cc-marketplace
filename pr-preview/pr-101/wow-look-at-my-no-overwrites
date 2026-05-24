@@ -1,0 +1,16 @@
+{
+  "dist-tags": {
+    "latest": "639.0.0"
+  },
+  "name": "wow-look-at-my-no-overwrites",
+  "versions": {
+    "639.0.0": {
+      "dist": {
+        "shasum": "5a6f071dbbcb763071f61bdb882a504f5a5e7e01",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/5a6f071dbbcb763071f61bdb882a504f5a5e7e01.tgz"
+      },
+      "name": "wow-look-at-my-no-overwrites",
+      "version": "639.0.0"
+    }
+  }
+}

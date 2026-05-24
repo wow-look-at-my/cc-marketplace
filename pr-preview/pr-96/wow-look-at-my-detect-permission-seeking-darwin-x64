@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "621.0.0"
+  },
+  "name": "wow-look-at-my-detect-permission-seeking-darwin-x64",
+  "versions": {
+    "621.0.0": {
+      "cpu": [
+        "x64"
+      ],
+      "dist": {
+        "shasum": "4bc2201788a79d337ec0793a1048cb374d58af80b848b000946bb9663ea72589",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/4bc2201788a79d337ec0793a1048cb374d58af80b848b000946bb9663ea72589.tgz"
+      },
+      "name": "wow-look-at-my-detect-permission-seeking-darwin-x64",
+      "os": [
+        "darwin"
+      ],
+      "version": "621.0.0"
+    }
+  }
+}

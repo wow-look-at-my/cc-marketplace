@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "639.0.0"
+  },
+  "name": "wow-look-at-my-enhanced-auto-allow-linux-x64",
+  "versions": {
+    "639.0.0": {
+      "cpu": [
+        "x64"
+      ],
+      "dist": {
+        "shasum": "380e7ca12a9c6498c0f0d33af1ff7e32f5228a6b",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/380e7ca12a9c6498c0f0d33af1ff7e32f5228a6b.tgz"
+      },
+      "name": "wow-look-at-my-enhanced-auto-allow-linux-x64",
+      "os": [
+        "linux"
+      ],
+      "version": "639.0.0"
+    }
+  }
+}

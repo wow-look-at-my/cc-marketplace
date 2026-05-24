@@ -1,0 +1,22 @@
+{
+  "dist-tags": {
+    "latest": "639.0.0"
+  },
+  "name": "wow-look-at-my-cleanup-bash-cmds",
+  "versions": {
+    "639.0.0": {
+      "dist": {
+        "shasum": "081274360a459fb1c57b327f34ec3e4f7666ce34",
+        "tarball": "https://wow-look-at-my.github.io/cc-marketplace/tarballs/081274360a459fb1c57b327f34ec3e4f7666ce34.tgz"
+      },
+      "name": "wow-look-at-my-cleanup-bash-cmds",
+      "optionalDependencies": {
+        "wow-look-at-my-cleanup-bash-cmds-darwin-arm64": "639.0.0",
+        "wow-look-at-my-cleanup-bash-cmds-darwin-x64": "639.0.0",
+        "wow-look-at-my-cleanup-bash-cmds-linux-arm64": "639.0.0",
+        "wow-look-at-my-cleanup-bash-cmds-linux-x64": "639.0.0"
+      },
+      "version": "639.0.0"
+    }
+  }
+}
