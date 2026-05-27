@@ -17,6 +17,7 @@ jobs:
       actions: read
       id-token: write
     outputs:
+      all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       has_build: ${{ steps.split.outputs.has_build }}
@@ -142,6 +143,13 @@ jobs:
       - name: Package plugin
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-${{ matrix.plugin }}
+          path: /tmp/packaged-${{ matrix.plugin }}
+          retention-days: 1
+
       - name: Save plugin cache
         uses: actions/cache/save@v4
         with:
@@ -184,3 +192,75 @@ jobs:
             echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)" && exit 1
           fi
           echo "Published to ${{ steps.npm.outputs.site_url }}"
+
+  publish-marketplace:
+    needs: [prepare, build]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref_name == 'master' &&
+      needs.prepare.outputs.all_plugins != '[]' &&
+      needs.prepare.outputs.all_plugins != '' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - name: Download all plugin artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: packaged-*
+          path: /tmp/all-plugin-artifacts
+
+      - name: Prepare combined input
+        run: |
+          mkdir -p /tmp/combined-plugins
+          for d in /tmp/all-plugin-artifacts/packaged-*/; do
+            plugin=$(basename "$d" | sed 's/^packaged-//')
+            cp -r "$d" "/tmp/combined-plugins/$plugin"
+          done
+
+      - name: Build npm registry
+        id: npm
+        run: |
+          marketplace-build build-npm-registry \
+            --input /tmp/combined-plugins \
+            --base-url "https://pazer.build/sites/cc-marketplace/branch/master" >> $GITHUB_OUTPUT
+
+      - name: Update marketplace.json
+        id: marketplace
+        run: |
+          marketplace-build update-marketplace \
+            --input /tmp/combined-plugins \
+            --base-url "https://pazer.build/sites/cc-marketplace/branch/master" >> $GITHUB_OUTPUT
+
+      - name: Assemble site
+        run: |
+          cp "${{ steps.marketplace.outputs.source_dir }}/marketplace.json" "${{ steps.npm.outputs.registry_dir }}/"
+          cp site/index.html "${{ steps.npm.outputs.registry_dir }}/"
+
+      - name: Publish to buildhost
+        run: |
+          TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
+          cd "${{ steps.npm.outputs.registry_dir }}"
+          zip -r /tmp/marketplace-site.zip .
+          for attempt in 1 2 3 4; do
+            STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
+              -X PUT "https://pazer.build/sites/cc-marketplace/branch/master" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/zip" \
+              -H "X-Git-Commit: $GITHUB_SHA" \
+              --data-binary @/tmp/marketplace-site.zip)
+            [ "$STATUS" -lt 500 ] && break
+            echo "Attempt $attempt failed ($STATUS), retrying..."
+            sleep $((2 ** attempt))
+          done
+          if [ "$STATUS" != "201" ]; then
+            echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)" && exit 1
+          fi
+          echo "Published marketplace to https://pazer.build/sites/cc-marketplace/branch/master/marketplace.json"
