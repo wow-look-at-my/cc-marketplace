@@ -5,13 +5,13 @@ on:
     branches: [master]
   delete:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, closed]
 
 concurrency:
   group: release-${{ github.ref }}
 
 jobs:
-  cleanup:
+  cleanup-branch:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -24,7 +24,77 @@ jobs:
       - run: npm ci
       - run: npx tsx .github/scripts/cleanup-branch.ts ${{ github.event.ref }}
 
+      - name: Delete buildhost site for branch
+        continue-on-error: true
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            await (async () => {
+              const branch: string = "${{ github.event.ref }}";
+              const server = "https://pazer.build";
+              const project = "cc-marketplace";
+
+              const idTokenUrl = env.ACTIONS_ID_TOKEN_REQUEST_URL;
+              const idTokenBearer = env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+              if (!idTokenUrl || !idTokenBearer) { core.warning("OIDC not available for cleanup"); return; }
+              const idResp = await fetch(`${idTokenUrl}&audience=${server}`, {
+                headers: { Authorization: `Bearer ${idTokenBearer}` },
+              });
+              const token: string = ((await idResp.json()) as { value: string }).value;
+              if (!token) { core.warning("Failed to get OIDC token for cleanup"); return; }
+
+              const resp = await fetch(`${server}/sites/${project}/branch/${branch}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!resp.ok && resp.status !== 404) {
+                core.warning(`Delete site failed (${resp.status}): ${await resp.text()}`);
+              } else {
+                core.info(`Deleted site for branch ${branch}`);
+              }
+            })();
+
+  cleanup-pr-site:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+    steps:
+      - name: Delete buildhost site for PR
+        continue-on-error: true
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            await (async () => {
+              const branch = "pr-${{ github.event.pull_request.number }}";
+              const server = "https://pazer.build";
+              const project = "cc-marketplace";
+
+              const idTokenUrl = env.ACTIONS_ID_TOKEN_REQUEST_URL;
+              const idTokenBearer = env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+              if (!idTokenUrl || !idTokenBearer) { core.warning("OIDC not available for cleanup"); return; }
+              const idResp = await fetch(`${idTokenUrl}&audience=${server}`, {
+                headers: { Authorization: `Bearer ${idTokenBearer}` },
+              });
+              const token: string = ((await idResp.json()) as { value: string }).value;
+              if (!token) { core.warning("Failed to get OIDC token for cleanup"); return; }
+
+              const resp = await fetch(`${server}/sites/${project}/branch/${branch}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!resp.ok && resp.status !== 404) {
+                core.warning(`Delete site failed (${resp.status}): ${await resp.text()}`);
+              } else {
+                core.info(`Deleted PR site for ${branch}`);
+              }
+            })();
+
   prepare:
+    if: >-
+      github.event_name != 'delete' &&
+      !(github.event_name == 'pull_request' && github.event.action == 'closed')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -97,7 +167,7 @@ jobs:
         id: prod-version
         run: |
           PROD_VERSION=$(curl -sf \
-            "https://wow-look-at-my.github.io/cc-marketplace/wow-look-at-my-html-demo" \
+            "https://pazer.build/sites/cc-marketplace/branch/master/wow-look-at-my-html-demo" \
             | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
           if [ -n "$PROD_VERSION" ]; then
             echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
@@ -173,7 +243,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  pages:
+  registry:
     needs: [prepare, build]
     if: '!cancelled() && !failure()'
     runs-on: ubuntu-latest
@@ -233,11 +303,13 @@ jobs:
       - name: Compute registry base URLs
         id: base-url
         run: |
-          ROOT_URL="https://wow-look-at-my.github.io/cc-marketplace"
+          SERVER="https://pazer.build"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "tarball-url=$ROOT_URL" >> $GITHUB_OUTPUT
-            echo "marketplace-url=$ROOT_URL/pr-preview/pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            BRANCH_URL="$SERVER/sites/cc-marketplace/branch/pr-${{ github.event.pull_request.number }}"
+            echo "tarball-url=$BRANCH_URL" >> $GITHUB_OUTPUT
+            echo "marketplace-url=$BRANCH_URL" >> $GITHUB_OUTPUT
           else
+            ROOT_URL="$SERVER/sites/cc-marketplace/branch/master"
             echo "tarball-url=$ROOT_URL" >> $GITHUB_OUTPUT
             echo "marketplace-url=$ROOT_URL" >> $GITHUB_OUTPUT
           fi
@@ -252,15 +324,8 @@ jobs:
           src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
           cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
-      - name: Add site index and file listing to registry
-        run: |
-          REGISTRY="${{ steps.registry.outputs.registry_dir }}"
-          cp site/index.html "$REGISTRY/index.html"
-          cd "$REGISTRY"
-          find . -type f -not -name 'files.json' -printf '%P\t%s\n' \
-            | sort \
-            | jq -Rn '[inputs | split("\t") | {path: .[0], size: (.[1] | tonumber)}]' \
-            > files.json
+      - name: Add site index to registry
+        run: cp site/index.html "${{ steps.registry.outputs.registry_dir }}/index.html"
 
       - uses: ./.github/actions/setup-claude-code
 
@@ -275,17 +340,102 @@ jobs:
           path: ${{ steps.registry.outputs.registry_dir }}
           compression-level: 0
 
-  deploy-preview:
-    needs: pages
-    if: github.event_name != 'delete'
+  deploy-buildhost:
+    needs: registry
+    if: needs.registry.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
-      contents: write
-      pull-requests: write
-      pages: write
+      contents: read
       id-token: write
-      statuses: write
-    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@master
-    with:
-      artifact-name: npm-registry
-      shared-dirs: tarballs
-    secrets: inherit
+      pull-requests: write
+    steps:
+      - name: Publish npm registry to buildhost
+        id: publish
+        uses: wow-look-at-my/actions@typescript#latest
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            await (async () => {
+              const server = "https://pazer.build";
+              const project = "cc-marketplace";
+              const branch: string = "${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}";
+              const artifactName = "npm-registry";
+
+              const downloadDir = path.join(os.tmpdir(), "buildhost-site-publish");
+              const extractDir = path.join(downloadDir, "extracted");
+              fs.mkdirSync(downloadDir, { recursive: true });
+              fs.mkdirSync(extractDir, { recursive: true });
+
+              // Download artifact via octokit
+              const oct = octokit(process.env.GITHUB_TOKEN!);
+              const [owner, repo] = github.repository.split("/");
+              const { data: { artifacts } } = await oct.rest.actions.listWorkflowRunArtifacts({
+                owner, repo, run_id: github.run_id,
+              });
+              const artifact = artifacts.find((a: any) => a.name === artifactName);
+              if (!artifact) { core.setFailed(`Artifact '${artifactName}' not found in run`); return; }
+
+              const { data: zip } = await oct.rest.actions.downloadArtifact({
+                owner, repo, artifact_id: artifact.id, archive_format: "zip",
+              });
+              const zipPath = path.join(downloadDir, "site.zip");
+              fs.writeFileSync(zipPath, Buffer.from(zip as ArrayBuffer));
+              await exec.exec("unzip", ["-o", zipPath, "-d", extractDir]);
+
+              // Mint OIDC token for buildhost
+              const idTokenUrl = env.ACTIONS_ID_TOKEN_REQUEST_URL;
+              const idTokenBearer = env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+              if (!idTokenUrl || !idTokenBearer) {
+                core.setFailed("OIDC not available. Add 'permissions: { id-token: write }'.");
+                return;
+              }
+              const idResp = await fetch(`${idTokenUrl}&audience=${server}`, {
+                headers: { Authorization: `Bearer ${idTokenBearer}` },
+              });
+              const token: string = ((await idResp.json()) as { value: string }).value;
+              if (!token) { core.setFailed("Failed to obtain OIDC token"); return; }
+
+              // Pack extracted contents as tar.gz
+              const tarPath = path.join(downloadDir, "site.tar.gz");
+              await exec.exec("bash", ["-c", `tar -czf "${tarPath}" -C "${extractDir}" .`]);
+
+              // Upload to buildhost sites endpoint
+              const siteData = fs.readFileSync(tarPath);
+              const headers: Record<string, string> = {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/gzip",
+                "X-Git-Commit": github.sha,
+              };
+
+              const resp = await fetch(`${server}/sites/${project}/branch/${branch}`, {
+                method: "PUT",
+                headers,
+                body: siteData,
+              });
+
+              if (resp.status !== 201) {
+                core.setFailed(`Upload failed (${resp.status}): ${await resp.text()}`);
+                return;
+              }
+
+              const siteURL = `${server}/sites/${project}/branch/${branch}/`;
+              core.info(`Published site to ${siteURL}`);
+              core.setOutput("site_url", siteURL);
+            })();
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: wow-look-at-my/actions@typescript#latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const siteURL = "${{ steps.publish.outputs.site_url }}";
+            const [owner, repo] = github.repository.split("/");
+            await octokit(process.env.GH_TOKEN!).rest.issues.createComment({
+              owner, repo,
+              issue_number: github.event.pull_request.number,
+              body: `📦 Preview npm registry: ${siteURL}\n\n\`\`\`\nclaude plugin marketplace add ${siteURL}marketplace.json\n\`\`\``,
+            });
