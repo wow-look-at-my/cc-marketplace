@@ -3,7 +3,6 @@ name: Release Plugins
 on:
   push:
     branches: [master]
-  delete:
   pull_request:
     types: [opened, reopened, synchronize]
 
@@ -11,25 +10,11 @@ concurrency:
   group: release-${{ github.ref }}
 
 jobs:
-  cleanup:
-    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - run: npm ci
-      - run: npx tsx .github/scripts/cleanup-branch.ts ${{ github.event.ref }}
-
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: read
-      contents: write
       id-token: write
     outputs:
       build_plugins: ${{ steps.split.outputs.build_plugins }}
@@ -97,7 +82,7 @@ jobs:
         id: prod-version
         run: |
           PROD_VERSION=$(curl -sf \
-            "https://wow-look-at-my.github.io/cc-marketplace/wow-look-at-my-html-demo" \
+            "https://pazer.build/sites/cc-marketplace/branch/master/wow-look-at-my-html-demo" \
             | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
           if [ -n "$PROD_VERSION" ]; then
             echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
@@ -109,7 +94,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
       id-token: write
     strategy:
       fail-fast: false
@@ -164,128 +148,39 @@ jobs:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
 
-      - name: Upload packaged plugin
-        uses: actions/upload-artifact@v4
-        with:
-          name: packaged-${{ matrix.plugin }}
-          path: /tmp/packaged-${{ matrix.plugin }}
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 1
-
-  pages:
-    needs: [prepare, build]
-    if: '!cancelled() && !failure()'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: ./.github/actions/setup-marketplace-build
-
-      - name: Restore cached plugins
-        if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
-        uses: wow-look-at-my/actions@typescript#latest
-        env:
-          NODE_PATH: ${{ github.workspace }}/node_modules
-        with:
-          needs: ${{ toJSON(needs) }}
-          script: |
-            const { hashFiles } = require('@actions/glob');
-            const { restoreCache } = require('@actions/cache');
-            const plugins: string[] = JSON.parse(needs.prepare.outputs.cached_plugins);
-
-            fs.mkdirSync('packaged', { recursive: true });
-            const toolHash = await hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod');
-
-            for (const plugin of plugins) {
-              const hash = await hashFiles(`plugins/${plugin}/**`);
-              const key = `plugin-${plugin}-${hash}-${toolHash}`;
-              const cachePath = `/tmp/packaged-${plugin}`;
-
-              core.info(`Restoring ${plugin}`);
-              const hit = await restoreCache([cachePath], key);
-              if (!hit) throw new Error(`Cache miss for ${plugin} (${key})`);
-
-              fs.renameSync(cachePath, `packaged/${plugin}`);
-              core.info(`  OK`);
-            }
-
-      - name: Download built plugins
-        if: needs.prepare.outputs.has_build == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          path: packaged
-          pattern: packaged-*
-
-      - name: Strip packaged- artifact prefix
-        if: needs.prepare.outputs.has_build == 'true'
-        run: |
-          set -e
-          shopt -s nullglob
-          for d in packaged/packaged-*; do
-            mv "$d" "packaged/${d#packaged/packaged-}"
-          done
-
-      - name: Compute registry base URLs
-        id: base-url
-        run: |
-          ROOT_URL="https://wow-look-at-my.github.io/cc-marketplace"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "tarball-url=$ROOT_URL" >> $GITHUB_OUTPUT
-            echo "marketplace-url=$ROOT_URL/pr-preview/pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-          else
-            echo "tarball-url=$ROOT_URL" >> $GITHUB_OUTPUT
-            echo "marketplace-url=$ROOT_URL" >> $GITHUB_OUTPUT
-          fi
-
       - name: Build npm registry
-        id: registry
-        run: marketplace-build build-npm-registry --input packaged --base-url "${{ steps.base-url.outputs.tarball-url }}" >> $GITHUB_OUTPUT
-
-      - name: Add marketplace.json to registry
+        id: npm
         run: |
-          marketplace-build update-marketplace --input packaged --base-url "${{ steps.base-url.outputs.marketplace-url }}" > /tmp/marketplace-out.txt
-          src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
-          cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
+          SERVER="https://pazer.build"
+          GIT_BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}"
+          SAFE_BRANCH="${GIT_BRANCH//\//-}"
+          BRANCH="plugin-${{ matrix.plugin }}-${SAFE_BRANCH}"
+          BASE_URL="$SERVER/sites/cc-marketplace/branch/$BRANCH"
+          mkdir -p /tmp/npm-input
+          cp -r /tmp/packaged-${{ matrix.plugin }} /tmp/npm-input/${{ matrix.plugin }}
+          marketplace-build build-npm-registry --input /tmp/npm-input --base-url "$BASE_URL" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "site_url=$BASE_URL/" >> $GITHUB_OUTPUT
 
-      - name: Add site index and file listing to registry
+      - name: Publish to buildhost
+        if: github.event_name == 'push'
         run: |
-          REGISTRY="${{ steps.registry.outputs.registry_dir }}"
-          cp site/index.html "$REGISTRY/index.html"
-          cd "$REGISTRY"
-          find . -type f -not -name 'files.json' -printf '%P\t%s\n' \
-            | sort \
-            | jq -Rn '[inputs | split("\t") | {path: .[0], size: (.[1] | tonumber)}]' \
-            > files.json
-
-      - uses: ./.github/actions/setup-claude-code
-
-      - name: Validate marketplace
-        run: |
-          claude plugin validate "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
-          claude plugin marketplace add "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: npm-registry
-          path: ${{ steps.registry.outputs.registry_dir }}
-          compression-level: 0
-
-  deploy-preview:
-    needs: pages
-    if: github.event_name != 'delete'
-    permissions:
-      contents: write
-      pull-requests: write
-      pages: write
-      id-token: write
-      statuses: write
-    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@master
-    with:
-      artifact-name: npm-registry
-      shared-dirs: tarballs
-    secrets: inherit
+          TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
+          cd "${{ steps.npm.outputs.registry_dir }}"
+          zip -r /tmp/plugin-registry.zip .
+          for attempt in 1 2 3 4; do
+            STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
+              -X PUT "https://pazer.build/sites/cc-marketplace/branch/${{ steps.npm.outputs.branch }}" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/zip" \
+              -H "X-Git-Commit: $GITHUB_SHA" \
+              --data-binary @/tmp/plugin-registry.zip)
+            [ "$STATUS" -lt 500 ] && break
+            echo "Attempt $attempt failed ($STATUS), retrying..."
+            sleep $((2 ** attempt))
+          done
+          if [ "$STATUS" != "201" ]; then
+            echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)" && exit 1
+          fi
+          echo "Published to ${{ steps.npm.outputs.site_url }}"
