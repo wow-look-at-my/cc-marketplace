@@ -293,19 +293,29 @@ jobs:
               // Pack registry dir as zip and upload to buildhost
               const zipPath = path.join(os.tmpdir(), "npm-registry.zip");
               await exec.exec("bash", ["-c", `cd "${registryDir}" && zip -r "${zipPath}" .`]);
+              const zipBody = fs.readFileSync(zipPath);
 
-              const resp = await fetch(`${server}/sites/${project}/branch/${branch}`, {
-                method: "PUT",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/zip",
-                  "X-Git-Commit": github.sha,
-                },
-                body: fs.readFileSync(zipPath),
-              });
+              let resp: Response | undefined;
+              for (let attempt = 1; attempt <= 4; attempt++) {
+                if (attempt > 1) {
+                  const delay = 2 ** attempt * 1000; // 4s, 8s, 16s
+                  core.info(`Retrying upload in ${delay / 1000}s (attempt ${attempt}/4)...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                }
+                resp = await fetch(`${server}/sites/${project}/branch/${branch}`, {
+                  method: "PUT",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/zip",
+                    "X-Git-Commit": github.sha,
+                  },
+                  body: zipBody,
+                });
+                if (resp.status < 500) break;
+              }
 
-              if (resp.status !== 201) {
-                core.setFailed(`Upload failed (${resp.status}): ${await resp.text()}`);
+              if (!resp || resp.status !== 201) {
+                core.setFailed(`Upload failed (${resp?.status}): ${await resp?.text()}`);
                 return;
               }
 
