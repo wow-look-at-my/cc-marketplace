@@ -152,7 +152,9 @@ jobs:
         id: npm
         run: |
           SERVER="https://pazer.build"
-          BRANCH="${{ github.event_name == 'pull_request' && format('pr-{0}-plugin-{1}', github.event.pull_request.number, matrix.plugin) || format('plugin-{0}', matrix.plugin) }}"
+          GIT_BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}"
+          SAFE_BRANCH="${GIT_BRANCH//\//-}"
+          BRANCH="plugin-${{ matrix.plugin }}-${SAFE_BRANCH}"
           BASE_URL="$SERVER/sites/cc-marketplace/branch/$BRANCH"
           mkdir -p /tmp/npm-input
           cp -r /tmp/packaged-${{ matrix.plugin }} /tmp/npm-input/${{ matrix.plugin }}
@@ -161,6 +163,7 @@ jobs:
           echo "site_url=$BASE_URL/" >> $GITHUB_OUTPUT
 
       - name: Publish to buildhost
+        if: github.event_name == 'push'
         run: |
           TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
             -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
