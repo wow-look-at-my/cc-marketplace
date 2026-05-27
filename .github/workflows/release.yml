@@ -5,13 +5,13 @@ on:
     branches: [master]
   delete:
   pull_request:
-    types: [opened, reopened, synchronize, closed]
+    types: [opened, reopened, synchronize]
 
 concurrency:
   group: release-${{ github.ref }}
 
 jobs:
-  cleanup-branch:
+  cleanup:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -24,77 +24,8 @@ jobs:
       - run: npm ci
       - run: npx tsx .github/scripts/cleanup-branch.ts ${{ github.event.ref }}
 
-      - name: Delete buildhost site for branch
-        continue-on-error: true
-        uses: wow-look-at-my/actions@typescript#latest
-        with:
-          script: |
-            await (async () => {
-              const branch: string = "${{ github.event.ref }}";
-              const server = "https://pazer.build";
-              const project = "cc-marketplace";
-
-              const idTokenUrl = env.ACTIONS_ID_TOKEN_REQUEST_URL;
-              const idTokenBearer = env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
-              if (!idTokenUrl || !idTokenBearer) { core.warning("OIDC not available for cleanup"); return; }
-              const idResp = await fetch(`${idTokenUrl}&audience=${server}`, {
-                headers: { Authorization: `Bearer ${idTokenBearer}` },
-              });
-              const token: string = ((await idResp.json()) as { value: string }).value;
-              if (!token) { core.warning("Failed to get OIDC token for cleanup"); return; }
-
-              const resp = await fetch(`${server}/sites/${project}/branch/${branch}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!resp.ok && resp.status !== 404) {
-                core.warning(`Delete site failed (${resp.status}): ${await resp.text()}`);
-              } else {
-                core.info(`Deleted site for branch ${branch}`);
-              }
-            })();
-
-  cleanup-pr-site:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      id-token: write
-    steps:
-      - name: Delete buildhost site for PR
-        continue-on-error: true
-        uses: wow-look-at-my/actions@typescript#latest
-        with:
-          script: |
-            await (async () => {
-              const branch = "pr-${{ github.event.pull_request.number }}";
-              const server = "https://pazer.build";
-              const project = "cc-marketplace";
-
-              const idTokenUrl = env.ACTIONS_ID_TOKEN_REQUEST_URL;
-              const idTokenBearer = env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
-              if (!idTokenUrl || !idTokenBearer) { core.warning("OIDC not available for cleanup"); return; }
-              const idResp = await fetch(`${idTokenUrl}&audience=${server}`, {
-                headers: { Authorization: `Bearer ${idTokenBearer}` },
-              });
-              const token: string = ((await idResp.json()) as { value: string }).value;
-              if (!token) { core.warning("Failed to get OIDC token for cleanup"); return; }
-
-              const resp = await fetch(`${server}/sites/${project}/branch/${branch}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!resp.ok && resp.status !== 404) {
-                core.warning(`Delete site failed (${resp.status}): ${await resp.text()}`);
-              } else {
-                core.info(`Deleted PR site for ${branch}`);
-              }
-            })();
-
   prepare:
-    if: >-
-      github.event_name != 'delete' &&
-      !(github.event_name == 'pull_request' && github.event.action == 'closed')
+    if: github.event_name != 'delete'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
