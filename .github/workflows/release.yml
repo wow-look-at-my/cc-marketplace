@@ -182,6 +182,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
 
@@ -265,55 +266,16 @@ jobs:
           claude plugin validate "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
           claude plugin marketplace add "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: npm-registry
-          path: ${{ steps.registry.outputs.registry_dir }}
-          compression-level: 0
-
-  deploy-buildhost:
-    needs: registry
-    if: needs.registry.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      id-token: write
-      pull-requests: write
-    steps:
-      - name: Publish npm registry to buildhost
+      - name: Publish to buildhost
         id: publish
         uses: wow-look-at-my/actions@typescript#latest
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         with:
           script: |
             await (async () => {
               const server = "https://pazer.build";
               const project = "cc-marketplace";
               const branch: string = "${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}";
-              const artifactName = "npm-registry";
-
-              const downloadDir = path.join(os.tmpdir(), "buildhost-site-publish");
-              const extractDir = path.join(downloadDir, "extracted");
-              fs.mkdirSync(downloadDir, { recursive: true });
-              fs.mkdirSync(extractDir, { recursive: true });
-
-              // Download artifact via octokit
-              const oct = octokit(process.env.GITHUB_TOKEN!);
-              const [owner, repo] = github.repository.split("/");
-              const { data: { artifacts } } = await oct.rest.actions.listWorkflowRunArtifacts({
-                owner, repo, run_id: github.run_id,
-              });
-              const artifact = artifacts.find((a: any) => a.name === artifactName);
-              if (!artifact) { core.setFailed(`Artifact '${artifactName}' not found in run`); return; }
-
-              const { data: zip } = await oct.rest.actions.downloadArtifact({
-                owner, repo, artifact_id: artifact.id, archive_format: "zip",
-              });
-              const zipPath = path.join(downloadDir, "site.zip");
-              fs.writeFileSync(zipPath, Buffer.from(zip as ArrayBuffer));
-              await exec.exec("unzip", ["-o", zipPath, "-d", extractDir]);
+              const registryDir: string = "${{ steps.registry.outputs.registry_dir }}";
 
               // Mint OIDC token for buildhost
               const idTokenUrl = env.ACTIONS_ID_TOKEN_REQUEST_URL;
@@ -328,22 +290,18 @@ jobs:
               const token: string = ((await idResp.json()) as { value: string }).value;
               if (!token) { core.setFailed("Failed to obtain OIDC token"); return; }
 
-              // Pack extracted contents as tar.gz
-              const tarPath = path.join(downloadDir, "site.tar.gz");
-              await exec.exec("bash", ["-c", `tar -czf "${tarPath}" -C "${extractDir}" .`]);
-
-              // Upload to buildhost sites endpoint
-              const siteData = fs.readFileSync(tarPath);
-              const headers: Record<string, string> = {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/gzip",
-                "X-Git-Commit": github.sha,
-              };
+              // Pack registry dir as zip and upload to buildhost
+              const zipPath = path.join(os.tmpdir(), "npm-registry.zip");
+              await exec.exec("bash", ["-c", `cd "${registryDir}" && zip -r "${zipPath}" .`]);
 
               const resp = await fetch(`${server}/sites/${project}/branch/${branch}`, {
                 method: "PUT",
-                headers,
-                body: siteData,
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/zip",
+                  "X-Git-Commit": github.sha,
+                },
+                body: fs.readFileSync(zipPath),
               });
 
               if (resp.status !== 201) {
@@ -352,7 +310,7 @@ jobs:
               }
 
               const siteURL = `${server}/sites/${project}/branch/${branch}/`;
-              core.info(`Published site to ${siteURL}`);
+              core.info(`Published to ${siteURL}`);
               core.setOutput("site_url", siteURL);
             })();
 
