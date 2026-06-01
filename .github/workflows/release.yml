@@ -163,28 +163,28 @@ jobs:
       # @buildhost/cc-marketplace__<plugin> (the "/" encoded as "__").
       - name: Read npm package manifest
         id: npmpkg
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name == 'master'
         run: |
           MANIFEST=/tmp/packaged-${{ matrix.plugin }}/manifest.json
           echo "version=$(jq -r '.version' "$MANIFEST")" >> "$GITHUB_OUTPUT"
           echo "tarball=/tmp/packaged-${{ matrix.plugin }}/$(jq -r '.main.tarball' "$MANIFEST")" >> "$GITHUB_OUTPUT"
 
       - name: Ensure buildhost project
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name == 'master'
         uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-project@master
         with:
           name: cc-marketplace/${{ matrix.plugin }}
           versioning: semver
 
       - name: Create buildhost release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name == 'master'
         uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-release@master
         with:
           project: cc-marketplace/${{ matrix.plugin }}
           version: ${{ steps.npmpkg.outputs.version }}
 
       - name: Upload npm package
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name == 'master'
         uses: wow-look-at-my/buildhost/.github/actions/buildhost-upload-artifact@master
         with:
           project: cc-marketplace/${{ matrix.plugin }}
@@ -195,7 +195,7 @@ jobs:
           path: ${{ steps.npmpkg.outputs.tarball }}
 
       - name: Publish buildhost release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name == 'master'
         uses: wow-look-at-my/buildhost/.github/actions/buildhost-publish-release@master
         with:
           project: cc-marketplace/${{ matrix.plugin }}
