@@ -83,7 +83,7 @@ jobs:
         id: prod-version
         run: |
           PROD_VERSION=$(curl -sf \
-            "https://pazer.build/sites/cc-marketplace/branch/master/wow-look-at-my-html-demo" \
+            "https://npm.pazer.build/@buildhost/wow-look-at-my-html-demo" \
             | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
           if [ -n "$PROD_VERSION" ]; then
             echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
@@ -156,42 +156,52 @@ jobs:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
 
-      - name: Build npm registry
-        id: npm
-        run: |
-          SERVER="https://pazer.build"
-          GIT_BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}"
-          SAFE_BRANCH="${GIT_BRANCH//\//-}"
-          BRANCH="plugin-${{ matrix.plugin }}-${SAFE_BRANCH}"
-          BASE_URL="$SERVER/sites/cc-marketplace/branch/$BRANCH"
-          mkdir -p /tmp/npm-input
-          cp -r /tmp/packaged-${{ matrix.plugin }} /tmp/npm-input/${{ matrix.plugin }}
-          marketplace-build build-npm-registry --input /tmp/npm-input --base-url "$BASE_URL" >> $GITHUB_OUTPUT
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          echo "site_url=$BASE_URL/" >> $GITHUB_OUTPUT
-
-      - name: Publish to buildhost
+      - name: Publish npm package to buildhost
         if: github.event_name == 'push'
         run: |
-          TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
-          cd "${{ steps.npm.outputs.registry_dir }}"
-          zip -r /tmp/plugin-registry.zip .
-          for attempt in 1 2 3 4; do
-            STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
-              -X PUT "https://pazer.build/sites/cc-marketplace/branch/${{ steps.npm.outputs.branch }}" \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Content-Type: application/zip" \
-              -H "X-Git-Commit: $GITHUB_SHA" \
-              --data-binary @/tmp/plugin-registry.zip)
-            [ "$STATUS" -lt 500 ] && break
-            echo "Attempt $attempt failed ($STATUS), retrying..."
-            sleep $((2 ** attempt))
-          done
-          if [ "$STATUS" != "201" ]; then
-            echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)" && exit 1
-          fi
-          echo "Published to ${{ steps.npm.outputs.site_url }}"
+          set -euo pipefail
+          TOKEN="${{ secrets.BUILDHOST_TOKEN }}"
+          MANIFEST=$(cat /tmp/packaged-${{ matrix.plugin }}/manifest.json)
+          PKG_NAME=$(echo "$MANIFEST" | jq -r '.name')
+          PKG_VERSION=$(echo "$MANIFEST" | jq -r '.version')
+          TARBALL_REL=$(echo "$MANIFEST" | jq -r '.main.tarball')
+          TARBALL="/tmp/packaged-${{ matrix.plugin }}/$TARBALL_REL"
+          # project name is the unscoped package name (strip @buildhost/)
+          PROJECT="${PKG_NAME#@buildhost/}"
+          SERVER="https://pazer.build"
+
+          # Create project (409 = already exists, both are fine)
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -X POST "$SERVER/api/v1/projects" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"$PROJECT\"}")
+          [ "$STATUS" = "201" ] || [ "$STATUS" = "409" ] || { echo "Create project failed ($STATUS)"; exit 1; }
+
+          # Create release (409 = already exists, idempotent)
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -X POST "$SERVER/api/v1/projects/$PROJECT/releases" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"version\":\"$PKG_VERSION\",\"git_branch\":\"$GITHUB_REF_NAME\",\"git_commit\":\"$GITHUB_SHA\"}")
+          [ "$STATUS" = "201" ] || [ "$STATUS" = "409" ] || { echo "Create release failed ($STATUS)"; exit 1; }
+
+          # Upload npm tarball (upsert: 409 on re-upload is fine)
+          STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
+            -X PUT "$SERVER/api/v1/projects/$PROJECT/releases/$PKG_VERSION/artifacts/any/any?kind=npm-package" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/gzip" \
+            -H "X-Git-Commit: $GITHUB_SHA" \
+            --data-binary @"$TARBALL")
+          [ "$STATUS" = "201" ] || [ "$STATUS" = "200" ] || [ "$STATUS" = "409" ] || { echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)"; exit 1; }
+
+          # Publish release
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -X POST "$SERVER/api/v1/projects/$PROJECT/releases/$PKG_VERSION/publish" \
+            -H "Authorization: Bearer $TOKEN")
+          [ "$STATUS" = "200" ] || [ "$STATUS" = "204" ] || [ "$STATUS" = "409" ] || { echo "Publish failed ($STATUS)"; exit 1; }
+
+          echo "Published $PKG_NAME@$PKG_VERSION to $SERVER/npm.pazer.build"
 
   publish-marketplace:
     needs: [prepare, build]
@@ -224,30 +234,24 @@ jobs:
             cp -r "$d" "/tmp/combined-plugins/$plugin"
           done
 
-      - name: Build npm registry
-        id: npm
-        run: |
-          marketplace-build build-npm-registry \
-            --input /tmp/combined-plugins \
-            --base-url "https://pazer.build/sites/cc-marketplace/branch/master" >> $GITHUB_OUTPUT
-
       - name: Update marketplace.json
         id: marketplace
         run: |
           marketplace-build update-marketplace \
             --input /tmp/combined-plugins \
-            --base-url "https://pazer.build/sites/cc-marketplace/branch/master" >> $GITHUB_OUTPUT
+            --base-url "https://npm.pazer.build" >> $GITHUB_OUTPUT
 
       - name: Assemble site
         run: |
-          cp "${{ steps.marketplace.outputs.source_dir }}/marketplace.json" "${{ steps.npm.outputs.registry_dir }}/"
-          cp site/index.html "${{ steps.npm.outputs.registry_dir }}/"
+          mkdir -p /tmp/site
+          cp "${{ steps.marketplace.outputs.source_dir }}/marketplace.json" /tmp/site/
+          cp site/index.html /tmp/site/
 
       - name: Publish to buildhost
         run: |
           TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
             -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
-          cd "${{ steps.npm.outputs.registry_dir }}"
+          cd /tmp/site
           zip -r /tmp/marketplace-site.zip .
           for attempt in 1 2 3 4; do
             STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
