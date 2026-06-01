@@ -83,7 +83,7 @@ jobs:
         id: prod-version
         run: |
           PROD_VERSION=$(curl -sf \
-            "https://npm.pazer.build/@buildhost/wow-look-at-my-html-demo" \
+            "https://npm.pazer.build/@buildhost/cc-marketplace/html-demo" \
             | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
           if [ -n "$PROD_VERSION" ]; then
             echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
@@ -160,14 +160,14 @@ jobs:
         if: github.event_name == 'push'
         run: |
           set -euo pipefail
-          TOKEN="${{ secrets.BUILDHOST_TOKEN }}"
+          TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
           MANIFEST=$(cat /tmp/packaged-${{ matrix.plugin }}/manifest.json)
           PKG_NAME=$(echo "$MANIFEST" | jq -r '.name')
           PKG_VERSION=$(echo "$MANIFEST" | jq -r '.version')
           TARBALL_REL=$(echo "$MANIFEST" | jq -r '.main.tarball')
           TARBALL="/tmp/packaged-${{ matrix.plugin }}/$TARBALL_REL"
-          # project name is the unscoped package name (strip @buildhost/)
-          PROJECT="${PKG_NAME#@buildhost/}"
+          PROJECT="cc-marketplace/${{ matrix.plugin }}"
           SERVER="https://pazer.build"
 
           # Create project (409 = already exists, both are fine)

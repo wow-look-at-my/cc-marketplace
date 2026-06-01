@@ -70,7 +70,8 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate package.json for npm registry publishing
-	npmPackageName := fmt.Sprintf("@buildhost/%s-%s", owner, pluginName)
+	// Project name is cc-marketplace/<plugin>; OIDC from this repo authorizes that namespace.
+	npmPackageName := fmt.Sprintf("@buildhost/cc-marketplace/%s", pluginName)
 	npmVersion := fmt.Sprintf("%d.0.0", newVersion)
 	if err := writeNPMPackageJSON(tmpDir, npmPackageName, npmVersion); err != nil {
 		return fmt.Errorf("failed to write package.json: %w", err)
