@@ -204,7 +204,6 @@ jobs:
     needs: [prepare, build]
     if: >-
       github.event_name == 'push' &&
-      github.ref_name == 'master' &&
       needs.prepare.outputs.all_plugins != '[]' &&
       needs.prepare.outputs.all_plugins != '' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
@@ -252,7 +251,7 @@ jobs:
           zip -r /tmp/marketplace-site.zip .
           for attempt in 1 2 3 4; do
             STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
-              -X PUT "https://pazer.build/sites/cc-marketplace/branch/master" \
+              -X PUT "https://pazer.build/sites/cc-marketplace/branch/$GITHUB_REF_NAME" \
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/zip" \
               -H "X-Git-Commit: $GITHUB_SHA" \
@@ -264,4 +263,4 @@ jobs:
           if [ "$STATUS" != "201" ]; then
             echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)" && exit 1
           fi
-          echo "Published marketplace to https://pazer.build/sites/cc-marketplace/branch/master/marketplace.json"
+          echo "Published marketplace to https://pazer.build/sites/cc-marketplace/branch/$GITHUB_REF_NAME/marketplace.json"
