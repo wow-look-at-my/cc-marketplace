@@ -2,9 +2,6 @@ name: Release Plugins
 
 on:
   push:
-    branches: [master]
-  pull_request:
-    types: [opened, reopened, synchronize]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -17,6 +14,7 @@ jobs:
       actions: read
       id-token: write
     outputs:
+      all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       has_build: ${{ steps.split.outputs.has_build }}
@@ -82,7 +80,7 @@ jobs:
         id: prod-version
         run: |
           PROD_VERSION=$(curl -sf \
-            "https://pazer.build/sites/cc-marketplace/branch/master/wow-look-at-my-html-demo" \
+            "https://npm.pazer.build/@buildhost/cc-marketplace__html-demo" \
             | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
           if [ -n "$PROD_VERSION" ]; then
             echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
@@ -142,45 +140,112 @@ jobs:
       - name: Package plugin
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-${{ matrix.plugin }}
+          path: /tmp/packaged-${{ matrix.plugin }}
+          retention-days: 1
+
       - name: Save plugin cache
         uses: actions/cache/save@v4
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
 
-      - name: Build npm registry
-        id: npm
-        run: |
-          SERVER="https://pazer.build"
-          GIT_BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}"
-          SAFE_BRANCH="${GIT_BRANCH//\//-}"
-          BRANCH="plugin-${{ matrix.plugin }}-${SAFE_BRANCH}"
-          BASE_URL="$SERVER/sites/cc-marketplace/branch/$BRANCH"
-          mkdir -p /tmp/npm-input
-          cp -r /tmp/packaged-${{ matrix.plugin }} /tmp/npm-input/${{ matrix.plugin }}
-          marketplace-build build-npm-registry --input /tmp/npm-input --base-url "$BASE_URL" >> $GITHUB_OUTPUT
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          echo "site_url=$BASE_URL/" >> $GITHUB_OUTPUT
-
-      - name: Publish to buildhost
+      # Publish the plugin to buildhost's npm registry using the buildhost
+      # composite actions (OIDC auth -- no static token; project auto-namespaced
+      # under cc-marketplace/). The project is created semver so the explicit
+      # N.0.0 version is preserved; buildhost serves it as the npm package
+      # @buildhost/cc-marketplace__<plugin> (the "/" encoded as "__").
+      - name: Read npm package manifest
+        id: npmpkg
         if: github.event_name == 'push'
         run: |
-          TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
-          cd "${{ steps.npm.outputs.registry_dir }}"
-          zip -r /tmp/plugin-registry.zip .
-          for attempt in 1 2 3 4; do
-            STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
-              -X PUT "https://pazer.build/sites/cc-marketplace/branch/${{ steps.npm.outputs.branch }}" \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Content-Type: application/zip" \
-              -H "X-Git-Commit: $GITHUB_SHA" \
-              --data-binary @/tmp/plugin-registry.zip)
-            [ "$STATUS" -lt 500 ] && break
-            echo "Attempt $attempt failed ($STATUS), retrying..."
-            sleep $((2 ** attempt))
+          MANIFEST=/tmp/packaged-${{ matrix.plugin }}/manifest.json
+          echo "version=$(jq -r '.version' "$MANIFEST")" >> "$GITHUB_OUTPUT"
+          echo "tarball=/tmp/packaged-${{ matrix.plugin }}/$(jq -r '.main.tarball' "$MANIFEST")" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure buildhost project
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-project@master
+        with:
+          name: cc-marketplace/${{ matrix.plugin }}
+          versioning: semver
+
+      - name: Create buildhost release
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-release@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
+
+      - name: Upload npm package
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-upload-artifact@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
+          os: any
+          arch: any
+          kind: npm-package
+          path: ${{ steps.npmpkg.outputs.tarball }}
+
+      - name: Publish buildhost release
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-publish-release@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
+
+  publish-marketplace:
+    needs: [prepare, build]
+    if: >-
+      github.event_name == 'push' &&
+      needs.prepare.outputs.all_plugins != '[]' &&
+      needs.prepare.outputs.all_plugins != '' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      pages: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      - name: Download all plugin artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: packaged-*
+          path: /tmp/all-plugin-artifacts
+
+      - name: Prepare combined input
+        run: |
+          mkdir -p /tmp/combined-plugins
+          for d in /tmp/all-plugin-artifacts/packaged-*/; do
+            plugin=$(basename "$d" | sed 's/^packaged-//')
+            cp -r "$d" "/tmp/combined-plugins/$plugin"
           done
-          if [ "$STATUS" != "201" ]; then
-            echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)" && exit 1
-          fi
-          echo "Published to ${{ steps.npm.outputs.site_url }}"
+
+      - name: Update marketplace.json
+        id: marketplace
+        run: |
+          marketplace-build update-marketplace \
+            --input /tmp/combined-plugins \
+            --base-url "https://npm.pazer.build" >> $GITHUB_OUTPUT
+
+      - name: Assemble site
+        run: |
+          mkdir -p /tmp/site
+          cp "${{ steps.marketplace.outputs.source_dir }}/marketplace.json" /tmp/site/
+          cp site/index.html /tmp/site/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

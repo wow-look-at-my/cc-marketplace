@@ -87,9 +87,16 @@ func runPackagePlugin(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// packageSlug converts a package name (possibly scoped, e.g. @scope/name) to a
+// filesystem-safe slug by stripping the leading @ and replacing / with -.
+func packageSlug(pkgName string) string {
+	s := strings.TrimPrefix(pkgName, "@")
+	return strings.ReplaceAll(s, "/", "-")
+}
+
 // packagePluginToDir builds the npm main tarball (and per-platform tarballs if
 // the plugin has cross-platform binaries) for a cooked plugin. The output dir
-// will contain manifest.json plus tarballs/<pkg>/<pkg>-<version>.tgz files.
+// will contain manifest.json plus tarballs/<slug>/<slug>-<version>.tgz files.
 func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return err
@@ -115,7 +122,8 @@ func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 		}
 	}
 
-	mainTarballRel := filepath.ToSlash(filepath.Join("tarballs", pkgName, fmt.Sprintf("%s-%s.tgz", pkgName, version)))
+	slug := packageSlug(pkgName)
+	mainTarballRel := filepath.ToSlash(filepath.Join("tarballs", slug, fmt.Sprintf("%s-%s.tgz", slug, version)))
 	mainTarballPath := filepath.Join(outDir, filepath.FromSlash(mainTarballRel))
 	if err := os.MkdirAll(filepath.Dir(mainTarballPath), 0755); err != nil {
 		return err
@@ -143,7 +151,8 @@ func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 				return fmt.Errorf("build platform package %s: %w", platPkgName, err)
 			}
 
-			platTarballRel := filepath.ToSlash(filepath.Join("tarballs", platPkgName, fmt.Sprintf("%s-%s.tgz", platPkgName, version)))
+			platSlug := packageSlug(platPkgName)
+			platTarballRel := filepath.ToSlash(filepath.Join("tarballs", platSlug, fmt.Sprintf("%s-%s.tgz", platSlug, version)))
 			platTarballPath := filepath.Join(outDir, filepath.FromSlash(platTarballRel))
 			if err := os.MkdirAll(filepath.Dir(platTarballPath), 0755); err != nil {
 				os.RemoveAll(platDir)
