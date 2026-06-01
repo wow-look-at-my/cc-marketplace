@@ -209,6 +209,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       id-token: write
+      pages: write
     steps:
       - uses: actions/checkout@v6
 
@@ -241,25 +242,10 @@ jobs:
           cp "${{ steps.marketplace.outputs.source_dir }}/marketplace.json" /tmp/site/
           cp site/index.html /tmp/site/
 
-      - name: Publish to buildhost
-        run: |
-          TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
-          cd /tmp/site
-          zip -r /tmp/marketplace-site.zip .
-          BRANCH_ENCODED=$(python3 -c "import urllib.parse, os; print(urllib.parse.quote(os.environ['GITHUB_REF_NAME'], safe=''))")
-          for attempt in 1 2 3 4; do
-            STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
-              -X PUT "https://sites.pazer.build/cc-marketplace/branch/$BRANCH_ENCODED" \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Content-Type: application/zip" \
-              -H "X-Git-Commit: $GITHUB_SHA" \
-              --data-binary @/tmp/marketplace-site.zip)
-            [ "$STATUS" -lt 500 ] && break
-            echo "Attempt $attempt failed ($STATUS), retrying..."
-            sleep $((2 ** attempt))
-          done
-          if [ "$STATUS" != "201" ]; then
-            echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)" && exit 1
-          fi
-          echo "Published marketplace to https://sites.pazer.build/cc-marketplace/branch/$BRANCH_ENCODED/marketplace.json"
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
