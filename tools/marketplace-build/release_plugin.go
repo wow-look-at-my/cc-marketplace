@@ -69,9 +69,12 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("hook validation failed: %w", err)
 	}
 
-	// Generate package.json for npm registry publishing
-	// Project name is cc-marketplace/<plugin>; OIDC from this repo authorizes that namespace.
-	npmPackageName := fmt.Sprintf("@buildhost/cc-marketplace/%s", pluginName)
+	// Generate package.json for npm registry publishing. The buildhost project
+	// is cc-marketplace/<plugin> (OIDC from this repo authorizes that
+	// namespace), but npm package names allow only one slash, so buildhost
+	// serves the package with the namespace slash encoded as "__". The name
+	// here must match what buildhost serves so marketplace.json resolves it.
+	npmPackageName := fmt.Sprintf("@buildhost/cc-marketplace__%s", pluginName)
 	npmVersion := fmt.Sprintf("%d.0.0", newVersion)
 	if err := writeNPMPackageJSON(tmpDir, npmPackageName, npmVersion); err != nil {
 		return fmt.Errorf("failed to write package.json: %w", err)

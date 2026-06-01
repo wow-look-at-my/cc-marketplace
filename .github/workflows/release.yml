@@ -83,7 +83,7 @@ jobs:
         id: prod-version
         run: |
           PROD_VERSION=$(curl -sf \
-            "https://npm.pazer.build/@buildhost/cc-marketplace/html-demo" \
+            "https://npm.pazer.build/@buildhost/cc-marketplace__html-demo" \
             | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
           if [ -n "$PROD_VERSION" ]; then
             echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
@@ -156,52 +156,50 @@ jobs:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
 
-      - name: Publish npm package to buildhost
+      # Publish the plugin to buildhost's npm registry using the buildhost
+      # composite actions (OIDC auth -- no static token; project auto-namespaced
+      # under cc-marketplace/). The project is created semver so the explicit
+      # N.0.0 version is preserved; buildhost serves it as the npm package
+      # @buildhost/cc-marketplace__<plugin> (the "/" encoded as "__").
+      - name: Read npm package manifest
+        id: npmpkg
         if: github.event_name == 'push'
         run: |
-          set -euo pipefail
-          TOKEN=$(curl -sS "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pazer.build" \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r .value)
-          MANIFEST=$(cat /tmp/packaged-${{ matrix.plugin }}/manifest.json)
-          PKG_NAME=$(echo "$MANIFEST" | jq -r '.name')
-          PKG_VERSION=$(echo "$MANIFEST" | jq -r '.version')
-          TARBALL_REL=$(echo "$MANIFEST" | jq -r '.main.tarball')
-          TARBALL="/tmp/packaged-${{ matrix.plugin }}/$TARBALL_REL"
-          PROJECT="cc-marketplace/${{ matrix.plugin }}"
-          SERVER="https://pazer.build"
+          MANIFEST=/tmp/packaged-${{ matrix.plugin }}/manifest.json
+          echo "version=$(jq -r '.version' "$MANIFEST")" >> "$GITHUB_OUTPUT"
+          echo "tarball=/tmp/packaged-${{ matrix.plugin }}/$(jq -r '.main.tarball' "$MANIFEST")" >> "$GITHUB_OUTPUT"
 
-          # Create project (409 = already exists, both are fine)
-          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
-            -X POST "$SERVER/api/v1/projects" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"name\":\"$PROJECT\"}")
-          [ "$STATUS" = "201" ] || [ "$STATUS" = "409" ] || { echo "Create project failed ($STATUS)"; exit 1; }
+      - name: Ensure buildhost project
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-project@master
+        with:
+          name: cc-marketplace/${{ matrix.plugin }}
+          versioning: semver
 
-          # Create release (409 = already exists, idempotent)
-          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
-            -X POST "$SERVER/api/v1/projects/$PROJECT/releases" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"version\":\"$PKG_VERSION\",\"git_branch\":\"$GITHUB_REF_NAME\",\"git_commit\":\"$GITHUB_SHA\"}")
-          [ "$STATUS" = "201" ] || [ "$STATUS" = "409" ] || { echo "Create release failed ($STATUS)"; exit 1; }
+      - name: Create buildhost release
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-release@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
 
-          # Upload npm tarball (upsert: 409 on re-upload is fine)
-          STATUS=$(curl -sS -o /tmp/upload-resp.txt -w "%{http_code}" \
-            -X PUT "$SERVER/api/v1/projects/$PROJECT/releases/$PKG_VERSION/artifacts/any/any?kind=npm-package" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/gzip" \
-            -H "X-Git-Commit: $GITHUB_SHA" \
-            --data-binary @"$TARBALL")
-          [ "$STATUS" = "201" ] || [ "$STATUS" = "200" ] || [ "$STATUS" = "409" ] || { echo "Upload failed ($STATUS): $(cat /tmp/upload-resp.txt)"; exit 1; }
+      - name: Upload npm package
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-upload-artifact@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
+          os: any
+          arch: any
+          kind: npm-package
+          path: ${{ steps.npmpkg.outputs.tarball }}
 
-          # Publish release
-          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
-            -X POST "$SERVER/api/v1/projects/$PROJECT/releases/$PKG_VERSION/publish" \
-            -H "Authorization: Bearer $TOKEN")
-          [ "$STATUS" = "200" ] || [ "$STATUS" = "204" ] || [ "$STATUS" = "409" ] || { echo "Publish failed ($STATUS)"; exit 1; }
-
-          echo "Published $PKG_NAME@$PKG_VERSION to $SERVER/npm.pazer.build"
+      - name: Publish buildhost release
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-publish-release@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
 
   publish-marketplace:
     needs: [prepare, build]
