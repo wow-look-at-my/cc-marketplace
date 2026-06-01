@@ -204,6 +204,7 @@ jobs:
     needs: [prepare, build]
     if: >-
       github.event_name == 'push' &&
+      github.ref_name == 'master' &&
       needs.prepare.outputs.all_plugins != '[]' &&
       needs.prepare.outputs.all_plugins != '' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
