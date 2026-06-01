@@ -2,8 +2,6 @@ name: Release Plugins
 
 on:
   push:
-  pull_request:
-    types: [opened, reopened, synchronize]
 
 concurrency:
   group: release-${{ github.ref }}
