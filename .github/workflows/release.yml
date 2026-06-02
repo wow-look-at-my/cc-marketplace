@@ -247,13 +247,18 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          SERVER="https://pazer.build"
           BRANCH="${REF//\//-}"
+          # buildhost dispatches each service by Host subdomain, so static
+          # sites live at sites.<domain>/<project>/branch/<branch> (not a
+          # /sites/ path on the apex). The OIDC audience is the buildhost
+          # instance identity (apex domain).
+          AUDIENCE="https://pazer.build"
+          SITE_URL="https://sites.pazer.build/cc-marketplace/branch/${BRANCH}"
 
           # Mint a GitHub Actions OIDC token scoped to buildhost -- no static
           # secret. The cc-marketplace repo's token auto-provisions the public
           # cc-marketplace project on first upload.
-          TOKEN=$(curl -sS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${SERVER}" \
+          TOKEN=$(curl -sS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r '.value')
           if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
             echo "Failed to obtain OIDC token" >&2
@@ -265,13 +270,13 @@ jobs:
           # Upload, retrying transient 5xx with exponential backoff.
           for attempt in 1 2 3 4; do
             STATUS=$(curl -sS -o /tmp/site-resp.json -w '%{http_code}' \
-              -X PUT "${SERVER}/sites/cc-marketplace/branch/${BRANCH}" \
+              -X PUT "${SITE_URL}" \
               -H "Authorization: Bearer ${TOKEN}" \
               -H "Content-Type: application/gzip" \
               -H "X-Git-Commit: ${SHA}" \
               --data-binary @/tmp/site.tar.gz) || true
             if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 300 ]; then
-              echo "Published site to ${SERVER}/sites/cc-marketplace/branch/${BRANCH}/"
+              echo "Published site to ${SITE_URL}/"
               cat /tmp/site-resp.json; echo
               exit 0
             fi
