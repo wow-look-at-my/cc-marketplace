@@ -209,7 +209,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       id-token: write
-      pages: write
     steps:
       - uses: actions/checkout@v6
 
@@ -242,10 +241,15 @@ jobs:
           cp "${{ steps.marketplace.outputs.source_dir }}/marketplace.json" /tmp/site/
           cp site/index.html /tmp/site/
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: /tmp/site
+      - name: Compute site branch
+        id: sitebranch
+        env:
+          REF: ${{ github.ref_name }}
+        run: echo "name=${REF//\//-}" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+      - name: Publish marketplace site to buildhost
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-publish-site@master
+        with:
+          project: cc-marketplace
+          branch: ${{ steps.sitebranch.outputs.name }}
+          source_dir: /tmp/site
