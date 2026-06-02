@@ -241,15 +241,47 @@ jobs:
           cp "${{ steps.marketplace.outputs.source_dir }}/marketplace.json" /tmp/site/
           cp site/index.html /tmp/site/
 
-      - name: Compute site branch
-        id: sitebranch
+      - name: Publish marketplace site to buildhost
         env:
           REF: ${{ github.ref_name }}
-        run: echo "name=${REF//\//-}" >> "$GITHUB_OUTPUT"
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          SERVER="https://pazer.build"
+          BRANCH="${REF//\//-}"
 
-      - name: Publish marketplace site to buildhost
-        uses: wow-look-at-my/buildhost/.github/actions/buildhost-publish-site@master
-        with:
-          project: cc-marketplace
-          branch: ${{ steps.sitebranch.outputs.name }}
-          source_dir: /tmp/site
+          # Mint a GitHub Actions OIDC token scoped to buildhost -- no static
+          # secret. The cc-marketplace repo's token auto-provisions the public
+          # cc-marketplace project on first upload.
+          TOKEN=$(curl -sS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${SERVER}" \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r '.value')
+          if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
+            echo "Failed to obtain OIDC token" >&2
+            exit 1
+          fi
+
+          tar -czf /tmp/site.tar.gz -C /tmp/site .
+
+          # Upload, retrying transient 5xx with exponential backoff.
+          for attempt in 1 2 3 4; do
+            STATUS=$(curl -sS -o /tmp/site-resp.json -w '%{http_code}' \
+              -X PUT "${SERVER}/sites/cc-marketplace/branch/${BRANCH}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "Content-Type: application/gzip" \
+              -H "X-Git-Commit: ${SHA}" \
+              --data-binary @/tmp/site.tar.gz) || true
+            if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 300 ]; then
+              echo "Published site to ${SERVER}/sites/cc-marketplace/branch/${BRANCH}/"
+              cat /tmp/site-resp.json; echo
+              exit 0
+            fi
+            echo "Upload attempt ${attempt} failed: HTTP ${STATUS}" >&2
+            cat /tmp/site-resp.json >&2 2>/dev/null || true
+            echo >&2
+            if [ "${STATUS}" -lt 500 ]; then
+              exit 1
+            fi
+            sleep $((2 ** attempt))
+          done
+          echo "Giving up after 4 attempts" >&2
+          exit 1
