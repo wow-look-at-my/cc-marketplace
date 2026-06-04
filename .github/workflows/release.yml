@@ -296,7 +296,7 @@ jobs:
   # that exercises the `claude plugin` npm install/update path (the demo workflow
   # loads a local --plugin-dir, and the build job only runs `claude plugin
   # validate` on a cooked dir). Claude installs every npm-source plugin into one
-  # shared npm prefix, so installing all of them reifies a single shared
+  # shared npm prefix, so installing all of them rebuilds a single shared
   # lockfile -- a dead/unreachable tarball for ANY plugin (e.g. a leftover
   # github.io URL after the buildhost migration) fails the whole run, exactly
   # like the cross-plugin 404 users hit when updating a single plugin.
@@ -345,7 +345,7 @@ jobs:
           claude plugin marketplace add "$MKT_URL"
 
           # Install every plugin into the shared npm prefix. The last installs
-          # reify all prior siblings, so one broken tarball fails the run.
+          # rebuild all prior siblings, so one broken tarball fails the run.
           for p in "${PLUGINS[@]}"; do
             echo "::group::install $p"
             claude plugin install "${p}@${MKT_NAME}"
