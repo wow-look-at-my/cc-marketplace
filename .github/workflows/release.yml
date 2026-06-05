@@ -311,62 +311,65 @@ jobs:
       - uses: ./.github/actions/setup-claude-code
 
       - name: Install and update every plugin via Claude Code
-        env:
-          REF: ${{ github.ref_name }}
-          RUN_NUMBER: ${{ github.run_number }}
-        run: |
-          set -euo pipefail
-          BRANCH="${REF//\//-}"
-          MKT_URL="https://sites.pazer.build/cc-marketplace/branch/${BRANCH}/marketplace.json"
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            // Drive real Claude Code against the marketplace this run published and
+            // install + update every plugin. Claude installs every npm-source plugin
+            // into one shared npm prefix, so installing them all rebuilds a single
+            // shared lockfile -- a dead/unreachable tarball for ANY plugin fails the
+            // run, exactly like the cross-plugin 404 users hit updating one plugin.
+            const branch = (env.GITHUB_REF_NAME ?? "").split("/").join("-");
+            const runNumber = env.GITHUB_RUN_NUMBER ?? "";
+            const mktUrl = `https://sites.pazer.build/cc-marketplace/branch/${branch}/marketplace.json`;
 
-          # Wait for the marketplace this run published (metadata.version mirrors
-          # the run number, see update_marketplace.go) to become live on buildhost.
-          live=""
-          for attempt in $(seq 1 30); do
-            ver="$(curl -fsS "$MKT_URL" | jq -r '.metadata.version // empty' 2>/dev/null || true)"
-            if [ "$ver" = "$RUN_NUMBER" ]; then live=1; echo "marketplace v$ver is live"; break; fi
-            echo "waiting for marketplace v$RUN_NUMBER (saw '${ver:-none}')... attempt $attempt"
-            sleep 5
-          done
-          if [ -z "$live" ]; then
-            echo "::error::marketplace did not reach v$RUN_NUMBER at $MKT_URL"
-            exit 1
-          fi
+            async function fetchJson(url: string): Promise<any> {
+              const r = await exec.getExecOutput("curl", ["-fsS", "-m", "25", url], { silent: true, ignoreReturnCode: true });
+              if (r.exitCode !== 0) return null;
+              try { return JSON.parse(r.stdout); } catch { return null; }
+            }
 
-          curl -fsS "$MKT_URL" -o /tmp/marketplace.json
-          MKT_NAME="$(jq -r '.name' /tmp/marketplace.json)"
-          mapfile -t PLUGINS < <(jq -r '.plugins[].name' /tmp/marketplace.json)
-          echo "Marketplace '$MKT_NAME' lists ${#PLUGINS[@]} plugins: ${PLUGINS[*]}"
-          if [ "${#PLUGINS[@]}" -eq 0 ]; then
-            echo "::error::published marketplace lists no plugins"
-            exit 1
-          fi
+            // Wait for the marketplace this run published (metadata.version mirrors
+            // the run number, see update_marketplace.go) to go live on buildhost.
+            let mkt: any = null;
+            for (let attempt = 1; attempt <= 30; attempt++) {
+              const j = await fetchJson(mktUrl);
+              const ver = j?.metadata?.version;
+              if (j && String(ver) === runNumber) { mkt = j; core.info(`marketplace v${runNumber} is live`); break; }
+              core.info(`waiting for marketplace v${runNumber} (saw '${ver ?? "none"}')... attempt ${attempt}`);
+              await new Promise<void>((res) => setTimeout(() => res(), 5000));
+            }
+            if (!mkt) { core.setFailed(`marketplace did not reach v${runNumber} at ${mktUrl}`); return; }
 
-          claude plugin marketplace add "$MKT_URL"
+            const mktName: string = mkt.name;
+            const plugins: string[] = (mkt.plugins ?? []).map((p: any) => String(p.name));
+            core.info(`Marketplace '${mktName}' lists ${plugins.length} plugins: ${plugins.join(" ")}`);
+            if (plugins.length === 0) { core.setFailed("published marketplace lists no plugins"); return; }
 
-          # Install every plugin into the shared npm prefix. The last installs
-          # rebuild all prior siblings, so one broken tarball fails the run.
-          for p in "${PLUGINS[@]}"; do
-            echo "::group::install $p"
-            claude plugin install "${p}@${MKT_NAME}"
-            echo "::endgroup::"
-          done
+            await $`claude plugin marketplace add ${mktUrl}`;
 
-          # Update every plugin -- the path that 404'd in production.
-          for p in "${PLUGINS[@]}"; do
-            echo "::group::update $p"
-            claude plugin update "${p}@${MKT_NAME}"
-            echo "::endgroup::"
-          done
+            // Install every plugin into the shared npm prefix; the last installs
+            // rebuild all prior siblings, so one broken tarball fails the run.
+            for (const p of plugins) {
+              core.startGroup(`install ${p}`);
+              await $`claude plugin install ${`${p}@${mktName}`}`;
+              core.endGroup();
+            }
 
-          claude plugin list
+            // Update every plugin -- the path that 404'd in production.
+            for (const p of plugins) {
+              core.startGroup(`update ${p}`);
+              await $`claude plugin update ${`${p}@${mktName}`}`;
+              core.endGroup();
+            }
 
-          # Guard against any plugin resolving to the decommissioned github.io
-          # registry instead of buildhost (the root cause of the cross-plugin 404).
-          LOCK="$HOME/.claude/plugins/npm-cache/package-lock.json"
-          if [ -f "$LOCK" ] && grep -q 'github\.io' "$LOCK"; then
-            echo "::error::a plugin still resolves to a github.io tarball:"
-            grep -n 'github\.io' "$LOCK" >&2 || true
-            exit 1
-          fi
-          echo "OK: every plugin installed and updated from the buildhost registry"
+            await $`claude plugin list`;
+
+            // Guard against any plugin resolving to the decommissioned github.io
+            // registry instead of buildhost (the root cause of the cross-plugin 404).
+            const lock = path.join(os.homedir(), ".claude/plugins/npm-cache/package-lock.json");
+            if (fs.existsSync(lock)) {
+              const bad = fs.readFileSync(lock, "utf8").split("\n").filter((l) => l.includes("github.io"));
+              if (bad.length > 0) { core.setFailed(`a plugin still resolves to a github.io tarball:\n${bad.join("\n")}`); return; }
+            }
+            core.info("OK: every plugin installed and updated from the buildhost registry");
