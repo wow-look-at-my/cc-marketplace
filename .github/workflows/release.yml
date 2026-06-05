@@ -339,12 +339,12 @@ jobs:
               core.info(`waiting for marketplace v${runNumber} (saw '${ver ?? "none"}')... attempt ${attempt}`);
               await new Promise<void>((res) => setTimeout(() => res(), 5000));
             }
-            if (!mkt) { core.setFailed(`marketplace did not reach v${runNumber} at ${mktUrl}`); return; }
+            if (!mkt) throw new Error(`marketplace did not reach v${runNumber} at ${mktUrl}`);
 
             const mktName: string = mkt.name;
             const plugins: string[] = (mkt.plugins ?? []).map((p: any) => String(p.name));
             core.info(`Marketplace '${mktName}' lists ${plugins.length} plugins: ${plugins.join(" ")}`);
-            if (plugins.length === 0) { core.setFailed("published marketplace lists no plugins"); return; }
+            if (plugins.length === 0) throw new Error("published marketplace lists no plugins");
 
             await $`claude plugin marketplace add ${mktUrl}`;
 
@@ -370,6 +370,6 @@ jobs:
             const lock = path.join(os.homedir(), ".claude/plugins/npm-cache/package-lock.json");
             if (fs.existsSync(lock)) {
               const bad = fs.readFileSync(lock, "utf8").split("\n").filter((l) => l.includes("github.io"));
-              if (bad.length > 0) { core.setFailed(`a plugin still resolves to a github.io tarball:\n${bad.join("\n")}`); return; }
+              if (bad.length > 0) throw new Error(`a plugin still resolves to a github.io tarball:\n${bad.join("\n")}`);
             }
             core.info("OK: every plugin installed and updated from the buildhost registry");
