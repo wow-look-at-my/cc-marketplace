@@ -290,3 +290,86 @@ jobs:
           done
           echo "Giving up after 4 attempts" >&2
           exit 1
+
+  # End-to-end smoke test: drive real Claude Code against the marketplace we just
+  # published and actually install + update every plugin. This is the only job
+  # that exercises the `claude plugin` npm install/update path (the demo workflow
+  # loads a local --plugin-dir, and the build job only runs `claude plugin
+  # validate` on a cooked dir). Claude installs every npm-source plugin into one
+  # shared npm prefix, so installing all of them rebuilds a single shared
+  # lockfile -- a dead/unreachable tarball for ANY plugin (e.g. a leftover
+  # github.io URL after the buildhost migration) fails the whole run, exactly
+  # like the cross-plugin 404 users hit when updating a single plugin.
+  smoke-test:
+    needs: [publish-marketplace]
+    if: ${{ github.event_name == 'push' && needs.publish-marketplace.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-claude-code
+
+      - name: Install and update every plugin via Claude Code
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            // Drive real Claude Code against the marketplace this run published and
+            // install + update every plugin. Claude installs every npm-source plugin
+            // into one shared npm prefix, so installing them all rebuilds a single
+            // shared lockfile -- a dead/unreachable tarball for ANY plugin fails the
+            // run, exactly like the cross-plugin 404 users hit updating one plugin.
+            const branch = (env.GITHUB_REF_NAME ?? "").split("/").join("-");
+            const runNumber = env.GITHUB_RUN_NUMBER ?? "";
+            const mktUrl = `https://sites.pazer.build/cc-marketplace/branch/${branch}/marketplace.json`;
+
+            async function fetchJson(url: string): Promise<any> {
+              const r = await exec.getExecOutput("curl", ["-fsS", "-m", "25", url], { silent: true, ignoreReturnCode: true });
+              if (r.exitCode !== 0) return null;
+              try { return JSON.parse(r.stdout); } catch { return null; }
+            }
+
+            // Wait for the marketplace this run published (metadata.version mirrors
+            // the run number, see update_marketplace.go) to go live on buildhost.
+            let mkt: any = null;
+            for (let attempt = 1; attempt <= 30; attempt++) {
+              const j = await fetchJson(mktUrl);
+              const ver = j?.metadata?.version;
+              if (j && String(ver) === runNumber) { mkt = j; core.info(`marketplace v${runNumber} is live`); break; }
+              core.info(`waiting for marketplace v${runNumber} (saw '${ver ?? "none"}')... attempt ${attempt}`);
+              await new Promise<void>((res) => setTimeout(() => res(), 5000));
+            }
+            if (!mkt) throw new Error(`marketplace did not reach v${runNumber} at ${mktUrl}`);
+
+            const mktName: string = mkt.name;
+            const plugins: string[] = (mkt.plugins ?? []).map((p: any) => String(p.name));
+            core.info(`Marketplace '${mktName}' lists ${plugins.length} plugins: ${plugins.join(" ")}`);
+            if (plugins.length === 0) throw new Error("published marketplace lists no plugins");
+
+            await $`claude plugin marketplace add ${mktUrl}`;
+
+            // Install every plugin into the shared npm prefix; the last installs
+            // rebuild all prior siblings, so one broken tarball fails the run.
+            for (const p of plugins) {
+              core.startGroup(`install ${p}`);
+              await $`claude plugin install ${`${p}@${mktName}`}`;
+              core.endGroup();
+            }
+
+            // Update every plugin -- the path that 404'd in production.
+            for (const p of plugins) {
+              core.startGroup(`update ${p}`);
+              await $`claude plugin update ${`${p}@${mktName}`}`;
+              core.endGroup();
+            }
+
+            await $`claude plugin list`;
+
+            // Guard against any plugin resolving to the decommissioned github.io
+            // registry instead of buildhost (the root cause of the cross-plugin 404).
+            const lock = path.join(os.homedir(), ".claude/plugins/npm-cache/package-lock.json");
+            if (fs.existsSync(lock)) {
+              const bad = fs.readFileSync(lock, "utf8").split("\n").filter((l) => l.includes("github.io"));
+              if (bad.length > 0) throw new Error(`a plugin still resolves to a github.io tarball:\n${bad.join("\n")}`);
+            }
+            core.info("OK: every plugin installed and updated from the buildhost registry");

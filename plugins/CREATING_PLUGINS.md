@@ -169,6 +169,11 @@ When you push to any branch, CI will:
 3. Run tests
 4. Create an orphan tag with the built plugin: `plugin/{plugin}/v{version}`
 5. Update `marketplace.json` with the new version
+6. Smoke-test the published marketplace by driving real Claude Code to `claude
+   plugin marketplace add` + `install` + `update` **every** plugin (the
+   `smoke-test` job in `release.yml`). Because Claude installs all plugins into a
+   single shared npm prefix, one unreachable tarball fails the run — this guards
+   against a plugin's published artifact going missing (e.g. a stale registry URL).
 
 **You don't need to manually edit marketplace.json** - CI handles it automatically.
 
