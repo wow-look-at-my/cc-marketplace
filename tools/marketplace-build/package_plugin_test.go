@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 // makeCookedDirForPackaging creates a fake cooked plugin directory with
@@ -46,7 +46,6 @@ func TestPackagePluginToDir_NoPlatformBinaries(t *testing.T) {
 	require.Equal(t, "owner-jq", m.Name)
 	require.Equal(t, "1.0.0", m.Version)
 	require.Equal(t, "tarballs/owner-jq/owner-jq-1.0.0.tgz", m.Main.Tarball)
-	require.Empty(t, m.Platforms)
 
 	_, err = os.Stat(filepath.Join(outDir, "tarballs", "owner-jq", "owner-jq-1.0.0.tgz"))
 	require.NoError(t, err)
@@ -69,27 +68,22 @@ func TestPackagePluginToDir_WithPlatformBinaries(t *testing.T) {
 	require.NoError(t, json.Unmarshal(manifestData, &m))
 	require.Equal(t, "owner-hook", m.Name)
 	require.Equal(t, "2.0.0", m.Version)
-	require.Len(t, m.Platforms, 2)
+	require.Equal(t, "tarballs/owner-hook/owner-hook-2.0.0.tgz", m.Main.Tarball)
 
-	platsByName := map[string]manifestPlatformPackage{}
-	for _, p := range m.Platforms {
-		platsByName[p.Name] = p
-	}
-	linux := platsByName["owner-hook-linux-x64"]
-	require.Equal(t, "linux", linux.OS)
-	require.Equal(t, "x64", linux.CPU)
-	require.Equal(t, "tarballs/owner-hook-linux-x64/owner-hook-linux-x64-2.0.0.tgz", linux.Tarball)
+	// One self-contained tarball -- no separate per-platform package directories.
+	mainTarball := filepath.Join(outDir, "tarballs", "owner-hook", "owner-hook-2.0.0.tgz")
+	_, err = os.Stat(mainTarball)
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(outDir, "tarballs", "owner-hook-linux-x64"))
+	require.True(t, os.IsNotExist(err), "no separate platform package should be produced")
+	_, err = os.Stat(filepath.Join(outDir, "tarballs", "owner-hook-darwin-arm64"))
+	require.True(t, os.IsNotExist(err), "no separate platform package should be produced")
 
-	darwin := platsByName["owner-hook-darwin-arm64"]
-	require.Equal(t, "darwin", darwin.OS)
-	require.Equal(t, "arm64", darwin.CPU)
-
-	_, err = os.Stat(filepath.Join(outDir, "tarballs", "owner-hook", "owner-hook-2.0.0.tgz"))
-	require.NoError(t, err)
-	_, err = os.Stat(filepath.Join(outDir, "tarballs", "owner-hook-linux-x64", "owner-hook-linux-x64-2.0.0.tgz"))
-	require.NoError(t, err)
-	_, err = os.Stat(filepath.Join(outDir, "tarballs", "owner-hook-darwin-arm64", "owner-hook-darwin-arm64-2.0.0.tgz"))
-	require.NoError(t, err)
+	// Every per-platform binary plus the launcher wrapper is bundled in the one tarball.
+	files := listTarballContents(t, mainTarball)
+	require.Contains(t, files, "package/build/hook")
+	require.Contains(t, files, "package/build/hook_linux_amd64")
+	require.Contains(t, files, "package/build/hook_darwin_arm64")
 }
 
 func TestRunPackagePlugin_NoInput(t *testing.T) {
@@ -200,27 +194,40 @@ func TestPackagePluginToDir_TarballFails_MainWithPlatforms(t *testing.T) {
 	require.Contains(t, err.Error(), "create main tarball")
 }
 
-func TestPackagePluginToDir_TarballFails_Platform(t *testing.T) {
-	cookedDir := makeCookedDirForPackaging(t, "owner-x", "1.0.0", map[string][]byte{
-		"build/hook":             []byte("#!/bin/sh"),
-		"build/hook_linux_amd64": []byte("elf"),
-	})
-	outDir := t.TempDir()
-
-	orig := createTarball
-	t.Cleanup(func() { createTarball = orig })
-	calls := 0
-	createTarball = func(src, dst string) error {
-		calls++
-		if calls == 1 {
-			return orig(src, dst)
-		}
-		return errStub
+func TestValidateBundledBinaries_MissingBinary(t *testing.T) {
+	orig := tarballContents
+	t.Cleanup(func() { tarballContents = orig })
+	// The wrapper is present but the linux binary it would exec is not.
+	tarballContents = func(_ string) ([]string, error) {
+		return []string{"package/build/hook", "package/build/hook_darwin_arm64"}, nil
 	}
 
-	err := packagePluginToDir(cookedDir, "owner-x", "1.0.0", outDir)
+	bins := []platformBinary{
+		{name: "hook", goOS: "linux", goArch: "amd64"},
+		{name: "hook", goOS: "darwin", goArch: "arm64"},
+	}
+	err := validateBundledBinariesReal("/fake.tgz", bins)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "create platform tarball")
+	require.Contains(t, err.Error(), "missing platform binary")
+	require.Contains(t, err.Error(), "package/build/hook_linux_amd64")
+}
+
+func TestValidateBundledBinaries_AllPresent(t *testing.T) {
+	orig := tarballContents
+	t.Cleanup(func() { tarballContents = orig })
+	tarballContents = func(_ string) ([]string, error) {
+		return []string{
+			"package/build/hook",
+			"package/build/hook_linux_amd64",
+			"package/build/hook_darwin_arm64",
+		}, nil
+	}
+
+	bins := []platformBinary{
+		{name: "hook", goOS: "linux", goArch: "amd64"},
+		{name: "hook", goOS: "darwin", goArch: "arm64"},
+	}
+	require.NoError(t, validateBundledBinariesReal("/fake.tgz", bins))
 }
 
 func TestValidateMainTarball_MissingPluginJSON(t *testing.T) {
@@ -328,7 +335,7 @@ func TestPackagePluginToDir_MainTarballContainsPluginJSON(t *testing.T) {
 		"build/hook":                 []byte("#!/bin/sh\nold"),
 		"build/hook_linux_amd64":     []byte("elf-linux"),
 		"build/hook_darwin_arm64":    []byte("mach-darwin"),
-		"mh.plugin.json":            []byte(`{"sourceCommit":"abc"}`),
+		"mh.plugin.json":             []byte(`{"sourceCommit":"abc"}`),
 	})
 	outDir := t.TempDir()
 
@@ -341,9 +348,11 @@ func TestPackagePluginToDir_MainTarballContainsPluginJSON(t *testing.T) {
 		"main tarball must contain .claude-plugin/plugin.json for hooks to work")
 	require.Contains(t, files, "package/mh.plugin.json")
 	require.Contains(t, files, "package/build/hook",
-		"main tarball must contain the wrapper script in build/")
-	require.NotContains(t, files, "package/build/hook_linux_amd64",
-		"main tarball must not contain platform-specific binaries")
+		"main tarball must contain the launcher wrapper in build/")
+	require.Contains(t, files, "package/build/hook_linux_amd64",
+		"main tarball must bundle the per-platform binaries")
+	require.Contains(t, files, "package/build/hook_darwin_arm64",
+		"main tarball must bundle the per-platform binaries")
 }
 
 func listTarballContents(t *testing.T, path string) []string {
