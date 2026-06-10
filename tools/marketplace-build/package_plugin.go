@@ -17,24 +17,16 @@ import (
 // the cooked plugin.json + .mcp.json so update-marketplace doesn't need a
 // separate copy of the cooked tree.
 type pluginPackageManifest struct {
-	Name       string                    `json:"name"`
-	Version    string                    `json:"version"`
-	Main       manifestTarball           `json:"main"`
-	Platforms  []manifestPlatformPackage `json:"platforms,omitempty"`
-	PluginJSON map[string]interface{}    `json:"pluginJson,omitempty"`
-	MCPJSON    map[string]interface{}    `json:"mcpJson,omitempty"`
+	Name       string                 `json:"name"`
+	Version    string                 `json:"version"`
+	Main       manifestTarball        `json:"main"`
+	PluginJSON map[string]interface{} `json:"pluginJson,omitempty"`
+	MCPJSON    map[string]interface{} `json:"mcpJson,omitempty"`
 }
 
 type manifestTarball struct {
 	// Tarball is a forward-slash-delimited path relative to the per-plugin
 	// output directory (e.g. "tarballs/owner-plugin/owner-plugin-1.0.0.tgz").
-	Tarball string `json:"tarball"`
-}
-
-type manifestPlatformPackage struct {
-	Name    string `json:"name"`
-	OS      string `json:"os"`
-	CPU     string `json:"cpu"`
 	Tarball string `json:"tarball"`
 }
 
@@ -94,9 +86,12 @@ func packageSlug(pkgName string) string {
 	return strings.ReplaceAll(s, "/", "-")
 }
 
-// packagePluginToDir builds the npm main tarball (and per-platform tarballs if
-// the plugin has cross-platform binaries) for a cooked plugin. The output dir
-// will contain manifest.json plus tarballs/<slug>/<slug>-<version>.tgz files.
+// packagePluginToDir builds the single npm tarball for a cooked plugin. When the
+// plugin ships cross-platform binaries, all of them are bundled into that one
+// tarball behind a launcher wrapper (see buildMainPackageDir) -- there are no
+// separate per-platform packages, so the published artifact always contains the
+// binary it runs. The output dir contains manifest.json plus
+// tarballs/<slug>/<slug>-<version>.tgz.
 func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return err
@@ -134,7 +129,11 @@ func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 			return fmt.Errorf("create main tarball: %w", err)
 		}
 	} else {
-		mainDir, err := buildMainPackageDir(cookedDir, platforms, pkgName, version)
+		// Bundle every per-platform binary into the one plugin package behind a
+		// launcher wrapper. No separate platform packages means no
+		// optionalDependencies that could go unpublished and leave the plugin a
+		// no-op.
+		mainDir, err := buildMainPackageDir(cookedDir, platforms)
 		if err != nil {
 			return fmt.Errorf("build main package dir: %w", err)
 		}
@@ -143,37 +142,8 @@ func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 		if err != nil {
 			return fmt.Errorf("create main tarball: %w", err)
 		}
-
-		for _, pk := range uniquePlatforms(platforms) {
-			platPkgName := pkgName + "-" + npmPlatformName(pk.os, pk.arch)
-			platDir, err := buildPlatformPackageDir(platforms, pk.os, pk.arch, platPkgName, version)
-			if err != nil {
-				return fmt.Errorf("build platform package %s: %w", platPkgName, err)
-			}
-
-			platSlug := packageSlug(platPkgName)
-			platTarballRel := filepath.ToSlash(filepath.Join("tarballs", platSlug, fmt.Sprintf("%s-%s.tgz", platSlug, version)))
-			platTarballPath := filepath.Join(outDir, filepath.FromSlash(platTarballRel))
-			if err := os.MkdirAll(filepath.Dir(platTarballPath), 0755); err != nil {
-				os.RemoveAll(platDir)
-				return err
-			}
-			err = createTarball(platDir, platTarballPath)
-			os.RemoveAll(platDir)
-			if err != nil {
-				return fmt.Errorf("create platform tarball %s: %w", platPkgName, err)
-			}
-
-			arch := npmArch[pk.arch]
-			if arch == "" {
-				arch = pk.arch
-			}
-			manifest.Platforms = append(manifest.Platforms, manifestPlatformPackage{
-				Name:    platPkgName,
-				OS:      pk.os,
-				CPU:     arch,
-				Tarball: platTarballRel,
-			})
+		if err := validateBundledBinaries(mainTarballPath, platforms); err != nil {
+			return fmt.Errorf("main tarball validation failed: %w", err)
 		}
 	}
 
@@ -188,6 +158,31 @@ func packagePluginToDir(cookedDir, pkgName, version, outDir string) error {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
 	return os.WriteFile(filepath.Join(outDir, "manifest.json"), data, 0644)
+}
+
+// validateBundledBinaries verifies the bundled plugin tarball actually contains
+// every per-platform binary the launcher wrapper will exec
+// (build/<name>_<goos>_<goarch>). Without this a plugin could publish a wrapper
+// whose target binaries are absent -- installing cleanly but silently doing
+// nothing, the exact failure that left every binary plugin a no-op.
+var validateBundledBinaries = validateBundledBinariesReal
+
+func validateBundledBinariesReal(tarballPath string, bins []platformBinary) error {
+	contents, err := tarballContents(tarballPath)
+	if err != nil {
+		return fmt.Errorf("list tarball: %w", err)
+	}
+	have := make(map[string]bool, len(contents))
+	for _, f := range contents {
+		have[f] = true
+	}
+	for _, b := range bins {
+		want := fmt.Sprintf("package/build/%s_%s_%s", b.name, b.goOS, b.goArch)
+		if !have[want] {
+			return fmt.Errorf("bundled tarball is missing platform binary %q", want)
+		}
+	}
+	return nil
 }
 
 // validateMainTarball extracts the main tarball and verifies that required files
