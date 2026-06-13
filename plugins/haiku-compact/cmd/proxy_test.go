@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"io"
 	"log"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"github.com/stretchr/testify/require"
 )
 
 // realInstruction reproduces the tail of Claude Code's compaction summarization
@@ -24,8 +24,8 @@ Your task is to create a detailed summary of the conversation so far, paying clo
 
 func compactionBody(model string) []byte {
 	b, _ := json.Marshal(map[string]any{
-		"model":	model,
-		"max_tokens":	20000,
+		"model":      model,
+		"max_tokens": 20000,
 		"messages": []map[string]any{
 			{"role": "user", "content": "please build the feature"},
 			{"role": "assistant", "content": "done"},
@@ -37,7 +37,7 @@ func compactionBody(model string) []byte {
 
 func normalBody(model string) []byte {
 	b, _ := json.Marshal(map[string]any{
-		"model":	model,
+		"model": model,
 		"messages": []map[string]any{
 			{"role": "user", "content": "what's 2+2?"},
 		},
@@ -74,9 +74,9 @@ func TestIsCompactionRequest_Normal(t *testing.T) {
 func TestIsCompactionRequest_MarkerOnlyInEarlierMessage(t *testing.T) {
 	b, _ := json.Marshal(map[string]any{
 		"messages": []map[string]any{
-			{"role": "user", "content": realInstruction},	// quoted earlier
+			{"role": "user", "content": realInstruction}, // quoted earlier
 			{"role": "assistant", "content": "got it"},
-			{"role": "user", "content": "now add tests"},	// real last turn
+			{"role": "user", "content": "now add tests"}, // real last turn
 		},
 	})
 	require.False(t, isCompactionRequest(b))
@@ -119,10 +119,10 @@ func testConfig(t *testing.T, upstream string) *proxyConfig {
 	require.Nil(t, err)
 
 	return &proxyConfig{
-		upstream:	u,
-		model:		"claude-haiku-4-5-20251001",
-		maxInputBytes:	defaultMaxInput,
-		logger:		log.New(io.Discard, "", 0),
+		upstream:      u,
+		model:         "claude-haiku-4-5-20251001",
+		maxInputBytes: defaultMaxInput,
+		logger:        log.New(io.Discard, "", 0),
 	}
 }
 
@@ -174,7 +174,7 @@ func TestProxy_SizeGuardSkipsSwap(t *testing.T) {
 	up := fakeUpstream(t)
 	defer up.Close()
 	cfg := testConfig(t, up.URL)
-	cfg.maxInputBytes = 10	// force the body over the guard
+	cfg.maxInputBytes = 10 // force the body over the guard
 	got := gotModel(t, cfg, "/v1/messages", compactionBody("claude-opus-4-8"))
 	require.Equal(t, "claude-opus-4-8", got)
 

@@ -26,6 +26,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -158,7 +159,7 @@ func startProxy(cfg *proxyConfig, addr string, idle time.Duration) (*http.Server
 	}()
 	if idle > 0 {
 		go func() {
-			t := time.NewTicker(time.Minute)
+			t := time.NewTicker(idleCheckInterval(idle))
 			defer t.Stop()
 			for range t.C {
 				if time.Since(time.Unix(0, last.Load())) > idle {
@@ -172,27 +173,71 @@ func startProxy(cfg *proxyConfig, addr string, idle time.Duration) (*http.Server
 	return server, ln.Addr().String(), done, nil
 }
 
-func cmdServe(args []string) {
+// idleCheckInterval picks how often to test for inactivity: frequently enough to
+// honor short idle windows in tests, but never more than once a minute.
+func idleCheckInterval(idle time.Duration) time.Duration {
+	iv := idle / 4
+	if iv > time.Minute {
+		iv = time.Minute
+	}
+	if iv <= 0 {
+		iv = time.Second
+	}
+	return iv
+}
+
+// alreadyListening reports whether something already accepts connections at addr.
+func alreadyListening(addr string) bool {
+	c, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	c.Close()
+	return true
+}
+
+// parseClaudeArgs returns the claude command line: everything after a "--"
+// separator if present, otherwise the args as given.
+func parseClaudeArgs(args []string) []string {
+	for i, a := range args {
+		if a == "--" {
+			return args[i+1:]
+		}
+	}
+	return args
+}
+
+// serveSetup builds the proxy and starts it listening, writing the pid file. It
+// returns the running server and a channel closed when it stops. The signal wait
+// is left to the caller so this core is testable.
+func serveSetup(args []string) (*http.Server, string, <-chan struct{}, error) {
 	port := flagValue(args, "--port", envOr(envPort, defaultPort))
 	logger := newLogger(flagValue(args, "--log", envOr(envLog, defaultLogPath())))
 	cfg, err := buildConfig(logger)
 	if err != nil {
-		logger.Fatalf("config error: %v", err)
+		return nil, "", nil, err
 	}
 	idle := time.Duration(envInt(envIdleMinutes, defaultIdleMinutes)) * time.Minute
 	server, addr, done, err := startProxy(cfg, net.JoinHostPort("127.0.0.1", port), idle)
 	if err != nil {
-		logger.Fatalf("listen on 127.0.0.1:%s failed: %v", port, err)
+		return nil, "", nil, fmt.Errorf("listen on 127.0.0.1:%s failed: %w", port, err)
 	}
 	logger.Printf("serving on http://%s -> %s (model %s)", addr, cfg.upstream, cfg.model)
 	writePidFile()
-	defer os.Remove(pidPath())
+	return server, addr, done, nil
+}
 
+func cmdServe(args []string) {
+	server, _, done, err := serveSetup(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "haiku-compact: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.Remove(pidPath())
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	select {
 	case <-stop:
-		logger.Printf("signal received; shutting down")
 		server.Close()
 	case <-done:
 	}
@@ -202,8 +247,7 @@ func cmdDaemon(args []string) {
 	port := flagValue(args, "--port", envOr(envPort, defaultPort))
 	addr := net.JoinHostPort("127.0.0.1", port)
 	// Already running? A successful dial means the port is owned; nothing to do.
-	if c, err := net.DialTimeout("tcp", addr, 300*time.Millisecond); err == nil {
-		c.Close()
+	if alreadyListening(addr) {
 		return
 	}
 	exe, err := os.Executable()
@@ -233,15 +277,11 @@ func cmdDaemon(args []string) {
 	}
 }
 
-func cmdLaunch(args []string) {
-	// Everything after an optional "--" is the claude command line.
-	claudeArgs := args
-	for i, a := range args {
-		if a == "--" {
-			claudeArgs = args[i+1:]
-			break
-		}
-	}
+// launchSetup starts an ephemeral proxy and points ANTHROPIC_BASE_URL at it,
+// returning the claude command line to run and the proxy server. The actual exec
+// of claude is left to the caller so this core is testable.
+func launchSetup(args []string) ([]string, *http.Server, error) {
+	claudeArgs := parseClaudeArgs(args)
 	// The real upstream is whatever ANTHROPIC_BASE_URL pointed at before we
 	// hijack it (or the configured/default endpoint).
 	upstream := envOr(envUpstream, os.Getenv("ANTHROPIC_BASE_URL"))
@@ -253,19 +293,26 @@ func cmdLaunch(args []string) {
 	logger := newLogger(envOr(envLog, defaultLogPath()))
 	cfg, err := buildConfig(logger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "haiku-compact: %v\n", err)
-		os.Exit(1)
+		return nil, nil, err
 	}
 	// Ephemeral port avoids clashing with an existing daemon.
-	_, addr, _, err := startProxy(cfg, "127.0.0.1:0", 0)
+	server, addr, _, err := startProxy(cfg, "127.0.0.1:0", 0)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "haiku-compact: %v\n", err)
-		os.Exit(1)
+		return nil, nil, err
 	}
 	_, port, _ := net.SplitHostPort(addr)
 	os.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:"+port)
 	logger.Printf("launch: proxy on %s -> %s (model %s)", addr, cfg.upstream, cfg.model)
+	return claudeArgs, server, nil
+}
 
+func cmdLaunch(args []string) {
+	claudeArgs, server, err := launchSetup(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "haiku-compact: %v\n", err)
+		os.Exit(1)
+	}
+	defer server.Close()
 	c := exec.Command("claude", claudeArgs...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
@@ -277,13 +324,17 @@ func cmdLaunch(args []string) {
 	}
 }
 
-func cmdStop() {
-	data, err := os.ReadFile(pidPath())
+func cmdStop() { stopDaemon(pidPath()) }
+
+// stopDaemon reads a pid from path, signals that process to terminate, and
+// removes the file. Missing or malformed pid files are reported, not fatal.
+func stopDaemon(path string) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "haiku-compact: no daemon running")
 		return
 	}
-	pid, err := strconv.Atoi(string(data))
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "haiku-compact: bad pid file: %v\n", err)
 		return
@@ -291,7 +342,7 @@ func cmdStop() {
 	if p, err := os.FindProcess(pid); err == nil {
 		p.Signal(syscall.SIGTERM)
 	}
-	os.Remove(pidPath())
+	os.Remove(path)
 }
 
 func writePidFile() {
