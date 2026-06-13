@@ -25,7 +25,8 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure
 type Rules struct {
-	Commands []CommandNode `json:"commands"`
+	Commands   []CommandNode       `json:"commands"`
+	MCPServers map[string][]string `json:"mcpServers"`
 }
 
 type CommandNode struct {
@@ -58,9 +59,15 @@ type xmlTest struct {
 }
 
 type xmlRules struct {
-	XMLName  xml.Name     `xml:"rules"`
-	Tests    []xmlTest    `xml:"test"`
-	Commands []xmlCommand `xml:"cmd"`
+	XMLName    xml.Name       `xml:"rules"`
+	Tests      []xmlTest      `xml:"test"`
+	Commands   []xmlCommand   `xml:"cmd"`
+	MCPServers []xmlMCPServer `xml:"mcpServer"`
+}
+
+type xmlMCPServer struct {
+	Name  string   `xml:"name,attr"`
+	Tools []string `xml:"tool"`
 }
 
 type xmlCommand struct {
@@ -107,6 +114,12 @@ func loadXMLRules(data []byte) (Rules, error) {
 	var r Rules
 	for _, xc := range xr.Commands {
 		r.Commands = append(r.Commands, convertXMLCommand(xc))
+	}
+	if len(xr.MCPServers) > 0 {
+		r.MCPServers = make(map[string][]string, len(xr.MCPServers))
+		for _, s := range xr.MCPServers {
+			r.MCPServers[s.Name] = s.Tools
+		}
 	}
 	return r, nil
 }
@@ -208,10 +221,6 @@ func main() {
 		return
 	}
 
-	if hi.ToolName != "Bash" {
-		os.Exit(0)
-	}
-
 	// Load rules from adjacent file
 	rulesPath := filepath.Join(filepath.Dir(os.Args[0]), "..", "rules.xml")
 	rulesData, err := os.ReadFile(rulesPath)
@@ -221,6 +230,19 @@ func main() {
 	var xmlErr error
 	rules, xmlErr = loadXMLRules(rulesData)
 	if xmlErr != nil {
+		os.Exit(0)
+	}
+
+	// Allow read-only MCP tools by server + tool pattern matching
+	if server, tool := parseMCPTool(hi.ToolName); tool != "" {
+		if matchMCPServer(rules.MCPServers, server, tool) {
+			outputDecision("allow", "")
+			return
+		}
+		os.Exit(0)
+	}
+
+	if hi.ToolName != "Bash" {
 		os.Exit(0)
 	}
 
