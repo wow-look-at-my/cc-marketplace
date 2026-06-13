@@ -1,4 +1,4 @@
-module no-overwrites
+module cleanup-bash-cmds
 
 go 1.23
 

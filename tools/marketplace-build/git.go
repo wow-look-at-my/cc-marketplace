@@ -1,11 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -51,147 +48,6 @@ func GetRepoInfo() (owner, repo string, err error) {
 	return "", "", fmt.Errorf("could not parse github repo from origin URL: %s", url)
 }
 
-// GetLatestTagVersion finds the highest version from plugin/{plugin}#* tags
-// Returns 0 if no tags exist
-func GetLatestTagVersion(plugin string) (int, error) {
-	prefix := fmt.Sprintf("plugin/%s#", plugin)
-	tags, err := ListTagsWithPrefix(prefix)
-	if err != nil {
-		return 0, nil
-	}
-
-	if len(tags) == 0 {
-		return 0, nil
-	}
-
-	// Find highest version
-	highest := 0
-	for _, tag := range tags {
-		// Skip 'latest' pointer tags
-		if strings.HasSuffix(tag, "#latest") {
-			continue
-		}
-
-		// Extract version from tag like "plugin/my-plugin#3"
-		hashParts := strings.SplitN(tag, "#", 2)
-		if len(hashParts) == 2 {
-			var v int
-			fmt.Sscanf(hashParts[1], "%d", &v)
-			if v > highest {
-				highest = v
-			}
-		}
-	}
-
-	return highest, nil
-}
-
-// HasCommitsAfterTag checks if there are commits to pluginPath after the latest version tag
-func HasCommitsAfterTag(plugin, pluginPath string) (bool, error) {
-	// Find highest version tag for this plugin
-	version, err := GetLatestTagVersion(plugin)
-	if err != nil || version == 0 {
-		// No tags exist, so definitely has changes (first build)
-		return true, nil
-	}
-
-	tagName := fmt.Sprintf("plugin/%s#%d", plugin, version)
-
-	// Read mh.plugin.json from the tag to get source commit
-	out, err := runGit("show", fmt.Sprintf("%s:mh.plugin.json", tagName))
-	if err != nil {
-		// Can't read metadata, assume we need to build
-		return true, nil
-	}
-
-	var metadata struct {
-		SourceCommit string `json:"sourceCommit"`
-	}
-	if err := json.Unmarshal([]byte(out), &metadata); err != nil || metadata.SourceCommit == "" {
-		// Invalid metadata, assume we need to build
-		return true, nil
-	}
-
-	// Count commits to plugin path since the source commit
-	out, err = runGit("rev-list", "--count", fmt.Sprintf("%s..HEAD", metadata.SourceCommit), "--", pluginPath)
-	if err != nil {
-		// If this fails, assume we need to build
-		return true, nil
-	}
-
-	count := strings.TrimSpace(out)
-	return count != "0", nil
-}
-
-// DeleteRemoteTags deletes tags from origin
-func DeleteRemoteTags(tags ...string) error {
-	for _, tag := range tags {
-		if _, err := runGit("push", "origin", ":refs/tags/"+tag); err != nil {
-			return fmt.Errorf("failed to delete tag %s: %w", tag, err)
-		}
-	}
-	return nil
-}
-
-// DeleteLocalTags deletes local tags
-func DeleteLocalTags(tags ...string) error {
-	for _, tag := range tags {
-		_ = runGitNoOutput("tag", "-d", tag)
-	}
-	return nil
-}
-
-// ReadFileFromTag reads a file's content from a git tag
-func ReadFileFromTag(tag, path string) (string, error) {
-	out, err := runGit("show", fmt.Sprintf("%s:%s", tag, path))
-	if err != nil {
-		return "", err
-	}
-	return out, nil
-}
-
-// ListFilesInTag lists files in a directory at a git tag
-// Returns slice of filenames (not full paths)
-func ListFilesInTag(tag, dirPath string) ([]string, error) {
-	// Use ls-tree to list directory contents
-	out, err := runGit("ls-tree", "--name-only", tag, dirPath+"/")
-	if err != nil {
-		return nil, err
-	}
-
-	if strings.TrimSpace(out) == "" {
-		return nil, nil
-	}
-
-	var files []string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		// ls-tree returns full paths, extract just the filename
-		name := filepath.Base(line)
-		files = append(files, name)
-	}
-	return files, nil
-}
-
-// ListTagsWithPrefix lists all tags matching a prefix (empty prefix = all tags)
-func ListTagsWithPrefix(prefix string) ([]string, error) {
-	var out string
-	var err error
-	if prefix == "" {
-		out, err = runGit("tag", "-l")
-	} else {
-		out, err = runGit("tag", "-l", prefix+"*")
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	if strings.TrimSpace(out) == "" {
-		return nil, nil
-	}
-
-	return strings.Split(strings.TrimSpace(out), "\n"), nil
-}
-
 var repoRoot string
 
 // getRepoRoot returns the root directory of the git repository
@@ -214,11 +70,6 @@ func getRepoRoot() string {
 var runGit = runGitReal
 
 func runGitReal(args ...string) (string, error) {
-	if os.Getenv("CI") == "" && len(args) > 0 && args[0] == "push" {
-		fmt.Printf("[local] skipping: git %v\n", args)
-		return "", nil
-	}
-
 	cmd := exec.Command("git", args...)
 	cmd.Dir = getRepoRoot()
 	out, err := cmd.Output()
@@ -230,69 +81,3 @@ func runGitReal(args ...string) (string, error) {
 	}
 	return string(out), nil
 }
-
-// runGitNoOutput runs a git command without returning output.
-// This is a variable so tests can replace it with a mock.
-var runGitNoOutput = runGitNoOutputReal
-
-func runGitNoOutputReal(args ...string) error {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = getRepoRoot()
-	return cmd.Run()
-}
-
-// ListPluginNames returns unique plugin names from plugin/{name}#* tags
-func ListPluginNames() ([]string, error) {
-	tags, err := ListTagsWithPrefix("plugin/")
-	if err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]bool)
-	var names []string
-	for _, tag := range tags {
-		// Parse plugin/{name}#{version}
-		hashParts := strings.SplitN(tag, "#", 2)
-		if len(hashParts) != 2 {
-			continue
-		}
-		pathParts := strings.SplitN(hashParts[0], "/", 2)
-		if len(pathParts) != 2 || pathParts[0] != "plugin" {
-			continue
-		}
-		name := pathParts[1]
-		if !seen[name] {
-			seen[name] = true
-			names = append(names, name)
-		}
-	}
-	return names, nil
-}
-
-// ListPluginTags returns all tags for a specific plugin, sorted by version ascending
-func ListPluginTags(plugin string) ([]string, error) {
-	prefix := fmt.Sprintf("plugin/%s#", plugin)
-	tags, err := ListTagsWithPrefix(prefix)
-	if err != nil {
-		return nil, err
-	}
-
-	// Filter out #latest pointer
-	var result []string
-	for _, tag := range tags {
-		if !strings.HasSuffix(tag, "#latest") {
-			result = append(result, tag)
-		}
-	}
-	return result, nil
-}
-
-// RemoteBranchExists checks if a branch exists on the remote
-func RemoteBranchExists(branch string) (bool, error) {
-	out, err := runGit("ls-remote", "--heads", "origin", branch)
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(out) != "", nil
-}
-
