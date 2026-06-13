@@ -797,4 +797,49 @@
       <allowedFlags/>
     </subcmd>
   </cmd>
+
+  <!-- curl (read-only localhost API) -->
+  <cmd name="curl" allowedFlags="*">
+    <test cmd="curl -s http://localhost:9120/read/ListStacks -H 'Content-Type: application/json' -H 'X-Api-Key: asdf' -H 'X-Api-Secret: fdsa' -d '{}'" expect="allow"/>
+    <test cmd="curl http://localhost:9120/read/SomeEndpoint" expect="allow"/>
+    <test cmd="curl http://localhost:9120/write/Something" expect=""/>
+    <test cmd="curl http://evil.com/" expect=""/>
+    <test cmd="curl" expect=""/>
+    <flagsWithValue>
+      <flag name="-H" />
+      <flag name="--header" />
+      <flag name="-d" />
+      <flag name="--data" />
+      <flag name="--data-raw" />
+      <flag name="--data-binary" />
+      <flag name="--data-urlencode" />
+      <flag name="-o" />
+      <flag name="--output" />
+      <flag name="-X" />
+      <flag name="--request" />
+      <flag name="-u" />
+      <flag name="--user" />
+      <flag name="-A" />
+      <flag name="--user-agent" />
+      <flag name="-e" />
+      <flag name="--referer" />
+      <flag name="-b" />
+      <flag name="--cookie" />
+      <flag name="-c" />
+      <flag name="--cookie-jar" />
+      <flag name="-w" />
+      <flag name="--write-out" />
+      <flag name="--connect-timeout" />
+      <flag name="--max-time" />
+      <flag name="-m" />
+      <flag name="--retry" />
+      <flag name="--retry-delay" />
+      <flag name="--retry-max-time" />
+      <flag name="-x" />
+      <flag name="--proxy" />
+    </flagsWithValue>
+    <allowedArgPrefixes>
+      <value>http://localhost:9120/read</value>
+    </allowedArgPrefixes>
+  </cmd>
 </rules>

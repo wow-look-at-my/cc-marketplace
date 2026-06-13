@@ -29,19 +29,20 @@ type Rules struct {
 }
 
 type CommandNode struct {
-	Name              interface{}      `json:"name"` // string or []string
-	Description       string           `json:"description,omitempty"`
-	AllowedFlags      interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
-	DeniedFlags       []string         `json:"deniedFlags,omitempty"`
-	ExecFlags         []string         `json:"execFlags,omitempty"`
-	RequiredFlags     []string         `json:"requiredFlags,omitempty"`
-	RequireFlagValue  *RequireFlagRule `json:"requireFlagValue,omitempty"`
-	DenyWithMessage   string           `json:"denyWithMessage,omitempty"`
-	FlagsWithValue    []string         `json:"flagsWithValue,omitempty"`
-	HelpAlwaysAllowed bool             `json:"helpAlwaysAllowed,omitempty"`
-	BareOnly          bool             `json:"bareOnly,omitempty"`
-	DenyArgSubstrings []string         `json:"denyArgSubstrings,omitempty"`
-	Subcommands       []CommandNode    `json:"subcommands,omitempty"`
+	Name               interface{}      `json:"name"` // string or []string
+	Description        string           `json:"description,omitempty"`
+	AllowedFlags       interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
+	DeniedFlags        []string         `json:"deniedFlags,omitempty"`
+	ExecFlags          []string         `json:"execFlags,omitempty"`
+	RequiredFlags      []string         `json:"requiredFlags,omitempty"`
+	RequireFlagValue   *RequireFlagRule `json:"requireFlagValue,omitempty"`
+	DenyWithMessage    string           `json:"denyWithMessage,omitempty"`
+	FlagsWithValue     []string         `json:"flagsWithValue,omitempty"`
+	HelpAlwaysAllowed  bool             `json:"helpAlwaysAllowed,omitempty"`
+	BareOnly           bool             `json:"bareOnly,omitempty"`
+	DenyArgSubstrings  []string         `json:"denyArgSubstrings,omitempty"`
+	AllowedArgPrefixes []string         `json:"allowedArgPrefixes,omitempty"`
+	Subcommands        []CommandNode    `json:"subcommands,omitempty"`
 }
 
 type RequireFlagRule struct {
@@ -64,21 +65,22 @@ type xmlRules struct {
 }
 
 type xmlCommand struct {
-	Name              string          `xml:"name,attr"`
-	Description       string          `xml:"description,attr,omitempty"`
-	AllowedFlagsAttr  string          `xml:"allowedFlags,attr,omitempty"`
-	DenyWithMessage   string          `xml:"denyWithMessage,attr,omitempty"`
-	HelpAlwaysAllowed bool            `xml:"helpAlwaysAllowed,attr,omitempty"`
-	BareOnly          bool            `xml:"bareOnly,attr,omitempty"`
-	Tests             []xmlTest       `xml:"test"`
-	AllowedFlags      *xmlFlagList    `xml:"allowedFlags"`
-	DeniedFlags       *xmlFlagList    `xml:"deniedFlags"`
-	ExecFlags         *xmlFlagList    `xml:"execFlags"`
-	RequiredFlags     *xmlFlagList    `xml:"requiredFlags"`
-	FlagsWithValue    *xmlFlagList    `xml:"flagsWithValue"`
-	DenyArgSubstrings *xmlStringList  `xml:"denyArgSubstrings"`
-	RequireFlagValue  *xmlRequireFlag `xml:"requireFlagValue"`
-	Subcommands       []xmlCommand    `xml:"subcmd"`
+	Name               string          `xml:"name,attr"`
+	Description        string          `xml:"description,attr,omitempty"`
+	AllowedFlagsAttr   string          `xml:"allowedFlags,attr,omitempty"`
+	DenyWithMessage    string          `xml:"denyWithMessage,attr,omitempty"`
+	HelpAlwaysAllowed  bool            `xml:"helpAlwaysAllowed,attr,omitempty"`
+	BareOnly           bool            `xml:"bareOnly,attr,omitempty"`
+	Tests              []xmlTest       `xml:"test"`
+	AllowedFlags       *xmlFlagList    `xml:"allowedFlags"`
+	DeniedFlags        *xmlFlagList    `xml:"deniedFlags"`
+	ExecFlags          *xmlFlagList    `xml:"execFlags"`
+	RequiredFlags      *xmlFlagList    `xml:"requiredFlags"`
+	FlagsWithValue     *xmlFlagList    `xml:"flagsWithValue"`
+	DenyArgSubstrings  *xmlStringList  `xml:"denyArgSubstrings"`
+	AllowedArgPrefixes *xmlStringList  `xml:"allowedArgPrefixes"`
+	RequireFlagValue   *xmlRequireFlag `xml:"requireFlagValue"`
+	Subcommands        []xmlCommand    `xml:"subcmd"`
 }
 
 type xmlFlagList struct {
@@ -147,6 +149,10 @@ func convertXMLCommand(xc xmlCommand) CommandNode {
 
 	if xc.DenyArgSubstrings != nil {
 		node.DenyArgSubstrings = xc.DenyArgSubstrings.Values
+	}
+
+	if xc.AllowedArgPrefixes != nil {
+		node.AllowedArgPrefixes = xc.AllowedArgPrefixes.Values
 	}
 
 	if xc.RequireFlagValue != nil {
@@ -380,9 +386,25 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		}
 	}
 
-	// Check allowed flags
+	// Check allowed flags (and optionally constrain positional args by prefix)
 	if node.AllowedFlags != nil {
-		if checkAllowedFlags(remaining, node.AllowedFlags) {
+		effectiveRemaining := remaining
+		if len(node.FlagsWithValue) > 0 {
+			effectiveRemaining = stripFlagsWithValue(remaining, node.FlagsWithValue)
+		}
+
+		if len(node.AllowedArgPrefixes) > 0 {
+			flags, positionals := splitFlagsAndArgs(effectiveRemaining)
+			if len(positionals) == 0 {
+				return "", ""
+			}
+			if !allArgsMatchPrefix(positionals, node.AllowedArgPrefixes) {
+				return "", ""
+			}
+			if checkAllowedFlags(flags, node.AllowedFlags) {
+				return "allow", ""
+			}
+		} else if checkAllowedFlags(remaining, node.AllowedFlags) {
 			return "allow", ""
 		}
 	}
@@ -685,6 +707,33 @@ func getFlagValue(args []string, flags []string) string {
 		}
 	}
 	return ""
+}
+
+func splitFlagsAndArgs(args []string) (flags, positionals []string) {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+		} else {
+			positionals = append(positionals, arg)
+		}
+	}
+	return
+}
+
+func allArgsMatchPrefix(args []string, prefixes []string) bool {
+	for _, arg := range args {
+		matched := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(arg, prefix) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }
 
 func outputDecision(behavior, message string) {
