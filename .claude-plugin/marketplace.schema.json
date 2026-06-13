@@ -85,6 +85,14 @@
                     "type": "string",
                     "description": "NPM package name"
                   },
+                  "version": {
+                    "type": "string",
+                    "description": "Package version (for npm sources)"
+                  },
+                  "registry": {
+                    "type": "string",
+                    "description": "Custom npm registry URL"
+                  },
                   "path": {
                     "type": "string",
                     "description": "File or directory path"

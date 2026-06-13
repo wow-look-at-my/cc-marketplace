@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseMCPTool(t *testing.T) {
@@ -80,4 +80,23 @@ func TestMatchMCPServerExactTool(t *testing.T) {
 	assert.True(t, matchMCPServer(servers, "github", "issue_read"))
 	assert.True(t, matchMCPServer(servers, "github", "pull_request_read"))
 	assert.False(t, matchMCPServer(servers, "github", "issue_write"))
+}
+
+func TestLoadXMLRulesMCPServers(t *testing.T) {
+	xml := `<?xml version="1.0" encoding="UTF-8"?>
+<rules>
+  <mcpServer name="grafana">
+    <tool>get_*</tool>
+    <tool>list_*</tool>
+  </mcpServer>
+  <mcpServer name="cloudflare">
+    <tool>search_*</tool>
+  </mcpServer>
+</rules>`
+	rules, err := loadXMLRules([]byte(xml))
+	assert.NoError(t, err)
+	assert.Equal(t, map[string][]string{
+		"grafana":    {"get_*", "list_*"},
+		"cloudflare": {"search_*"},
+	}, rules.MCPServers)
 }

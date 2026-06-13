@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
-	"path"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -24,7 +25,7 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure
 type Rules struct {
-	Commands   []CommandNode        `json:"commands"`
+	Commands   []CommandNode       `json:"commands"`
 	MCPServers map[string][]string `json:"mcpServers"`
 }
 
@@ -40,6 +41,7 @@ type CommandNode struct {
 	FlagsWithValue    []string         `json:"flagsWithValue,omitempty"`
 	HelpAlwaysAllowed bool             `json:"helpAlwaysAllowed,omitempty"`
 	BareOnly          bool             `json:"bareOnly,omitempty"`
+	DenyArgSubstrings []string         `json:"denyArgSubstrings,omitempty"`
 	Subcommands       []CommandNode    `json:"subcommands,omitempty"`
 }
 
@@ -47,6 +49,146 @@ type RequireFlagRule struct {
 	Flags   []string `json:"flags"`
 	Default string   `json:"default"`
 	Allowed []string `json:"allowed"`
+}
+
+// XML parsing types
+
+type xmlTest struct {
+	Command  string `xml:"cmd,attr"`
+	Expected string `xml:"expect,attr"`
+}
+
+type xmlRules struct {
+	XMLName    xml.Name       `xml:"rules"`
+	Tests      []xmlTest      `xml:"test"`
+	Commands   []xmlCommand   `xml:"cmd"`
+	MCPServers []xmlMCPServer `xml:"mcpServer"`
+}
+
+type xmlMCPServer struct {
+	Name  string   `xml:"name,attr"`
+	Tools []string `xml:"tool"`
+}
+
+type xmlCommand struct {
+	Name              string          `xml:"name,attr"`
+	Description       string          `xml:"description,attr,omitempty"`
+	AllowedFlagsAttr  string          `xml:"allowedFlags,attr,omitempty"`
+	DenyWithMessage   string          `xml:"denyWithMessage,attr,omitempty"`
+	HelpAlwaysAllowed bool            `xml:"helpAlwaysAllowed,attr,omitempty"`
+	BareOnly          bool            `xml:"bareOnly,attr,omitempty"`
+	Tests             []xmlTest       `xml:"test"`
+	AllowedFlags      *xmlFlagList    `xml:"allowedFlags"`
+	DeniedFlags       *xmlFlagList    `xml:"deniedFlags"`
+	ExecFlags         *xmlFlagList    `xml:"execFlags"`
+	RequiredFlags     *xmlFlagList    `xml:"requiredFlags"`
+	FlagsWithValue    *xmlFlagList    `xml:"flagsWithValue"`
+	DenyArgSubstrings *xmlStringList  `xml:"denyArgSubstrings"`
+	RequireFlagValue  *xmlRequireFlag `xml:"requireFlagValue"`
+	Subcommands       []xmlCommand    `xml:"subcmd"`
+}
+
+type xmlFlagList struct {
+	Flags []xmlFlag `xml:"flag"`
+}
+
+type xmlFlag struct {
+	Name string `xml:"name,attr"`
+}
+
+type xmlStringList struct {
+	Values []string `xml:"value"`
+}
+
+type xmlRequireFlag struct {
+	Default string    `xml:"default,attr"`
+	Flags   []xmlFlag `xml:"flag"`
+	Allowed []string  `xml:"allowed"`
+}
+
+func loadXMLRules(data []byte) (Rules, error) {
+	var xr xmlRules
+	if err := xml.Unmarshal(data, &xr); err != nil {
+		return Rules{}, err
+	}
+	var r Rules
+	for _, xc := range xr.Commands {
+		r.Commands = append(r.Commands, convertXMLCommand(xc))
+	}
+	if len(xr.MCPServers) > 0 {
+		r.MCPServers = make(map[string][]string, len(xr.MCPServers))
+		for _, s := range xr.MCPServers {
+			r.MCPServers[s.Name] = s.Tools
+		}
+	}
+	return r, nil
+}
+
+func convertXMLCommand(xc xmlCommand) CommandNode {
+	node := CommandNode{
+		Description:       xc.Description,
+		DenyWithMessage:   xc.DenyWithMessage,
+		HelpAlwaysAllowed: xc.HelpAlwaysAllowed,
+		BareOnly:          xc.BareOnly,
+	}
+
+	names := strings.Split(xc.Name, ",")
+	if len(names) == 1 {
+		node.Name = names[0]
+	} else {
+		ifaces := make([]interface{}, len(names))
+		for i, n := range names {
+			ifaces[i] = strings.TrimSpace(n)
+		}
+		node.Name = ifaces
+	}
+
+	if xc.AllowedFlagsAttr == "*" {
+		node.AllowedFlags = "*"
+	} else if xc.AllowedFlags != nil {
+		flags := make([]interface{}, len(xc.AllowedFlags.Flags))
+		for i, f := range xc.AllowedFlags.Flags {
+			flags[i] = f.Name
+		}
+		node.AllowedFlags = flags
+	}
+
+	node.DeniedFlags = xmlFlagNames(xc.DeniedFlags)
+	node.ExecFlags = xmlFlagNames(xc.ExecFlags)
+	node.RequiredFlags = xmlFlagNames(xc.RequiredFlags)
+	node.FlagsWithValue = xmlFlagNames(xc.FlagsWithValue)
+
+	if xc.DenyArgSubstrings != nil {
+		node.DenyArgSubstrings = xc.DenyArgSubstrings.Values
+	}
+
+	if xc.RequireFlagValue != nil {
+		rfv := &RequireFlagRule{
+			Default: xc.RequireFlagValue.Default,
+			Allowed: xc.RequireFlagValue.Allowed,
+		}
+		for _, f := range xc.RequireFlagValue.Flags {
+			rfv.Flags = append(rfv.Flags, f.Name)
+		}
+		node.RequireFlagValue = rfv
+	}
+
+	for _, xs := range xc.Subcommands {
+		node.Subcommands = append(node.Subcommands, convertXMLCommand(xs))
+	}
+
+	return node
+}
+
+func xmlFlagNames(fl *xmlFlagList) []string {
+	if fl == nil {
+		return nil
+	}
+	names := make([]string, len(fl.Flags))
+	for i, f := range fl.Flags {
+		names[i] = f.Name
+	}
+	return names
 }
 
 // Permission response
@@ -80,12 +222,14 @@ func main() {
 	}
 
 	// Load rules from adjacent file
-	rulesPath := filepath.Join(filepath.Dir(os.Args[0]), "..", "rules.json")
+	rulesPath := filepath.Join(filepath.Dir(os.Args[0]), "..", "rules.xml")
 	rulesData, err := os.ReadFile(rulesPath)
 	if err != nil {
 		os.Exit(0)
 	}
-	if err := json.Unmarshal(rulesData, &rules); err != nil {
+	var xmlErr error
+	rules, xmlErr = loadXMLRules(rulesData)
+	if xmlErr != nil {
 		os.Exit(0)
 	}
 
@@ -173,6 +317,20 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 	// Check deny with message first
 	if node.DenyWithMessage != "" {
 		return "deny", node.DenyWithMessage
+	}
+
+	// If any argument contains a denied substring, this node does not match.
+	// Used for tools that accept script arguments (awk, sed, etc.) where
+	// dangerous features (system(), getline, I/O redirection) appear as
+	// substrings of the script body.
+	if len(node.DenyArgSubstrings) > 0 {
+		for _, arg := range args {
+			for _, substr := range node.DenyArgSubstrings {
+				if strings.Contains(arg, substr) {
+					return "", ""
+				}
+			}
+		}
 	}
 
 	// Check required flags
@@ -427,12 +585,8 @@ func hasOutputRedirect(node syntax.Node) bool {
 				switch r.Op {
 				case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll,
 					syntax.DplOut, syntax.ClbOut, syntax.RdrInOut:
-					// Allow stderr redirects: 2>/dev/null and 2>&1
-					if r.N != nil && r.N.Value == "2" {
-						target := redirectTarget(r)
-						if target == "/dev/null" || (r.Op == syntax.DplOut && target == "1") {
-							continue
-						}
+					if isAllowedRedirect(r) {
+						continue
 					}
 					found = true
 					return false
@@ -444,15 +598,54 @@ func hasOutputRedirect(node syntax.Node) bool {
 	return found
 }
 
+// isAllowedRedirect reports whether a redirect operation is safe to auto-allow.
+// Permitted: 2>&1, and stdout/stderr writes to /dev/null or under /tmp/.
+func isAllowedRedirect(r *syntax.Redirect) bool {
+	fd := "1"
+	if r.N != nil {
+		fd = r.N.Value
+	}
+	target := redirectTarget(r)
+
+	// 2>&1
+	if r.Op == syntax.DplOut {
+		return fd == "2" && target == "1"
+	}
+
+	switch r.Op {
+	case syntax.RdrOut, syntax.AppOut:
+		if fd != "1" && fd != "2" {
+			return false
+		}
+	case syntax.RdrAll, syntax.AppAll:
+		// &> and &>> redirect both stdout and stderr
+	default:
+		return false
+	}
+
+	return isSafeRedirectPath(target)
+}
+
+// isSafeRedirectPath reports whether target is /dev/null or a path under /tmp/.
+// path.Clean defeats traversal attempts like /tmp/../etc/passwd.
+func isSafeRedirectPath(target string) bool {
+	if target == "/dev/null" {
+		return true
+	}
+	return strings.HasPrefix(path.Clean(target), "/tmp/")
+}
+
 func redirectTarget(r *syntax.Redirect) string {
 	if r.Word == nil {
 		return ""
 	}
 	var parts []string
 	for _, p := range r.Word.Parts {
-		if lit, ok := p.(*syntax.Lit); ok {
-			parts = append(parts, lit.Value)
+		lit, ok := p.(*syntax.Lit)
+		if !ok {
+			return ""
 		}
+		parts = append(parts, lit.Value)
 	}
 	return strings.Join(parts, "")
 }
@@ -477,6 +670,10 @@ func hasAnyFlag(args []string, flags []string) bool {
 	}
 	for _, arg := range args {
 		if flagSet[arg] {
+			return true
+		}
+		// Also match --flag=value form.
+		if idx := strings.Index(arg, "="); idx > 0 && flagSet[arg[:idx]] {
 			return true
 		}
 	}
@@ -510,36 +707,6 @@ func getFlagValue(args []string, flags []string) string {
 		}
 	}
 	return ""
-}
-
-// parseMCPTool splits "mcp__<server>__<tool>" into server and tool.
-// Returns ("", "") if the name is not an MCP tool.
-func parseMCPTool(toolName string) (server, tool string) {
-	if !strings.HasPrefix(toolName, "mcp__") {
-		return "", ""
-	}
-	lastIdx := strings.LastIndex(toolName, "__")
-	if lastIdx <= 4 { // must have at least mcp__x__
-		return "", ""
-	}
-	return toolName[5:lastIdx], toolName[lastIdx+2:]
-}
-
-// matchMCPServer checks whether a server+tool combination is allowed.
-// Server keys in the map are glob patterns matched against the server name;
-// values are glob patterns matched against the tool name.
-func matchMCPServer(servers map[string][]string, server, tool string) bool {
-	for serverPat, toolPats := range servers {
-		if matched, _ := path.Match(serverPat, server); !matched {
-			continue
-		}
-		for _, toolPat := range toolPats {
-			if matched, _ := path.Match(toolPat, tool); matched {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func outputDecision(behavior, message string) {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -16,35 +15,29 @@ func runPrepareMatrix(cmd *cobra.Command, args []string) error {
 	repoRoot := getRepoRoot()
 	pluginsDir := filepath.Join(repoRoot, "plugins")
 
-	// Check if infrastructure changed (workflow or marketplace-build)
-	infraChanged := hasInfraChanges(repoRoot)
-	if infraChanged {
-		fmt.Fprintf(os.Stderr, "Infrastructure changed - rebuilding all plugins\n")
-	}
-
-	// Find all plugins with mh.include_in_marketplace: true
+	// Find all plugins with mh.include_in_marketplace: true. Without orphan
+	// tags there is no per-plugin "previous version" to diff against, and the
+	// pages registry has to carry every plugin every push (otherwise unchanged
+	// plugins fall out of the freshly-deployed gh-pages snapshot), so include
+	// every marketplace plugin unconditionally.
 	entries, err := os.ReadDir(pluginsDir)
 	if err != nil {
 		return fmt.Errorf("failed to read plugins directory: %w", err)
 	}
 
-	var changedPlugins []string
-
+	var pluginNames []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
 		pluginName := entry.Name()
-		pluginPath := filepath.Join(pluginsDir, pluginName)
-		pluginJSONPath := filepath.Join(pluginPath, ".claude-plugin", "plugin.json")
+		pluginJSONPath := filepath.Join(pluginsDir, pluginName, ".claude-plugin", "plugin.json")
 
-		// Check if plugin.json exists
 		if _, err := os.Stat(pluginJSONPath); os.IsNotExist(err) {
 			continue
 		}
 
-		// Read and parse plugin.json
 		data, err := os.ReadFile(pluginJSONPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to read %s: %v\n", pluginJSONPath, err)
@@ -57,37 +50,20 @@ func runPrepareMatrix(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// Check mh.include_in_marketplace
 		if !isIncludedInMarketplace(pluginJSON) {
 			continue
 		}
 
-		// If infra changed, rebuild all plugins
-		if infraChanged {
-			changedPlugins = append(changedPlugins, pluginName)
-			continue
-		}
-
-		// Check if there are commits after the latest tag
-		hasChanges, err := HasCommitsAfterTag(pluginName, pluginPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to check changes for %s: %v\n", pluginName, err)
-			continue
-		}
-
-		if hasChanges {
-			changedPlugins = append(changedPlugins, pluginName)
-		}
+		pluginNames = append(pluginNames, pluginName)
 	}
 
-	// Output in GITHUB_OUTPUT format
-	pluginsJSON, err := json.Marshal(changedPlugins)
+	pluginsJSON, err := json.Marshal(pluginNames)
 	if err != nil {
 		return fmt.Errorf("failed to marshal plugins: %w", err)
 	}
 
 	fmt.Printf("plugins=%s\n", pluginsJSON)
-	fmt.Printf("has_changes=%t\n", len(changedPlugins) > 0)
+	fmt.Printf("has_changes=%t\n", len(pluginNames) > 0)
 
 	return nil
 }
@@ -101,78 +77,4 @@ func isIncludedInMarketplace(pluginJSON map[string]interface{}) bool {
 
 	include, ok := mh["include_in_marketplace"].(bool)
 	return ok && include
-}
-
-// hasInfraChanges checks if workflow or marketplace-build changed since the oldest plugin tag
-func hasInfraChanges(repoRoot string) bool {
-	// Get the oldest plugin tag to use as baseline
-	oldestCommit := getOldestPluginTagCommit()
-	if oldestCommit == "" {
-		// No tags exist, so this is first build - not an infra change
-		return false
-	}
-
-	// Check if workflow or tools changed since oldest tag
-	infraPaths := []string{
-		filepath.Join(repoRoot, ".github/workflows"),
-		filepath.Join(repoRoot, "tools/marketplace-build"),
-	}
-
-	for _, path := range infraPaths {
-		out, err := runGit("rev-list", "--count", fmt.Sprintf("%s..HEAD", oldestCommit), "--", path)
-		if err != nil {
-			continue
-		}
-		count := strings.TrimSpace(out)
-		if count != "0" {
-			return true
-		}
-	}
-
-	return false
-}
-
-// getOldestPluginTagCommit returns the source commit of the oldest plugin tag
-func getOldestPluginTagCommit() string {
-	// List all plugin tags (format: plugin/{name}#{version})
-	tags, err := ListTagsWithPrefix("plugin/")
-	if err != nil || len(tags) == 0 {
-		return ""
-	}
-
-	// Find the oldest source commit across all tags
-	var oldestCommit string
-	for _, tag := range tags {
-		// Skip #latest pointer tags
-		if strings.HasSuffix(tag, "#latest") {
-			continue
-		}
-
-		// Read mh.plugin.json from the tag
-		metaOut, err := runGit("show", fmt.Sprintf("%s:mh.plugin.json", tag))
-		if err != nil {
-			continue
-		}
-
-		var metadata struct {
-			SourceCommit string `json:"sourceCommit"`
-		}
-		if err := json.Unmarshal([]byte(metaOut), &metadata); err != nil || metadata.SourceCommit == "" {
-			continue
-		}
-
-		if oldestCommit == "" {
-			oldestCommit = metadata.SourceCommit
-			continue
-		}
-
-		// Check if this commit is older (is an ancestor of current oldest)
-		_, err = runGit("merge-base", "--is-ancestor", metadata.SourceCommit, oldestCommit)
-		if err == nil {
-			// metadata.SourceCommit is an ancestor of oldestCommit, so it's older
-			oldestCommit = metadata.SourceCommit
-		}
-	}
-
-	return oldestCommit
 }

@@ -1,0 +1,24 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "detect-permission-seeking",
+	"description": "Detects permission-seeking patterns in assistant messages and blocks the stop with a lecture about autonomy",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["stop", "permission", "autonomy", "behavior", "hook"],
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/detect-permission-seeking"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
