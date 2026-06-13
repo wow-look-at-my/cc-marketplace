@@ -145,8 +145,8 @@ prebuild:
 
 The marketplace builder runs in this order:
 
-1. `just prebuild` (if recipe exists in justfile)
-2. **go-toolchain** (automatically invoked if any `.go` files are found in the plugin directory — downloads from `https://github.com/wow-look-at-my/go-toolchain/releases/latest`)
+1. **go-toolchain** (CI runs `wow-look-at-my/go-toolchain@latest` action if any `.go` files are found — builds cross-platform binaries for linux/darwin × amd64/arm64)
+2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
 See `example-plugin/justfile.template` for examples.
@@ -169,6 +169,11 @@ When you push to any branch, CI will:
 3. Run tests
 4. Create an orphan tag with the built plugin: `plugin/{plugin}/v{version}`
 5. Update `marketplace.json` with the new version
+6. Smoke-test the published marketplace by driving real Claude Code to `claude
+   plugin marketplace add` + `install` + `update` **every** plugin (the
+   `smoke-test` job in `release.yml`). Because Claude installs all plugins into a
+   single shared npm prefix, one unreachable tarball fails the run — this guards
+   against a plugin's published artifact going missing (e.g. a stale registry URL).
 
 **You don't need to manually edit marketplace.json** - CI handles it automatically.
 
