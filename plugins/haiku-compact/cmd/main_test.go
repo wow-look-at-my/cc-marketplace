@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -280,6 +281,39 @@ func TestMain_HelpDispatch(t *testing.T) {
 	defer func() { os.Args = old }()
 	os.Args = []string{"haiku-compact", "help"}
 	main()
+}
+
+func TestProxy_UpstreamError(t *testing.T) {
+	cfg := testConfig(t, "http://127.0.0.1:1") // nothing listens on port 1
+	handler := newProxyHandler(cfg)
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(string(normalBody("m"))))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+}
+
+func TestLaunchSetup_DefaultUpstream(t *testing.T) {
+	t.Setenv("HAIKU_COMPACT_UPSTREAM", "")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	_, server, err := launchSetup(nil)
+	require.NoError(t, err)
+	defer server.Close()
+	require.Equal(t, defaultUpstream, os.Getenv("HAIKU_COMPACT_UPSTREAM"))
+}
+
+func TestCmdDaemon_SpawnError(t *testing.T) {
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	_, port, _ := net.SplitHostPort(probe.Addr().String())
+	require.NoError(t, probe.Close())
+
+	orig := startDetached
+	defer func() { startDetached = orig }()
+	startDetached = func(exe string, args []string, logPath string) error {
+		return errors.New("boom")
+	}
+	t.Setenv("TMPDIR", t.TempDir())
+	cmdDaemon([]string{"--port", port}) // spawn fails -> reports and returns
 }
 
 func TestUsage(t *testing.T) {
