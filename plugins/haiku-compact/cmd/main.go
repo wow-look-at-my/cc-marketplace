@@ -249,8 +249,32 @@ func waitForShutdown(server *http.Server, done <-chan struct{}, sig <-chan os.Si
 	}
 }
 
+// configuredForProxy reports whether ANTHROPIC_BASE_URL points at our loopback
+// port -- i.e. the user opted in via settings.json env. When it does not, the
+// SessionStart daemon is a no-op, so merely installing the plugin (or using the
+// `launch` wrapper, which uses its own ephemeral port) never spawns a stray
+// background proxy.
+func configuredForProxy(port string) bool {
+	base := os.Getenv("ANTHROPIC_BASE_URL")
+	if base == "" {
+		return false
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	switch u.Hostname() {
+	case "127.0.0.1", "localhost", "::1":
+		return u.Port() == port
+	}
+	return false
+}
+
 func cmdDaemon(args []string) {
 	port := flagValue(args, "--port", envOr(envPort, defaultPort))
+	if !configuredForProxy(port) {
+		return // ANTHROPIC_BASE_URL is not pointed at us; nothing to do
+	}
 	addr := net.JoinHostPort("127.0.0.1", port)
 	// Already running? A successful dial means the port is owned; nothing to do.
 	if alreadyListening(addr) {

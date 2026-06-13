@@ -39,9 +39,7 @@ Run Claude Code through the bundled launcher. It starts an ephemeral proxy, poin
 
 ### Option B: always-on daemon + settings env
 
-The plugin's `SessionStart` hook already starts the proxy daemon automatically
-(idempotent; it self-exits after an idle period). You just have to point Claude
-Code at it once, by adding this to your `settings.json`:
+Point Claude Code at the proxy once, by adding this to your `settings.json`:
 
 ```json
 {
@@ -51,7 +49,11 @@ Code at it once, by adding this to your `settings.json`:
 }
 ```
 
-That's it. The daemon listens on `127.0.0.1:8788` by default.
+That's it. The plugin's `SessionStart` hook starts the proxy daemon automatically
+(idempotent; it self-exits after an idle period). The hook only starts the daemon
+when `ANTHROPIC_BASE_URL` actually points at its port, so installing the plugin
+without this setting -- or using Option A -- never spawns a stray background
+process. The daemon listens on `127.0.0.1:8788` by default.
 
 ## Verifying it works
 

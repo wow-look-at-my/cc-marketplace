@@ -170,8 +170,22 @@ func TestCmdDaemon_AlreadyRunning(t *testing.T) {
 	require.NoError(t, err)
 	defer ln.Close()
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:"+port) // opt in
 	// A listener already owns the port, so daemon must return without spawning.
 	cmdDaemon([]string{"--port", port})
+}
+
+func TestConfiguredForProxy(t *testing.T) {
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	require.False(t, configuredForProxy("8788"))
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:8788")
+	require.True(t, configuredForProxy("8788"))
+	t.Setenv("ANTHROPIC_BASE_URL", "http://localhost:8788")
+	require.True(t, configuredForProxy("8788"))
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:9999")
+	require.False(t, configuredForProxy("8788"))
+	t.Setenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+	require.False(t, configuredForProxy("8788"))
 }
 
 func TestStopDaemon_NoFile(t *testing.T) {
@@ -250,7 +264,8 @@ func TestCmdDaemon_SpawnPath(t *testing.T) {
 	}()
 
 	t.Setenv("TMPDIR", t.TempDir())
-	cmdDaemon([]string{"--port", port}) // free -> spawn (stub binds) -> poll sees it -> return
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:"+port) // opt in
+	cmdDaemon([]string{"--port", port})                      // free -> spawn (stub binds) -> poll sees it -> return
 	require.True(t, alreadyListening(net.JoinHostPort("127.0.0.1", port)))
 }
 
@@ -313,7 +328,8 @@ func TestCmdDaemon_SpawnError(t *testing.T) {
 		return errors.New("boom")
 	}
 	t.Setenv("TMPDIR", t.TempDir())
-	cmdDaemon([]string{"--port", port}) // spawn fails -> reports and returns
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:"+port) // opt in
+	cmdDaemon([]string{"--port", port})                      // spawn fails -> reports and returns
 }
 
 func TestUsage(t *testing.T) {
