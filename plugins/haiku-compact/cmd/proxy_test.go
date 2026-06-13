@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"github.com/stretchr/testify/require"
 )
 
 // realInstruction reproduces the tail of Claude Code's compaction summarization
@@ -23,8 +24,8 @@ Your task is to create a detailed summary of the conversation so far, paying clo
 
 func compactionBody(model string) []byte {
 	b, _ := json.Marshal(map[string]any{
-		"model":      model,
-		"max_tokens": 20000,
+		"model":	model,
+		"max_tokens":	20000,
 		"messages": []map[string]any{
 			{"role": "user", "content": "please build the feature"},
 			{"role": "assistant", "content": "done"},
@@ -36,7 +37,7 @@ func compactionBody(model string) []byte {
 
 func normalBody(model string) []byte {
 	b, _ := json.Marshal(map[string]any{
-		"model": model,
+		"model":	model,
 		"messages": []map[string]any{
 			{"role": "user", "content": "what's 2+2?"},
 		},
@@ -45,9 +46,8 @@ func normalBody(model string) []byte {
 }
 
 func TestIsCompactionRequest_True(t *testing.T) {
-	if !isCompactionRequest(compactionBody("claude-opus-4-8")) {
-		t.Fatal("expected compaction request to be detected")
-	}
+	require.True(t, isCompactionRequest(compactionBody("claude-opus-4-8")))
+
 }
 
 func TestIsCompactionRequest_BlockContent(t *testing.T) {
@@ -59,15 +59,13 @@ func TestIsCompactionRequest_BlockContent(t *testing.T) {
 			}},
 		},
 	})
-	if !isCompactionRequest(b) {
-		t.Fatal("expected block-style content to be detected")
-	}
+	require.True(t, isCompactionRequest(b))
+
 }
 
 func TestIsCompactionRequest_Normal(t *testing.T) {
-	if isCompactionRequest(normalBody("claude-opus-4-8")) {
-		t.Fatal("normal request must not be detected as compaction")
-	}
+	require.False(t, isCompactionRequest(normalBody("claude-opus-4-8")))
+
 }
 
 // The marker may legitimately appear in the conversation being summarized -- for
@@ -76,62 +74,55 @@ func TestIsCompactionRequest_Normal(t *testing.T) {
 func TestIsCompactionRequest_MarkerOnlyInEarlierMessage(t *testing.T) {
 	b, _ := json.Marshal(map[string]any{
 		"messages": []map[string]any{
-			{"role": "user", "content": realInstruction}, // quoted earlier
+			{"role": "user", "content": realInstruction},	// quoted earlier
 			{"role": "assistant", "content": "got it"},
-			{"role": "user", "content": "now add tests"}, // real last turn
+			{"role": "user", "content": "now add tests"},	// real last turn
 		},
 	})
-	if isCompactionRequest(b) {
-		t.Fatal("marker in an earlier message must not trigger detection")
-	}
+	require.False(t, isCompactionRequest(b))
+
 }
 
 func TestIsCompactionRequest_Garbage(t *testing.T) {
 	for _, b := range [][]byte{[]byte("not json"), []byte(`{"messages":[]}`), []byte(`{}`)} {
-		if isCompactionRequest(b) {
-			t.Fatalf("garbage/empty body must not be detected: %s", b)
-		}
+		require.False(t, isCompactionRequest(b))
+
 	}
 }
 
 func TestRewriteModel(t *testing.T) {
 	out, ok := rewriteModel(compactionBody("claude-opus-4-8"), "claude-haiku-4-5-20251001")
-	if !ok {
-		t.Fatal("rewrite should succeed on a JSON object")
-	}
+	require.True(t, ok)
+
 	var obj map[string]any
-	if err := json.Unmarshal(out, &obj); err != nil {
-		t.Fatalf("rewritten body is not valid JSON: %v", err)
-	}
-	if obj["model"] != "claude-haiku-4-5-20251001" {
-		t.Fatalf("model not swapped: %v", obj["model"])
-	}
+	require.NoError(t, json.Unmarshal(out, &obj))
+
+	require.Equal(t, "claude-haiku-4-5-20251001", obj["model"])
+
 	// Other fields must be preserved.
-	if obj["max_tokens"].(float64) != 20000 {
-		t.Fatalf("max_tokens clobbered: %v", obj["max_tokens"])
-	}
-	if msgs, ok := obj["messages"].([]any); !ok || len(msgs) != 3 {
-		t.Fatalf("messages clobbered: %v", obj["messages"])
-	}
+	require.Equal(t, float64(20000), obj["max_tokens"].(float64))
+
+	msgs, ok := obj["messages"].([]any)
+	require.False(t, !ok || len(msgs) != 3)
+
 }
 
 func TestRewriteModel_NotObject(t *testing.T) {
-	if _, ok := rewriteModel([]byte(`["array"]`), "x"); ok {
-		t.Fatal("rewrite should report failure on non-object body")
-	}
+	_, ok := rewriteModel([]byte(`["array"]`), "x")
+	require.False(t, ok)
+
 }
 
 func testConfig(t *testing.T, upstream string) *proxyConfig {
 	t.Helper()
 	u, err := url.Parse(upstream)
-	if err != nil {
-		t.Fatalf("bad upstream: %v", err)
-	}
+	require.Nil(t, err)
+
 	return &proxyConfig{
-		upstream:      u,
-		model:         "claude-haiku-4-5-20251001",
-		maxInputBytes: defaultMaxInput,
-		logger:        log.New(io.Discard, "", 0),
+		upstream:	u,
+		model:		"claude-haiku-4-5-20251001",
+		maxInputBytes:	defaultMaxInput,
+		logger:		log.New(io.Discard, "", 0),
 	}
 }
 
@@ -156,9 +147,8 @@ func gotModel(t *testing.T, cfg *proxyConfig, path string, body []byte) string {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(body)))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("proxy returned %d", rec.Code)
-	}
+	require.Equal(t, http.StatusOK, rec.Code)
+
 	return rec.Header().Get("X-Got-Model")
 }
 
@@ -166,28 +156,28 @@ func TestProxy_SwapsOnCompaction(t *testing.T) {
 	up := fakeUpstream(t)
 	defer up.Close()
 	cfg := testConfig(t, up.URL)
-	if got := gotModel(t, cfg, "/v1/messages", compactionBody("claude-opus-4-8")); got != cfg.model {
-		t.Fatalf("compaction request should reach upstream as %s, got %s", cfg.model, got)
-	}
+	got := gotModel(t, cfg, "/v1/messages", compactionBody("claude-opus-4-8"))
+	require.Equal(t, cfg.model, got)
+
 }
 
 func TestProxy_LeavesNormalRequest(t *testing.T) {
 	up := fakeUpstream(t)
 	defer up.Close()
 	cfg := testConfig(t, up.URL)
-	if got := gotModel(t, cfg, "/v1/messages", normalBody("claude-opus-4-8")); got != "claude-opus-4-8" {
-		t.Fatalf("normal request model must be untouched, got %s", got)
-	}
+	got := gotModel(t, cfg, "/v1/messages", normalBody("claude-opus-4-8"))
+	require.Equal(t, "claude-opus-4-8", got)
+
 }
 
 func TestProxy_SizeGuardSkipsSwap(t *testing.T) {
 	up := fakeUpstream(t)
 	defer up.Close()
 	cfg := testConfig(t, up.URL)
-	cfg.maxInputBytes = 10 // force the body over the guard
-	if got := gotModel(t, cfg, "/v1/messages", compactionBody("claude-opus-4-8")); got != "claude-opus-4-8" {
-		t.Fatalf("oversized compaction should not be swapped, got %s", got)
-	}
+	cfg.maxInputBytes = 10	// force the body over the guard
+	got := gotModel(t, cfg, "/v1/messages", compactionBody("claude-opus-4-8"))
+	require.Equal(t, "claude-opus-4-8", got)
+
 }
 
 func TestProxy_DoesNotSwapCountTokens(t *testing.T) {
@@ -195,9 +185,9 @@ func TestProxy_DoesNotSwapCountTokens(t *testing.T) {
 	defer up.Close()
 	cfg := testConfig(t, up.URL)
 	// Same body shape, but the count_tokens sub-route must pass through untouched.
-	if got := gotModel(t, cfg, "/v1/messages/count_tokens", compactionBody("claude-opus-4-8")); got != "claude-opus-4-8" {
-		t.Fatalf("count_tokens must not be swapped, got %s", got)
-	}
+	got := gotModel(t, cfg, "/v1/messages/count_tokens", compactionBody("claude-opus-4-8"))
+	require.Equal(t, "claude-opus-4-8", got)
+
 }
 
 func TestProxy_ForwardsResponseBody(t *testing.T) {
@@ -208,20 +198,17 @@ func TestProxy_ForwardsResponseBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(string(normalBody("m"))))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if !strings.Contains(rec.Body.String(), "message_stop") {
-		t.Fatalf("response body not streamed through: %q", rec.Body.String())
-	}
+	require.Contains(t, rec.Body.String(), "message_stop")
+
 }
 
 func TestExtractText(t *testing.T) {
-	if got := extractText(json.RawMessage(`"hello"`)); got != "hello" {
-		t.Fatalf("string content: got %q", got)
-	}
-	got := extractText(json.RawMessage(`[{"type":"text","text":"a"},{"type":"text","text":"b"}]`))
-	if !strings.Contains(got, "a") || !strings.Contains(got, "b") {
-		t.Fatalf("block content: got %q", got)
-	}
-	if extractText(json.RawMessage(`123`)) != "" {
-		t.Fatal("numeric content should yield empty string")
-	}
+	got := extractText(json.RawMessage(`"hello"`))
+	require.Equal(t, "hello", got)
+
+	got = extractText(json.RawMessage(`[{"type":"text","text":"a"},{"type":"text","text":"b"}]`))
+	require.False(t, !strings.Contains(got, "a") || !strings.Contains(got, "b"))
+
+	require.Equal(t, "", extractText(json.RawMessage(`123`)))
+
 }
