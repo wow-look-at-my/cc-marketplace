@@ -2,36 +2,19 @@ name: Release Plugins
 
 on:
   push:
-    branches: [master]
-  delete:
-  pull_request:
-    types: [opened, reopened, synchronize]
 
 concurrency:
   group: release-${{ github.ref }}
 
 jobs:
-  cleanup:
-    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - run: npm ci
-      - run: npx tsx .github/scripts/cleanup-branch.ts ${{ github.event.ref }}
-
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: read
-      contents: write
       id-token: write
     outputs:
+      all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       has_build: ${{ steps.split.outputs.has_build }}
@@ -97,7 +80,7 @@ jobs:
         id: prod-version
         run: |
           PROD_VERSION=$(curl -sf \
-            "https://wow-look-at-my.github.io/cc-marketplace/wow-look-at-my-html-demo" \
+            "https://npm.pazer.build/@buildhost/cc-marketplace__html-demo" \
             | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
           if [ -n "$PROD_VERSION" ]; then
             echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
@@ -109,7 +92,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
       id-token: write
     strategy:
       fail-fast: false
@@ -158,134 +140,236 @@ jobs:
       - name: Package plugin
         run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
 
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-${{ matrix.plugin }}
+          path: /tmp/packaged-${{ matrix.plugin }}
+          retention-days: 1
+
       - name: Save plugin cache
         uses: actions/cache/save@v5
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
 
-      - name: Upload packaged plugin
-        uses: actions/upload-artifact@v4
-        with:
-          name: packaged-${{ matrix.plugin }}
-          path: /tmp/packaged-${{ matrix.plugin }}
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 1
+      # Publish the plugin to buildhost's npm registry using the buildhost
+      # composite actions (OIDC auth -- no static token; project auto-namespaced
+      # under cc-marketplace/). The project is created semver so the explicit
+      # N.0.0 version is preserved; buildhost serves it as the npm package
+      # @buildhost/cc-marketplace__<plugin> (the "/" encoded as "__").
+      - name: Read npm package manifest
+        id: npmpkg
+        if: github.event_name == 'push'
+        run: |
+          MANIFEST=/tmp/packaged-${{ matrix.plugin }}/manifest.json
+          echo "version=$(jq -r '.version' "$MANIFEST")" >> "$GITHUB_OUTPUT"
+          echo "tarball=/tmp/packaged-${{ matrix.plugin }}/$(jq -r '.main.tarball' "$MANIFEST")" >> "$GITHUB_OUTPUT"
 
-  pages:
+      - name: Ensure buildhost project
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-project@master
+        with:
+          name: cc-marketplace/${{ matrix.plugin }}
+          versioning: semver
+
+      - name: Create buildhost release
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-release@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
+
+      - name: Upload npm package
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-upload-artifact@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
+          os: any
+          arch: any
+          kind: npm-package
+          path: ${{ steps.npmpkg.outputs.tarball }}
+
+      - name: Publish buildhost release
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/buildhost/.github/actions/buildhost-publish-release@master
+        with:
+          project: cc-marketplace/${{ matrix.plugin }}
+          version: ${{ steps.npmpkg.outputs.version }}
+
+  publish-marketplace:
     needs: [prepare, build]
-    if: '!cancelled() && !failure()'
+    if: >-
+      github.event_name == 'push' &&
+      needs.prepare.outputs.all_plugins != '[]' &&
+      needs.prepare.outputs.all_plugins != '' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
-      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Restore cached plugins
-        if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
-        uses: wow-look-at-my/actions@typescript#latest
-        env:
-          NODE_PATH: ${{ github.workspace }}/node_modules
-        with:
-          needs: ${{ toJSON(needs) }}
-          script: |
-            const { hashFiles } = require('@actions/glob');
-            const { restoreCache } = require('@actions/cache');
-            const plugins: string[] = JSON.parse(needs.prepare.outputs.cached_plugins);
-
-            fs.mkdirSync('packaged', { recursive: true });
-            const toolHash = await hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod');
-
-            for (const plugin of plugins) {
-              const hash = await hashFiles(`plugins/${plugin}/**`);
-              const key = `plugin-${plugin}-${hash}-${toolHash}`;
-              const cachePath = `/tmp/packaged-${plugin}`;
-
-              core.info(`Restoring ${plugin}`);
-              const hit = await restoreCache([cachePath], key);
-              if (!hit) throw new Error(`Cache miss for ${plugin} (${key})`);
-
-              fs.renameSync(cachePath, `packaged/${plugin}`);
-              core.info(`  OK`);
-            }
-
-      - name: Download built plugins
-        if: needs.prepare.outputs.has_build == 'true'
+      - name: Download all plugin artifacts
         uses: actions/download-artifact@v4
         with:
-          path: packaged
           pattern: packaged-*
+          path: /tmp/all-plugin-artifacts
 
-      - name: Strip packaged- artifact prefix
-        if: needs.prepare.outputs.has_build == 'true'
+      - name: Prepare combined input
         run: |
-          set -e
-          shopt -s nullglob
-          for d in packaged/packaged-*; do
-            mv "$d" "packaged/${d#packaged/packaged-}"
+          mkdir -p /tmp/combined-plugins
+          for d in /tmp/all-plugin-artifacts/packaged-*/; do
+            plugin=$(basename "$d" | sed 's/^packaged-//')
+            cp -r "$d" "/tmp/combined-plugins/$plugin"
           done
 
-      - name: Compute registry base URLs
-        id: base-url
+      - name: Update marketplace.json
+        id: marketplace
         run: |
-          ROOT_URL="https://wow-look-at-my.github.io/cc-marketplace"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "tarball-url=$ROOT_URL" >> $GITHUB_OUTPUT
-            echo "marketplace-url=$ROOT_URL/pr-preview/pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-          else
-            echo "tarball-url=$ROOT_URL" >> $GITHUB_OUTPUT
-            echo "marketplace-url=$ROOT_URL" >> $GITHUB_OUTPUT
+          marketplace-build update-marketplace \
+            --input /tmp/combined-plugins \
+            --base-url "https://npm.pazer.build" >> $GITHUB_OUTPUT
+
+      - name: Assemble site
+        run: |
+          mkdir -p /tmp/site
+          cp "${{ steps.marketplace.outputs.source_dir }}/marketplace.json" /tmp/site/
+          cp site/index.html /tmp/site/
+
+      - name: Publish marketplace site to buildhost
+        env:
+          REF: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          BRANCH="${REF//\//-}"
+          # buildhost dispatches each service by Host subdomain, so static
+          # sites live at sites.<domain>/<project>/branch/<branch> (not a
+          # /sites/ path on the apex). The OIDC audience is the buildhost
+          # instance identity (apex domain).
+          AUDIENCE="https://pazer.build"
+          SITE_URL="https://sites.pazer.build/cc-marketplace/branch/${BRANCH}"
+
+          # Mint a GitHub Actions OIDC token scoped to buildhost -- no static
+          # secret. The cc-marketplace repo's token auto-provisions the public
+          # cc-marketplace project on first upload.
+          TOKEN=$(curl -sS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r '.value')
+          if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
+            echo "Failed to obtain OIDC token" >&2
+            exit 1
           fi
 
-      - name: Build npm registry
-        id: registry
-        run: marketplace-build build-npm-registry --input packaged --base-url "${{ steps.base-url.outputs.tarball-url }}" >> $GITHUB_OUTPUT
+          tar -czf /tmp/site.tar.gz -C /tmp/site .
 
-      - name: Add marketplace.json to registry
-        run: |
-          marketplace-build update-marketplace --input packaged --base-url "${{ steps.base-url.outputs.marketplace-url }}" > /tmp/marketplace-out.txt
-          src=$(grep '^source_dir=' /tmp/marketplace-out.txt | cut -d= -f2)
-          cp "$src/marketplace.json" "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
+          # Upload, retrying transient 5xx with exponential backoff.
+          for attempt in 1 2 3 4; do
+            STATUS=$(curl -sS -o /tmp/site-resp.json -w '%{http_code}' \
+              -X PUT "${SITE_URL}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "Content-Type: application/gzip" \
+              -H "X-Git-Commit: ${SHA}" \
+              --data-binary @/tmp/site.tar.gz) || true
+            if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 300 ]; then
+              echo "Published site to ${SITE_URL}/"
+              cat /tmp/site-resp.json; echo
+              exit 0
+            fi
+            echo "Upload attempt ${attempt} failed: HTTP ${STATUS}" >&2
+            cat /tmp/site-resp.json >&2 2>/dev/null || true
+            echo >&2
+            if [ "${STATUS}" -lt 500 ]; then
+              exit 1
+            fi
+            sleep $((2 ** attempt))
+          done
+          echo "Giving up after 4 attempts" >&2
+          exit 1
 
-      - name: Add site index and file listing to registry
-        run: |
-          REGISTRY="${{ steps.registry.outputs.registry_dir }}"
-          cp site/index.html "$REGISTRY/index.html"
-          cd "$REGISTRY"
-          find . -type f -not -name 'files.json' -printf '%P\t%s\n' \
-            | sort \
-            | jq -Rn '[inputs | split("\t") | {path: .[0], size: (.[1] | tonumber)}]' \
-            > files.json
+  # End-to-end smoke test: drive real Claude Code against the marketplace we just
+  # published and actually install + update every plugin. This is the only job
+  # that exercises the `claude plugin` npm install/update path (the demo workflow
+  # loads a local --plugin-dir, and the build job only runs `claude plugin
+  # validate` on a cooked dir). Claude installs every npm-source plugin into one
+  # shared npm prefix, so installing all of them rebuilds a single shared
+  # lockfile -- a dead/unreachable tarball for ANY plugin (e.g. a leftover
+  # github.io URL after the buildhost migration) fails the whole run, exactly
+  # like the cross-plugin 404 users hit when updating a single plugin.
+  smoke-test:
+    needs: [publish-marketplace]
+    if: ${{ github.event_name == 'push' && needs.publish-marketplace.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-claude-code
 
-      - name: Validate marketplace
-        run: |
-          claude plugin validate "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
-          claude plugin marketplace add "${{ steps.registry.outputs.registry_dir }}/marketplace.json"
-
-      - uses: actions/upload-artifact@v4
+      - name: Install and update every plugin via Claude Code
+        uses: wow-look-at-my/actions@typescript#latest
         with:
-          name: npm-registry
-          path: ${{ steps.registry.outputs.registry_dir }}
-          compression-level: 0
+          script: |
+            // Drive real Claude Code against the marketplace this run published and
+            // install + update every plugin. Claude installs every npm-source plugin
+            // into one shared npm prefix, so installing them all rebuilds a single
+            // shared lockfile -- a dead/unreachable tarball for ANY plugin fails the
+            // run, exactly like the cross-plugin 404 users hit updating one plugin.
+            const branch = (env.GITHUB_REF_NAME ?? "").split("/").join("-");
+            const runNumber = env.GITHUB_RUN_NUMBER ?? "";
+            const mktUrl = `https://sites.pazer.build/cc-marketplace/branch/${branch}/marketplace.json`;
 
-  deploy-preview:
-    needs: pages
-    if: github.event_name != 'delete'
-    permissions:
-      contents: write
-      pull-requests: write
-      pages: write
-      id-token: write
-      statuses: write
-    uses: PazerOP/pr-preview-action/.github/workflows/preview.yml@master
-    with:
-      artifact-name: npm-registry
-      shared-dirs: tarballs
-    secrets: inherit
+            async function fetchJson(url: string): Promise<any> {
+              const r = await exec.getExecOutput("curl", ["-fsS", "-m", "25", url], { silent: true, ignoreReturnCode: true });
+              if (r.exitCode !== 0) return null;
+              try { return JSON.parse(r.stdout); } catch { return null; }
+            }
+
+            // Wait for the marketplace this run published (metadata.version mirrors
+            // the run number, see update_marketplace.go) to go live on buildhost.
+            let mkt: any = null;
+            for (let attempt = 1; attempt <= 30; attempt++) {
+              const j = await fetchJson(mktUrl);
+              const ver = j?.metadata?.version;
+              if (j && String(ver) === runNumber) { mkt = j; core.info(`marketplace v${runNumber} is live`); break; }
+              core.info(`waiting for marketplace v${runNumber} (saw '${ver ?? "none"}')... attempt ${attempt}`);
+              await new Promise<void>((res) => setTimeout(() => res(), 5000));
+            }
+            if (!mkt) throw new Error(`marketplace did not reach v${runNumber} at ${mktUrl}`);
+
+            const mktName: string = mkt.name;
+            const plugins: string[] = (mkt.plugins ?? []).map((p: any) => String(p.name));
+            core.info(`Marketplace '${mktName}' lists ${plugins.length} plugins: ${plugins.join(" ")}`);
+            if (plugins.length === 0) throw new Error("published marketplace lists no plugins");
+
+            await $`claude plugin marketplace add ${mktUrl}`;
+
+            // Install every plugin into the shared npm prefix; the last installs
+            // rebuild all prior siblings, so one broken tarball fails the run.
+            for (const p of plugins) {
+              core.startGroup(`install ${p}`);
+              await $`claude plugin install ${`${p}@${mktName}`}`;
+              core.endGroup();
+            }
+
+            // Update every plugin -- the path that 404'd in production.
+            for (const p of plugins) {
+              core.startGroup(`update ${p}`);
+              await $`claude plugin update ${`${p}@${mktName}`}`;
+              core.endGroup();
+            }
+
+            await $`claude plugin list`;
+
+            // Guard against any plugin resolving to the decommissioned github.io
+            // registry instead of buildhost (the root cause of the cross-plugin 404).
+            const lock = path.join(os.homedir(), ".claude/plugins/npm-cache/package-lock.json");
+            if (fs.existsSync(lock)) {
+              const bad = fs.readFileSync(lock, "utf8").split("\n").filter((l) => l.includes("github.io"));
+              if (bad.length > 0) throw new Error(`a plugin still resolves to a github.io tarball:\n${bad.join("\n")}`);
+            }
+            core.info("OK: every plugin installed and updated from the buildhost registry");
