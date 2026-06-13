@@ -32,9 +32,9 @@
     {
       "name": "haiku-compact",
       "source": "./haiku-compact",
-      "description": "Temporarily switch the active model to Haiku during context compaction",
+      "description": "Localhost proxy that swaps the model to Haiku for Claude Code context compaction, cutting compaction cost without changing the model used for normal turns",
       "category": "development",
-      "keywords": ["compact", "haiku", "model", "cost", "hook"]
+      "keywords": ["compact", "haiku", "model", "cost", "proxy"]
     }
   ]
 }

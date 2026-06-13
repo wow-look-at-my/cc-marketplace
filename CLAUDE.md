@@ -39,3 +39,14 @@ The enhanced-auto-allow plugin lives at `plugins/enhanced-auto-allow/`. It white
 When adding new whitelisted tools:
 - For Bash commands: add entries to `rules.xml`
 - For MCP tools or other non-Bash tools: add to the tool name allowlist in `cmd/hook.go` and add a matcher in `plugin.json`
+
+## Haiku Compact Plugin
+
+The haiku-compact plugin lives at `plugins/haiku-compact/`. It is a localhost reverse proxy (Go) that rewrites the model to Haiku for Claude Code's context-compaction request only, leaving all other traffic untouched.
+
+- **Proxy code**: `plugins/haiku-compact/cmd/proxy.go` — detection (`isCompactionRequest`) and model rewrite; `cmd/main.go` — `serve`/`daemon`/`launch`/`stop` subcommands
+- **Plugin config**: `plugins/haiku-compact/.claude-plugin/plugin.json` — a `SessionStart` hook runs `build/haiku-compact daemon` to keep the proxy up
+
+Key facts (a hook cannot do this job — see `claude-docs-gaps/docs/compaction-model-selection.md`):
+- Compaction reads the model from in-memory `mainLoopModel`, not from `settings.json`, so a `PreCompact` hook cannot change it.
+- The proxy detects the compaction call by the fixed instruction in the request's **final** message, then swaps the `model` field; the user points Claude Code at it via `settings.json` `env.ANTHROPIC_BASE_URL` or the `launch` wrapper.
