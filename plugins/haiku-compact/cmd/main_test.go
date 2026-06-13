@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -215,6 +216,70 @@ func TestMaybeSwap_Ignored(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/v1/messages", nil)
 	r.Body = nil
 	maybeSwap(r, cfg) // no panic, no-op
+}
+
+func TestStartDetached(t *testing.T) {
+	// Spawn a harmless real command so the detach path itself is exercised.
+	err := startDetached("sleep", []string{"0.05"}, filepath.Join(t.TempDir(), "d.log"))
+	require.NoError(t, err)
+}
+
+func TestCmdDaemon_SpawnPath(t *testing.T) {
+	// Reserve then release a port so it is initially free.
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	_, port, _ := net.SplitHostPort(probe.Addr().String())
+	require.NoError(t, probe.Close())
+
+	orig := startDetached
+	defer func() { startDetached = orig }()
+	var ln net.Listener
+	startDetached = func(exe string, args []string, logPath string) error {
+		l, e := net.Listen("tcp", net.JoinHostPort("127.0.0.1", port))
+		if e != nil {
+			return e
+		}
+		ln = l
+		return nil
+	}
+	defer func() {
+		if ln != nil {
+			ln.Close()
+		}
+	}()
+
+	t.Setenv("TMPDIR", t.TempDir())
+	cmdDaemon([]string{"--port", port}) // free -> spawn (stub binds) -> poll sees it -> return
+	require.True(t, alreadyListening(net.JoinHostPort("127.0.0.1", port)))
+}
+
+func TestWaitForShutdown_Signal(t *testing.T) {
+	server := &http.Server{}
+	sig := make(chan os.Signal, 1)
+	sig <- syscall.SIGTERM
+	waitForShutdown(server, make(chan struct{}), sig) // signal branch closes the server
+}
+
+func TestWaitForShutdown_Done(t *testing.T) {
+	server := &http.Server{}
+	done := make(chan struct{})
+	close(done)
+	waitForShutdown(server, done, make(chan os.Signal, 1)) // done branch returns
+}
+
+func TestMain_StopDispatch(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir()) // no pid file -> cmdStop reports and returns
+	old := os.Args
+	defer func() { os.Args = old }()
+	os.Args = []string{"haiku-compact", "stop"}
+	main()
+}
+
+func TestMain_HelpDispatch(t *testing.T) {
+	old := os.Args
+	defer func() { os.Args = old }()
+	os.Args = []string{"haiku-compact", "help"}
+	main()
 }
 
 func TestUsage(t *testing.T) {

@@ -236,8 +236,14 @@ func cmdServe(args []string) {
 	defer os.Remove(pidPath())
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	waitForShutdown(server, done, stop)
+}
+
+// waitForShutdown blocks until either a termination signal arrives (closing the
+// server) or the server stops on its own (e.g. idle shutdown).
+func waitForShutdown(server *http.Server, done <-chan struct{}, sig <-chan os.Signal) {
 	select {
-	case <-stop:
+	case <-sig:
 		server.Close()
 	case <-done:
 	}
@@ -256,25 +262,31 @@ func cmdDaemon(args []string) {
 		return // fail-open: never break the session
 	}
 	logPath := envOr(envLog, defaultLogPath())
-	logf, _ := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	cmd := exec.Command(exe, "serve", "--port", port, "--log", logPath)
-	cmd.Env = os.Environ()
-	if logf != nil {
-		cmd.Stdout, cmd.Stderr = logf, logf
-	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // detach into its own session
-	if err := cmd.Start(); err != nil {
+	if err := startDetached(exe, []string{"serve", "--port", port, "--log", logPath}, logPath); err != nil {
 		fmt.Fprintf(os.Stderr, "haiku-compact: failed to start daemon: %v\n", err)
 		return
 	}
 	// Give it a moment to bind so the first API call already routes through it.
 	for i := 0; i < 30; i++ {
-		if c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond); err == nil {
-			c.Close()
+		if alreadyListening(addr) {
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// startDetached launches exe as a background process in its own session, with
+// output redirected to logPath. It is a package variable so tests can stub the
+// spawn without re-executing the binary.
+var startDetached = func(exe string, args []string, logPath string) error {
+	logf, _ := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	cmd := exec.Command(exe, args...)
+	cmd.Env = os.Environ()
+	if logf != nil {
+		cmd.Stdout, cmd.Stderr = logf, logf
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // detach into its own session
+	return cmd.Start()
 }
 
 // launchSetup starts an ephemeral proxy and points ANTHROPIC_BASE_URL at it,
