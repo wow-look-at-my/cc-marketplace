@@ -1,6 +1,6 @@
 module enhanced-auto-allow
 
-go 1.23
+go 1.24.7
 
 require (
 	github.com/stretchr/testify v1.11.1

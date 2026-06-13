@@ -842,4 +842,11 @@
       <value>http://localhost:9120/read</value>
     </allowedArgPrefixes>
   </cmd>
+
+  <mcpServer name="grafana">
+    <tool>get_*</tool>
+    <tool>list_*</tool>
+    <tool>search_*</tool>
+    <tool>query_*</tool>
+  </mcpServer>
 </rules>
