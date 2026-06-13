@@ -7,10 +7,8 @@ A marketplace of Claude Code plugins.
 ### Add This Marketplace
 
 ```bash
-claude plugin marketplace add https://wow-look-at-my.github.io/cc-marketplace/marketplace.json
+claude plugin marketplace add https://sites.pazer.build/cc-marketplace/branch/master/marketplace.json
 ```
-
-The marketplace is served via GitHub Pages and updated automatically on every push to master.
 
 ### Install Plugins
 
