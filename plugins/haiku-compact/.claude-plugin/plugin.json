@@ -1,28 +1,18 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "haiku-compact",
-	"description": "Switches the active model to Haiku during context compaction and restores it afterwards",
+	"description": "Intercepting proxy that swaps the model to Haiku for Claude Code context compaction, cutting compaction cost without changing the model used for normal turns",
 	"author": {
 		"name": "mhaynie"
 	},
-	"keywords": ["compact", "haiku", "model", "cost", "hook"],
+	"keywords": ["compact", "haiku", "model", "cost", "proxy"],
 	"hooks": {
-		"PreCompact": [
+		"SessionStart": [
 			{
 				"hooks": [
 					{
 						"type": "command",
-						"command": "bash ${CLAUDE_PLUGIN_ROOT}/hook.sh"
-					}
-				]
-			}
-		],
-		"PostCompact": [
-			{
-				"hooks": [
-					{
-						"type": "command",
-						"command": "bash ${CLAUDE_PLUGIN_ROOT}/hook.sh"
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/haiku-compact daemon"
 					}
 				]
 			}
