@@ -28,6 +28,13 @@
       "description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
       "category": "development",
       "keywords": ["bash", "cleanup", "rewrite", "hook"]
+    },
+    {
+      "name": "finish-your-todos",
+      "source": "./finish-your-todos",
+      "description": "Blocks the Stop event while the TodoWrite list still has pending or in-progress items, so the assistant doesn't accidentally stop with work unfinished",
+      "category": "development",
+      "keywords": ["stop", "todo", "todowrite", "tasks", "autonomy", "hook"]
     }
   ]
 }

@@ -1,0 +1,24 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "finish-your-todos",
+	"description": "Blocks the Stop event while the TodoWrite list still has pending or in-progress items, so the assistant doesn't accidentally stop with work unfinished",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["stop", "todo", "todowrite", "tasks", "autonomy", "hook"],
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
