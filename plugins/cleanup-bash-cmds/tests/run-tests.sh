@@ -295,11 +295,17 @@ fi
 
 check_noop "unparseable bash fails open" 'if true; then'
 
+# The tool-missing hooks exit before reading stdin, so feed the payload from
+# a file: piping would race the writer against the early exit and surface as
+# a spurious SIGPIPE (status 141) under pipefail on fast machines.
+PAYLOAD_FILE=$(mktemp)
+payload_bash 'ls 2>/dev/null' >"$PAYLOAD_FILE"
+
 # jq missing: PATH with bash but no jq must fail open before reading stdin.
 FAKEBIN=$(mktemp -d)
 ln -s "$(command -v bash)" "$FAKEBIN/bash"
 set +e
-NOJQ_OUT=$(printf '%s' "$(payload_bash 'ls 2>/dev/null')" | env PATH="$FAKEBIN" "$HOOK")
+NOJQ_OUT=$(env PATH="$FAKEBIN" "$HOOK" <"$PAYLOAD_FILE")
 NOJQ_STATUS=$?
 set -e
 rm -rf "$FAKEBIN"
@@ -314,10 +320,11 @@ FAKEBIN=$(mktemp -d)
 ln -s "$(command -v bash)" "$FAKEBIN/bash"
 ln -s "$(command -v jq)" "$FAKEBIN/jq"
 set +e
-NOSHFMT_OUT=$(printf '%s' "$(payload_bash 'ls 2>/dev/null')" | env PATH="$FAKEBIN" "$HOOK")
+NOSHFMT_OUT=$(env PATH="$FAKEBIN" "$HOOK" <"$PAYLOAD_FILE")
 NOSHFMT_STATUS=$?
 set -e
 rm -rf "$FAKEBIN"
+rm -f "$PAYLOAD_FILE"
 if [ "$NOSHFMT_STATUS" -eq 0 ] && [ -z "$NOSHFMT_OUT" ]; then
 	ok "missing shfmt fails open"
 else
