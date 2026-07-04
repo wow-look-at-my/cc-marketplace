@@ -148,7 +148,7 @@ jobs:
           retention-days: 1
 
       - name: Save plugin cache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
