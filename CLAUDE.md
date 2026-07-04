@@ -28,6 +28,16 @@ The `master` branch is protected. All changes require a pull request.
 @plugins/example-plugin/.mcp.template.json
 @plugins/example-plugin/README.template.md
 
+## Cleanup Bash Cmds Plugin
+
+The cleanup-bash-cmds plugin lives at `plugins/cleanup-bash-cmds/`. It is a PreToolUse hook in pure bash + jq (cross-platform, no compiled binary) that rewrites Bash tool commands before execution: it strips ALL `2>/dev/null` stderr suppression anywhere in the command (including `2> /dev/null`, `2>>/dev/null`, and quoted `/dev/null` targets, while leaving multi-digit fds like `12>/dev/null` and distinct paths like `/dev/null.log` intact), and removes legacy noise (trailing `2>&1`, `|| true`, `| head/tail/grep`, leading `set -e`).
+
+- **Hook script**: `plugins/cleanup-bash-cmds/hook.sh` — all scrub/cleanup logic (bash regex; jq only parses/builds the hook JSON)
+- **Tests**: `plugins/cleanup-bash-cmds/tests/run-tests.sh` — self-contained runner; CI runs it via the plugin `justfile` `prebuild` recipe
+- **Plugin config**: `plugins/cleanup-bash-cmds/.claude-plugin/plugin.json` — PreToolUse/Bash matcher invoking `hook.sh`
+
+The hook emits `hookSpecificOutput.updatedInput` WITHOUT a `permissionDecision`, so the normal permission flow evaluates the rewritten command (it does not auto-allow). Rewrites can be logged by setting `CLEANUP_BASH_CMDS_LOG`.
+
 ## Enhanced Auto-Allow Plugin
 
 The enhanced-auto-allow plugin lives at `plugins/enhanced-auto-allow/`. It whitelists read-only tools via a PermissionRequest hook.

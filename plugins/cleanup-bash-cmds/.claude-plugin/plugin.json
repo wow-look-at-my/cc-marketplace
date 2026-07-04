@@ -1,11 +1,11 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "cleanup-bash-cmds",
-	"description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
+	"description": "Rewrites Bash commands to strip ALL 2>/dev/null stderr suppression and remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
 	"author": {
 		"name": "mhaynie"
 	},
-	"keywords": ["bash", "cleanup", "rewrite", "hook"],
+	"keywords": ["bash", "cleanup", "rewrite", "hook", "stderr", "devnull"],
 	"hooks": {
 		"PreToolUse": [
 			{
@@ -13,7 +13,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/cleanup-bash-cmds"
+						"command": "${CLAUDE_PLUGIN_ROOT}/hook.sh"
 					}
 				]
 			}
