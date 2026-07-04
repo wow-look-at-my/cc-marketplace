@@ -14,23 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build hook binary
-        uses: wow-look-at-my/go-toolchain@latest
-        with:
-          working-directory: plugins/cleanup-bash-cmds
-          os: linux
-          arch: amd64
-          upload-artifacts: 'false'
-          codeql: 'false'
-
-      - name: Stage hook binary at the path plugin.json expects
-        run: |
-          set -euxo pipefail
-          src=plugins/cleanup-bash-cmds/build/cleanup-bash-cmds_linux_amd64
-          dst=plugins/cleanup-bash-cmds/build/cleanup-bash-cmds
-          cp "$src" "$dst"
-          chmod +x "$dst"
-          ls -la plugins/cleanup-bash-cmds/build/
+      # The hook is a plain bash + jq script (hook.sh) checked into the
+      # plugin, so there is no binary to build or stage.
 
       - uses: ./.github/actions/setup-claude-code
 
