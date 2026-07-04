@@ -50,8 +50,17 @@ clean_command() {
 	local re_set_e_and='^set[[:space:]]+-e[[:space:]]*&&[[:space:]]*'
 	local re_or_true='[[:space:]]*[|][|][[:space:]]*true[[:space:]]*$'
 	local re_stderr_merge='[[:space:]]+2>&1[[:space:]]*$'
-	local re_head='[[:space:]]*[|][[:space:]]*head([[:space:]]+[^[:space:]|]+)*[[:space:]]*$'
-	local re_tail='[[:space:]]*[|][[:space:]]*tail([[:space:]]+[^[:space:]|]+)*[[:space:]]*$'
+	# Trailing | head / | tail stages are stripped with ANY flags/arguments
+	# (| head, |head -50, | head -n 100, | head -c 4k, | tail -n +2,
+	# | tail -f, ...) and unwound repeatedly until stable, so
+	# "cmd | head -5 | tail -2" collapses all the way to "cmd". The required
+	# whitespace (or end-of-command) after the word keeps | headache /
+	# | tailscale and other prefixed names intact; the $ anchor keeps
+	# mid-pipeline stages intact (end-of-command-string anchoring, same as
+	# every other trailing rule). Arguments are matched with [[:blank:]]
+	# separators so they cannot span a newline: a | head on an earlier line
+	# of a multi-line command is not trailing and stays untouched.
+	local re_head_tail='[[:space:]]*[|][[:space:]]*(head|tail)([[:blank:]]+[^[:space:]|]+)*[[:space:]]*$'
 	local re_grep='[[:space:]]*[|][[:space:]]*grep([[:space:]]+[^[:space:]|]+)*[[:space:]]*$'
 	# New rule: scrub EVERY stderr-to-/dev/null redirection, anywhere in the
 	# command (not just trailing). Covered forms: 2>/dev/null, 2> /dev/null,
@@ -76,8 +85,11 @@ clean_command() {
 		while [[ $cmd =~ $re_devnull ]]; do
 			cmd="${BASH_REMATCH[1]}${BASH_REMATCH[3]:-}"
 		done
-		if [[ $cmd =~ $re_head ]]; then cmd=${cmd%"${BASH_REMATCH[0]}"}; fi
-		if [[ $cmd =~ $re_tail ]]; then cmd=${cmd%"${BASH_REMATCH[0]}"}; fi
+		# Strictly shrinking, so this always terminates; any depth of chained
+		# trailing head/tail stages unwinds in a single pass.
+		while [[ $cmd =~ $re_head_tail ]]; do
+			cmd=${cmd%"${BASH_REMATCH[0]}"}
+		done
 		if [[ $cmd =~ $re_grep ]]; then cmd=${cmd%"${BASH_REMATCH[0]}"}; fi
 		cmd=$(trim_space "$cmd")
 		if [ "$cmd" = "$prev" ]; then break; fi

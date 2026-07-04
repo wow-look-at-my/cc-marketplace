@@ -172,6 +172,41 @@ check_rewrite "all legacy patterns" 'set -e; npm install 2>&1 || true' 'npm inst
 check_rewrite "head after 2>&1" 'ls -la 2>&1 | head -20' 'ls -la'
 check_rewrite "tail then grep chain" 'cmd | tail -10 | grep foo' 'cmd'
 
+# --- Trailing | head / | tail: arbitrary flags, chains, word boundaries ---
+
+check_rewrite "trailing |head without spaces" 'cat file.txt|head -50' 'cat file.txt'
+check_rewrite "trailing | head -c 4k" 'cat file.txt | head -c 4k' 'cat file.txt'
+check_rewrite "trailing | tail -f" 'cat /var/log/syslog | tail -f' 'cat /var/log/syslog'
+check_rewrite "trailing | tail -n +2" 'cat file.txt | tail -n +2' 'cat file.txt'
+check_rewrite "head then tail chain unwinds fully" 'cmd | head -5 | tail -2' 'cmd'
+check_rewrite "deep alternating head/tail chain unwinds fully" \
+	'cmd | head -9 | tail -8 | head -7 | tail -6 | head -5 | tail -4 | head -3 | tail -2 | head -1 | tail -1 | head -2 | tail -3' \
+	'cmd'
+check_rewrite "deep same-filter chain unwinds fully" \
+	'cmd | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1' \
+	'cmd'
+check_rewrite "grep-interleaved chain unwinds via iteration" \
+	'cmd | head -5 | grep x | tail -2' \
+	'cmd'
+
+check_noop "| headache untouched (word boundary)" 'cmd | headache'
+check_noop "| tailscale untouched (word boundary)" 'cmd | tailscale status'
+check_noop "| head5 untouched (word boundary)" 'cmd | head5'
+
+# Multi-line: trailing means the end of the whole command string (same
+# anchoring as every legacy trailing rule). A | head at the end of an
+# earlier line is not trailing, and its argument matching cannot swallow
+# the following lines.
+check_noop "head at non-final line end untouched" $'foo | head -3\necho done'
+check_rewrite "tail on final line is trailing" $'foo\nbar | tail -5' $'foo\nbar'
+
+# Blunt-by-design caveat: a trailing filter inside a quoted string that
+# reaches the end of the command is still stripped (the closing quote gets
+# eaten as part of the argument token). Same stance as the /dev/null scrub.
+check_rewrite "trailing | head inside quotes is stripped (blunt by design)" \
+	"echo 'try: cmd | head -3'" \
+	"echo 'try: cmd"
+
 check_noop "|| true mid-command untouched" 'cmd || true && echo done'
 check_noop "head mid-pipeline untouched" 'cmd | head -5 | wc'
 check_noop "tail mid-pipeline untouched" 'cmd | tail -10 | wc'

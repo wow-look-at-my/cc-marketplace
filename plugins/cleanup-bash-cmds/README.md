@@ -3,14 +3,18 @@
 A PreToolUse hook that rewrites Bash tool commands before they run. Pure bash + jq --
 no compiled binary, so it works on any platform where bash and jq exist.
 
-It does two jobs:
+It does three jobs:
 
 1. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is scrubbed
    from the command, wherever it appears. You cannot responsibly use that, so it has
    to be taken away: silencing stderr hides the very errors you need to see.
-2. **Removes noise the model likes to add** (the original behavior of this plugin):
-   trailing `2>&1`, trailing `|| true`, trailing `| head` / `| tail` / `| grep`
-   (with their arguments), and leading `set -e;` / `set -e &&`.
+2. **Kills trailing `| head` / `| tail` stages.** Any flags or arguments (`| head`,
+   `|head -50`, `| head -n 100`, `| head -c 4k`, `| tail -n +2`, `| tail -f`, ...),
+   unwound repeatedly until stable, so `cmd | head -5 | tail -2` collapses all the
+   way to `cmd`. Truncating output hides the rest of it.
+3. **Removes other noise the model likes to add** (the original behavior of this
+   plugin): trailing `2>&1`, trailing `|| true`, trailing `| grep ...`, and leading
+   `set -e;` / `set -e &&`.
 
 ## Before / After
 
@@ -54,6 +58,28 @@ Safety guards:
   different files and are not touched (the target must be followed by end-of-command
   or a non-path character).
 
+## Trailing `| head` / `| tail` removal
+
+A trailing `| head ...` or `| tail ...` stage -- the final stage(s) of the pipeline
+at the end of the command -- is removed with whatever flags and arguments it
+carries, and the removal repeats until stable:
+
+```bash
+git log | head -5 | tail -2   ->   git log
+cat f | grep x | head -3      ->   cat f      # grep becomes trailing next pass
+```
+
+Safety guards:
+
+- **Word boundaries.** `| headache`, `| tailscale status`, `| head5` are different
+  commands and stay untouched (whitespace or end-of-command must follow the word).
+- **Mid-pipeline stages stay.** `cmd | head -5 | wc` keeps its `head` -- it is not
+  trailing. (If a later trailing stage is stripped and `head`/`tail` becomes
+  trailing, the next pass strips it too; that is the point.)
+- **Multi-line commands.** Only the end of the whole command counts as trailing:
+  in `foo | head -3<newline>echo done` the `head` stays, and its arguments can
+  never swallow the following lines.
+
 ## Non-goals (deliberately NOT touched)
 
 - `&>/dev/null` (redirects both stdout and stderr)
@@ -62,12 +88,17 @@ Safety guards:
   removed by the legacy noise rule, leaving `cmd >/dev/null`
 - bare `2>&1` in the middle of a command (e.g. `cmd 2>&1 | wc`)
 - `2 >/dev/null` (that is an argument `2` plus a stdout redirect)
+- `head`/`tail` used mid-pipeline or as a non-final pipeline stage
 
 ## Caveats
 
 - **Quoted strings and heredocs get scrubbed too.** The hook is a blunt instrument by
   design -- it completely scrubs all usages, including `echo "try 2>/dev/null"`. If a
   scrub removes text mid-command, a doubled space may remain; bash does not care.
+- **A trailing filter inside a quoted string is still stripped.** In
+  `echo 'try: cmd | head -3'` the `| head -3'` reaches the end of the command, so it
+  is removed -- taking the closing quote with it and breaking the quoting. Same
+  blunt stance; if you must echo such text, do not put it at the very end.
 - **jq is required; the hook fails open.** If jq is not installed, the input is not
   valid hook JSON, the tool is not Bash, or the command is empty, the hook exits 0
   and changes nothing.

@@ -30,7 +30,7 @@ The `master` branch is protected. All changes require a pull request.
 
 ## Cleanup Bash Cmds Plugin
 
-The cleanup-bash-cmds plugin lives at `plugins/cleanup-bash-cmds/`. It is a PreToolUse hook in pure bash + jq (cross-platform, no compiled binary) that rewrites Bash tool commands before execution: it strips ALL `2>/dev/null` stderr suppression anywhere in the command (including `2> /dev/null`, `2>>/dev/null`, and quoted `/dev/null` targets, while leaving multi-digit fds like `12>/dev/null` and distinct paths like `/dev/null.log` intact), and removes legacy noise (trailing `2>&1`, `|| true`, `| head/tail/grep`, leading `set -e`).
+The cleanup-bash-cmds plugin lives at `plugins/cleanup-bash-cmds/`. It is a PreToolUse hook in pure bash + jq (cross-platform, no compiled binary) that rewrites Bash tool commands before execution: it strips ALL `2>/dev/null` stderr suppression anywhere in the command (including `2> /dev/null`, `2>>/dev/null`, and quoted `/dev/null` targets, while leaving multi-digit fds like `12>/dev/null` and distinct paths like `/dev/null.log` intact), kills any chain of trailing `| head ...` / `| tail ...` stages (all flags/args, e.g. `|head -50`, `| tail -n +2`, unwound until stable, with `| headache`-style names and mid-pipeline stages left intact), and removes legacy noise (trailing `2>&1`, `|| true`, `| grep`, leading `set -e`).
 
 - **Hook script**: `plugins/cleanup-bash-cmds/hook.sh` — all scrub/cleanup logic (bash regex; jq only parses/builds the hook JSON)
 - **Tests**: `plugins/cleanup-bash-cmds/tests/run-tests.sh` — self-contained runner; CI runs it via the plugin `justfile` `prebuild` recipe
