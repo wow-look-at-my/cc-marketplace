@@ -1,11 +1,11 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "cleanup-bash-cmds",
-	"description": "Rewrites Bash commands to strip ALL 2>/dev/null stderr suppression and remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
+	"description": "Parses Bash commands with shfmt's syntax tree and rewrites them to strip ALL 2>/dev/null stderr suppression and trailing | head / | tail stages, plus unnecessary 2>&1, || true, trailing | grep, and set -e",
 	"author": {
 		"name": "mhaynie"
 	},
-	"keywords": ["bash", "cleanup", "rewrite", "hook", "stderr", "devnull"],
+	"keywords": ["bash", "cleanup", "rewrite", "hook", "stderr", "devnull", "shfmt", "ast"],
 	"hooks": {
 		"PreToolUse": [
 			{

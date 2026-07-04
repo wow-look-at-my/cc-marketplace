@@ -1,17 +1,20 @@
 # cleanup-bash-cmds
 
-A PreToolUse hook that rewrites Bash tool commands before they run. Pure bash + jq --
-no compiled binary, so it works on any platform where bash and jq exist.
+A PreToolUse hook that rewrites Bash tool commands before they run. The command is
+**parsed, not pattern-matched**: shfmt turns it into a syntax tree, a jq program
+rewrites the tree, and shfmt turns the tree back into a command. No compiled
+binary -- bash + jq + shfmt work the same on every platform.
 
 It does three jobs:
 
-1. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is scrubbed
-   from the command, wherever it appears. You cannot responsibly use that, so it has
-   to be taken away: silencing stderr hides the very errors you need to see.
+1. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed,
+   wherever it appears -- including inside command substitutions. You cannot
+   responsibly use that, so it has to be taken away: silencing stderr hides the
+   very errors you need to see.
 2. **Kills trailing `| head` / `| tail` stages.** Any flags or arguments (`| head`,
    `|head -50`, `| head -n 100`, `| head -c 4k`, `| tail -n +2`, `| tail -f`, ...),
-   unwound repeatedly until stable, so `cmd | head -5 | tail -2` collapses all the
-   way to `cmd`. Truncating output hides the rest of it.
+   unwound until stable, so `cmd | head -5 | tail -2` collapses all the way to
+   `cmd`. Truncating output hides the rest of it.
 3. **Removes other noise the model likes to add** (the original behavior of this
    plugin): trailing `2>&1`, trailing `|| true`, trailing `| grep ...`, and leading
    `set -e;` / `set -e &&`.
@@ -35,10 +38,35 @@ ls /nope
 
 stderr stays visible: `ls: cannot access '/nope': No such file or directory`.
 
+## How it works
+
+```
+hook stdin JSON -> jq (extract .tool_input.command)
+                -> shfmt --to-json          (parse to a typed syntax tree)
+                -> jq -f transform.jq       (rewrite the tree)
+                -> shfmt --from-json        (regenerate the command)
+                -> emit hookSpecificOutput.updatedInput
+```
+
+Because the rewrite operates on real `Redirect` and pipeline nodes, string
+literals, heredoc bodies, and comments that merely *contain* `2>/dev/null` or
+`| head` are never touched. A rewrite is emitted only when the tree semantically
+changed (positions are ignored in the comparison); untouched commands pass through
+byte-for-byte.
+
+Two implementation notes:
+
+- shfmt's typed JSON encodes operators as version-dependent numbers (`|` is 12 in
+  v3.8.0 but 13 in v3.13.1), so the hook probes the numbers at runtime by parsing
+  a tiny fixed script with the same shfmt binary it will use.
+- A rewritten command comes back in shfmt's canonical formatting (normalized
+  spacing; `a; b` becomes two lines). Formatting-only differences never trigger a
+  rewrite on their own.
+
 ## Exactly which forms are scrubbed
 
-All of these are removed, anywhere in the command (start, middle, end, across
-multi-line commands):
+Stderr redirections to /dev/null, anywhere in the command, in any of these
+spellings:
 
 | Form | Example |
 |------|---------|
@@ -49,63 +77,80 @@ multi-line commands):
 | `2>'/dev/null'` | `cmd 2>'/dev/null'` |
 | `2>"/dev/null"` | `cmd 2>"/dev/null"` |
 
-Safety guards:
-
-- **Multi-digit file descriptors are left alone.** `foo 12>/dev/null` redirects fd 12,
-  not stderr, and is not touched (the `2` must be at the start of the command or
-  preceded by a non-digit).
-- **Distinct paths are left alone.** `2>/dev/null2` and `2>/dev/null.log` name real,
-  different files and are not touched (the target must be followed by end-of-command
-  or a non-path character).
+Because the match is a parsed `Redirect` node (fd 2, `>` or `>>`, target exactly
+`/dev/null`), the old regex hazards are structurally impossible: `12>/dev/null`
+redirects fd 12 and stays; `2>/dev/null2` and `2>/dev/null.log` name different
+files and stay; `echo "try 2>/dev/null"` is a string and stays.
 
 ## Trailing `| head` / `| tail` removal
 
-A trailing `| head ...` or `| tail ...` stage -- the final stage(s) of the pipeline
-at the end of the command -- is removed with whatever flags and arguments it
-carries, and the removal repeats until stable:
+A trailing `| head ...` or `| tail ...` stage is dropped from the end of a
+pipeline, repeatedly, with whatever flags and arguments it carries:
 
 ```bash
 git log | head -5 | tail -2   ->   git log
 cat f | grep x | head -3      ->   cat f      # grep becomes trailing next pass
+a | head -2 && b | tail -3    ->   a && b
 ```
 
-Safety guards:
+Scope and guards:
 
-- **Word boundaries.** `| headache`, `| tailscale status`, `| head5` are different
-  commands and stay untouched (whitespace or end-of-command must follow the word).
-- **Mid-pipeline stages stay.** `cmd | head -5 | wc` keeps its `head` -- it is not
-  trailing. (If a later trailing stage is stripped and `head`/`tail` becomes
-  trailing, the next pass strips it too; that is the point.)
-- **Multi-line commands.** Only the end of the whole command counts as trailing:
-  in `foo | head -3<newline>echo done` the `head` stays, and its arguments can
-  never swallow the following lines.
+- Applies to every top-level statement (each line / `;` member) and both sides of
+  top-level `&&` / `||` chains.
+- **Never inside `$(...)` or `<(...)`.** `VAR=$(ls | head -1)` is functional
+  capture, not output truncation, and is preserved.
+- **Word boundaries are real.** `| headache`, `| tailscale status`, `| head5` are
+  different commands and stay untouched (the stage's command word must be exactly
+  `head` or `tail`).
+- **Mid-pipeline stages stay.** `cmd | head -5 | wc` keeps its `head`. If a later
+  trailing stage is stripped and `head`/`tail` becomes trailing, the next pass
+  strips it too; that is the point.
+- Strings are safe: `echo "foo | head"` contains no pipeline.
 
 ## Non-goals (deliberately NOT touched)
 
 - `&>/dev/null` (redirects both stdout and stderr)
 - `>/dev/null` (stdout only)
 - `>/dev/null 2>&1` -- the `>/dev/null` part survives; a *trailing* `2>&1` is still
-  removed by the legacy noise rule, leaving `cmd >/dev/null`
-- bare `2>&1` in the middle of a command (e.g. `cmd 2>&1 | wc`)
+  removed by the legacy rule, leaving `cmd >/dev/null`
+- `2>&1` anywhere except the very end of the command (e.g. `cmd 2>&1 | wc`)
 - `2 >/dev/null` (that is an argument `2` plus a stdout redirect)
-- `head`/`tail` used mid-pipeline or as a non-final pipeline stage
+- `head`/`tail` used mid-pipeline, standalone (`head -5 file`), or inside
+  command/process substitutions
+- trailing `| grep` keeps its original anchoring: only at the very end of the
+  command (last statement), unlike head/tail which apply per statement
+
+## Requirements
+
+The hook needs three tools on PATH at runtime; if any is missing it **fails
+open** (the command runs unmodified):
+
+| Tool | Why | Notes |
+|------|-----|-------|
+| bash | orchestration | |
+| jq | JSON handling + AST transform | 1.6+ |
+| shfmt | parse/print bash | needs `--to-json` / `--from-json` (v3.7.0+; verified with 3.8.0 and 3.13.1) |
+
+Installing shfmt:
+
+```bash
+# Debian/Ubuntu                # macOS                    # Windows
+sudo apt-get install shfmt     brew install shfmt         scoop install shfmt
+
+# Anywhere with Go                             # Static binaries
+go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/releases
+```
 
 ## Caveats
 
-- **Quoted strings and heredocs get scrubbed too.** The hook is a blunt instrument by
-  design -- it completely scrubs all usages, including `echo "try 2>/dev/null"`. If a
-  scrub removes text mid-command, a doubled space may remain; bash does not care.
-- **A trailing filter inside a quoted string is still stripped.** In
-  `echo 'try: cmd | head -3'` the `| head -3'` reaches the end of the command, so it
-  is removed -- taking the closing quote with it and breaking the quoting. Same
-  blunt stance; if you must echo such text, do not put it at the very end.
-- **jq is required; the hook fails open.** If jq is not installed, the input is not
-  valid hook JSON, the tool is not Bash, or the command is empty, the hook exits 0
-  and changes nothing.
+- **Rewritten commands come back shfmt-formatted.** Spacing is normalized and
+  `a; b` prints as two lines. Only commands that had a real change are reformatted.
+- **The command must parse as bash.** Anything shfmt cannot parse passes through
+  untouched (fail-open), as does anything when shfmt/jq are absent.
 - **The permission prompt still applies.** The hook emits
   `hookSpecificOutput.updatedInput` *without* a `permissionDecision`, so the normal
   permission flow evaluates the rewritten command (verified against
-  `@anthropic-ai/claude-code` 2.1.201). This is a change from the previous Go
+  `@anthropic-ai/claude-code` 2.1.201). This is a change from the original Go
   implementation of this plugin, which returned `permissionDecision: "allow"` and
   made every rewritten command skip the permission prompt.
 - The model is told about the rewrite via `additionalContext`, and the user sees a
@@ -135,13 +180,15 @@ claude plugin install cleanup-bash-cmds
 
 ## Development
 
-The hook logic lives in `hook.sh`; the tests in `tests/run-tests.sh` feed synthetic
-hook payloads to the script and assert on the emitted JSON:
+The orchestration lives in `hook.sh`, the AST rewrite in `transform.jq`, and the
+tests in `tests/run-tests.sh` (synthetic hook payloads in, JSON assertions out):
 
 ```bash
 bash tests/run-tests.sh
 ```
 
-CI runs the same tests through the `prebuild` recipe in the `justfile`.
+If the machine has no usable shfmt, the test runner bootstraps a pinned release
+binary into a temp directory for the run (this is how bare CI runners pass). CI
+runs the same tests through the `prebuild` recipe in the `justfile`.
 
 And no, `hook.sh` does not use `2>/dev/null` anywhere itself. We checked.

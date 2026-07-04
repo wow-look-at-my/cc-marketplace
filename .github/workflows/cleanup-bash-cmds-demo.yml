@@ -14,8 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # The hook is a plain bash + jq script (hook.sh) checked into the
-      # plugin, so there is no binary to build or stage.
+      # The hook is a bash + jq + shfmt script (hook.sh) checked into the
+      # plugin, so there is no binary to build or stage. It does need shfmt
+      # (--to-json/--from-json) on the machine running Claude.
+      - name: Install shfmt
+        run: sudo apt-get update -q && sudo apt-get install -y -q shfmt
 
       - uses: ./.github/actions/setup-claude-code
 

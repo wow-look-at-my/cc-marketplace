@@ -30,10 +30,11 @@ The `master` branch is protected. All changes require a pull request.
 
 ## Cleanup Bash Cmds Plugin
 
-The cleanup-bash-cmds plugin lives at `plugins/cleanup-bash-cmds/`. It is a PreToolUse hook in pure bash + jq (cross-platform, no compiled binary) that rewrites Bash tool commands before execution: it strips ALL `2>/dev/null` stderr suppression anywhere in the command (including `2> /dev/null`, `2>>/dev/null`, and quoted `/dev/null` targets, while leaving multi-digit fds like `12>/dev/null` and distinct paths like `/dev/null.log` intact), kills any chain of trailing `| head ...` / `| tail ...` stages (all flags/args, e.g. `|head -50`, `| tail -n +2`, unwound until stable, with `| headache`-style names and mid-pipeline stages left intact), and removes legacy noise (trailing `2>&1`, `|| true`, `| grep`, leading `set -e`).
+The cleanup-bash-cmds plugin lives at `plugins/cleanup-bash-cmds/`. It is a PreToolUse hook in bash + jq + shfmt (cross-platform, no compiled binary) that rewrites Bash tool commands before execution by parsing them: `shfmt --to-json` produces the syntax tree, a jq program transforms it, and `shfmt --from-json` regenerates the command. It strips ALL `2>/dev/null` stderr suppression anywhere in the tree (Redirect nodes only — quoted strings/heredocs and fds like `12>/dev/null` are structurally safe), kills any chain of trailing `| head ...` / `| tail ...` pipeline stages on top-level statements (never inside `$(...)`/`<(...)` captures), and removes legacy noise (trailing `2>&1`, `|| true`, `| grep`, leading `set -e`). shfmt operator numbers are version-dependent, so the hook probes them at runtime; missing tools or unparseable commands fail open.
 
-- **Hook script**: `plugins/cleanup-bash-cmds/hook.sh` — all scrub/cleanup logic (bash regex; jq only parses/builds the hook JSON)
-- **Tests**: `plugins/cleanup-bash-cmds/tests/run-tests.sh` — self-contained runner; CI runs it via the plugin `justfile` `prebuild` recipe
+- **Hook script**: `plugins/cleanup-bash-cmds/hook.sh` — orchestration (extract command, probe ops, parse, transform, regenerate, emit)
+- **AST transform**: `plugins/cleanup-bash-cmds/transform.jq` — all rewrite rules
+- **Tests**: `plugins/cleanup-bash-cmds/tests/run-tests.sh` — self-contained runner (bootstraps a pinned shfmt if the machine lacks one); CI runs it via the plugin `justfile` `prebuild` recipe
 - **Plugin config**: `plugins/cleanup-bash-cmds/.claude-plugin/plugin.json` — PreToolUse/Bash matcher invoking `hook.sh`
 
 The hook emits `hookSpecificOutput.updatedInput` WITHOUT a `permissionDecision`, so the normal permission flow evaluates the rewritten command (it does not auto-allow). Rewrites can be logged by setting `CLEANUP_BASH_CMDS_LOG`.

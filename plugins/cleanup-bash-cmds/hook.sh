@@ -1,105 +1,78 @@
 #!/usr/bin/env bash
 # PreToolUse hook: cleans up Bash tool commands before they run.
 #
-# Ported 1:1 from the previous Go implementation (hook.go), plus one new rule:
-# ALL stderr-to-/dev/null redirections are scrubbed from anywhere in the
-# command, because silencing stderr hides real errors.
+# The command is PARSED, not pattern-matched: shfmt --to-json produces the
+# syntax tree, transform.jq rewrites it (scrub stderr-to-/dev/null redirects
+# everywhere; kill trailing | head / | tail stages; legacy noise rules), and
+# shfmt --from-json regenerates the command. Only a semantic AST change
+# triggers a rewrite, so string literals that merely contain "2>/dev/null"
+# or "| head" are never mangled.
 #
-# Reads the hook event JSON on stdin. If the command needs rewriting, emits
-# hookSpecificOutput JSON carrying updatedInput on stdout and exits 0. The
-# output deliberately carries NO permissionDecision: the normal permission
-# flow continues and evaluates the rewritten command (verified against
-# @anthropic-ai/claude-code 2.1.201: cli.js:199270 schema, cli.js:393479
-# hookUpdatedInput event, cli.js:408198 input replacement).
+# Operator tokens in shfmt's typed JSON are version-dependent numbers, so
+# they are probed at runtime from the same shfmt binary (see $probe below).
 #
-# Fail-open policy: if jq is missing, stdin is not valid hook JSON, the tool
-# is not Bash, or the command is missing/empty, exit 0 with no output.
+# If the command needs rewriting, emits hookSpecificOutput JSON carrying
+# updatedInput on stdout and exits 0. The output deliberately carries NO
+# permissionDecision: the normal permission flow continues and evaluates the
+# rewritten command (verified against @anthropic-ai/claude-code 2.1.201:
+# cli.js:199270 schema, cli.js:393479 hookUpdatedInput event, cli.js:408198
+# input replacement).
+#
+# Fail-open policy: if jq or shfmt is missing, stdin is not valid hook JSON,
+# the tool is not Bash, the command is missing/empty, or the command does not
+# parse as bash, exit 0 with no output.
 #
 # This script never suppresses stderr with /dev/null itself; that would be
-# hypocritical.
+# hypocritical. Tool stderr is captured into the substitution result and
+# discarded only when the failing exit code takes the fail-open path.
 
 set -euo pipefail
 
 command -v jq >/dev/null || exit 0
+command -v shfmt >/dev/null || exit 0
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 input=$(cat)
 [ -n "$input" ] || exit 0
 
 # Single fail-open extraction: empty result unless tool_name is Bash and a
-# non-empty command is present. On jq parse errors the captured text is
-# discarded and the nonzero exit takes the fail-open path.
+# non-empty command is present.
 cmd=$(printf '%s' "$input" | jq -r 'if (.tool_name? == "Bash") then (.tool_input.command? // "") else "" end' 2>&1) || exit 0
 [ -n "$cmd" ] || exit 0
 
-# Equivalent of Go strings.TrimSpace (leading/trailing [[:space:]]).
-trim_space() {
-	local s=$1
-	local re='^[[:space:]]*(.*[^[:space:]])[[:space:]]*$'
-	if [[ $s =~ $re ]]; then
-		printf '%s' "${BASH_REMATCH[1]}"
-	fi
-}
+# Probe this shfmt build's operator numbers with a fixed script whose ops sit
+# at known paths. The numbers differ between shfmt versions ("|" is 12 in
+# v3.8.0 but 13 in v3.13.1), so they can never be hardcoded.
+probe=$(printf '%s' $': 2>/dev/null\n: 2>>/dev/null\n: 2>&1\n: && :\n: || :\n: | :\n: |& :' | shfmt --to-json 2>&1) || exit 0
+ops=$(printf '%s' "$probe" | jq -c '{
+	gt: .Stmts[0].Redirs[0].Op,
+	app: .Stmts[1].Redirs[0].Op,
+	dup: .Stmts[2].Redirs[0].Op,
+	and: .Stmts[3].Cmd.Op,
+	or: .Stmts[4].Cmd.Op,
+	pipe: .Stmts[5].Cmd.Op,
+	pipeall: .Stmts[6].Cmd.Op
+}' 2>&1) || exit 0
+printf '%s' "$ops" | jq -e 'all(.[]; type == "number")' >/dev/null 2>&1 || exit 0
 
-# Applies the cleanup rules until the command stabilizes (max 10 passes, same
-# as the Go implementation). Prints the cleaned command on stdout.
-clean_command() {
-	local cmd=$1 prev i
-	# Ported from hook.go (Go regexp -> POSIX ERE; \s -> [[:space:]], and
-	# literal pipes as [|] for portability):
-	local re_set_e_semi='^set[[:space:]]+-e[[:space:]]*;[[:space:]]*'
-	local re_set_e_and='^set[[:space:]]+-e[[:space:]]*&&[[:space:]]*'
-	local re_or_true='[[:space:]]*[|][|][[:space:]]*true[[:space:]]*$'
-	local re_stderr_merge='[[:space:]]+2>&1[[:space:]]*$'
-	# Trailing | head / | tail stages are stripped with ANY flags/arguments
-	# (| head, |head -50, | head -n 100, | head -c 4k, | tail -n +2,
-	# | tail -f, ...) and unwound repeatedly until stable, so
-	# "cmd | head -5 | tail -2" collapses all the way to "cmd". The required
-	# whitespace (or end-of-command) after the word keeps | headache /
-	# | tailscale and other prefixed names intact; the $ anchor keeps
-	# mid-pipeline stages intact (end-of-command-string anchoring, same as
-	# every other trailing rule). Arguments are matched with [[:blank:]]
-	# separators so they cannot span a newline: a | head on an earlier line
-	# of a multi-line command is not trailing and stays untouched.
-	local re_head_tail='[[:space:]]*[|][[:space:]]*(head|tail)([[:blank:]]+[^[:space:]|]+)*[[:space:]]*$'
-	local re_grep='[[:space:]]*[|][[:space:]]*grep([[:space:]]+[^[:space:]|]+)*[[:space:]]*$'
-	# New rule: scrub EVERY stderr-to-/dev/null redirection, anywhere in the
-	# command (not just trailing). Covered forms: 2>/dev/null, 2> /dev/null,
-	# 2>>/dev/null, 2>> /dev/null, and the quoted targets 2>'/dev/null' and
-	# 2>"/dev/null". The (^|.*[^0-9]) prefix requires start-of-string or a
-	# non-digit before the 2, so multi-digit fds (12>/dev/null) stay intact.
-	# The trailing ([^A-Za-z0-9._/-].*)? guard requires end-of-string or a
-	# non-path character after the target, so distinct paths such as
-	# /dev/null2 or /dev/null.log stay intact. Occurrences inside quoted
-	# strings and heredocs ARE scrubbed -- blunt by design.
-	local re_devnull='(^|.*[^0-9])2>>?[[:space:]]*("/dev/null"|'\''/dev/null'\''|/dev/null)([^A-Za-z0-9._/-].*)?$'
+# Parse the command; anything that is not valid bash fails open.
+ast=$(printf '%s' "$cmd" | shfmt --to-json 2>&1) || exit 0
 
-	for ((i = 0; i < 10; i++)); do
-		prev=$cmd
-		cmd=$(trim_space "$cmd")
-		if [[ $cmd =~ $re_set_e_semi ]]; then cmd=${cmd#"${BASH_REMATCH[0]}"}; fi
-		if [[ $cmd =~ $re_set_e_and ]]; then cmd=${cmd#"${BASH_REMATCH[0]}"}; fi
-		if [[ $cmd =~ $re_or_true ]]; then cmd=${cmd%"${BASH_REMATCH[0]}"}; fi
-		if [[ $cmd =~ $re_stderr_merge ]]; then cmd=${cmd%"${BASH_REMATCH[0]}"}; fi
-		# Greedy prefix makes each pass strip the rightmost occurrence; the
-		# string strictly shrinks, so this always terminates.
-		while [[ $cmd =~ $re_devnull ]]; do
-			cmd="${BASH_REMATCH[1]}${BASH_REMATCH[3]:-}"
-		done
-		# Strictly shrinking, so this always terminates; any depth of chained
-		# trailing head/tail stages unwinds in a single pass.
-		while [[ $cmd =~ $re_head_tail ]]; do
-			cmd=${cmd%"${BASH_REMATCH[0]}"}
-		done
-		if [[ $cmd =~ $re_grep ]]; then cmd=${cmd%"${BASH_REMATCH[0]}"}; fi
-		cmd=$(trim_space "$cmd")
-		if [ "$cmd" = "$prev" ]; then break; fi
-	done
-	printf '%s' "$cmd"
-}
+result=$(printf '%s' "$ast" | jq -c --argjson ops "$ops" -f "$SCRIPT_DIR/transform.jq" 2>&1) || exit 0
 
-# Best-effort rewrite log, same env var and line format as the Go version
-# (Go %q approximated by escaping backslash, quote, newline, and tab).
-# Failures never break the hook.
+changed=$(printf '%s' "$result" | jq -r '.changed' 2>&1) || exit 0
+[ "$changed" = "true" ] || exit 0
+
+cleaned=$(printf '%s' "$result" | jq -c '.ast' | shfmt --from-json 2>&1) || exit 0
+# from-json terminates the output with a newline; command substitution
+# strips it. Never emit an empty command.
+[ -n "$cleaned" ] || exit 0
+[ "$cleaned" = "$cmd" ] && exit 0
+
+# Best-effort rewrite log, same env var and line format as the original Go
+# implementation (Go %q approximated by escaping backslash, quote, newline,
+# and tab). Failures never break the hook.
 log_rewrite() {
 	local path=${CLEANUP_BASH_CMDS_LOG:-}
 	[ -n "$path" ] || return 0
@@ -114,11 +87,6 @@ log_rewrite() {
 	c=${c//$'\t'/\\t}
 	printf 'REWRITE\toriginal="%s"\tcleaned="%s"\n' "$o" "$c" >>"$path" || true
 }
-
-cleaned=$(clean_command "$cmd")
-if [ "$cleaned" = "$cmd" ]; then
-	exit 0
-fi
 
 log_rewrite "$cmd" "$cleaned"
 

@@ -2,11 +2,37 @@
 # Self-contained tests for the cleanup-bash-cmds PreToolUse hook.
 # Feeds synthetic hook payloads to hook.sh and asserts on the JSON output
 # with jq. Prints PASS/FAIL per case and exits nonzero on any failure.
+#
+# The hook needs shfmt (--to-json/--from-json, v3.7.0+). If the environment
+# lacks a suitable shfmt (e.g. a bare CI runner), a pinned release binary is
+# bootstrapped into a temp dir for the duration of the run.
+#
+# shellcheck disable=SC2016  # test inputs are literal commands; $() in them
+#                            # is data for the hook, never meant to expand
 
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 HOOK=$SCRIPT_DIR/../hook.sh
+
+if ! command -v shfmt >/dev/null || ! shfmt --help 2>&1 | grep -q -- '--from-json'; then
+	SHFMT_VERSION=v3.8.0
+	os=$(uname -s | tr '[:upper:]' '[:lower:]')
+	arch=$(uname -m)
+	case "$arch" in
+	x86_64) arch=amd64 ;;
+	aarch64 | arm64) arch=arm64 ;;
+	esac
+	bindir=$(mktemp -d)
+	url="https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_${os}_${arch}"
+	echo "shfmt with --from-json not found; bootstrapping ${SHFMT_VERSION}"
+	curl -fsSL "$url" -o "$bindir/shfmt" ||
+		gh release download "$SHFMT_VERSION" -R mvdan/sh \
+			--pattern "shfmt_${SHFMT_VERSION}_${os}_${arch}" -O "$bindir/shfmt"
+	chmod +x "$bindir/shfmt"
+	export PATH="$bindir:$PATH"
+fi
+echo "using shfmt $(shfmt --version) at $(command -v shfmt)"
 
 PASS=0
 FAIL=0
@@ -34,7 +60,7 @@ payload_bash() {
 	jq -cn --arg cmd "$1" '{hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: {command: $cmd}}'
 }
 
-# Asserts the hook rewrites command $2 to exactly $3.
+# Asserts the hook rewrites command $2 to exactly $3 (shfmt-canonical text).
 check_rewrite() {
 	local name=$1 in_cmd=$2 want=$3 got
 	run_hook "$(payload_bash "$in_cmd")"
@@ -71,29 +97,28 @@ else
 	bad "hook script is executable" "$HOOK is not executable"
 fi
 
-# --- New rule: scrub stderr-to-/dev/null anywhere in the command ---
+# --- Scrub stderr-to-/dev/null redirections (AST Redirect nodes only) ---
 
 check_rewrite "simple trailing scrub" \
 	'ls /nope 2>/dev/null' \
 	'ls /nope'
 
-# Mid-command occurrences leave a doubled blank behind; that is harmless to
-# bash and accepted by design.
 check_rewrite "mid-command scrub before &&" \
 	'grep foo file 2>/dev/null && echo found' \
-	'grep foo file  && echo found'
+	'grep foo file && echo found'
 
-check_rewrite "all variants in one command" \
+# Semicolon-separated statements come back one per line (shfmt-canonical).
+check_rewrite "all redirect variants in one command" \
 	'a 2>/dev/null; b 2> /dev/null; c 2>>/dev/null; d 2>> /dev/null; e 2>'\''/dev/null'\''; f 2>"/dev/null"' \
-	'a ; b ; c ; d ; e ; f'
+	$'a\nb\nc\nd\ne\nf'
 
-check_rewrite "adjacent pipe after scrub" \
+check_rewrite "adjacent pipe after scrub (canonical spacing)" \
 	'foo 2>/dev/null|bar' \
-	'foo |bar'
+	'foo | bar'
 
 check_rewrite "scrub between pipeline stages" \
 	'cmd 2>/dev/null | wc' \
-	'cmd  | wc'
+	'cmd | wc'
 
 check_noop "multi-digit fd 12>/dev/null untouched" \
 	'foo 12>/dev/null'
@@ -102,25 +127,26 @@ check_rewrite "fd 12 kept while fd 2 scrubbed" \
 	'foo 12>/dev/null 2>/dev/null' \
 	'foo 12>/dev/null'
 
-check_rewrite "scrub inside a quoted string (blunt by design)" \
-	'echo "silence with 2>/dev/null here"' \
-	'echo "silence with  here"'
-
-check_rewrite "scrub inside a heredoc (blunt by design)" \
-	$'cat <<EOF\nsome 2>/dev/null text\nEOF' \
-	$'cat <<EOF\nsome  text\nEOF'
-
-# A scrub at end-of-line leaves the same harmless residual blank as a
-# mid-command scrub (only string-leading/trailing whitespace is trimmed).
-check_rewrite "multi-line command scrubbed per occurrence" \
-	$'ls /a 2>/dev/null\nls /b 2>/dev/null' \
-	$'ls /a \nls /b'
-
-check_rewrite "redirect at start of command" \
+check_rewrite "redirect before the command word" \
 	'2>/dev/null ls' \
 	'ls'
 
-# --- Non-goals: these stderr/stdout forms are NOT scrubbed ---
+check_rewrite "scrub inside a command substitution" \
+	'echo $(ls /x 2>/dev/null)' \
+	'echo $(ls /x)'
+
+check_rewrite "multi-line command scrubbed per statement" \
+	$'ls /a 2>/dev/null\nls /b 2>/dev/null' \
+	$'ls /a\nls /b'
+
+# AST-aware wins: text that merely CONTAINS the pattern is not a redirect.
+check_noop "quoted string containing 2>/dev/null untouched" \
+	'echo "silence with 2>/dev/null here"'
+
+check_noop "heredoc body containing 2>/dev/null untouched" \
+	$'cat <<EOF\nsome 2>/dev/null text\nEOF'
+
+# --- Non-goals: these redirect forms are NOT scrubbed ---
 
 check_noop "stdout >/dev/null untouched" \
 	'ls >/dev/null'
@@ -141,18 +167,66 @@ check_noop "bare mid-command 2>&1 untouched" \
 	'cmd 2>&1 | wc'
 
 # ">/dev/null 2>&1": the >/dev/null part survives; the trailing 2>&1 is
-# removed by the ported legacy rule.
+# removed by the legacy rule.
 check_rewrite "trailing 2>&1 removed but >/dev/null kept" \
 	'foo >/dev/null 2>&1' \
 	'foo >/dev/null'
 
-# --- Ported legacy rules (1:1 with the Go hook_test.go cases) ---
+# --- Trailing | head / | tail: arbitrary flags, chains, word boundaries ---
+
+check_rewrite "trailing |head without spaces" 'cat file.txt|head -50' 'cat file.txt'
+check_rewrite "trailing | head -c 4k" 'cat file.txt | head -c 4k' 'cat file.txt'
+check_rewrite "trailing | tail -f" 'cat /var/log/syslog | tail -f' 'cat /var/log/syslog'
+check_rewrite "trailing | tail -n +2" 'cat file.txt | tail -n +2' 'cat file.txt'
+check_rewrite "head then tail chain unwinds fully" 'cmd | head -5 | tail -2' 'cmd'
+check_rewrite "deep alternating head/tail chain unwinds fully" \
+	'cmd | head -9 | tail -8 | head -7 | tail -6 | head -5 | tail -4 | head -3 | tail -2 | head -1 | tail -1 | head -2 | tail -3' \
+	'cmd'
+check_rewrite "deep same-filter chain unwinds fully" \
+	'cmd | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1' \
+	'cmd'
+check_rewrite "grep-interleaved chain unwinds via iteration" \
+	'cmd | head -5 | grep x | tail -2' \
+	'cmd'
+check_rewrite "head/tail stripped in both && members" \
+	'a | head -2 && b | tail -3' \
+	'a && b'
+check_rewrite "combined scrub and head strip across &&" \
+	'foo 2>/dev/null | head -3 && bar 2> /dev/null' \
+	'foo && bar'
+
+check_noop "| headache untouched (word boundary)" 'cmd | headache'
+check_noop "| tailscale untouched (word boundary)" 'cmd | tailscale status'
+check_noop "| head5 untouched (word boundary)" 'cmd | head5'
+
+# Command/process substitutions are functional capture, not output
+# truncation -- never stripped there.
+check_noop "head inside \$() capture preserved" 'VAR=$(ls | head -1)'
+check_noop "head inside plain command substitution preserved" 'echo $(ls | head -1)'
+check_noop "head inside process substitution preserved" 'diff <(ls | head -2) file'
+
+# AST-aware wins: pipes inside string literals are not pipelines.
+check_noop "quoted string containing | head untouched" 'echo "foo | head"'
+check_noop "single-quoted trailing | head untouched" "echo 'try: cmd | head -3'"
+
+# Multi-line commands: every top-level statement is in scope for head/tail.
+check_rewrite "head stripped on a non-final line too" \
+	$'foo | head -3\necho done' \
+	$'foo\necho done'
+check_rewrite "tail on final line is trailing" \
+	$'foo\nbar | tail -5' \
+	$'foo\nbar'
+
+check_rewrite "multi-line mix of all rules" \
+	$'set -e; ls /x 2>/dev/null | head -3\ngrep -r pat . 2>>/dev/null || true' \
+	$'ls /x\ngrep -r pat .'
+
+# --- Legacy rules (semantics ported from the original Go implementation) ---
 
 check_rewrite "trailing 2>&1" 'ls -la 2>&1' 'ls -la'
 check_rewrite "trailing || true" 'rm -f foo || true' 'rm -f foo'
 check_rewrite "leading set -e;" 'set -e; npm test' 'npm test'
 check_rewrite "leading set -e &&" 'set -e && npm test' 'npm test'
-check_rewrite "whitespace trim" '  ls -la  ' 'ls -la'
 check_rewrite "trailing | head" 'cat file.txt | head' 'cat file.txt'
 check_rewrite "trailing | head -5" 'cat file.txt | head -5' 'cat file.txt'
 check_rewrite "trailing | head -n 20" 'cat file.txt | head -n 20' 'cat file.txt'
@@ -171,48 +245,23 @@ check_rewrite "2>&1 with || true" 'cmd 2>&1 || true' 'cmd'
 check_rewrite "all legacy patterns" 'set -e; npm install 2>&1 || true' 'npm install'
 check_rewrite "head after 2>&1" 'ls -la 2>&1 | head -20' 'ls -la'
 check_rewrite "tail then grep chain" 'cmd | tail -10 | grep foo' 'cmd'
-
-# --- Trailing | head / | tail: arbitrary flags, chains, word boundaries ---
-
-check_rewrite "trailing |head without spaces" 'cat file.txt|head -50' 'cat file.txt'
-check_rewrite "trailing | head -c 4k" 'cat file.txt | head -c 4k' 'cat file.txt'
-check_rewrite "trailing | tail -f" 'cat /var/log/syslog | tail -f' 'cat /var/log/syslog'
-check_rewrite "trailing | tail -n +2" 'cat file.txt | tail -n +2' 'cat file.txt'
-check_rewrite "head then tail chain unwinds fully" 'cmd | head -5 | tail -2' 'cmd'
-check_rewrite "deep alternating head/tail chain unwinds fully" \
-	'cmd | head -9 | tail -8 | head -7 | tail -6 | head -5 | tail -4 | head -3 | tail -2 | head -1 | tail -1 | head -2 | tail -3' \
+# AST improvement over the old text rule, which could not tell a quoted
+# pipe from a real one and skipped this grep.
+check_rewrite "trailing grep with quoted pipe arg is stripped" \
+	'cmd | grep "foo|bar"' \
 	'cmd'
-check_rewrite "deep same-filter chain unwinds fully" \
-	'cmd | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1 | head -1' \
-	'cmd'
-check_rewrite "grep-interleaved chain unwinds via iteration" \
-	'cmd | head -5 | grep x | tail -2' \
-	'cmd'
-
-check_noop "| headache untouched (word boundary)" 'cmd | headache'
-check_noop "| tailscale untouched (word boundary)" 'cmd | tailscale status'
-check_noop "| head5 untouched (word boundary)" 'cmd | head5'
-
-# Multi-line: trailing means the end of the whole command string (same
-# anchoring as every legacy trailing rule). A | head at the end of an
-# earlier line is not trailing, and its argument matching cannot swallow
-# the following lines.
-check_noop "head at non-final line end untouched" $'foo | head -3\necho done'
-check_rewrite "tail on final line is trailing" $'foo\nbar | tail -5' $'foo\nbar'
-
-# Blunt-by-design caveat: a trailing filter inside a quoted string that
-# reaches the end of the command is still stripped (the closing quote gets
-# eaten as part of the argument token). Same stance as the /dev/null scrub.
-check_rewrite "trailing | head inside quotes is stripped (blunt by design)" \
-	"echo 'try: cmd | head -3'" \
-	"echo 'try: cmd"
 
 check_noop "|| true mid-command untouched" 'cmd || true && echo done'
 check_noop "head mid-pipeline untouched" 'cmd | head -5 | wc'
 check_noop "tail mid-pipeline untouched" 'cmd | tail -10 | wc'
 check_noop "grep mid-pipeline untouched" 'cmd | grep foo | wc'
-check_noop "grep with quoted pipe arg untouched" 'cmd | grep "foo|bar"'
 check_noop "clean command passes through" 'git status'
+# The old rule keyed on an explicit `;` after set -e; a newline stays.
+check_noop "set -e on its own line untouched" $'set -e\nnpm test'
+# grep keeps its legacy end-of-command anchoring (unlike head/tail).
+check_noop "grep on a non-final line untouched" $'cmd | grep x\necho done'
+# Whitespace-only differences are not semantic changes in the AST.
+check_noop "whitespace-only difference is not a rewrite" '  ls -la  '
 
 # --- Payload handling and fail-open behavior ---
 
@@ -244,6 +293,8 @@ else
 	bad "missing command passes through" "status=$STATUS out=$(printf '%q' "$OUT")"
 fi
 
+check_noop "unparseable bash fails open" 'if true; then'
+
 # jq missing: PATH with bash but no jq must fail open before reading stdin.
 FAKEBIN=$(mktemp -d)
 ln -s "$(command -v bash)" "$FAKEBIN/bash"
@@ -256,6 +307,21 @@ if [ "$NOJQ_STATUS" -eq 0 ] && [ -z "$NOJQ_OUT" ]; then
 	ok "missing jq fails open"
 else
 	bad "missing jq fails open" "status=$NOJQ_STATUS out=$(printf '%q' "$NOJQ_OUT")"
+fi
+
+# shfmt missing: PATH with bash and jq but no shfmt must fail open too.
+FAKEBIN=$(mktemp -d)
+ln -s "$(command -v bash)" "$FAKEBIN/bash"
+ln -s "$(command -v jq)" "$FAKEBIN/jq"
+set +e
+NOSHFMT_OUT=$(printf '%s' "$(payload_bash 'ls 2>/dev/null')" | env PATH="$FAKEBIN" "$HOOK")
+NOSHFMT_STATUS=$?
+set -e
+rm -rf "$FAKEBIN"
+if [ "$NOSHFMT_STATUS" -eq 0 ] && [ -z "$NOSHFMT_OUT" ]; then
+	ok "missing shfmt fails open"
+else
+	bad "missing shfmt fails open" "status=$NOSHFMT_STATUS out=$(printf '%q' "$NOSHFMT_OUT")"
 fi
 
 # --- Output JSON shape (verified schema, claude-code 2.1.201) ---
