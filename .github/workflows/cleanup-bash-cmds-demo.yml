@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # The hook is a plain bash + jq script (hook.sh) checked into the
       # plugin, so there is no binary to build or stage.
