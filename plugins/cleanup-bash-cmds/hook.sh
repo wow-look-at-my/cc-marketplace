@@ -2,11 +2,13 @@
 # PreToolUse hook: cleans up Bash tool commands before they run.
 #
 # The command is PARSED, not pattern-matched: shfmt --to-json produces the
-# syntax tree, transform.jq rewrites it (scrub stderr-to-/dev/null redirects
-# everywhere; kill trailing | head / | tail stages; legacy noise rules), and
-# shfmt --from-json regenerates the command. Only a semantic AST change
-# triggers a rewrite, so string literals that merely contain "2>/dev/null"
-# or "| head" are never mangled.
+# syntax tree, transform.jq inspects and rewrites it, and shfmt --from-json
+# regenerates the command. Commands containing a heredoc (<< or <<-,
+# anywhere in the tree) are DENIED outright. Otherwise the tree is rewritten
+# (scrub stderr-to-/dev/null redirects everywhere; kill trailing | head /
+# | tail stages; legacy noise rules). Only a semantic AST change triggers a
+# rewrite, so string literals that merely contain "2>/dev/null" or "| head"
+# are never mangled.
 #
 # Operator tokens in shfmt's typed JSON are version-dependent numbers, so
 # they are probed at runtime from the same shfmt binary (see $probe below).
@@ -43,8 +45,9 @@ cmd=$(printf '%s' "$input" | jq -r 'if (.tool_name? == "Bash") then (.tool_input
 
 # Probe this shfmt build's operator numbers with a fixed script whose ops sit
 # at known paths. The numbers differ between shfmt versions ("|" is 12 in
-# v3.8.0 but 13 in v3.13.1), so they can never be hardcoded.
-probe=$(printf '%s' $': 2>/dev/null\n: 2>>/dev/null\n: 2>&1\n: && :\n: || :\n: | :\n: |& :' | shfmt --to-json 2>&1) || exit 0
+# v3.8.0 but 13 in v3.13.1), so they can never be hardcoded. The last two
+# statements probe the heredoc operators (<< and <<-).
+probe=$(printf '%s' $': 2>/dev/null\n: 2>>/dev/null\n: 2>&1\n: && :\n: || :\n: | :\n: |& :\n: <<CBC_A\nCBC_A\n: <<-CBC_B\nCBC_B' | shfmt --to-json 2>&1) || exit 0
 ops=$(printf '%s' "$probe" | jq -c '{
 	gt: .Stmts[0].Redirs[0].Op,
 	app: .Stmts[1].Redirs[0].Op,
@@ -52,7 +55,9 @@ ops=$(printf '%s' "$probe" | jq -c '{
 	and: .Stmts[3].Cmd.Op,
 	or: .Stmts[4].Cmd.Op,
 	pipe: .Stmts[5].Cmd.Op,
-	pipeall: .Stmts[6].Cmd.Op
+	pipeall: .Stmts[6].Cmd.Op,
+	hdoc: .Stmts[7].Redirs[0].Op,
+	dashhdoc: .Stmts[8].Redirs[0].Op
 }' 2>&1) || exit 0
 printf '%s' "$ops" | jq -e 'all(.[]; type == "number")' >/dev/null 2>&1 || exit 0
 
@@ -60,6 +65,49 @@ printf '%s' "$ops" | jq -e 'all(.[]; type == "number")' >/dev/null 2>&1 || exit 
 ast=$(printf '%s' "$cmd" | shfmt --to-json 2>&1) || exit 0
 
 result=$(printf '%s' "$ast" | jq -c --argjson ops "$ops" -f "$SCRIPT_DIR/transform.jq" 2>&1) || exit 0
+
+# Best-effort log (CLEANUP_BASH_CMDS_LOG), same env var and line format
+# family as the original Go implementation (Go %q approximated by escaping
+# backslash, quote, newline, and tab). Failures never break the hook.
+log_escape() {
+	local s=$1
+	s=${s//\\/\\\\}
+	s=${s//\"/\\\"}
+	s=${s//$'\n'/\\n}
+	s=${s//$'\t'/\\t}
+	printf '%s' "$s"
+}
+
+log_rewrite() {
+	local path=${CLEANUP_BASH_CMDS_LOG:-}
+	[ -n "$path" ] || return 0
+	printf 'REWRITE\toriginal="%s"\tcleaned="%s"\n' "$(log_escape "$1")" "$(log_escape "$2")" >>"$path" || true
+}
+
+log_deny() {
+	local path=${CLEANUP_BASH_CMDS_LOG:-}
+	[ -n "$path" ] || return 0
+	printf 'DENY\toriginal="%s"\treason="heredoc"\n' "$(log_escape "$1")" >>"$path" || true
+}
+
+# Heredocs are banned outright: deny beats rewrite. Herestrings (<<<) are
+# fine and never denied. Detection is AST-based (Redirect nodes only), so a
+# string containing "<<EOF" or an arithmetic bit shift ($((x << 2)), which
+# shares the << token number) is not affected.
+deny=$(printf '%s' "$result" | jq -r '.deny' 2>&1) || exit 0
+if [ "$deny" = "true" ]; then
+	log_deny "$cmd"
+	reason="Heredocs are banned in this environment. Write file content with the Write/Edit tools; for command stdin use printf '%s' ... | cmd or a temp file."
+	jq -cn --arg reason "$reason" '{
+		systemMessage: "cleanup-bash-cmds: denied a Bash command containing a heredoc.",
+		hookSpecificOutput: {
+			hookEventName: "PreToolUse",
+			permissionDecision: "deny",
+			permissionDecisionReason: $reason
+		}
+	}' || exit 0
+	exit 0
+fi
 
 changed=$(printf '%s' "$result" | jq -r '.changed' 2>&1) || exit 0
 [ "$changed" = "true" ] || exit 0
@@ -69,24 +117,6 @@ cleaned=$(printf '%s' "$result" | jq -c '.ast' | shfmt --from-json 2>&1) || exit
 # strips it. Never emit an empty command.
 [ -n "$cleaned" ] || exit 0
 [ "$cleaned" = "$cmd" ] && exit 0
-
-# Best-effort rewrite log, same env var and line format as the original Go
-# implementation (Go %q approximated by escaping backslash, quote, newline,
-# and tab). Failures never break the hook.
-log_rewrite() {
-	local path=${CLEANUP_BASH_CMDS_LOG:-}
-	[ -n "$path" ] || return 0
-	local o=$1 c=$2
-	o=${o//\\/\\\\}
-	o=${o//\"/\\\"}
-	o=${o//$'\n'/\\n}
-	o=${o//$'\t'/\\t}
-	c=${c//\\/\\\\}
-	c=${c//\"/\\\"}
-	c=${c//$'\n'/\\n}
-	c=${c//$'\t'/\\t}
-	printf 'REWRITE\toriginal="%s"\tcleaned="%s"\n' "$o" "$c" >>"$path" || true
-}
 
 log_rewrite "$cmd" "$cleaned"
 

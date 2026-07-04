@@ -2,10 +2,12 @@
 #
 # Input: a shfmt --to-json syntax tree (mvdan.cc/sh typed JSON).
 # $ops:  operator token numbers probed at runtime from the SAME shfmt binary
-#        ({gt, app, dup, and, or, pipe, pipeall}). The numeric values differ
-#        between shfmt versions (e.g. "|" is 12 in v3.8.0 but 13 in v3.13.1),
-#        so they must never be hardcoded.
-# Output: {changed: bool, ast: <transformed tree>}.
+#        ({gt, app, dup, and, or, pipe, pipeall, hdoc, dashhdoc}). The
+#        numeric values differ between shfmt versions (e.g. "|" is 12 in
+#        v3.8.0 but 13 in v3.13.1), so they must never be hardcoded.
+# Output: {deny: bool, changed: bool, ast: <transformed tree>}.
+#         deny=true means the command contains a heredoc and must be blocked;
+#         changed/ast are only meaningful when deny is false.
 
 # Position objects ({Offset, Line, Col}) are stripped only for comparison;
 # the emitted AST keeps them so shfmt --from-json preserves line structure.
@@ -173,6 +175,20 @@ def strip_leading_set_e:
 # this terminates), then report whether anything semantically changed.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Heredocs are banned: any << or <<- Redirect node, anywhere in the tree
+# (including $(), process substitutions, and compound bodies), denies the
+# whole command. The match is restricted to Redirs arrays because the token
+# NUMBER for << is shared with the arithmetic shift operator ($((x << 2)) is
+# BinaryArithm Op 61 in shfmt 3.8.0) -- a bare Op scan would false-positive.
+# Herestrings (<<<) have their own token and are never matched.
+# ---------------------------------------------------------------------------
+
+def has_heredoc:
+  [.. | objects | select(has("Redirs")) | .Redirs[]
+   | select(.Op == $ops.hdoc or .Op == $ops.dashhdoc)]
+  | length > 0;
+
 def transform_once:
   scrub_devnull
   | strip_head_tail
@@ -184,5 +200,8 @@ def fixpoint(f):
   | if (($y | strip_pos) == ($x | strip_pos)) then $x else ($y | fixpoint(f)) end;
 
 . as $orig
-| fixpoint(transform_once) as $new
-| {changed: (($orig | strip_pos) != ($new | strip_pos)), ast: $new}
+| if has_heredoc then {deny: true, changed: false, ast: $orig}
+  else
+    (fixpoint(transform_once) as $new
+     | {deny: false, changed: (($orig | strip_pos) != ($new | strip_pos)), ast: $new})
+  end

@@ -91,6 +91,23 @@ check_noop() {
 	fi
 }
 
+# Asserts the hook DENIES command $2 (permissionDecision deny, a reason
+# pointing at the Write tool, and no updatedInput).
+check_deny() {
+	local name=$1 in_cmd=$2
+	run_hook "$(payload_bash "$in_cmd")"
+	if [ "$STATUS" -eq 0 ] && [ -n "$OUT" ] && printf '%s' "$OUT" | jq -e '
+		(.hookSpecificOutput.hookEventName == "PreToolUse") and
+		(.hookSpecificOutput.permissionDecision == "deny") and
+		(.hookSpecificOutput.permissionDecisionReason | test("Write")) and
+		(.hookSpecificOutput | has("updatedInput") | not)
+	' >/dev/null; then
+		ok "$name"
+	else
+		bad "$name" "expected deny JSON, got status=$STATUS out=$(printf '%q' "$OUT")"
+	fi
+}
+
 if [ -x "$HOOK" ]; then
 	ok "hook script is executable"
 else
@@ -143,8 +160,41 @@ check_rewrite "multi-line command scrubbed per statement" \
 check_noop "quoted string containing 2>/dev/null untouched" \
 	'echo "silence with 2>/dev/null here"'
 
-check_noop "heredoc body containing 2>/dev/null untouched" \
-	$'cat <<EOF\nsome 2>/dev/null text\nEOF'
+# --- Heredocs: banned outright (deny beats rewrite) ---
+
+check_deny "plain heredoc denied" \
+	$'cat <<EOF > /tmp/f\nhello\nEOF'
+
+check_deny "dash heredoc (<<-) denied" \
+	$'cat <<-EOF\n\thello\nEOF'
+
+check_deny "quoted-delimiter heredoc denied" \
+	$'cat <<\'EOF\'\nhello\nEOF'
+
+check_deny "heredoc inside command substitution denied" \
+	$'x=$(cat <<INNER\nhi\nINNER\n)'
+
+# Precedence: a command with a heredoc AND scrubbables is denied, never
+# rewritten (check_deny asserts no updatedInput).
+check_deny "heredoc plus 2>/dev/null is denied, not rewritten" \
+	$'cat <<EOF 2>/dev/null\nsome text\nEOF'
+
+# Herestrings are not heredocs: allowed, and other cleanups still apply.
+check_noop "herestring alone is allowed" \
+	'grep x <<<"data"'
+
+check_rewrite "herestring kept while 2>/dev/null scrubbed" \
+	'grep x <<<"data" 2>/dev/null' \
+	'grep x <<<"data"'
+
+# AST-based detection: text and arithmetic are not heredocs.
+check_noop "string literal containing <<EOF untouched" \
+	'echo "here is <<EOF in a string"'
+
+# The arithmetic shift shares the << token number with heredocs in shfmt's
+# typed JSON; the Redirs-scoped match must not deny it.
+check_noop "arithmetic bit shift is not a heredoc" \
+	'echo $((1 << 2))'
 
 # --- Non-goals: these redirect forms are NOT scrubbed ---
 
@@ -404,6 +454,13 @@ if [ ! -e "$LOGFILE" ]; then
 	ok "no log file when env var is empty"
 else
 	bad "no log file when env var is empty" "log=$(cat "$LOGFILE")"
+fi
+
+OUT=$(printf '%s' "$(payload_bash $'cat <<EOF\nhi\nEOF')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
+if [ -f "$LOGFILE" ] && grep -q '^DENY	original="cat <<EOF\\nhi\\nEOF"	reason="heredoc"$' "$LOGFILE"; then
+	ok "deny is logged with action DENY"
+else
+	bad "deny is logged with action DENY" "log=$(cat "$LOGFILE" || printf 'missing')"
 fi
 
 rm -rf "$LOGDIR"

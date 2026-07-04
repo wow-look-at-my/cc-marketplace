@@ -5,17 +5,19 @@ A PreToolUse hook that rewrites Bash tool commands before they run. The command 
 rewrites the tree, and shfmt turns the tree back into a command. No compiled
 binary -- bash + jq + shfmt work the same on every platform.
 
-It does three jobs:
+It does four jobs:
 
-1. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed,
+1. **Destroys heredocs.** Any command containing a heredoc is DENIED outright --
+   not rewritten, denied. See "Heredocs: banned" below.
+2. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed,
    wherever it appears -- including inside command substitutions. You cannot
    responsibly use that, so it has to be taken away: silencing stderr hides the
    very errors you need to see.
-2. **Kills trailing `| head` / `| tail` stages.** Any flags or arguments (`| head`,
+3. **Kills trailing `| head` / `| tail` stages.** Any flags or arguments (`| head`,
    `|head -50`, `| head -n 100`, `| head -c 4k`, `| tail -n +2`, `| tail -f`, ...),
    unwound until stable, so `cmd | head -5 | tail -2` collapses all the way to
    `cmd`. Truncating output hides the rest of it.
-3. **Removes other noise the model likes to add** (the original behavior of this
+4. **Removes other noise the model likes to add** (the original behavior of this
    plugin): trailing `2>&1`, trailing `|| true`, trailing `| grep ...`, and leading
    `set -e;` / `set -e &&`.
 
@@ -43,16 +45,42 @@ stderr stays visible: `ls: cannot access '/nope': No such file or directory`.
 ```
 hook stdin JSON -> jq (extract .tool_input.command)
                 -> shfmt --to-json          (parse to a typed syntax tree)
-                -> jq -f transform.jq       (rewrite the tree)
+                -> jq -f transform.jq       (inspect + rewrite the tree)
+                -> heredoc found?           (emit permissionDecision deny; stop)
                 -> shfmt --from-json        (regenerate the command)
                 -> emit hookSpecificOutput.updatedInput
 ```
 
 Because the rewrite operates on real `Redirect` and pipeline nodes, string
-literals, heredoc bodies, and comments that merely *contain* `2>/dev/null` or
-`| head` are never touched. A rewrite is emitted only when the tree semantically
-changed (positions are ignored in the comparison); untouched commands pass through
-byte-for-byte.
+literals and comments that merely *contain* `2>/dev/null` or `| head` are never
+touched. A rewrite is emitted only when the tree semantically changed (positions
+are ignored in the comparison); untouched commands pass through byte-for-byte.
+
+## Heredocs: banned
+
+You cannot be trusted with heredocs, so they are gone. Any command whose syntax
+tree contains a heredoc redirect -- `<<` or `<<-`, quoted or unquoted delimiter,
+anywhere in the command including inside `$(...)`, process substitutions, and
+function bodies -- is **denied**, not rewritten:
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+ "permissionDecisionReason": "Heredocs are banned in this environment. Write file
+ content with the Write/Edit tools; for command stdin use printf '%s' ... | cmd
+ or a temp file."}}
+```
+
+- **Deny beats rewrite**: a command with a heredoc AND scrubbable noise is denied
+  immediately; nothing is rewritten.
+- **Herestrings (`<<<`) are allowed** -- they are not heredocs -- and still get the
+  other cleanups (`grep x <<<"data" 2>/dev/null` becomes `grep x <<<"data"`).
+- Detection is AST-based: `echo "here is <<EOF in a string"` and the arithmetic
+  bit shift `$((x << 2))` (which shares shfmt's `<<` token number) are untouched.
+- What to use instead: the Write/Edit tools for file content; `printf '%s' ... |
+  cmd` or a temp file for stdin.
+- Denies are logged to `CLEANUP_BASH_CMDS_LOG` as `DENY` lines.
+- Fail-open still applies: if the command does not parse (or shfmt/jq are
+  missing), the hook cannot see a heredoc and passes the command through.
 
 Two implementation notes:
 
@@ -147,21 +175,24 @@ go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/relea
   `a; b` prints as two lines. Only commands that had a real change are reformatted.
 - **The command must parse as bash.** Anything shfmt cannot parse passes through
   untouched (fail-open), as does anything when shfmt/jq are absent.
-- **The permission prompt still applies.** The hook emits
+- **The permission prompt still applies to rewrites.** For rewrites the hook emits
   `hookSpecificOutput.updatedInput` *without* a `permissionDecision`, so the normal
   permission flow evaluates the rewritten command (verified against
   `@anthropic-ai/claude-code` 2.1.201). This is a change from the original Go
   implementation of this plugin, which returned `permissionDecision: "allow"` and
-  made every rewritten command skip the permission prompt.
+  made every rewritten command skip the permission prompt. Only the heredoc ban
+  uses a `permissionDecision` (`"deny"`).
 - The model is told about the rewrite via `additionalContext`, and the user sees a
   `systemMessage` notice.
 
 ## Logging
 
-Set `CLEANUP_BASH_CMDS_LOG=/path/to/file` to append a record of every rewrite:
+Set `CLEANUP_BASH_CMDS_LOG=/path/to/file` to append a record of every rewrite
+and every deny:
 
 ```
 REWRITE	original="ls | grep foo"	cleaned="ls"
+DENY	original="cat <<EOF\nhi\nEOF"	reason="heredoc"
 ```
 
 Log failures never break the hook.
