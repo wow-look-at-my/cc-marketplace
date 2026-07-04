@@ -5,7 +5,7 @@ A PreToolUse hook that rewrites Bash tool commands before they run. The command 
 rewrites the tree, and shfmt turns the tree back into a command. No compiled
 binary -- bash + jq + shfmt work the same on every platform.
 
-It does four jobs:
+It does six jobs:
 
 1. **Destroys heredocs.** Any command containing a heredoc is DENIED outright --
    not rewritten, denied. See "Heredocs: banned" below.
@@ -17,9 +17,35 @@ It does four jobs:
    `|head -50`, `| head -n 100`, `| head -c 4k`, `| tail -n +2`, `| tail -f`, ...),
    unwound until stable, so `cmd | head -5 | tail -2` collapses all the way to
    `cmd`. Truncating output hides the rest of it.
-4. **Removes other noise the model likes to add** (the original behavior of this
-   plugin): trailing `2>&1`, trailing `|| true`, trailing `| grep ...`, and leading
-   `set -e;` / `set -e &&`.
+4. **Turns trailing `> file` into `| tee file`.** The output lands in the file AND
+   stays visible (`cmd >> f` becomes `cmd | tee -a f`). See "Stdout redirects
+   become tee" below.
+5. **Ensures `set -o pipefail`.** Every command runs with pipefail enabled --
+   silently prepended unless the command already turns it on. This also keeps the
+   producer's exit status observable through the injected `| tee`.
+6. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing
+   `| grep ...`. Strictness settings the user wrote (`set -e` and friends) are
+   NEVER removed -- this hook only ever adds strictness.
+
+## Announced vs silent
+
+Changes that alter what you can observe are announced in a `systemMessage`
+listing each actual edit ("removed 2>/dev/null; removed | head -50"); plumbing
+that changes nothing observable is applied silently:
+
+| Rule | Class |
+|------|-------|
+| heredoc ban | deny (its own message) |
+| `2>/dev/null` scrub | announced |
+| trailing `| head` / `| tail` strip | announced |
+| trailing `| grep` strip | announced |
+| trailing `|| true` removal | announced |
+| trailing `> file` -> `| tee file` | announced |
+| trailing `2>&1` removal | silent |
+| `set -o pipefail` injection | silent |
+
+A silent-only rewrite carries `suppressOutput: true` and no message at all; when
+announced changes fire, silent ones ride along unannounced.
 
 ## Before / After
 
@@ -135,18 +161,46 @@ Scope and guards:
   strips it too; that is the point.
 - Strings are safe: `echo "foo | head"` contains no pipeline.
 
+## Stdout redirects become tee
+
+A trailing stdout file redirect on a top-level pipeline/statement is rewritten
+into a pipe through tee, so the file is still written but the output is no
+longer hidden from the transcript:
+
+```bash
+cmd > build.log         ->   cmd | tee build.log
+cmd >> build.log        ->   cmd | tee -a build.log
+a | b > out             ->   a | b | tee out
+make > "$OUT" 2>err     ->   make 2>err | tee "$OUT"
+```
+
+The redirect's target word is reused verbatim (quoting and expansions like
+`"$OUT"` survive), every other redirect stays on the producer, and the injected
+`set -o pipefail` keeps the producer's exit status from being masked by tee.
+
+Exclusions (left exactly as written, deliberately):
+
+- targets under `/dev/` -- `cmd > /dev/null` is a deliberate stdout discard and
+  stays a discard
+- process-substitution targets (`cmd > >(gzip)`)
+- statements with more than one stdout file redirect (`cmd > a > b`)
+- anything inside `$(...)` or `<(...)` -- `VAR=$(cmd > f)` is untouched
+- non-stdout redirects (`cmd 2> err.log`, `cmd < in`)
+
 ## Non-goals (deliberately NOT touched)
 
 - `&>/dev/null` (redirects both stdout and stderr)
-- `>/dev/null` (stdout only)
-- `>/dev/null 2>&1` -- the `>/dev/null` part survives; a *trailing* `2>&1` is still
-  removed by the legacy rule, leaving `cmd >/dev/null`
+- `>/dev/null` (a stdout discard stays a discard)
+- `>/dev/null 2>&1` -- the trailing `2>&1` is silently removed, leaving
+  `cmd >/dev/null`
 - `2>&1` anywhere except the very end of the command (e.g. `cmd 2>&1 | wc`)
 - `2 >/dev/null` (that is an argument `2` plus a stdout redirect)
 - `head`/`tail` used mid-pipeline, standalone (`head -5 file`), or inside
   command/process substitutions
 - trailing `| grep` keeps its original anchoring: only at the very end of the
   command (last statement), unlike head/tail which apply per statement
+- `set -e`, `set -u`, `set -euo pipefail`, ... -- strictness settings are never
+  removed (and `set -euo pipefail` is recognized, so no duplicate injection)
 
 ## Requirements
 
@@ -182,16 +236,19 @@ go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/relea
   implementation of this plugin, which returned `permissionDecision: "allow"` and
   made every rewritten command skip the permission prompt. Only the heredoc ban
   uses a `permissionDecision` (`"deny"`).
-- The model is told about the rewrite via `additionalContext`, and the user sees a
-  `systemMessage` notice.
+- For announced rewrites the model is told what actually runs via
+  `additionalContext`, and the user sees the per-change `systemMessage`. Silent
+  rewrites emit neither (plus `suppressOutput: true`).
 
 ## Logging
 
 Set `CLEANUP_BASH_CMDS_LOG=/path/to/file` to append a record of every rewrite
-and every deny:
+(including silent ones, tagged -- the spam concern is the transcript, not the
+log) and every deny:
 
 ```
-REWRITE	original="ls | grep foo"	cleaned="ls"
+REWRITE	original="ls | grep foo"	cleaned="set -o pipefail\nls"
+REWRITE	original="git status"	cleaned="set -o pipefail\ngit status"	reason="silent"
 DENY	original="cat <<EOF\nhi\nEOF"	reason="heredoc"
 ```
 

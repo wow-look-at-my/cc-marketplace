@@ -65,8 +65,9 @@ jobs:
             echo "::error::hook log has no REWRITE entries"
             exit 1
           fi
-          if ! grep -q 'cleaned="seq 1 10"' "$log"; then
-            echo "::error::expected the trailing | head to be stripped"
+          # The rewrite strips the trailing | head and injects set -o pipefail.
+          if ! grep -qF 'cleaned="set -o pipefail\nseq 1 10"' "$log"; then
+            echo "::error::expected | head stripped and pipefail injected"
             exit 1
           fi
-          echo "OK: hook stripped the trailing | head as expected"
+          echo "OK: hook stripped the trailing | head and injected pipefail"
