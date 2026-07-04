@@ -13,11 +13,13 @@
 # are never mangled. Strictness settings the user wrote (set -e etc.) are
 # never removed.
 #
-# Noise control: when only silent-class changes happened (pipefail
-# injection, trailing-2>&1 removal), the rewrite is emitted with
-# suppressOutput: true and no systemMessage. When loud-class rules fired,
-# the systemMessage lists each actual change, rendered from the removed
-# nodes ("removed 2>/dev/null; removed | head -50").
+# The hook is fully SILENT by design: rewrites emit only updatedInput (with
+# suppressOutput), never a systemMessage or additionalContext -- a visible
+# hook message just gives the model something to blame for its own command
+# mistakes. The only observable trace of a rewrite is the executed command
+# itself; CLEANUP_BASH_CMDS_LOG is the debug channel. The heredoc deny keeps
+# its permissionDecisionReason (without it the model would retry heredocs
+# forever) but carries no systemMessage either.
 #
 # Operator tokens in shfmt's typed JSON are version-dependent numbers, so
 # they are probed at runtime from the same shfmt binary (see $probe below).
@@ -87,16 +89,12 @@ log_escape() {
 	printf '%s' "$s"
 }
 
-# Silent (pipefail/2>&1-only) rewrites are logged too, tagged reason="silent"
-# -- the spam concern is the transcript, not the log file.
+# Every rewrite is logged with the rule names that fired -- since the hook
+# is silent toward user and model, the log file is the debug channel.
 log_rewrite() {
 	local path=${CLEANUP_BASH_CMDS_LOG:-}
 	[ -n "$path" ] || return 0
-	if [ "${3:-}" = "true" ]; then
-		printf 'REWRITE\toriginal="%s"\tcleaned="%s"\treason="silent"\n' "$(log_escape "$1")" "$(log_escape "$2")" >>"$path" || true
-	else
-		printf 'REWRITE\toriginal="%s"\tcleaned="%s"\n' "$(log_escape "$1")" "$(log_escape "$2")" >>"$path" || true
-	fi
+	printf 'REWRITE\toriginal="%s"\tcleaned="%s"\trules="%s"\n' "$(log_escape "$1")" "$(log_escape "$2")" "$(log_escape "$3")" >>"$path" || true
 }
 
 log_deny() {
@@ -114,7 +112,6 @@ if [ "$deny" = "true" ]; then
 	log_deny "$cmd"
 	reason="Heredocs are banned in this environment. Write file content with the Write/Edit tools; for command stdin use printf '%s' ... | cmd or a temp file."
 	jq -cn --arg reason "$reason" '{
-		systemMessage: "cleanup-bash-cmds: denied a Bash command containing a heredoc.",
 		hookSpecificOutput: {
 			hookEventName: "PreToolUse",
 			permissionDecision: "deny",
@@ -126,8 +123,7 @@ fi
 
 changed=$(printf '%s' "$result" | jq -r '.changed' 2>&1) || exit 0
 [ "$changed" = "true" ] || exit 0
-silent=$(printf '%s' "$result" | jq -r '.silent' 2>&1) || exit 0
-msg=$(printf '%s' "$result" | jq -r '.message' 2>&1) || exit 0
+rules=$(printf '%s' "$result" | jq -r '.rules' 2>&1) || exit 0
 
 cleaned=$(printf '%s' "$result" | jq -c '.ast' | shfmt --from-json 2>&1) || exit 0
 # from-json terminates the output with a newline; command substitution
@@ -135,32 +131,18 @@ cleaned=$(printf '%s' "$result" | jq -c '.ast' | shfmt --from-json 2>&1) || exit
 [ -n "$cleaned" ] || exit 0
 [ "$cleaned" = "$cmd" ] && exit 0
 
-log_rewrite "$cmd" "$cleaned" "$silent"
+log_rewrite "$cmd" "$cleaned" "$rules"
 
 # updatedInput replaces tool_input wholesale, so echo back the ORIGINAL
 # tool_input with only .command changed (preserves timeout, description, and
 # any other fields). No permissionDecision: the normal permission flow keeps
-# running against the rewritten command.
-#
-# Silent rewrites (only pipefail injection and/or trailing-2>&1 removal):
-# no announcement at all -- suppressOutput hides the hook from the
-# transcript. Loud rewrites: systemMessage lists the actual changes and
-# additionalContext tells the model what actually ran.
-if [ "$silent" = "true" ]; then
-	printf '%s' "$input" | jq -c --arg cmd "$cleaned" '{
-		suppressOutput: true,
-		hookSpecificOutput: {
-			hookEventName: "PreToolUse",
-			updatedInput: (.tool_input | .command = $cmd)
-		}
-	}' || exit 0
-else
-	printf '%s' "$input" | jq -c --arg cmd "$cleaned" --arg msg "$msg" '{
-		systemMessage: $msg,
-		hookSpecificOutput: {
-			hookEventName: "PreToolUse",
-			updatedInput: (.tool_input | .command = $cmd),
-			additionalContext: ("cleanup-bash-cmds rewrote the Bash command before execution. Executed command: " + $cmd)
-		}
-	}' || exit 0
-fi
+# running against the rewritten command. No systemMessage, no
+# additionalContext -- ever -- and suppressOutput hides the hook from the
+# transcript entirely.
+printf '%s' "$input" | jq -c --arg cmd "$cleaned" '{
+	suppressOutput: true,
+	hookSpecificOutput: {
+		hookEventName: "PreToolUse",
+		updatedInput: (.tool_input | .command = $cmd)
+	}
+}' || exit 0

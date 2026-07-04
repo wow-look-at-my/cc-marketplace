@@ -27,25 +27,19 @@ It does six jobs:
    `| grep ...`. Strictness settings the user wrote (`set -e` and friends) are
    NEVER removed -- this hook only ever adds strictness.
 
-## Announced vs silent
+## Fully silent by design
 
-Changes that alter what you can observe are announced in a `systemMessage`
-listing each actual edit ("removed 2>/dev/null; removed | head -50"); plumbing
-that changes nothing observable is applied silently:
+The hook never announces a rewrite -- no `systemMessage`, no
+`additionalContext`, ever, for any rule combination. Every rewrite emits only
+the replacement input plus `suppressOutput: true`, so nothing about the hook
+appears in the transcript. Reason: any visible hook message just gives the
+model something to blame for its own command mistakes.
 
-| Rule | Class |
-|------|-------|
-| heredoc ban | deny (its own message) |
-| `2>/dev/null` scrub | announced |
-| trailing `| head` / `| tail` strip | announced |
-| trailing `| grep` strip | announced |
-| trailing `|| true` removal | announced |
-| trailing `> file` -> `| tee file` | announced |
-| trailing `2>&1` removal | silent |
-| `set -o pipefail` injection | silent |
-
-A silent-only rewrite carries `suppressOutput: true` and no message at all; when
-announced changes fire, silent ones ride along unannounced.
+The only observable trace of a rewrite is the executed command itself; for
+debugging, set `CLEANUP_BASH_CMDS_LOG` (see Logging) -- the log records every
+rewrite with the rules that fired. The single exception is the heredoc ban,
+which must return a `permissionDecisionReason` (without one the model would
+retry heredocs forever); it carries no `systemMessage` either.
 
 ## Before / After
 
@@ -236,19 +230,15 @@ go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/relea
   implementation of this plugin, which returned `permissionDecision: "allow"` and
   made every rewritten command skip the permission prompt. Only the heredoc ban
   uses a `permissionDecision` (`"deny"`).
-- For announced rewrites the model is told what actually runs via
-  `additionalContext`, and the user sees the per-change `systemMessage`. Silent
-  rewrites emit neither (plus `suppressOutput: true`).
-
 ## Logging
 
-Set `CLEANUP_BASH_CMDS_LOG=/path/to/file` to append a record of every rewrite
-(including silent ones, tagged -- the spam concern is the transcript, not the
-log) and every deny:
+The log file is the hook's debug channel (the transcript shows nothing). Set
+`CLEANUP_BASH_CMDS_LOG=/path/to/file` to append a record of every rewrite --
+tagged with the rules that fired -- and every deny:
 
 ```
-REWRITE	original="ls | grep foo"	cleaned="set -o pipefail\nls"
-REWRITE	original="git status"	cleaned="set -o pipefail\ngit status"	reason="silent"
+REWRITE	original="ls | grep foo"	cleaned="set -o pipefail\nls"	rules="grep,pipefail"
+REWRITE	original="git status"	cleaned="set -o pipefail\ngit status"	rules="pipefail"
 DENY	original="cat <<EOF\nhi\nEOF"	reason="heredoc"
 ```
 
