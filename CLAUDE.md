@@ -28,6 +28,17 @@ The `master` branch is protected. All changes require a pull request.
 @plugins/example-plugin/.mcp.template.json
 @plugins/example-plugin/README.template.md
 
+## Cleanup Bash Cmds Plugin
+
+The cleanup-bash-cmds plugin lives at `plugins/cleanup-bash-cmds/`. It is a PreToolUse hook in bash + jq + shfmt (cross-platform, no compiled binary) that inspects and rewrites Bash tool commands before execution by parsing them: `shfmt --to-json` produces the syntax tree, a jq program transforms it, and `shfmt --from-json` regenerates the command. Commands containing a heredoc (`<<`/`<<-`, anywhere in the tree, including inside `$()`) are DENIED outright via `permissionDecision: "deny"` — herestrings (`<<<`), strings containing `<<EOF`, and `$((x << 2))` bit shifts are not affected. Otherwise it strips ALL `2>/dev/null` stderr suppression anywhere in the tree (Redirect nodes only — quoted strings and fds like `12>/dev/null` are structurally safe), kills any chain of trailing `| head ...` / `| tail ...` pipeline stages on top-level statements (never inside `$(...)`/`<(...)` captures), rewrites a trailing stdout file redirect into `| tee file` (`>> file` → `| tee -a file`; `/dev/` targets, process substitutions, and multi-stdout-redirect statements excluded), prepends `set -o pipefail` unless the command already enables it, and removes trailing `2>&1`, trailing `|| true`, and trailing `| grep`. Strictness settings the user wrote (`set -e` etc.) are never removed. The hook is fully silent by design: every rewrite emits ONLY `updatedInput` + `suppressOutput: true` — never a `systemMessage` or `additionalContext` (a visible hook message lets the model blame the hook for its own command mistakes); only the heredoc deny returns a reason. shfmt operator numbers are version-dependent, so the hook probes them at runtime; missing tools or unparseable commands fail open (no pipefail injection into anything unparseable).
+
+- **Hook script**: `plugins/cleanup-bash-cmds/hook.sh` — orchestration (extract command, probe ops, parse, transform, regenerate, emit)
+- **AST transform**: `plugins/cleanup-bash-cmds/transform.jq` — all rewrite rules
+- **Tests**: `plugins/cleanup-bash-cmds/tests/run-tests.sh` — self-contained runner (bootstraps a pinned shfmt if the machine lacks one); CI runs it via the plugin `justfile` `prebuild` recipe
+- **Plugin config**: `plugins/cleanup-bash-cmds/.claude-plugin/plugin.json` — PreToolUse/Bash matcher invoking `hook.sh`
+
+For rewrites the hook emits `hookSpecificOutput.updatedInput` WITHOUT a `permissionDecision`, so the normal permission flow evaluates the rewritten command (it does not auto-allow); only the heredoc ban emits a `permissionDecision` (`"deny"` + reason). The debug channel is `CLEANUP_BASH_CMDS_LOG`: every rewrite is logged with the rules that fired (`REWRITE ... rules="grep,pipefail"`), denies as `DENY ... reason="heredoc"`.
+
 ## Enhanced Auto-Allow Plugin
 
 The enhanced-auto-allow plugin lives at `plugins/enhanced-auto-allow/`. It whitelists read-only tools via a PermissionRequest hook.

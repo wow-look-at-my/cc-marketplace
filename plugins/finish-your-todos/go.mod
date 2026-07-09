@@ -1,4 +1,4 @@
-module cleanup-bash-cmds
+module finish-your-todos
 
 go 1.23
 
