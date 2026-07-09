@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"encoding/xml"
 	"io"
 	"os"
 	"path"
@@ -25,157 +24,31 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure
 type Rules struct {
-	Commands []CommandNode `json:"commands"`
+	Commands   []CommandNode       `json:"commands"`
+	MCPServers map[string][]string `json:"mcpServers"`
 }
 
 type CommandNode struct {
-	Name              interface{}      `json:"name"` // string or []string
-	Description       string           `json:"description,omitempty"`
-	AllowedFlags      interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
-	DeniedFlags       []string         `json:"deniedFlags,omitempty"`
-	ExecFlags         []string         `json:"execFlags,omitempty"`
-	RequiredFlags     []string         `json:"requiredFlags,omitempty"`
-	RequireFlagValue  *RequireFlagRule `json:"requireFlagValue,omitempty"`
-	DenyWithMessage   string           `json:"denyWithMessage,omitempty"`
-	FlagsWithValue    []string         `json:"flagsWithValue,omitempty"`
-	HelpAlwaysAllowed bool             `json:"helpAlwaysAllowed,omitempty"`
-	BareOnly          bool             `json:"bareOnly,omitempty"`
-	DenyArgSubstrings []string         `json:"denyArgSubstrings,omitempty"`
-	Subcommands       []CommandNode    `json:"subcommands,omitempty"`
+	Name               interface{}      `json:"name"` // string or []string
+	Description        string           `json:"description,omitempty"`
+	AllowedFlags       interface{}      `json:"allowedFlags,omitempty"` // "*" or []string
+	DeniedFlags        []string         `json:"deniedFlags,omitempty"`
+	ExecFlags          []string         `json:"execFlags,omitempty"`
+	RequiredFlags      []string         `json:"requiredFlags,omitempty"`
+	RequireFlagValue   *RequireFlagRule `json:"requireFlagValue,omitempty"`
+	DenyWithMessage    string           `json:"denyWithMessage,omitempty"`
+	FlagsWithValue     []string         `json:"flagsWithValue,omitempty"`
+	HelpAlwaysAllowed  bool             `json:"helpAlwaysAllowed,omitempty"`
+	BareOnly           bool             `json:"bareOnly,omitempty"`
+	DenyArgSubstrings  []string         `json:"denyArgSubstrings,omitempty"`
+	AllowedArgPrefixes []string         `json:"allowedArgPrefixes,omitempty"`
+	Subcommands        []CommandNode    `json:"subcommands,omitempty"`
 }
 
 type RequireFlagRule struct {
 	Flags   []string `json:"flags"`
 	Default string   `json:"default"`
 	Allowed []string `json:"allowed"`
-}
-
-// XML parsing types
-
-type xmlTest struct {
-	Command  string `xml:"cmd,attr"`
-	Expected string `xml:"expect,attr"`
-}
-
-type xmlRules struct {
-	XMLName  xml.Name     `xml:"rules"`
-	Tests    []xmlTest    `xml:"test"`
-	Commands []xmlCommand `xml:"cmd"`
-}
-
-type xmlCommand struct {
-	Name              string          `xml:"name,attr"`
-	Description       string          `xml:"description,attr,omitempty"`
-	AllowedFlagsAttr  string          `xml:"allowedFlags,attr,omitempty"`
-	DenyWithMessage   string          `xml:"denyWithMessage,attr,omitempty"`
-	HelpAlwaysAllowed bool            `xml:"helpAlwaysAllowed,attr,omitempty"`
-	BareOnly          bool            `xml:"bareOnly,attr,omitempty"`
-	Tests             []xmlTest       `xml:"test"`
-	AllowedFlags      *xmlFlagList    `xml:"allowedFlags"`
-	DeniedFlags       *xmlFlagList    `xml:"deniedFlags"`
-	ExecFlags         *xmlFlagList    `xml:"execFlags"`
-	RequiredFlags     *xmlFlagList    `xml:"requiredFlags"`
-	FlagsWithValue    *xmlFlagList    `xml:"flagsWithValue"`
-	DenyArgSubstrings *xmlStringList  `xml:"denyArgSubstrings"`
-	RequireFlagValue  *xmlRequireFlag `xml:"requireFlagValue"`
-	Subcommands       []xmlCommand    `xml:"subcmd"`
-}
-
-type xmlFlagList struct {
-	Flags []xmlFlag `xml:"flag"`
-}
-
-type xmlFlag struct {
-	Name string `xml:"name,attr"`
-}
-
-type xmlStringList struct {
-	Values []string `xml:"value"`
-}
-
-type xmlRequireFlag struct {
-	Default string    `xml:"default,attr"`
-	Flags   []xmlFlag `xml:"flag"`
-	Allowed []string  `xml:"allowed"`
-}
-
-func loadXMLRules(data []byte) (Rules, error) {
-	var xr xmlRules
-	if err := xml.Unmarshal(data, &xr); err != nil {
-		return Rules{}, err
-	}
-	var r Rules
-	for _, xc := range xr.Commands {
-		r.Commands = append(r.Commands, convertXMLCommand(xc))
-	}
-	return r, nil
-}
-
-func convertXMLCommand(xc xmlCommand) CommandNode {
-	node := CommandNode{
-		Description:       xc.Description,
-		DenyWithMessage:   xc.DenyWithMessage,
-		HelpAlwaysAllowed: xc.HelpAlwaysAllowed,
-		BareOnly:          xc.BareOnly,
-	}
-
-	names := strings.Split(xc.Name, ",")
-	if len(names) == 1 {
-		node.Name = names[0]
-	} else {
-		ifaces := make([]interface{}, len(names))
-		for i, n := range names {
-			ifaces[i] = strings.TrimSpace(n)
-		}
-		node.Name = ifaces
-	}
-
-	if xc.AllowedFlagsAttr == "*" {
-		node.AllowedFlags = "*"
-	} else if xc.AllowedFlags != nil {
-		flags := make([]interface{}, len(xc.AllowedFlags.Flags))
-		for i, f := range xc.AllowedFlags.Flags {
-			flags[i] = f.Name
-		}
-		node.AllowedFlags = flags
-	}
-
-	node.DeniedFlags = xmlFlagNames(xc.DeniedFlags)
-	node.ExecFlags = xmlFlagNames(xc.ExecFlags)
-	node.RequiredFlags = xmlFlagNames(xc.RequiredFlags)
-	node.FlagsWithValue = xmlFlagNames(xc.FlagsWithValue)
-
-	if xc.DenyArgSubstrings != nil {
-		node.DenyArgSubstrings = xc.DenyArgSubstrings.Values
-	}
-
-	if xc.RequireFlagValue != nil {
-		rfv := &RequireFlagRule{
-			Default: xc.RequireFlagValue.Default,
-			Allowed: xc.RequireFlagValue.Allowed,
-		}
-		for _, f := range xc.RequireFlagValue.Flags {
-			rfv.Flags = append(rfv.Flags, f.Name)
-		}
-		node.RequireFlagValue = rfv
-	}
-
-	for _, xs := range xc.Subcommands {
-		node.Subcommands = append(node.Subcommands, convertXMLCommand(xs))
-	}
-
-	return node
-}
-
-func xmlFlagNames(fl *xmlFlagList) []string {
-	if fl == nil {
-		return nil
-	}
-	names := make([]string, len(fl.Flags))
-	for i, f := range fl.Flags {
-		names[i] = f.Name
-	}
-	return names
 }
 
 // Permission response
@@ -208,10 +81,6 @@ func main() {
 		return
 	}
 
-	if hi.ToolName != "Bash" {
-		os.Exit(0)
-	}
-
 	// Load rules from adjacent file
 	rulesPath := filepath.Join(filepath.Dir(os.Args[0]), "..", "rules.xml")
 	rulesData, err := os.ReadFile(rulesPath)
@@ -221,6 +90,19 @@ func main() {
 	var xmlErr error
 	rules, xmlErr = loadXMLRules(rulesData)
 	if xmlErr != nil {
+		os.Exit(0)
+	}
+
+	// Allow read-only MCP tools by server + tool pattern matching
+	if server, tool := parseMCPTool(hi.ToolName); tool != "" {
+		if matchMCPServer(rules.MCPServers, server, tool) {
+			outputDecision("allow", "")
+			return
+		}
+		os.Exit(0)
+	}
+
+	if hi.ToolName != "Bash" {
 		os.Exit(0)
 	}
 
@@ -380,9 +262,25 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		}
 	}
 
-	// Check allowed flags
+	// Check allowed flags (and optionally constrain positional args by prefix)
 	if node.AllowedFlags != nil {
-		if checkAllowedFlags(remaining, node.AllowedFlags) {
+		effectiveRemaining := remaining
+		if len(node.FlagsWithValue) > 0 {
+			effectiveRemaining = stripFlagsWithValue(remaining, node.FlagsWithValue)
+		}
+
+		if len(node.AllowedArgPrefixes) > 0 {
+			flags, positionals := splitFlagsAndArgs(effectiveRemaining)
+			if len(positionals) == 0 {
+				return "", ""
+			}
+			if !allArgsMatchPrefix(positionals, node.AllowedArgPrefixes) {
+				return "", ""
+			}
+			if checkAllowedFlags(flags, node.AllowedFlags) {
+				return "allow", ""
+			}
+		} else if checkAllowedFlags(remaining, node.AllowedFlags) {
 			return "allow", ""
 		}
 	}
@@ -685,6 +583,33 @@ func getFlagValue(args []string, flags []string) string {
 		}
 	}
 	return ""
+}
+
+func splitFlagsAndArgs(args []string) (flags, positionals []string) {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+		} else {
+			positionals = append(positionals, arg)
+		}
+	}
+	return
+}
+
+func allArgsMatchPrefix(args []string, prefixes []string) bool {
+	for _, arg := range args {
+		matched := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(arg, prefix) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }
 
 func outputDecision(behavior, message string) {

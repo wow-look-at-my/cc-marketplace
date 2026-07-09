@@ -1,4 +1,4 @@
-module recommend-go-toolchain
+module finish-your-todos
 
 go 1.23
 

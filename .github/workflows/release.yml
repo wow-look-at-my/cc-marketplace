@@ -20,7 +20,7 @@ jobs:
       has_build: ${{ steps.split.outputs.has_build }}
       prod_version: ${{ steps.prod-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -98,7 +98,7 @@ jobs:
       matrix:
         plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Compute plugin hash
         id: hash
@@ -148,7 +148,7 @@ jobs:
           retention-days: 1
 
       - name: Save plugin cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
@@ -210,7 +210,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -306,7 +306,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-claude-code
 
