@@ -50,3 +50,20 @@ The enhanced-auto-allow plugin lives at `plugins/enhanced-auto-allow/`. It white
 When adding new whitelisted tools:
 - For Bash commands: add entries to `rules.xml`
 - For MCP tools or other non-Bash tools: add to the tool name allowlist in `cmd/hook.go` and add a matcher in `plugin.json`
+
+## Glob Plugin
+
+The glob plugin lives at `plugins/glob/`. It is a Go stdio MCP server restoring the builtin Glob tool that Claude Code disabled by default in 2.1.117, mirroring 2.1.116 byte-for-byte: verbatim description and schema, ripgrep as the engine (`rg --files --glob <pat> --sort=modified --no-ignore --hidden`, so `.gitignore` is NOT respected and dotfiles/`.git` ARE listed — env-overridable via `CLAUDE_CODE_GLOB_NO_IGNORE`/`CLAUDE_CODE_GLOB_HIDDEN`), oldest-first mtime order, 25000-file cap with the verbatim truncation line, 20s (60s WSL) timeout via `CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`, and >50000-char persist-to-temp-file. Requires `rg` on PATH (or `RIPGREP_PATH`); a missing ripgrep is a tool error. The MCP tool is `Glob` on server key `glob`, so the model-visible name is `mcp__plugin_glob_glob__Glob`; `.mcp.json` sets `alwaysLoad: true` so the tool is never deferred behind ToolSearch. A version gate hides the tool from `claude-code` clients whose version parses as < 2.1.117 (they still have the builtin); override with `CC_GLOB_PLUGIN=always|never|auto`.
+
+- **Tool logic**: `plugins/glob/globtool.go` — verbatim description/schema consts, rg argv, validation, result formatting
+- **Protocol / gate / runner / persist**: `plugins/glob/server.go`, `gate.go`, `rg.go`, `persist.go` — shared shape with the grep plugin
+- **Tests**: `plugins/glob/*_test.go` — TestMain bootstraps a pinned ripgrep 14.1.0 when the machine lacks one (CI runners)
+
+## Grep Plugin
+
+The grep plugin lives at `plugins/grep/`. It is a Go stdio MCP server restoring the builtin Grep tool that Claude Code disabled by default in 2.1.117, mirroring 2.1.116 (verbatim rg argv: `--hidden`, the six VCS `!` excludes, `--max-columns 500`, `.gitignore` respected — the opposite of glob's default; context precedence `context` > `-C` > `-B`/`-A`; `-e` for dash-leading patterns; zod-style input coercions; Q46/l46 pagination with the exact result strings; 20s/60s timeout, 20MB caps, >20000-char persist) **except for a deliberately amended output-mode set**: `output_mode` is exactly `content` | `filenames_with_matches` | `filenames` | `count` — the old `files_with_matches` name is gone, no alias. `filenames_with_matches` (the default) is backed by `rg --json` and groups results per file: unindented `path:` headers newest-first, that file's match/context lines indented two spaces (`N:`/`N-` prefixes, `--` separators only when a nonzero context width is set), with `head_limit` paginating the match/context LINES across files. `filenames` returns exactly what the old `files_with_matches` returned; `content` is byte-parity; `count` adds the upstream `-c -H` single-file fix. Ripgrep exit 2 with no output (invalid regex/glob/type) surfaces rg's stderr as a tool error instead of the builtin's silent "No matches found". Requires `rg` on PATH (or `RIPGREP_PATH`). Model-visible name: `mcp__plugin_grep_grep__Grep` (`alwaysLoad: true`). Version gate: hidden for `claude-code` < 2.1.117; override `CC_GREP_PLUGIN=always|never|auto`.
+
+- **Tool core**: `plugins/grep/greptool.go` — description/schema consts, argument parsing/coercions, rg argv, path validation
+- **Mode formatting**: `plugins/grep/grepmodes.go` (content/count/filenames + Q46/l46 ports), `plugins/grep/grepfwm.go` (the grouped default mode over rg --json)
+- **Protocol / gate / runner / persist**: `plugins/grep/server.go`, `gate.go`, `rg.go` (carries the exit-2 stderr divergence), `persist.go`, `paths.go`
+- **Tests**: `plugins/grep/*_test.go` — byte-exact goldens for every mode, same ripgrep bootstrap as glob
