@@ -153,14 +153,41 @@ func TestRelativizePathQuirks(t *testing.T) {
 }
 
 func TestResolveAgainst(t *testing.T) {
-	got := resolveAgainst("/abs/dir", "/root")
-	assert.Equal(t, "/abs/dir", got)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cases := []struct{ in, want string }{
+		{"/abs/dir", "/abs/dir"},
+		{"rel/dir", "/root/rel/dir"},
+		{"  rel/dir  ", "/root/rel/dir"}, // Vq trims before resolving
+		{"   ", "/root"},                 // whitespace-only -> root
+		{"~", home},
+		{"~/", home},
+		{"~/sub/x", home + "/sub/x"},
+		{"~user", "/root/~user"}, // "~user" is NOT expanded (Vq parity)
+	}
+	for _, tc := range cases {
+		got, err := resolveAgainst(tc.in, "/root")
+		require.NoError(t, err)
 
-	got = resolveAgainst("rel/dir", "/root")
-	assert.Equal(t, "/root/rel/dir", got)
+		assert.Equal(t, tc.want, got, "input %q", tc.in)
 
-	got = resolveAgainst("../x", "/root/sub")
+	}
+
+	got, err := resolveAgainst("../x", "/root/sub")
+	require.NoError(t, err)
+
 	assert.Equal(t, "/root/x", got)
+
+	_, err = resolveAgainst("bad\x00path", "/root")
+	require.EqualError(t, err, "Path contains null bytes")
+
+	// Without a resolvable home, "~" stays literal (documented
+	// divergence: the builtin's os.homedir() cannot fail on POSIX).
+	t.Setenv("HOME", "")
+	got, err = resolveAgainst("~", "/root")
+	require.NoError(t, err)
+
+	assert.Equal(t, "/root/~", got)
 
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWeirdFilenames(t *testing.T) {
@@ -134,15 +135,21 @@ func TestNoMatchesIsNoFilesFound(t *testing.T) {
 	wantText(t, got, "No files found")
 }
 
-func TestInvalidGlobResolvesAsNoFilesFound(t *testing.T) {
-	// rg exits 2 on an unparseable glob; the builtin resolves whatever
-	// stdout produced (nothing) instead of erroring (spec quirk #3).
+func TestInvalidGlobSurfacesRgStderr(t *testing.T) {
+	// rg exits 2 with nothing on stdout for an unparseable glob. The
+	// builtin silently resolved "No files found"; this plugin surfaces
+	// rg's stderr as a tool error instead (deliberate deviation shared
+	// with the grep sibling — see rg.go). The assertion is substring-
+	// based because rg 13 omits the "rg: " message prefix that 14+ add.
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt")
 	got, isErr := runGlob(t, testTool(t, root), "{unclosed")
-	require.False(t, isErr)
+	require.True(t, isErr)
 
-	wantText(t, got, "No files found")
+	assert.Contains(t, got, "error parsing glob")
+
+	assert.Contains(t, got, "{unclosed")
+
 }
 
 func TestEmptyPatternMatchesEverything(t *testing.T) {
@@ -265,6 +272,113 @@ func TestAbsolutePatternMetacharInFirstComponent(t *testing.T) {
 	base, rel = splitAbsolutePattern("/a/b?.txt")
 	assert.False(t, base != "/a" || rel != "b?.txt")
 
+}
+
+func TestSplitAbsolutePatternNodeDirnameParity(t *testing.T) {
+	// Node dirname/basename ignore trailing separators; Go's
+	// filepath.Dir("/foo/bar/") would keep "/foo/bar" as the base dir.
+	base, rel := splitAbsolutePattern("/foo/bar/")
+	assert.Equal(t, "/foo", base)
+
+	assert.Equal(t, "bar", rel)
+
+	base, rel = splitAbsolutePattern("/foo/bar///")
+	assert.Equal(t, "/foo", base)
+
+	assert.Equal(t, "bar", rel)
+
+	// Node basename("/") is "": the empty glob is inert in rg, so the
+	// whole tree under "/" matches (faithful to the builtin's a81).
+	base, rel = splitAbsolutePattern("/")
+	assert.Equal(t, "/", base)
+
+	assert.Equal(t, "", rel)
+
+}
+
+func TestAbsolutePatternTrailingSlash(t *testing.T) {
+	// "<root>/sub/" must search <root> for glob "sub" (Node dirname
+	// semantics), not <root>/sub for glob "sub". The fixture makes the
+	// two behaviors observably different: a FILE named "sub" lives under
+	// a/, while sub/ is a directory (a bare-name glob never matches a
+	// directory's contents, verified rg 13/14/15).
+	root := t.TempDir()
+	mkFiles(t, root, "a/sub", "sub/inner.txt")
+	got, isErr := runGlob(t, testTool(t, root), root+"/sub/")
+	require.False(t, isErr)
+
+	wantText(t, got, "a/sub")
+}
+
+func TestMtimeTieOrdersByLocaleCollation(t *testing.T) {
+	// With --sort=modified gone (the sort now happens in Go), equal
+	// mtimes order by the localeCompare-parity collator: primary
+	// strength is case-insensitive, so a.txt sorts before B.txt (byte
+	// order would put B.txt first).
+	root := t.TempDir()
+	mkFiles(t, root, "B.txt", "a.txt", "sub/C.txt")
+	tie := time.Now().Add(-time.Hour)
+	for _, n := range []string{"B.txt", "a.txt", "sub/C.txt"} {
+		p := filepath.Join(root, filepath.FromSlash(n))
+		require.NoError(t, os.Chtimes(p, tie, tie))
+	}
+	got, _ := runGlob(t, testTool(t, root), "**/*.txt")
+	wantText(t, got, "a.txt\nB.txt\nsub/C.txt")
+}
+
+func TestPathTildeExpansion(t *testing.T) {
+	// Vq parity: "~" and "~/sub" expand to the home directory. Results
+	// outside the root come back absolute.
+	root := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	mkFiles(t, home, "inhome.txt", "nested/deep.txt")
+	g := testTool(t, root)
+
+	got, isErr := runGlob(t, g, "**/*.txt", "~")
+	require.False(t, isErr)
+
+	wantText(t, got, home+"/inhome.txt\n"+home+"/nested/deep.txt")
+
+	got, isErr = runGlob(t, g, "*.txt", "~/nested")
+	require.False(t, isErr)
+
+	wantText(t, got, home+"/nested/deep.txt")
+}
+
+func TestPathTildeUserNotExpanded(t *testing.T) {
+	// The builtin's Vq only expanded "~" and "~/..."; "~user" resolves
+	// as a literal name against the root.
+	root := t.TempDir()
+	got, isErr := runGlob(t, testTool(t, root), "*", "~nobody")
+	require.True(t, isErr)
+
+	wantText(t, got, fmt.Sprintf("Directory does not exist: ~nobody. %s %s.", cwdNote, root))
+}
+
+func TestPathWhitespaceTrimmedBeforeResolve(t *testing.T) {
+	// Vq trim() parity: "  sub  " only names a real directory after
+	// trimming, and a whitespace-only path resolves to the root.
+	root := t.TempDir()
+	mkFiles(t, root, "sub/inner.txt")
+	g := testTool(t, root)
+	got, isErr := runGlob(t, g, "*.txt", "  sub  ")
+	require.False(t, isErr)
+
+	wantText(t, got, "sub/inner.txt")
+
+	got, isErr = runGlob(t, g, "**/*.txt", "   ")
+	require.False(t, isErr)
+
+	wantText(t, got, "sub/inner.txt")
+}
+
+func TestPathNullByteRejected(t *testing.T) {
+	root := t.TempDir()
+	got, isErr := runGlob(t, testTool(t, root), "*", "bad\x00path")
+	require.True(t, isErr)
+
+	wantText(t, got, "Path contains null bytes")
 }
 
 func TestEmptyPathTreatedAsOmitted(t *testing.T) {

@@ -7,9 +7,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -143,12 +145,15 @@ func parseGlobArgs(raw json.RawMessage) (pattern, path string, rpcErr *rpcError)
 	for k, v := range m {
 		switch k {
 		case "pattern":
-			if json.Unmarshal(v, &pattern) != nil {
+			// Explicit null check: Unmarshal treats JSON null as a no-op
+			// on Go scalars (an unchecked {"pattern": null} would list the
+			// whole tree), but zod rejects null for these fields.
+			if isJSONNull(v) || json.Unmarshal(v, &pattern) != nil {
 				return invalid("%s pattern must be a string", globToolName)
 			}
 			seenPattern = true
 		case "path":
-			if json.Unmarshal(v, &path) != nil {
+			if isJSONNull(v) || json.Unmarshal(v, &path) != nil {
 				return invalid("%s path must be a string", globToolName)
 			}
 		default:
@@ -162,12 +167,19 @@ func parseGlobArgs(raw json.RawMessage) (pattern, path string, rpcErr *rpcError)
 	return pattern, path, nil
 }
 
+func isJSONNull(v json.RawMessage) bool {
+	return string(bytes.TrimSpace(v)) == "null"
+}
+
 // execute runs one Glob search, returning the tool_result text and
 // whether it is an error.
 func (g *globTool) execute(pattern, path string) (string, bool) {
 	searchPath := g.root
 	if path != "" { // empty string is falsy upstream: same as omitted
-		resolved := resolveAgainst(path, g.root)
+		resolved, err := resolveAgainst(path, g.root)
+		if err != nil {
+			return err.Error(), true
+		}
 		if msg, ok := g.validateDir(path, resolved); !ok {
 			return msg, true
 		}
@@ -188,9 +200,11 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 		return err.Error(), true
 	}
 
-	// argv per N57 (2.1.116:cli.js:286057-286078). The gitignore/hidden
+	// argv per N57 (2.1.116:cli.js:286057-286078), except --sort=modified:
+	// the mtime sort happens in Go (sortFilesByMtimeAsc below) so the
+	// order is identical on every ripgrep version. The gitignore/hidden
 	// defaults are env-overridable exactly like the builtin.
-	args := []string{"--files", "--glob", pat, "--sort=modified"}
+	args := []string{"--files", "--glob", pat}
 	if envTruthyDefault("CLAUDE_CODE_GLOB_NO_IGNORE", "true") {
 		args = append(args, "--no-ignore")
 	}
@@ -212,6 +226,7 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 		}
 		files = append(files, l)
 	}
+	sortFilesByMtimeAsc(files)
 	truncated := len(files) > g.maxResults
 	if truncated {
 		files = files[:g.maxResults]
@@ -259,25 +274,86 @@ func (g *globTool) validateDir(rawPath, resolved string) (string, bool) {
 	return "", true
 }
 
-// resolveAgainst resolves p against root (absolute paths pass through
-// cleaned), like Node path.resolve(root, p). Divergence: no unicode NFC
-// normalization (the builtin NFC-normalizes; stdlib-only here).
-func resolveAgainst(p, root string) string {
-	if filepath.IsAbs(p) {
-		return filepath.Clean(p)
+// resolveAgainst ports the builtin's Vq path preprocessing
+// (2.1.116:cli.js:35597-35615) against root (the session-cwd
+// equivalent): null bytes are rejected with the builtin's exact error,
+// the input is whitespace-trimmed (whitespace-only resolves to root), a
+// bare "~" or "~/..." prefix expands to the home directory ("~user" is
+// NOT expanded — the builtin didn't support it either, resolving it as a
+// literal name against root), absolute paths pass through cleaned, and
+// anything else joins onto root like Node path.resolve. Divergences: no
+// unicode NFC normalization (the builtin NFC-normalizes; stdlib-only
+// here), and an unresolvable home directory leaves "~" literal instead
+// of throwing.
+func resolveAgainst(p, root string) (string, error) {
+	if strings.ContainsRune(p, 0) {
+		return "", errors.New("Path contains null bytes")
 	}
-	return filepath.Join(root, p)
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return root, nil
+	}
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			if p == "~" {
+				return home, nil
+			}
+			return filepath.Join(home, p[2:]), nil
+		}
+	}
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p), nil
+	}
+	return filepath.Join(root, p), nil
 }
 
-// splitAbsolutePattern mirrors a81: split an absolute pattern at the
-// first glob metachar [*?[{]; the base dir is everything before the last
-// separator preceding it and the rest is the relative pattern. Without a
-// metachar the split is dirname/basename. (The Windows drive-letter
-// special case is omitted: this plugin ships linux/darwin binaries only.)
+// sortFilesByMtimeAsc orders the absolute paths oldest-first by mtime,
+// replacing the builtin's rg --sort=modified: rg 13 sorted each
+// directory independently (a subtree's files were emitted at the
+// position of the DIRECTORY's mtime) while rg 14+ sort files globally,
+// so sorting here pins the builtin's (rg 14-era) global order on every
+// ripgrep version — and lets rg walk in parallel instead of --sort's
+// forced single thread. Failed stats sort as time zero (grep-sibling
+// parity). Equal mtimes tie-break by ascending localeCompare order (see
+// collate.go); the builtin left equal-mtime order to rg's walk order,
+// which was deterministic but unspecified.
+func sortFilesByMtimeAsc(files []string) {
+	type entry struct {
+		path  string
+		mtime time.Time
+	}
+	entries := make([]entry, len(files))
+	for i, p := range files {
+		var mt time.Time
+		if st, err := os.Stat(p); err == nil {
+			mt = st.ModTime()
+		}
+		entries[i] = entry{p, mt}
+	}
+	col := newPathCollator()
+	sort.SliceStable(entries, func(i, j int) bool {
+		if !entries[i].mtime.Equal(entries[j].mtime) {
+			return entries[i].mtime.Before(entries[j].mtime)
+		}
+		return col.CompareString(entries[i].path, entries[j].path) < 0
+	})
+	for i, e := range entries {
+		files[i] = e.path
+	}
+}
+
+// splitAbsolutePattern mirrors a81 (2.1.116:cli.js:286040-286056): split
+// an absolute pattern at the first glob metachar [*?[{]; the base dir is
+// everything before the last separator preceding it and the rest is the
+// relative pattern. Without a metachar the split is Node
+// dirname/basename — which ignore trailing slashes ("/foo/bar/" splits
+// into "/foo" + "bar", NOT "/foo/bar" + "bar" as Go's filepath.Dir/Base
+// would). (The Windows drive-letter special case is omitted: this
+// plugin ships linux/darwin binaries only.)
 func splitAbsolutePattern(pat string) (base, rel string) {
 	idx := strings.IndexAny(pat, "*?[{")
 	if idx < 0 {
-		return filepath.Dir(pat), filepath.Base(pat)
+		return splitNodeDirBase(pat)
 	}
 	slash := strings.LastIndex(pat[:idx], "/")
 	if slash < 0 {
@@ -288,6 +364,18 @@ func splitAbsolutePattern(pat string) (base, rel string) {
 		base = "/" // metachar in the first component after the root slash
 	}
 	return base, pat[slash+1:]
+}
+
+// splitNodeDirBase mirrors Node path.posix dirname/basename on the
+// absolute inputs the no-metachar branch sees: trailing separators are
+// ignored, and "/" itself splits into "/" + "" (an empty glob is inert
+// in rg, matching everything — faithful to the builtin).
+func splitNodeDirBase(p string) (dir, base string) {
+	trimmed := strings.TrimRight(p, "/")
+	if trimmed == "" { // p was all slashes
+		return "/", ""
+	}
+	return filepath.Dir(trimmed), filepath.Base(trimmed)
 }
 
 // relativizePath mirrors QZH (2.1.116:cli.js:35616-35619): root-relative

@@ -214,7 +214,9 @@ func TestToolsCallInvalidArguments(t *testing.T) {
 		{"missing pattern", `{}`},
 		{"absent arguments", `null`},
 		{"pattern wrong type", `{"pattern":42}`},
+		{"pattern null", `{"pattern":null}`}, // would otherwise list the whole tree
 		{"path wrong type", `{"pattern":"*","path":[]}`},
+		{"path null", `{"pattern":"*","path":null}`},
 		{"unexpected extra key", `{"pattern":"*","bogus":1}`},
 		{"arguments not an object", `"str"`},
 	}
