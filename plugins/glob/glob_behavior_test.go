@@ -58,25 +58,46 @@ func TestGitignoreNotRespectedAndGitIncluded(t *testing.T) {
 	}
 }
 
+// The CLAUDE_CODE_GLOB_NO_IGNORE / _HIDDEN overrides act on DIRECTORY
+// traversal only: ripgrep treats a positive --glob as a whitelist that
+// overrides hidden/ignore filtering for directly-matching FILES (verified
+// empirically on rg 14.1.0), so a top-level ignored or hidden file that
+// matches the pattern is returned regardless. The builtin passes the
+// identical argv and shares the quirk.
 func TestEnvNoIgnoreOverride(t *testing.T) {
 	root := t.TempDir()
-	mkFiles(t, root, ".git/config", "ignored.txt", "kept.txt")
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored.txt\n"), 0o644))
+	mkFiles(t, root, ".git/config", "ignoreddir/within.txt", "ignored.txt", "kept.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignoreddir/\nignored.txt\n"), 0o644))
+
+	g := testTool(t, root)
+	got, _ := runGlob(t, g, "*.txt") // default: gitignore NOT respected
+	assert.True(t, containsLine(got, "ignoreddir/within.txt"), "default must ignore .gitignore: %s", got)
 
 	t.Setenv("CLAUDE_CODE_GLOB_NO_IGNORE", "0")
-	got, _ := runGlob(t, testTool(t, root), "*.txt")
-	assert.False(t, containsLine(got, "ignored.txt"))
+	got, _ = runGlob(t, g, "*.txt")
+	assert.False(t, containsLine(got, "ignoreddir/within.txt"), "ignored DIRECTORY must be pruned: %s", got)
 
-	assert.True(t, containsLine(got, "kept.txt"))
+	assert.True(t, containsLine(got, "kept.txt"), got)
+
+	assert.True(t, containsLine(got, "ignored.txt"), "whitelist-glob quirk: directly-matching ignored FILE still returned: %s", got)
 
 }
 
 func TestEnvHiddenOverride(t *testing.T) {
 	root := t.TempDir()
-	mkFiles(t, root, ".hidden.txt", "visible.txt")
+	mkFiles(t, root, ".dotdir/inside.txt", ".hidden.txt", "visible.txt")
+	g := testTool(t, root)
+	got, _ := runGlob(t, g, "*.txt") // default: hidden included
+	assert.True(t, containsLine(got, ".dotdir/inside.txt"), "default must include hidden dirs: %s", got)
+
 	t.Setenv("CLAUDE_CODE_GLOB_HIDDEN", "false")
-	got, _ := runGlob(t, testTool(t, root), "*.txt")
-	wantText(t, got, "visible.txt")
+	got, _ = runGlob(t, g, "*.txt")
+	assert.False(t, containsLine(got, ".dotdir/inside.txt"), "hidden DIRECTORY must be pruned: %s", got)
+
+	assert.True(t, containsLine(got, "visible.txt"), got)
+
+	assert.True(t, containsLine(got, ".hidden.txt"), "whitelist-glob quirk: directly-matching hidden FILE still returned: %s", got)
+
 }
 
 func TestSymlinksNotFollowedOrListed(t *testing.T) {

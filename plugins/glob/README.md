@@ -48,7 +48,11 @@ Behavior (all inherited from the 2.1.116 builtin):
   in the search root; results come back **oldest-first** (ascending mtime).
 - `.gitignore` is **not** respected and dotfiles (including `.git/`) **are**
   included, unless overridden via `CLAUDE_CODE_GLOB_NO_IGNORE` /
-  `CLAUDE_CODE_GLOB_HIDDEN` (set to `0`/`false` to disable).
+  `CLAUDE_CODE_GLOB_HIDDEN` (set to `0`/`false` to disable). Note that even
+  with the overrides, ripgrep treats the positive glob as a whitelist, so a
+  hidden or gitignored file that directly matches the pattern is still
+  returned; the overrides prune hidden/ignored directories. The builtin
+  behaved identically (same argv).
 - Paths are returned relative to the project directory when under it,
   absolute otherwise.
 - An absolute `pattern` overrides `path`: the portion before the first glob
