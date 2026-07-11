@@ -50,17 +50,20 @@ lines. This plugin replaces it (no alias is accepted):
 | `content` | Byte-parity with the builtin: raw `path:line:text` lines from ripgrep. |
 | `count` | Byte-parity with the builtin except the `-H` fix (below): `path:count` lines plus the `Found N total occurrences across M files.` trailer. |
 
-`filenames_with_matches` example (`pattern: "err"`, two files, `-C 1`):
+`filenames_with_matches` example (`pattern: "needle"`, two files, `-C 1`;
+matches on lines 12 and 40 of the newer file, which ends at line 40):
 
 ```
 Found 2 files
-src/newest.go:
-  3:	if err != nil {
-  4-		return
+src/parser.go:
+  11-	// tokenize the header
+  12:	tok := needle(line)
+  13-	if tok == nil {
   --
-  9:	err := run()
+  39-	// fallback
+  40:	return needle(rest)
 older:colon.txt:
-  1:no error here
+  1:needle: found
 ```
 
 - Match lines render `N:text`, context lines `N-text`, and an indented `--`
