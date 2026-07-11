@@ -88,8 +88,10 @@ func TestCountPagination(t *testing.T) {
 	got := grepOK(t, g, countArgs(map[string]any{"pattern": "x", "head_limit": 2}))
 	wantText(t, got, "a:1\nb:2\n\nFound 3 total occurrences across 2 files. with pagination = limit: 2")
 
+	// Q46 quirk: the limit is only "applied" when items existed beyond
+	// the window (3 - 1 is not > 2), so only the offset is reported.
 	got = grepOK(t, g, countArgs(map[string]any{"pattern": "x", "head_limit": 2, "offset": 1}))
-	wantText(t, got, "b:2\nc:3\n\nFound 5 total occurrences across 2 files. with pagination = limit: 2, offset: 1")
+	wantText(t, got, "b:2\nc:3\n\nFound 5 total occurrences across 2 files. with pagination = offset: 1")
 
 	// Exactly at the limit: no pagination note.
 	got = grepOK(t, g, countArgs(map[string]any{"pattern": "x", "head_limit": 3}))
@@ -121,9 +123,9 @@ func TestCountUnparseableLinesSkipped(t *testing.T) {
 
 func TestJSParseIntUnits(t *testing.T) {
 	cases := []struct {
-		in   string
-		n    int
-		ok   bool
+		in string
+		n  int
+		ok bool
 	}{
 		{"3", 3, true},
 		{"  42", 42, true},

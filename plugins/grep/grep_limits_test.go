@@ -126,8 +126,10 @@ func TestFilenamesPagination(t *testing.T) {
 	got := grepOK(t, g, fn(map[string]any{"pattern": "needle", "head_limit": 2}))
 	wantText(t, got, "Found 2 files limit: 2\nf3.txt\nf2.txt")
 
+	// Q46 quirk: 3 - 1 is not > 2, so the limit is not reported as
+	// applied; only the offset appears.
 	got = grepOK(t, g, fn(map[string]any{"pattern": "needle", "head_limit": 2, "offset": 1}))
-	wantText(t, got, "Found 2 files limit: 2, offset: 1\nf2.txt\nf1.txt")
+	wantText(t, got, "Found 2 files offset: 1\nf2.txt\nf1.txt")
 
 	got = grepOK(t, g, fn(map[string]any{"pattern": "needle", "head_limit": 3}))
 	wantText(t, got, "Found 3 files\nf3.txt\nf2.txt\nf1.txt")

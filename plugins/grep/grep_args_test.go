@@ -140,7 +140,7 @@ func TestJSSliceUnits(t *testing.T) {
 	assert.Equal(t, []int{1, 2}, jsSlice(items, 1, 3))
 	assert.Equal(t, []int{0, 1, 2, 3, 4}, jsSlice(items, 0, 99))
 	assert.Empty(t, jsSlice(items, 9, 12))
-	assert.Empty(t, jsSlice(items, 3, 1))          // end < start
+	assert.Empty(t, jsSlice(items, 3, 1))             // end < start
 	assert.Equal(t, []int{4}, jsSlice(items, -1, 99)) // negative from end
 	assert.Equal(t, []int{0, 1}, jsSlice(items, -99, 2))
 	assert.Equal(t, []int{0, 1}, jsSlice(items, 0, 2.9)) // trunc toward zero
