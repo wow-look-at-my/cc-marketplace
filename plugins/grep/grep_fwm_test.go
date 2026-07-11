@@ -164,6 +164,26 @@ func TestFwmMtimeTieBreaksByPathAscending(t *testing.T) {
 	wantText(t, got, "Found 3 files\naa.txt\nmm.txt\nzz.txt")
 }
 
+func TestFwmMtimeTieUsesLocaleOrder(t *testing.T) {
+	// The builtin's tie-break was localeCompare, which compares
+	// case-insensitively at primary strength: a.txt sorts before B.txt.
+	// Go byte order would put B.txt first — the collator port (see
+	// collate.go) pins the builtin's order.
+	root := t.TempDir()
+	mkTree(t, root,
+		tf{"B.txt", "needle\n"},
+		tf{"a.txt", "needle\n"})
+	tie := time.Now().Add(-time.Hour)
+	for _, n := range []string{"B.txt", "a.txt"} {
+		require.NoError(t, os.Chtimes(filepath.Join(root, n), tie, tie))
+	}
+	g := testTool(t, root)
+	got := grepOK(t, g, map[string]any{"pattern": "needle", "output_mode": "filenames"})
+	wantText(t, got, "Found 2 files\na.txt\nB.txt")
+	got = grepOK(t, g, map[string]any{"pattern": "needle"})
+	wantText(t, got, "Found 2 files\na.txt:\n  1:needle\nB.txt:\n  1:needle")
+}
+
 func TestFwmMultilinePattern(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"ml.txt", "one A\ntwo B\nthree\n"})

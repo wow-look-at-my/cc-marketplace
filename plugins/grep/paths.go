@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,14 +12,37 @@ import (
 
 const cwdNote = "Note: your current working directory is"
 
-// resolveAgainst resolves p against root (absolute paths pass through
-// cleaned), like Node path.resolve(root, p). Divergence: no unicode NFC
-// normalization (the builtin NFC-normalizes; stdlib-only here).
-func resolveAgainst(p, root string) string {
-	if filepath.IsAbs(p) {
-		return filepath.Clean(p)
+// resolveAgainst ports the builtin's Vq path preprocessing
+// (2.1.116:cli.js:35597-35615) against root (the session-cwd
+// equivalent): null bytes are rejected with the builtin's exact error,
+// the input is whitespace-trimmed (whitespace-only resolves to root), a
+// bare "~" or "~/..." prefix expands to the home directory ("~user" is
+// NOT expanded — the builtin didn't support it either, resolving it as a
+// literal name against root), absolute paths pass through cleaned, and
+// anything else joins onto root like Node path.resolve. Divergences: no
+// unicode NFC normalization (the builtin NFC-normalizes; stdlib-only
+// here), and an unresolvable home directory leaves "~" literal instead
+// of throwing.
+func resolveAgainst(p, root string) (string, error) {
+	if strings.ContainsRune(p, 0) {
+		return "", errors.New("Path contains null bytes")
 	}
-	return filepath.Join(root, p)
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return root, nil
+	}
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			if p == "~" {
+				return home, nil
+			}
+			return filepath.Join(home, p[2:]), nil
+		}
+	}
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p), nil
+	}
+	return filepath.Join(root, p), nil
 }
 
 // relativizePath mirrors QZH (2.1.116:cli.js:35616-35619): root-relative

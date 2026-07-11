@@ -356,7 +356,10 @@ func coerceBool(v json.RawMessage) (bool, bool) {
 func (g *grepTool) execute(a *grepArgs) (string, bool) {
 	searchPath := g.root
 	if a.path != "" { // empty string is falsy upstream: same as omitted
-		resolved := resolveAgainst(a.path, g.root)
+		resolved, err := resolveAgainst(a.path, g.root)
+		if err != nil {
+			return err.Error(), true
+		}
 		if msg, ok := g.validatePath(a.path, resolved); !ok {
 			return msg, true
 		}

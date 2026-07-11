@@ -343,3 +343,47 @@ func TestUNCishResolvedPathSkipsValidation(t *testing.T) {
 	msg, ok = g.validatePath("//host/share", "//host/share")
 	assert.True(t, ok, msg)
 }
+
+func TestPathTildeExpansion(t *testing.T) {
+	// Vq parity: "~" and "~/sub" expand to the home directory. Results
+	// outside the root come back absolute.
+	root := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	mkTree(t, home, tf{"inhome.txt", "needle\n"}, tf{"nested/deep.txt", "needle\n"})
+	g := testTool(t, root)
+
+	got := grepOK(t, g, map[string]any{"pattern": "needle", "path": "~", "output_mode": "filenames"})
+	wantText(t, got, "Found 2 files\n"+home+"/nested/deep.txt\n"+home+"/inhome.txt")
+
+	got = grepOK(t, g, map[string]any{"pattern": "needle", "path": "~/nested", "output_mode": "filenames"})
+	wantText(t, got, "Found 1 file\n"+home+"/nested/deep.txt")
+}
+
+func TestPathTildeUserNotExpanded(t *testing.T) {
+	// The builtin's Vq only expanded "~" and "~/..."; "~user" resolves
+	// as a literal name against the root.
+	root := t.TempDir()
+	got, isErr := runGrep(t, testTool(t, root), map[string]any{"pattern": "x", "path": "~nobody"})
+	require.True(t, isErr)
+	wantText(t, got, fmt.Sprintf("Path does not exist: ~nobody. Note: your current working directory is %s.", root))
+}
+
+func TestPathWhitespaceTrimmedBeforeResolve(t *testing.T) {
+	// Vq trim() parity: "  sub  " only names a real directory after
+	// trimming, and a whitespace-only path resolves to the root.
+	root := t.TempDir()
+	mkTree(t, root, tf{"sub/inner.txt", "needle\n"})
+	g := testTool(t, root)
+	got := grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "path": "  sub  "}))
+	wantText(t, got, "sub/inner.txt:1:needle")
+	got = grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "path": "   "}))
+	wantText(t, got, "sub/inner.txt:1:needle")
+}
+
+func TestPathNullByteRejected(t *testing.T) {
+	root := t.TempDir()
+	got, isErr := runGrep(t, testTool(t, root), map[string]any{"pattern": "x", "path": "bad\x00path"})
+	require.True(t, isErr)
+	wantText(t, got, "Path contains null bytes")
+}

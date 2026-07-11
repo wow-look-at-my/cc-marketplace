@@ -204,10 +204,12 @@ func jsParseInt(s string) (int, bool) {
 	return n, true
 }
 
-// sortPathsByMtimeDesc ports the files_with_matches comparator: newest
-// mtime first (millisecond precision, matching JS mtimeMs; failed stats
-// sort as 0) with ties broken by ascending path order (the builtin's
-// localeCompare, approximated by Go string order).
+// sortPathsByMtimeDesc ports the files_with_matches comparator
+// (2.1.116:cli.js:286432-286436): newest mtime first (millisecond
+// precision, matching JS mtimeMs; failed stats sort as 0) with ties
+// broken by ascending localeCompare order on the path (see collate.go).
+// The stable sort mirrors JS Array.prototype.sort, so paths that collate
+// equal keep rg's emission order.
 func sortPathsByMtimeDesc(paths []string) []string {
 	type entry struct {
 		path  string
@@ -221,11 +223,12 @@ func sortPathsByMtimeDesc(paths []string) []string {
 		}
 		entries[i] = entry{p, mt}
 	}
-	sort.Slice(entries, func(i, j int) bool {
+	col := newPathCollator()
+	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].mtime != entries[j].mtime {
 			return entries[i].mtime > entries[j].mtime
 		}
-		return entries[i].path < entries[j].path
+		return col.CompareString(entries[i].path, entries[j].path) < 0
 	})
 	out := make([]string, len(paths))
 	for i, e := range entries {
