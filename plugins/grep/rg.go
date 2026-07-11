@@ -6,13 +6,16 @@
 // matches, one -j 1 retry on EAGAIN, and timeout-with-partial-output
 // resolving the parsed lines minus the last (possibly truncated) one.
 //
-// Copied from the sibling glob plugin with ONE deliberate divergence
-// from both it and the builtin: exit code 2 with NO stdout surfaces rg's
-// stderr as an error instead of resolving empty. The builtin silently
-// reported "No matches found" for an invalid regex/glob/type; this
-// plugin makes those failures visible. Exit 2 WITH stdout (e.g. matches
-// found but some tree entries unreadable) still resolves the partial
-// results like the builtin did.
+// ONE deliberate divergence from the builtin, shared by both sibling
+// plugins: exit code 2 with NO stdout surfaces rg's stderr (capped at
+// rgStderrErrLimit) as an error instead of resolving empty. The builtin
+// silently reported "No matches found" / "No files found" for an
+// invalid regex/glob/type; the plugins make those failures visible.
+// Exit 2 WITH stdout (e.g. matches found but some tree entries
+// unreadable) still resolves the partial results like the builtin did.
+//
+// This file is tool-agnostic and copied verbatim between the grep and
+// glob sibling plugins.
 package main
 
 import (
@@ -27,6 +30,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // rgOutputCapBytes mirrors DeH = 20000000 (2.1.116:cli.js:148704).
@@ -155,13 +159,13 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 		// Exit 2: EAGAIN earns one -j 1 retry; with stdout, resolve the
 		// partial results like the builtin; with NOTHING on stdout,
 		// surface rg's stderr (invalid regex/glob/type) as the failure
-		// instead of the builtin's silent "No matches found" (deliberate
+		// instead of the builtin's silent no-results text (deliberate
 		// deviation, see the file comment).
 		if stderrIndicatesEAGAIN(stderr.String()) {
 			return nil, true, nil
 		}
 		if len(lines) == 0 {
-			if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			if msg := truncateErrText(strings.TrimSpace(stderr.String())); msg != "" {
 				return nil, false, errors.New(msg)
 			}
 		}
@@ -176,6 +180,27 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 
 func stderrIndicatesEAGAIN(s string) bool {
 	return strings.Contains(s, "os error 11") || strings.Contains(s, "Resource temporarily unavailable")
+}
+
+// rgStderrErrLimit caps how much of rg's stderr is surfaced as an error
+// message, so a pathological run (e.g. megabytes of per-file warnings
+// ending in a real error) cannot blow up the MCP result. Errors bypass
+// the persistOversize path, hence the cap here.
+const rgStderrErrLimit = 4000
+
+const rgStderrTruncNote = "\n[ripgrep error output truncated]"
+
+// truncateErrText caps s at rgStderrErrLimit bytes (cut on a rune
+// boundary) and appends a truncation note when anything was dropped.
+func truncateErrText(s string) string {
+	if len(s) <= rgStderrErrLimit {
+		return s
+	}
+	cut := rgStderrErrLimit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + rgStderrTruncNote
 }
 
 // parseRgLines mirrors the shared runner's line handling: whole output

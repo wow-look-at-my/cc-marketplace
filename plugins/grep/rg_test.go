@@ -111,6 +111,37 @@ func TestRunnerExitTwoSilentResolvesEmpty(t *testing.T) {
 
 }
 
+func TestRunnerExitTwoStderrSurfacedTextIsCapped(t *testing.T) {
+	// A pathological exit-2 run (megabytes of warnings ending in an
+	// error) must not blow up the MCP result: the surfaced error text
+	// caps at rgStderrErrLimit plus the truncation note.
+	fake := writeFakeRg(t, "head -c 6000 /dev/zero | tr '\\0' x >&2; exit 2")
+	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	assert.Nil(t, lines)
+
+	require.NotNil(t, err)
+
+	assert.Equal(t, rgStderrErrLimit+len(rgStderrTruncNote), len(err.Error()))
+
+	assert.True(t, strings.HasSuffix(err.Error(), rgStderrTruncNote))
+
+	assert.True(t, strings.HasPrefix(err.Error(), strings.Repeat("x", 64)))
+
+}
+
+func TestTruncateErrTextUnits(t *testing.T) {
+	// Exactly at the cap: untouched.
+	exact := strings.Repeat("y", rgStderrErrLimit)
+	assert.Equal(t, exact, truncateErrText(exact))
+
+	// A multi-byte rune straddling the cap is dropped whole: the cut
+	// backs up to the previous rune boundary.
+	s := strings.Repeat("x", rgStderrErrLimit-1) + "\u00e9zz"
+	got := truncateErrText(s)
+	assert.Equal(t, strings.Repeat("x", rgStderrErrLimit-1)+rgStderrTruncNote, got)
+
+}
+
 func TestRunnerEAGAINRetriesSingleThreaded(t *testing.T) {
 	// First invocation fails with the EAGAIN signature; the retry must
 	// prepend -j 1, which the fake detects to succeed.

@@ -78,11 +78,67 @@ func TestRunnerExitOneMeansNoMatches(t *testing.T) {
 }
 
 func TestRunnerExitTwoResolvesStdout(t *testing.T) {
+	// Exit 2 WITH stdout (e.g. matches found but part of the tree was
+	// unreadable) keeps the builtin behavior: the partial results win.
 	fake := writeFakeRg(t, "echo half-result; echo 'rg: some error' >&2; exit 2")
 	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
 	require.Nil(t, err)
 
 	assert.False(t, len(lines) != 1 || lines[0] != "half-result")
+
+}
+
+func TestRunnerExitTwoNoOutputSurfacesStderr(t *testing.T) {
+	// Deliberate deviation from the builtin: exit 2 with NOTHING on
+	// stdout surfaces rg's stderr instead of resolving empty.
+	fake := writeFakeRg(t, "printf 'rg: error parsing glob:\\nbroken\\n' >&2; exit 2")
+	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	assert.Nil(t, lines)
+
+	require.NotNil(t, err)
+
+	assert.Equal(t, "rg: error parsing glob:\nbroken", err.Error())
+
+}
+
+func TestRunnerExitTwoSilentResolvesEmpty(t *testing.T) {
+	// Exit 2 with neither stdout nor stderr still resolves empty.
+	fake := writeFakeRg(t, "exit 2")
+	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	assert.Nil(t, err)
+
+	assert.Empty(t, lines)
+
+}
+
+func TestRunnerExitTwoStderrSurfacedTextIsCapped(t *testing.T) {
+	// A pathological exit-2 run (megabytes of warnings ending in an
+	// error) must not blow up the MCP result: the surfaced error text
+	// caps at rgStderrErrLimit plus the truncation note.
+	fake := writeFakeRg(t, "head -c 6000 /dev/zero | tr '\\0' x >&2; exit 2")
+	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	assert.Nil(t, lines)
+
+	require.NotNil(t, err)
+
+	assert.Equal(t, rgStderrErrLimit+len(rgStderrTruncNote), len(err.Error()))
+
+	assert.True(t, strings.HasSuffix(err.Error(), rgStderrTruncNote))
+
+	assert.True(t, strings.HasPrefix(err.Error(), strings.Repeat("x", 64)))
+
+}
+
+func TestTruncateErrTextUnits(t *testing.T) {
+	// Exactly at the cap: untouched.
+	exact := strings.Repeat("y", rgStderrErrLimit)
+	assert.Equal(t, exact, truncateErrText(exact))
+
+	// A multi-byte rune straddling the cap is dropped whole: the cut
+	// backs up to the previous rune boundary.
+	s := strings.Repeat("x", rgStderrErrLimit-1) + "\u00e9zz"
+	got := truncateErrText(s)
+	assert.Equal(t, strings.Repeat("x", rgStderrErrLimit-1)+rgStderrTruncNote, got)
 
 }
 
