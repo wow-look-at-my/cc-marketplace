@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,9 +32,8 @@ func TestWeirdFilenames(t *testing.T) {
 	}
 	mkFiles(t, root, names...)
 	got, isErr := runGlob(t, testTool(t, root), "**/*.txt")
-	if isErr {
-		t.Fatalf("unexpected error: %s", got)
-	}
+	require.False(t, isErr)
+
 	wantText(t, got, strings.Join(names, "\n"))
 }
 
@@ -48,31 +49,26 @@ func TestMtimeAscendingOrder(t *testing.T) {
 func TestGitignoreNotRespectedAndGitIncluded(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, ".git/config", ".gitignore", "ignored.txt", "kept.txt")
-	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored.txt\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored.txt\n"), 0o644))
+
 	got, _ := runGlob(t, testTool(t, root), "**/*")
 	for _, want := range []string{".git/config", ".gitignore", "ignored.txt", "kept.txt"} {
-		if !containsLine(got, want) {
-			t.Errorf("missing %q in:\n%s", want, got)
-		}
+		assert.True(t, containsLine(got, want))
+
 	}
 }
 
 func TestEnvNoIgnoreOverride(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, ".git/config", "ignored.txt", "kept.txt")
-	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored.txt\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored.txt\n"), 0o644))
+
 	t.Setenv("CLAUDE_CODE_GLOB_NO_IGNORE", "0")
 	got, _ := runGlob(t, testTool(t, root), "*.txt")
-	if containsLine(got, "ignored.txt") {
-		t.Errorf("gitignore should be respected with CLAUDE_CODE_GLOB_NO_IGNORE=0:\n%s", got)
-	}
-	if !containsLine(got, "kept.txt") {
-		t.Errorf("kept.txt missing:\n%s", got)
-	}
+	assert.False(t, containsLine(got, "ignored.txt"))
+
+	assert.True(t, containsLine(got, "kept.txt"))
+
 }
 
 func TestEnvHiddenOverride(t *testing.T) {
@@ -88,9 +84,8 @@ func TestSymlinksNotFollowedOrListed(t *testing.T) {
 	mkFiles(t, root, "real/target.txt")
 	must := func(err error) {
 		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.Nil(t, err)
+
 	}
 	must(os.Symlink(filepath.Join(root, "real/target.txt"), filepath.Join(root, "link-to-file.txt")))
 	must(os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "link-to-dir")))
@@ -103,9 +98,8 @@ func TestSymlinksNotFollowedOrListed(t *testing.T) {
 
 func TestBinaryFileListed(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "blob.bin"), []byte{0, 1, 2, 0xff, 0, 60, 61}, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "blob.bin"), []byte{0, 1, 2, 0xff, 0, 60, 61}, 0o644))
+
 	got, _ := runGlob(t, testTool(t, root), "*.bin")
 	wantText(t, got, "blob.bin")
 }
@@ -114,9 +108,8 @@ func TestNoMatchesIsNoFilesFound(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt")
 	got, isErr := runGlob(t, testTool(t, root), "*.zzz")
-	if isErr {
-		t.Fatalf("no matches must not be an error: %s", got)
-	}
+	require.False(t, isErr)
+
 	wantText(t, got, "No files found")
 }
 
@@ -126,9 +119,8 @@ func TestInvalidGlobResolvesAsNoFilesFound(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt")
 	got, isErr := runGlob(t, testTool(t, root), "{unclosed")
-	if isErr {
-		t.Fatalf("invalid glob must not be an error: %s", got)
-	}
+	require.False(t, isErr)
+
 	wantText(t, got, "No files found")
 }
 
@@ -187,9 +179,8 @@ func TestPathOutsideRootReturnsAbsolutePaths(t *testing.T) {
 func TestPathDoesNotExist(t *testing.T) {
 	root := t.TempDir()
 	got, isErr := runGlob(t, testTool(t, root), "*", "no-such-dir")
-	if !isErr {
-		t.Fatalf("want error, got: %s", got)
-	}
+	require.True(t, isErr)
+
 	wantText(t, got, fmt.Sprintf("Directory does not exist: no-such-dir. Note: your current working directory is %s.", root))
 }
 
@@ -197,9 +188,8 @@ func TestPathIsNotADirectory(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "plain.txt")
 	got, isErr := runGlob(t, testTool(t, root), "*", "plain.txt")
-	if !isErr {
-		t.Fatalf("want error, got: %s", got)
-	}
+	require.True(t, isErr)
+
 	wantText(t, got, "Path is not a directory: plain.txt")
 }
 
@@ -207,17 +197,15 @@ func TestPathDidYouMeanSuggestion(t *testing.T) {
 	// EvalSymlinks so the suggester's realpath step cannot diverge on
 	// hosts whose temp dir sits behind a symlink (e.g. macOS /var).
 	base, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
+
 	root := filepath.Join(base, "proj")
 	mkFiles(t, root, "sub/file.txt")
 	// "../sub" resolves to base/sub (missing); re-rooted under root it
 	// exists, so the suggester proposes the absolute re-rooted path.
 	got, isErr := runGlob(t, testTool(t, root), "*", "../sub")
-	if !isErr {
-		t.Fatalf("want error, got: %s", got)
-	}
+	require.True(t, isErr)
+
 	want := fmt.Sprintf("Directory does not exist: ../sub. Note: your current working directory is %s. Did you mean %s?",
 		root, filepath.Join(root, "sub"))
 	wantText(t, got, want)
@@ -248,26 +236,22 @@ func TestAbsolutePatternMetacharInFirstComponent(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "x.txt")
 	base, rel := splitAbsolutePattern("/st*ar")
-	if base != "/" || rel != "st*ar" {
-		t.Errorf("splitAbsolutePattern(/st*ar) = %q, %q; want /, st*ar", base, rel)
-	}
+	assert.False(t, base != "/" || rel != "st*ar")
+
 	base, rel = splitAbsolutePattern("/a/b/pa*/x")
-	if base != "/a/b" || rel != "pa*/x" {
-		t.Errorf("splitAbsolutePattern(/a/b/pa*/x) = %q, %q; want /a/b, pa*/x", base, rel)
-	}
+	assert.False(t, base != "/a/b" || rel != "pa*/x")
+
 	base, rel = splitAbsolutePattern("/a/b?.txt")
-	if base != "/a" || rel != "b?.txt" {
-		t.Errorf("splitAbsolutePattern(/a/b?.txt) = %q, %q; want /a, b?.txt", base, rel)
-	}
+	assert.False(t, base != "/a" || rel != "b?.txt")
+
 }
 
 func TestEmptyPathTreatedAsOmitted(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt")
 	got, isErr := runGlob(t, testTool(t, root), "*.txt", "")
-	if isErr {
-		t.Fatalf("empty path must behave like omitted: %s", got)
-	}
+	require.False(t, isErr)
+
 	wantText(t, got, "a.txt")
 }
 
@@ -277,9 +261,8 @@ func TestTruncationAtInjectedCap(t *testing.T) {
 	g := testTool(t, root)
 	g.maxResults = 3
 	got, isErr := runGlob(t, g, "*.txt")
-	if isErr {
-		t.Fatalf("unexpected error: %s", got)
-	}
+	require.False(t, isErr)
+
 	wantText(t, got, "f1.txt\nf2.txt\nf3.txt\n"+globTruncationLine)
 }
 

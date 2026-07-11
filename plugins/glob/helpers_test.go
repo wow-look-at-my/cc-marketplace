@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io"
 	"os"
 	"path/filepath"
@@ -39,16 +41,13 @@ func mkFiles(t *testing.T, root string, names ...string) {
 	base := time.Now().Add(-2 * time.Hour)
 	for i, n := range names {
 		p := filepath.Join(root, filepath.FromSlash(n))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte("x\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+
+		require.NoError(t, os.WriteFile(p, []byte("x\n"), 0o644))
+
 		mt := base.Add(time.Duration(i) * time.Second)
-		if err := os.Chtimes(p, mt, mt); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.Chtimes(p, mt, mt))
+
 	}
 }
 
@@ -61,21 +60,18 @@ func runGlob(t *testing.T, g *globTool, pattern string, path ...string) (string,
 		args["path"] = path[0]
 	}
 	raw, err := json.Marshal(args)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
+
 	res, rpcErr := g.Call(raw)
-	if rpcErr != nil {
-		t.Fatalf("unexpected rpc error: %+v", rpcErr)
-	}
+	require.Nil(t, rpcErr)
+
 	return res.Text, res.IsError
 }
 
 func wantText(t *testing.T, got, want string) {
 	t.Helper()
-	if got != want {
-		t.Errorf("result text mismatch\ngot:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, want, got)
+
 }
 
 // writeFakeRg writes an executable shell script standing in for ripgrep
@@ -83,9 +79,8 @@ func wantText(t *testing.T, got, want string) {
 func writeFakeRg(t *testing.T, script string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "fake-rg")
-	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(p, []byte("#!/bin/sh\n"+script+"\n"), 0o755))
+
 	return p
 }
 
@@ -118,9 +113,8 @@ func startServer(t *testing.T, tools ...mcpTool) *pipeClient {
 	c := &pipeClient{t: t, w: inW, r: bufio.NewReader(outR), done: done}
 	t.Cleanup(func() {
 		inW.Close()
-		if err := <-done; err != nil {
-			t.Errorf("server run: %v", err)
-		}
+		assert.NoError(t, <-done)
+
 	})
 	return c
 }
@@ -190,12 +184,10 @@ func (c *pipeClient) listTools(id int) []any {
 func errorCode(t *testing.T, resp map[string]any) int {
 	t.Helper()
 	errObj, ok := resp["error"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected error in response, got %v", resp)
-	}
+	require.True(t, ok)
+
 	code, ok := errObj["code"].(float64)
-	if !ok {
-		t.Fatalf("error without numeric code: %v", errObj)
-	}
+	require.True(t, ok)
+
 	return int(code)
 }

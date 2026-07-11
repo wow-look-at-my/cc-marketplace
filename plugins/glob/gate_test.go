@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"github.com/stretchr/testify/assert"
+	"testing"
+)
 
 func TestParseSemver(t *testing.T) {
 	cases := []struct {
@@ -28,9 +31,8 @@ func TestParseSemver(t *testing.T) {
 	}
 	for _, tc := range cases {
 		got, ok := parseSemver(tc.in)
-		if ok != tc.ok || (ok && got != tc.want) {
-			t.Errorf("parseSemver(%q) = %+v, %v; want %+v, %v", tc.in, got, ok, tc.want, tc.ok)
-		}
+		assert.False(t, ok != tc.ok || (ok && got != tc.want))
+
 	}
 }
 
@@ -48,9 +50,9 @@ func TestSemverLess(t *testing.T) {
 		{semver{2, 2, 0}, semver{2, 1, 117}, false},
 	}
 	for _, tc := range cases {
-		if got := tc.a.less(tc.b); got != tc.want {
-			t.Errorf("%+v.less(%+v) = %v, want %v", tc.a, tc.b, got, tc.want)
-		}
+		got := tc.a.less(tc.b)
+		assert.Equal(t, tc.want, got)
+
 	}
 }
 
@@ -77,9 +79,9 @@ func TestGateAllows(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := gateAllows(tc.mode, tc.client, tc.version); got != tc.want {
-				t.Errorf("gateAllows(%q, %q, %q) = %v, want %v", tc.mode, tc.client, tc.version, got, tc.want)
-			}
+			got := gateAllows(tc.mode, tc.client, tc.version)
+			assert.Equal(t, tc.want, got)
+
 		})
 	}
 }

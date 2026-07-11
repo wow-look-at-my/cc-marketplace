@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
 )
@@ -21,60 +23,56 @@ const wantGlobDescription = "- Fast file pattern matching tool that works with a
 	"- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead"
 
 func TestSchemaAndDescriptionVerbatim(t *testing.T) {
-	if got := string(globInputSchemaCompact); got != wantGlobSchemaCompact {
-		t.Errorf("input schema drifted from 2.1.116 spec\ngot:  %s\nwant: %s", got, wantGlobSchemaCompact)
-	}
-	if globDescription != wantGlobDescription {
-		t.Errorf("description drifted from 2.1.116 spec\ngot:\n%q\nwant:\n%q", globDescription, wantGlobDescription)
-	}
-	if n := len(globDescription); n > 2048 {
-		t.Errorf("description is %d chars; claude-code truncates MCP tool descriptions at 2048", n)
-	}
+	got := string(globInputSchemaCompact)
+	assert.Equal(t, wantGlobSchemaCompact, got)
+
+	assert.Equal(t, wantGlobDescription, globDescription)
+
+	n := len(globDescription)
+	assert.LessOrEqual(t, n, 2048)
+
 }
 
 func TestHandshake(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.handshake("claude-code", "2.1.207")
 	result, ok := resp["result"].(map[string]any)
-	if !ok {
-		t.Fatalf("initialize: no result in %v", resp)
-	}
-	if got := result["protocolVersion"]; got != "2025-11-25" {
-		t.Errorf("protocolVersion = %v, want echo of client's 2025-11-25", got)
-	}
+	require.True(t, ok)
+
+	got := result["protocolVersion"]
+	assert.Equal(t, "2025-11-25", got)
+
 	si, _ := result["serverInfo"].(map[string]any)
-	if si["name"] != "glob" || si["version"] == "" {
-		t.Errorf("serverInfo = %v", si)
-	}
+	assert.False(t, si["name"] != "glob" || si["version"] == "")
+
 	caps, _ := result["capabilities"].(map[string]any)
-	if _, ok := caps["tools"]; !ok {
-		t.Errorf("capabilities missing tools: %v", caps)
-	}
+	_, ok = caps["tools"]
+	assert.True(t, ok)
+
 }
 
 func TestInitializeEchoesUnknownProtocolVersion(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2099-01-01","clientInfo":{"name":"x","version":"1.0.0"}}}`)
 	result := resp["result"].(map[string]any)
-	if got := result["protocolVersion"]; got != "2099-01-01" {
-		t.Errorf("protocolVersion = %v, want echoed 2099-01-01", got)
-	}
+	got := result["protocolVersion"]
+	assert.Equal(t, "2099-01-01", got)
+
 }
 
 func TestInitializeWithoutParams(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`)
 	result, ok := resp["result"].(map[string]any)
-	if !ok {
-		t.Fatalf("initialize without params must still succeed: %v", resp)
-	}
-	if got := result["protocolVersion"]; got != defaultProtocolVersion {
-		t.Errorf("protocolVersion = %v, want default %s", got, defaultProtocolVersion)
-	}
+	require.True(t, ok)
+
+	got := result["protocolVersion"]
+	assert.Equal(t, defaultProtocolVersion, got)
+
 	// Unknown client -> tool exposed.
-	if n := len(c.listTools(2)); n != 1 {
-		t.Errorf("tools = %d, want 1 for unknown client", n)
-	}
+	n := len(c.listTools(2))
+	assert.Equal(t, 1, n)
+
 }
 
 func TestToolsListEntryShape(t *testing.T) {
@@ -85,45 +83,35 @@ func TestToolsListEntryShape(t *testing.T) {
 
 	// The compacted schema must appear byte-for-byte in the wire output
 	// (RawMessage embeds it verbatim, preserving property order).
-	if !strings.Contains(raw, wantGlobSchemaCompact) {
-		t.Errorf("tools/list wire output does not contain the verbatim schema:\n%s", raw)
-	}
+	assert.Contains(t, raw, wantGlobSchemaCompact)
+
 	descJSON, _ := json.Marshal(wantGlobDescription)
-	if !strings.Contains(raw, string(descJSON)) {
-		t.Errorf("tools/list wire output does not contain the verbatim description:\n%s", raw)
-	}
-	if pi, di := strings.Index(raw, `"The glob pattern`), strings.Index(raw, `"The directory to search in`); pi < 0 || di < 0 || pi > di {
-		t.Errorf("schema property order not pattern-then-path (pattern@%d path@%d)", pi, di)
-	}
+	assert.Contains(t, raw, string(descJSON))
+
+	pi, di := strings.Index(raw, `"The glob pattern`), strings.Index(raw, `"The directory to search in`)
+	assert.False(t, pi < 0 || di < 0 || pi > di)
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(raw), &resp))
+
 	tools := resp["result"].(map[string]any)["tools"].([]any)
-	if len(tools) != 1 {
-		t.Fatalf("tools = %d, want 1", len(tools))
-	}
+	require.Equal(t, 1, len(tools))
+
 	tool := tools[0].(map[string]any)
-	if tool["name"] != "Glob" {
-		t.Errorf("name = %v, want Glob", tool["name"])
-	}
+	assert.Equal(t, "Glob", tool["name"])
+
 	ann, _ := tool["annotations"].(map[string]any)
-	if ann["readOnlyHint"] != true {
-		t.Errorf("annotations = %v, want readOnlyHint true", ann)
-	}
+	assert.Equal(t, true, ann["readOnlyHint"])
+
 	meta, _ := tool["_meta"].(map[string]any)
-	if meta["anthropic/alwaysLoad"] != true {
-		t.Errorf("_meta = %v, want anthropic/alwaysLoad true", meta)
-	}
+	assert.Equal(t, true, meta["anthropic/alwaysLoad"])
+
 	schema, _ := tool["inputSchema"].(map[string]any)
-	if schema["additionalProperties"] != false {
-		t.Errorf("inputSchema.additionalProperties = %v, want false", schema["additionalProperties"])
-	}
+	assert.Equal(t, false, schema["additionalProperties"])
+
 	req, _ := schema["required"].([]any)
-	if len(req) != 1 || req[0] != "pattern" {
-		t.Errorf("inputSchema.required = %v, want [pattern]", req)
-	}
+	assert.False(t, len(req) != 1 || req[0] != "pattern")
+
 }
 
 func TestVersionGateMatrix(t *testing.T) {
@@ -155,9 +143,9 @@ func TestVersionGateMatrix(t *testing.T) {
 			t.Setenv(gateEnvVar, tc.envMode)
 			c := startServer(t, testTool(t, t.TempDir()))
 			c.handshake(tc.clientName, tc.clientVersion)
-			if got := len(c.listTools(2)); got != tc.wantTools {
-				t.Errorf("tools = %d, want %d", got, tc.wantTools)
-			}
+			got := len(c.listTools(2))
+			assert.Equal(t, tc.wantTools, got)
+
 		})
 	}
 }
@@ -167,13 +155,12 @@ func TestGatedOffListIsEmptyArrayAndCallsRejected(t *testing.T) {
 	c.handshake("claude-code", "2.1.116")
 	c.send(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
 	raw := c.recvRaw()
-	if !strings.Contains(raw, `"tools":[]`) {
-		t.Errorf("gated-off tools/list must serialize an empty array, got: %s", raw)
-	}
+	assert.Contains(t, raw, `"tools":[]`)
+
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"Glob","arguments":{"pattern":"*"}}}`)
-	if code := errorCode(t, resp); code != codeInvalidParams {
-		t.Errorf("gated-off tools/call code = %d, want %d", code, codeInvalidParams)
-	}
+	code := errorCode(t, resp)
+	assert.Equal(t, codeInvalidParams, code)
+
 }
 
 func TestToolsCallHappyPath(t *testing.T) {
@@ -183,20 +170,17 @@ func TestToolsCallHappyPath(t *testing.T) {
 	c.handshake("claude-code", "2.1.207")
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"Glob","arguments":{"pattern":"*.txt"}}}`)
 	result, ok := resp["result"].(map[string]any)
-	if !ok {
-		t.Fatalf("no result: %v", resp)
-	}
-	if isErr, present := result["isError"]; present && isErr == true {
-		t.Errorf("unexpected isError: %v", result)
-	}
+	require.True(t, ok)
+
+	isErr, present := result["isError"]
+	assert.False(t, present && isErr == true)
+
 	content := result["content"].([]any)
 	block := content[0].(map[string]any)
-	if block["type"] != "text" {
-		t.Errorf("content type = %v, want text", block["type"])
-	}
-	if block["text"] != "old.txt\nnew.txt" {
-		t.Errorf("text = %q, want files in ascending mtime order", block["text"])
-	}
+	assert.Equal(t, "text", block["type"])
+
+	assert.Equal(t, "old.txt\nnew.txt", block["text"])
+
 }
 
 func TestToolsCallErrorsSurfaceAsIsError(t *testing.T) {
@@ -205,23 +189,21 @@ func TestToolsCallErrorsSurfaceAsIsError(t *testing.T) {
 	c.handshake("claude-code", "2.1.207")
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"Glob","arguments":{"pattern":"*","path":"missing-dir"}}}`)
 	result := resp["result"].(map[string]any)
-	if result["isError"] != true {
-		t.Fatalf("want isError true, got %v", result)
-	}
+	require.Equal(t, true, result["isError"])
+
 	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
 	want := fmt.Sprintf("Directory does not exist: missing-dir. Note: your current working directory is %s.", root)
-	if text != want {
-		t.Errorf("text = %q, want %q", text, want)
-	}
+	assert.Equal(t, want, text)
+
 }
 
 func TestToolsCallUnknownTool(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	c.handshake("claude-code", "2.1.207")
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"Nope","arguments":{}}}`)
-	if code := errorCode(t, resp); code != codeInvalidParams {
-		t.Errorf("code = %d, want %d", code, codeInvalidParams)
-	}
+	code := errorCode(t, resp)
+	assert.Equal(t, codeInvalidParams, code)
+
 }
 
 func TestToolsCallInvalidArguments(t *testing.T) {
@@ -241,9 +223,9 @@ func TestToolsCallInvalidArguments(t *testing.T) {
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"Glob","arguments":%s}}`, 10+i, tc.args)
-			if code := errorCode(t, c.roundTrip(req)); code != codeInvalidParams {
-				t.Errorf("code = %d, want %d", code, codeInvalidParams)
-			}
+			code := errorCode(t, c.roundTrip(req))
+			assert.Equal(t, codeInvalidParams, code)
+
 		})
 	}
 }
@@ -251,43 +233,42 @@ func TestToolsCallInvalidArguments(t *testing.T) {
 func TestToolsCallMissingName(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{}}`)
-	if code := errorCode(t, resp); code != codeInvalidParams {
-		t.Errorf("code = %d, want %d", code, codeInvalidParams)
-	}
+	code := errorCode(t, resp)
+	assert.Equal(t, codeInvalidParams, code)
+
 }
 
 func TestMalformedJSONLine(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.roundTrip(`{this is not json`)
-	if code := errorCode(t, resp); code != codeParseError {
-		t.Errorf("code = %d, want %d", code, codeParseError)
-	}
-	if id, present := resp["id"]; !present || id != nil {
-		t.Errorf("parse error id = %v, want null", id)
-	}
+	code := errorCode(t, resp)
+	assert.Equal(t, codeParseError, code)
+
+	id, present := resp["id"]
+	assert.False(t, !present || id != nil)
+
 	// The server must survive and keep answering.
 	pong := c.roundTrip(`{"jsonrpc":"2.0","id":9,"method":"ping"}`)
-	if pong["result"] == nil {
-		t.Errorf("ping after parse error failed: %v", pong)
-	}
+	assert.NotNil(t, pong["result"])
+
 }
 
 func TestValidJSONButNotARequest(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	for _, raw := range []string{`[1,2,3]`, `"just a string"`, `42`} {
 		resp := c.roundTrip(raw)
-		if code := errorCode(t, resp); code != codeInvalidRequest {
-			t.Errorf("%s: code = %d, want %d", raw, code, codeInvalidRequest)
-		}
+		code := errorCode(t, resp)
+		assert.Equal(t, codeInvalidRequest, code)
+
 	}
 }
 
 func TestUnknownMethod(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":5,"method":"resources/list"}`)
-	if code := errorCode(t, resp); code != codeMethodNotFound {
-		t.Errorf("code = %d, want %d", code, codeMethodNotFound)
-	}
+	code := errorCode(t, resp)
+	assert.Equal(t, codeMethodNotFound, code)
+
 }
 
 func TestUnknownNotificationsTolerated(t *testing.T) {
@@ -297,35 +278,32 @@ func TestUnknownNotificationsTolerated(t *testing.T) {
 	// No responses for either; the next request must be answered with its
 	// own id, proving nothing was emitted in between.
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":77,"method":"ping"}`)
-	if id, ok := resp["id"].(float64); !ok || int(id) != 77 {
-		t.Errorf("id = %v, want 77", resp["id"])
-	}
+	id, ok := resp["id"].(float64)
+	assert.False(t, !ok || int(id) != 77)
+
 }
 
 func TestPing(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":1,"method":"ping"}`)
 	result, ok := resp["result"].(map[string]any)
-	if !ok || len(result) != 0 {
-		t.Errorf("ping result = %v, want {}", resp["result"])
-	}
+	assert.False(t, !ok || len(result) != 0)
+
 }
 
 func TestStringAndCRLFRequestIDs(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":"abc-123","method":"ping"}` + "\r")
-	if resp["id"] != "abc-123" {
-		t.Errorf("id = %v, want abc-123 echoed (with CR tolerated)", resp["id"])
-	}
+	assert.Equal(t, "abc-123", resp["id"])
+
 }
 
 func TestStdinEOFShutdown(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	c.handshake("claude-code", "2.1.207")
 	c.w.Close()
-	if err := <-c.done; err != nil {
-		t.Errorf("run after EOF = %v, want nil", err)
-	}
+	assert.NoError(t, <-c.done)
+
 	// Re-arm done so Cleanup's receive does not block.
 	c.done <- nil
 }
