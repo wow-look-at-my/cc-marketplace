@@ -93,7 +93,7 @@ func TestInlineJustUnderPersistThreshold(t *testing.T) {
 
 func TestTimeoutThroughTool(t *testing.T) {
 	root := t.TempDir()
-	fake := writeFakeRg(t, "sleep 5")
+	fake := writeFakeRg(t, "exec sleep 5")
 	g := testTool(t, root)
 	g.resolveRg = fixedRg(fake)
 	g.timeout = 150 * time.Millisecond
@@ -107,7 +107,7 @@ func TestTimeoutPartialThroughTool(t *testing.T) {
 	root := t.TempDir()
 	// Fake rg emits two absolute paths then hangs: the tool must resolve
 	// the first (last line dropped) relativized against the root.
-	fake := writeFakeRg(t, fmt.Sprintf("printf '%s/kept.txt\\n%s/dropped.txt\\n'; sleep 5", root, root))
+	fake := writeFakeRg(t, fmt.Sprintf("printf '%s/kept.txt\\n%s/dropped.txt\\n'; exec sleep 5", root, root))
 	g := testTool(t, root)
 	g.resolveRg = fixedRg(fake)
 	g.timeout = 300 * time.Millisecond

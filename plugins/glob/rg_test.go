@@ -16,7 +16,7 @@ func testRunner(timeout time.Duration) *rgRunner {
 }
 
 func TestRunnerTimeoutWithoutOutput(t *testing.T) {
-	fake := writeFakeRg(t, "sleep 5")
+	fake := writeFakeRg(t, "exec sleep 5")
 	r := testRunner(200 * time.Millisecond)
 	start := time.Now()
 	lines, err := r.run(fake, []string{"--files"}, t.TempDir())
@@ -35,7 +35,7 @@ func TestRunnerTimeoutWithoutOutput(t *testing.T) {
 func TestRunnerTimeoutLabelIsWSLConstantNotEffectiveTimeout(t *testing.T) {
 	// Faithful quirk: the message reports the 20/60 default even when the
 	// effective timeout differs.
-	fake := writeFakeRg(t, "sleep 5")
+	fake := writeFakeRg(t, "exec sleep 5")
 	r := &rgRunner{timeout: 100 * time.Millisecond, timeoutLabel: 60, maxOutput: rgOutputCapBytes}
 	_, err := r.run(fake, nil, t.TempDir())
 	assert.False(t, err == nil || !strings.Contains(err.Error(), "timed out after 60 seconds"))
@@ -43,7 +43,7 @@ func TestRunnerTimeoutLabelIsWSLConstantNotEffectiveTimeout(t *testing.T) {
 }
 
 func TestRunnerTimeoutWithPartialOutputDropsLastLine(t *testing.T) {
-	fake := writeFakeRg(t, "printf 'a.txt\\nb.txt\\n'; sleep 5")
+	fake := writeFakeRg(t, "printf 'a.txt\\nb.txt\\n'; exec sleep 5")
 	r := testRunner(300 * time.Millisecond)
 	lines, err := r.run(fake, []string{"--files"}, t.TempDir())
 	require.Nil(t, err)

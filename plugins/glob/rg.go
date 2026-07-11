@@ -111,7 +111,9 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 	stderr := &cappedBuffer{max: r.maxOutput}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.WaitDelay = 10 * time.Second
+	// After a kill, don't let stray descendants holding the pipes delay
+	// the (partial) result: give I/O one second to drain, then move on.
+	cmd.WaitDelay = time.Second
 
 	runErr := cmd.Run()
 	lines = parseRgLines(stdout.String())
