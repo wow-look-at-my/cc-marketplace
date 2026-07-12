@@ -22,6 +22,11 @@ claude plugin install glob
   binary
   - **Linux**: `apt install ripgrep`
   - **macOS**: `brew install ripgrep`
+- Any ripgrep from **13.0.0** up works (13/14/15 are tested): result
+  ordering happens in the plugin, not via rg's `--sort` (which rg 13
+  implemented per-directory instead of globally). The only rg-13
+  difference is cosmetic — its error messages lack the `rg: ` prefix
+  that 14+ prepend, visible only in surfaced error text.
 - Linux or macOS (amd64/arm64). Windows binaries are not built.
 
 Without ripgrep, tool calls fail with:
@@ -44,8 +49,14 @@ turn 1 instead of being deferred behind ToolSearch.
 
 Behavior (all inherited from the 2.1.116 builtin):
 
-- Runs `rg --files --glob <pattern> --sort=modified --no-ignore --hidden`
-  in the search root; results come back **oldest-first** (ascending mtime).
+- Runs `rg --files --glob <pattern> --no-ignore --hidden` in the search
+  root and sorts the results **oldest-first** (ascending mtime) in the
+  plugin, so the order is identical on every ripgrep version (the
+  builtin delegated to `--sort=modified`, which rg 13 applied
+  per-directory rather than globally). Equal mtimes tie-break by
+  locale-aware path collation — the same localeCompare port the grep
+  sibling uses for its newest-first sort; the builtin left equal-mtime
+  order to rg's walk order.
 - `.gitignore` is **not** respected and dotfiles (including `.git/`) **are**
   included, unless overridden via `CLAUDE_CODE_GLOB_NO_IGNORE` /
   `CLAUDE_CODE_GLOB_HIDDEN` (set to `0`/`false` to disable). Note that even
@@ -53,14 +64,20 @@ Behavior (all inherited from the 2.1.116 builtin):
   hidden or gitignored file that directly matches the pattern is still
   returned; the overrides prune hidden/ignored directories. The builtin
   behaved identically (same argv).
+- `path` is whitespace-trimmed and accepts `~` / `~/sub` (expanded to the
+  home directory), exactly like the builtin's path resolution; `~user` is
+  NOT expanded (the builtin didn't either) and null bytes are rejected
+  with `Path contains null bytes`.
 - Paths are returned relative to the project directory when under it,
   absolute otherwise.
 - An absolute `pattern` overrides `path`: the portion before the first glob
   metachar becomes the search root.
 - Results cap at **25000 files**, then append the line
   `(Results are truncated. Consider using a more specific path or pattern.)`
-- No matches (including invalid glob syntax, which ripgrep rejects with
-  exit 2) return `No files found`.
+- No matches return `No files found`. **Invalid glob syntax is a tool
+  error**: ripgrep exit 2 with no output surfaces rg's stderr (capped at
+  4000 characters) instead of the builtin's silent `No files found` — a
+  deliberate deviation shared with the grep sibling.
 - Results over 50000 characters are written to a temp file and replaced by
   a `<persisted-output>` block with a ~2KB preview.
 - Searches time out after 20 seconds (60 on WSL), overridable via
@@ -83,6 +100,17 @@ get the tool. Override with:
 
 ## Deliberate divergences from the builtin
 
+- **Invalid glob syntax is an error**: ripgrep exit code 2 with no output
+  surfaces rg's actual stderr as a tool error (capped at 4000 characters
+  with a truncation note). The builtin silently reported `No files
+  found`. Exit 2 with partial output still returns the partial results
+  like the builtin.
+- The ascending-mtime sort happens in the plugin rather than via
+  `--sort=modified`: same order as the builtin under rg 14+, rg 13's
+  per-directory sort quirk bypassed, deterministic collation tie-breaks
+  for equal mtimes (the builtin's were rg's unspecified walk order), and
+  rg gets to walk in parallel instead of `--sort`'s forced single
+  thread.
 - ripgrep resolution: system `rg` from PATH (or `RIPGREP_PATH`), not the
   binary embedded in the claude executable; the not-found error suggests
   `RIPGREP_PATH` instead of the native-binary escape hatch.

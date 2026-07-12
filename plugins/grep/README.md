@@ -22,6 +22,9 @@ claude plugin install grep
   binary
   - **Linux**: `apt install ripgrep`
   - **macOS**: `brew install ripgrep`
+- Any ripgrep from **13.0.0** up works (13/14/15 are tested). The only
+  rg-13 difference is cosmetic: its error messages lack the `rg: `
+  prefix that 14+ prepend, visible only in surfaced error text.
 - Linux or macOS (amd64/arm64). Windows binaries are not built.
 
 Without ripgrep, tool calls fail with:
@@ -73,8 +76,10 @@ older:colon.txt:
   dropped.
 - Parsing rule: after the `Found N files` header, every line starting with
   two spaces belongs to the current file; any other line is the next file's
-  header (strip the one trailing `:`). Unambiguous for filenames containing
-  `:` or content that looks like a path.
+  header (strip the one trailing `:`). This holds for filenames containing
+  `:` and content that looks like a path — the one blind spot is a filename
+  that itself begins with two spaces, whose header line is
+  indistinguishable from content.
 - `head_limit`/`offset` paginate the flattened stream of match/context
   lines across all files (headers and `--` separators are not counted); a
   file whose lines are entirely cut is omitted. Default `head_limit` is
@@ -91,9 +96,17 @@ older:colon.txt:
   glob plugin's default. A positive `glob` parameter acts as a ripgrep
   whitelist: a gitignored or type-filtered file that directly matches it is
   still searched (builtin parity — same argv).
-- `path` may be a file or a directory; missing paths return
+- `path` may be a file or a directory; it is whitespace-trimmed and
+  accepts `~` / `~/sub` (expanded to the home directory) like the
+  builtin's path resolution — `~user` is NOT expanded (the builtin didn't
+  either) and null bytes are rejected with `Path contains null bytes`.
+  Missing paths return
   `Path does not exist: ... Note: your current working directory is ...`
   with a did-you-mean suggestion when a re-rooted candidate exists.
+- `filenames_with_matches` and `filenames` order files newest-first;
+  equal mtimes tie-break by the builtin's localeCompare (ported via ICU
+  root collation — case-insensitive at primary strength, so `a.txt`
+  sorts before `B.txt`).
 - Context precedence: `context` beats `-C` beats `-B`/`-A`. `-n` defaults
   to true. Patterns starting with `-` are passed via `-e`.
 - Searches time out after 20 seconds (60 on WSL), overridable via
@@ -125,8 +138,9 @@ get the tool. Override with:
   and the tool description/schema text was surgically edited to match. The
   context flags and `-n` now apply to `filenames_with_matches` too.
 - **Invalid regex/glob/type are errors**: ripgrep exit code 2 with no
-  output surfaces rg's actual stderr as a tool error. The builtin silently
-  reported "No matches found". Exit 2 with partial output (e.g. unreadable
+  output surfaces rg's actual stderr as a tool error (capped at 4000
+  characters with a truncation note). The builtin silently reported
+  "No matches found". Exit 2 with partial output (e.g. unreadable
   directory entries mid-search) still returns the partial results like the
   builtin.
 - **count mode passes `-c -H`** (claude-code's own >= 2.1.175 fix): a
@@ -142,6 +156,9 @@ get the tool. Override with:
   the builtin appended are not available to a plugin and are omitted.
 - Paths are not Unicode-NFC-normalized (the builtin normalizes resolved
   paths; this server is stdlib-only).
+- The mtime tie-break pins ICU **root** collation (matches Node's en-US
+  localeCompare for every committed test vector); the builtin inherited
+  the host locale's collation, which can differ under exotic locales.
 - The search root defaults to `$CLAUDE_PROJECT_DIR` (injected by Claude
   Code) rather than the session cwd; for plugin servers these are the same
   directory. (`.mcp.json` `cwd` is deliberately unset: Claude Code does not

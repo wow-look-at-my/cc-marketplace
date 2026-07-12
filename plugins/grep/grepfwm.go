@@ -9,8 +9,10 @@
 // across all files (file headers and "--" separators are not counted).
 // A file whose lines are entirely cut by pagination is omitted.
 //
-// Rendered shape (locked by tests; two-space indent disambiguates
-// headers from content):
+// Rendered shape (locked by tests; the two-space indent disambiguates
+// headers from content, except for the pathological case of a filename
+// that itself begins with two spaces — its header renders like a
+// content line):
 //
 //	Found 2 files
 //	newest.go:
