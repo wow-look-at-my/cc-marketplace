@@ -3,8 +3,8 @@
 Restores the builtin **Glob** tool that Claude Code disabled by default in
 2.1.117, as a plugin MCP server. Behavior mirrors version 2.1.116 (the last
 release that shipped the builtin by default): same description, same input
-schema, same ripgrep invocation, same sorting, same truncation and error
-strings.
+schema, same ripgrep engine and result order, same truncation and error
+strings — except for a few deliberate divergences listed at the bottom.
 
 ## Installation
 
