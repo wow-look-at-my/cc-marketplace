@@ -5,13 +5,19 @@
 # syntax tree, transform.jq inspects and rewrites it, and shfmt --from-json
 # regenerates the command. Commands containing a heredoc (<< or <<-,
 # anywhere in the tree) are DENIED outright. Otherwise the tree is rewritten:
-# scrub stderr-to-/dev/null redirects everywhere; kill trailing | head /
-# | tail stages; strip trailing | grep, trailing || true, and trailing 2>&1;
-# rewrite a trailing stdout file redirect into | tee; and ensure
-# `set -o pipefail` is in effect. Only a semantic AST change triggers a
-# rewrite, so string literals that merely contain "2>/dev/null" or "| head"
-# are never mangled. Strictness settings the user wrote (set -e etc.) are
-# never removed.
+# scrub stderr-to-/dev/null redirects everywhere; on the FINAL top-level
+# statement only, kill trailing | head / | tail stages, strip trailing
+# | grep, trailing || true, and trailing 2>&1, and rewrite a trailing stdout
+# file redirect into | tee (mid-script limiting pipes and redirects are
+# deliberate and preserved); cap every sleep at 3 seconds; replace constant
+# terminal-bound echoes with a fixed nag; and ensure `set -o pipefail` is in
+# effect. Only a semantic AST change triggers a rewrite, so string literals
+# that merely contain "2>/dev/null" or "| head" are never mangled.
+# Strictness settings the user wrote (set -e etc.) are never removed. After
+# regeneration the cleaned command is re-parsed and the rewrite is dropped
+# entirely (fail open) if it somehow contains fewer top-level statements
+# than the original -- a belt-and-braces guard against ever executing a
+# truncated command.
 #
 # The hook is fully SILENT by design: rewrites emit only updatedInput (with
 # suppressOutput), never a systemMessage or additionalContext -- a visible
@@ -103,6 +109,12 @@ log_deny() {
 	printf 'DENY\toriginal="%s"\treason="heredoc"\n' "$(log_escape "$1")" >>"$path" || true
 }
 
+log_guard() {
+	local path=${CLEANUP_BASH_CMDS_LOG:-}
+	[ -n "$path" ] || return 0
+	printf 'GUARD\toriginal="%s"\tcleaned="%s"\treason="stmt-count"\n' "$(log_escape "$1")" "$(log_escape "$2")" >>"$path" || true
+}
+
 # Heredocs are banned outright: deny beats rewrite. Herestrings (<<<) are
 # fine and never denied. Detection is AST-based (Redirect nodes only), so a
 # string containing "<<EOF" or an arithmetic bit shift ($((x << 2)), which
@@ -130,6 +142,20 @@ cleaned=$(printf '%s' "$result" | jq -c '.ast' | shfmt --from-json 2>&1) || exit
 # strips it. Never emit an empty command.
 [ -n "$cleaned" ] || exit 0
 [ "$cleaned" = "$cmd" ] && exit 0
+
+# Belt-and-braces no-statement-loss guard: re-parse the cleaned command and
+# compare top-level statement counts. The transform never splices .Stmts
+# (rules map over statements, edit within them, or prepend pipefail), so a
+# rewrite can only ADD statements -- but if a future rule bug or a shfmt
+# --from-json regression ever eats one, fail open (emit no rewrite) rather
+# than execute a truncated command. The GUARD log line is the only trace,
+# keeping the hook's silent contract.
+orig_count=$(printf '%s' "$ast" | jq -e '.Stmts | length' 2>&1) || exit 0
+cleaned_count=$(printf '%s' "$cleaned" | shfmt --to-json 2>&1 | jq -e '.Stmts | length' 2>&1) || exit 0
+if [ "$cleaned_count" -lt "$orig_count" ]; then
+	log_guard "$cmd" "$cleaned"
+	exit 0
+fi
 
 log_rewrite "$cmd" "$cleaned" "$rules"
 

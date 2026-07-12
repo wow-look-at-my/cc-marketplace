@@ -92,26 +92,22 @@ def promote($outer):
 
 # Strip trailing pipeline stages whose command name is in $names, repeatedly.
 # Pipelines parse left-associative, so the last stage is always .Cmd.Y.
+# Applied only at the textual end of the command (on_last_stmt +
+# on_spine_leaf, below): a limiting pipe on a NON-final statement is an
+# intentional part of a longer script and is preserved.
 def strip_trailing_stages($names):
   if (.Cmd.Type? == "BinaryCmd") and (.Cmd.Op == $ops.pipe)
     and ((.Cmd.Y.Cmd | call_name) as $n | ($names | index($n)) != null)
   then . as $outer | (.Cmd.X | promote($outer)) | strip_trailing_stages($names)
   else . end;
 
-# Apply f to every top-level statement and both sides of top-level && / ||
-# chains. Never descends into command substitutions, process substitutions,
-# subshells, or other compound bodies.
-def on_top_members(f):
-  def go:
-    if (.Cmd.Type? == "BinaryCmd") and (.Cmd.Op == $ops.and or .Cmd.Op == $ops.or)
-    then (.Cmd.X |= go) | (.Cmd.Y |= go)
-    else f end;
-  if has("Stmts") then .Stmts |= map(go) else . end;
-
 # ---------------------------------------------------------------------------
-# Legacy trailing rules, anchored where the old text rules anchored: the end
-# of the command string, i.e. the last top-level statement (descending the
-# right side of its && / || chain, which is a leaf under left association).
+# Trailing-noise rules, all anchored where the old text rules anchored: the
+# end of the command string, i.e. the last top-level statement (descending
+# the right side of its && / || chain, which is a leaf under left
+# association). head_tail and tee share this anchoring too (see pass_once):
+# mid-script `| tail -N` / `> file` in a longer script are deliberate and
+# stay untouched.
 # NOTE: strictness settings are never removed -- there is deliberately no
 # rule that strips `set -e` or friends.
 # ---------------------------------------------------------------------------
@@ -161,14 +157,16 @@ def on_last_stmt(f):
 # ---------------------------------------------------------------------------
 # Rule: rewrite a trailing stdout file redirect into a pipe through tee, so
 # the output lands in the file AND stays visible: `cmd > f` -> `cmd | tee f`,
-# `cmd >> f` -> `cmd | tee -a f`. Applies to the redirect on the final stage
-# of each top-level pipeline/statement (same scope as head/tail); the target
-# Word subtree is reused verbatim so quoting and expansions are preserved,
-# and every other redirect stays on the producer. Exclusions: targets under
-# /dev/ (a stdout discard stays a discard), process-substitution targets
-# (> >(cmd)), statements with more than one stdout file redirect, anything
-# inside $() or <(). The injected pipefail (below) keeps the producer's exit
-# status observable through the pipe.
+# `cmd >> f` -> `cmd | tee -a f`. Applies only to the FINAL top-level
+# statement, at the rightmost leaf of its && / || spine (same anchoring as
+# head/tail and grep); a mid-script `> file` is a deliberate part of a
+# longer script and is preserved. The target Word subtree is reused verbatim
+# so quoting and expansions are preserved, and every other redirect stays on
+# the producer. Exclusions: targets under /dev/ (a stdout discard stays a
+# discard), process-substitution targets (> >(cmd)), statements with more
+# than one stdout file redirect, anything inside $() or <(). The injected
+# pipefail (below) keeps the producer's exit status observable through the
+# pipe.
 # ---------------------------------------------------------------------------
 
 def is_stdout_file_any:
@@ -240,6 +238,161 @@ def ensure_pipefail:
   else .Stmts = ([pipefail_stmt] + .Stmts) end;
 
 # ---------------------------------------------------------------------------
+# Rule: cap sleep durations at 3 seconds -- everywhere in the tree, including
+# $() / <() captures, loops, functions, subshells, and both sides of
+# && / || / ; chains. A CallExpr in real command position whose command word
+# is the plain literal `sleep` (prefix env assignments still count) keeps its
+# argument list only when EVERY argument is a literal word (no expansions)
+# that parses as a GNU sleep duration (float with optional s/m/h/d suffix)
+# and the durations sum to <= 3 seconds. Anything else -- over-cap totals,
+# `infinity`/`inf` (they fail the number pattern, deliberately sharing the
+# junk path), $VAR / $() arguments, unparseable junk, zero arguments --
+# replaces the WHOLE argument list with the single literal `3`. Word
+# arguments to OTHER commands (`timeout 5 sleep 30`) and "sleep" inside
+# string literals are untouched by construction: only command position
+# matches call_name. Node-local: only .Args of the matched CallExpr changes;
+# assignments, redirects, and statement structure are never touched, so the
+# rule cannot drop or reorder statements.
+# ---------------------------------------------------------------------------
+
+# Literal text of a word: every part must be a Lit, SglQuoted (incl. $'..'),
+# or DblQuoted over Lits. null when the word contains any expansion.
+def word_literal:
+  if ((.Parts? // []) | length) == 0 then null
+  else
+    ([.Parts[]
+      | if (.Type == "Lit" or .Type == "SglQuoted") then (.Value // "")
+        elif (.Type == "DblQuoted") and ((.Parts // []) | all(.Type == "Lit"))
+        then ([(.Parts // [])[] | (.Value // "")] | join(""))
+        else null end]) as $texts
+    | if ($texts | any(. == null)) then null else ($texts | join("")) end
+  end;
+
+# GNU sleep duration in seconds; null when unparseable. Deliberately strict:
+# plain decimals with an optional s/m/h/d suffix. Scientific notation,
+# signs, inf/infinity, and junk all yield null (=> capped to `sleep 3`).
+def sleep_seconds:
+  (capture("^(?<n>[0-9]+(\\.[0-9]*)?|\\.[0-9]+)(?<u>[smhd]?)$") // null) as $m
+  | if $m == null then null
+    else ($m.n | tonumber) * ({s: 1, m: 60, h: 3600, d: 86400}[$m.u] // 1)
+    end;
+
+def cap_sleep_call:
+  # . = CallExpr already known to be a `sleep` command.
+  ([.Args[1:][] | word_literal as $lit
+    | if $lit == null then null else ($lit | sleep_seconds) end]) as $secs
+  | if (($secs | length) > 0) and ($secs | all(. != null))
+       and (($secs | add) <= 3)
+    then .
+    else .Args = [.Args[0], {Parts: [{Type: "Lit", Value: "3"}]}]
+    end;
+
+def cap_sleep:
+  walk(if (type == "object") and (call_name == "sleep")
+    then cap_sleep_call
+    else . end);
+
+# ---------------------------------------------------------------------------
+# Rule: replace narration echoes with a fixed nag. An `echo` CallExpr whose
+# arguments are ALL constant (no ParamExp / CmdSubst / ArithmExp anywhere in
+# any argument; flags and pure-literal quoted strings count as constant) and
+# whose stdout actually reaches the terminal gets its argument list replaced
+# by the single double-quoted word
+#   "system message: do not use echo to communicate with the user"
+# (flags like -n / -e are dropped with the rest of the arguments).
+#
+# stdout reaches the terminal iff, walking TOP-DOWN from the file root:
+#   - the statement is not the X side of a | or |& (that stdout feeds the
+#     pipe: `echo '{}' | jq` is data);
+#   - no statement on the path (the echo's own, or an enclosing compound's)
+#     carries a redirect other than a pure stderr one -- allowed are 2>f,
+#     2>>f, and 2>&n only; > >> >&n &> >| < <<< etc. all make the subtree
+#     invisible (conservative: unknown redirect = no rewrite);
+#   - it is not inside $(), backticks, <() or >( ) -- those live inside Word
+#     parts, which this traversal never enters, so captures are excluded by
+#     construction;
+#   - it is not inside a FuncDecl body (the call site decides visibility --
+#     `x=$(f)` would capture -- so function bodies are conservatively
+#     skipped) or a coproc (its stdout is captured by the coproc fd).
+# Compound bodies (blocks, subshells, if/while/for/case, time) stay visible
+# unless one of the rules above flips them off; both sides of && / || / ;
+# count as statement position. Node-local: only .Args of the matched
+# CallExpr changes, so the rule cannot drop or reorder statements.
+# ---------------------------------------------------------------------------
+
+def echo_nag_word:
+  {Parts: [{Type: "DblQuoted", Parts: [{Type: "Lit",
+    Value: "system message: do not use echo to communicate with the user"}]}]};
+
+# A word is constant when every part is a Lit without glob/expansion risk
+# (* ? [ { trigger pathname/brace expansion; leading ~ expands to $HOME), a
+# single-quoted string (incl. $'..'), or a double-quoted string over Lits.
+def word_is_constant:
+  def part_constant:
+    if .Type == "Lit"
+    then ((.Value // "") | (test("[*?\\[{]") or startswith("~")) | not)
+    elif .Type == "SglQuoted" then true
+    elif .Type == "DblQuoted" then ((.Parts // []) | all(.Type == "Lit"))
+    else false end;
+  ((.Parts? // []) | all(part_constant));
+
+# Every redirect on the statement leaves stdout alone: fd 2 with > >> or >&
+# only. Anything else (stdout redirects, &>, fd juggling, stdin forms) is
+# disqualifying -- unknown ops fail closed into "leave the echo alone".
+def redirs_stderr_only:
+  ((.Redirs? // []) | all(
+    (.N.Value? == "2")
+    and (.Op == $ops.gt or .Op == $ops.app or .Op == $ops.dup)));
+
+def echo_nag:
+  # $vis threads "stdout reaches the terminal" top-down; jq's walk is
+  # bottom-up with no ancestor info, so the traversal is hand-rolled over
+  # statement structure only (never into Words -- captures stay data).
+  def nag_stmt($vis):
+    # . = Stmt
+    ($vis and redirs_stderr_only and (.Coprocess? != true)) as $v
+    | if (has("Cmd") | not) or (.Cmd == null) then .
+      else .Cmd |= (
+        if .Type? == "CallExpr" then
+          if $v and (call_name == "echo")
+             and ((.Args[1:]) | all(word_is_constant))
+          then .Args = [.Args[0], echo_nag_word]
+          else . end
+        elif .Type? == "BinaryCmd" then
+          if (.Op == $ops.pipe or .Op == $ops.pipeall)
+          then (.X |= nag_stmt(false)) | (.Y |= nag_stmt($v))
+          elif (.Op == $ops.and or .Op == $ops.or)
+          then (.X |= nag_stmt($v)) | (.Y |= nag_stmt($v))
+          else . end
+        elif (.Type? == "Block") or (.Type? == "Subshell") then
+          .Stmts |= map(nag_stmt($v))
+        elif .Type? == "WhileClause" then
+          (.Cond |= map(nag_stmt($v))) | (.Do |= map(nag_stmt($v)))
+        elif .Type? == "ForClause" then
+          .Do |= map(nag_stmt($v))
+        elif .Type? == "IfClause" then
+          # The elif/else chain: Else nodes are IfClauses without a Type
+          # field (and a plain else has no Cond), so walk the chain by
+          # field presence.
+          def nag_ifchain:
+            (if has("Cond") and (.Cond != null)
+             then .Cond |= map(nag_stmt($v)) else . end)
+            | (if has("Then") and (.Then != null)
+               then .Then |= map(nag_stmt($v)) else . end)
+            | (if has("Else") and (.Else != null)
+               then .Else |= nag_ifchain else . end);
+          nag_ifchain
+        elif .Type? == "CaseClause" then
+          .Items |= map(if has("Stmts") and (.Stmts != null)
+                        then .Stmts |= map(nag_stmt($v)) else . end)
+        elif .Type? == "TimeClause" then
+          (if has("Stmt") and (.Stmt != null)
+           then .Stmt |= nag_stmt($v) else . end)
+        else . end)  # FuncDecl, CoprocClause, DeclClause, ...: leaf
+      end;
+  if has("Stmts") then .Stmts |= map(nag_stmt(true)) else . end;
+
+# ---------------------------------------------------------------------------
 # Assemble. State: {ast, fired}. Each step compares before/after (positions
 # stripped) and records the rule name when it changed something. The fired
 # list feeds ONLY the CLEANUP_BASH_CMDS_LOG debug log; the hook never
@@ -254,11 +407,13 @@ def apply_step($name; f):
 
 def pass_once:
   apply_step("devnull"; scrub_devnull)
-  | apply_step("head_tail"; on_top_members(strip_trailing_stages(["head", "tail"])))
+  | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]))))
   | apply_step("or_true"; on_last_stmt(strip_or_true))
   | apply_step("grep"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["grep"]))))
   | apply_step("stderr_merge"; on_last_stmt(on_spine_leaf(on_last_stage(strip_trailing_stderr_merge))))
-  | apply_step("tee"; on_top_members(tee_rewrite));
+  | apply_step("tee"; on_last_stmt(on_spine_leaf(tee_rewrite)))
+  | apply_step("sleep_cap"; cap_sleep)
+  | apply_step("echo_nag"; echo_nag);
 
 def fix_state:
   . as $st
