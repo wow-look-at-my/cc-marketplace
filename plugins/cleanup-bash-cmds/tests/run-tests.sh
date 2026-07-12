@@ -18,6 +18,9 @@ HOOK=$SCRIPT_DIR/../hook.sh
 # Almost every rewritten command gains this prefix (pipefail injection).
 PFX=$'set -o pipefail\n'
 
+# The echo_nag replacement command (exact text, byte-for-byte).
+NAG='echo "system message: do not use echo to communicate with the user"'
+
 if ! command -v shfmt >/dev/null || ! shfmt --help 2>&1 | grep -q -- '--from-json'; then
 	SHFMT_VERSION=v3.8.0
 	os=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -139,8 +142,8 @@ check_rewrite "simple trailing scrub" \
 	'ls /nope'
 
 check_rewrite "mid-command scrub before &&" \
-	'grep foo file 2>/dev/null && echo found' \
-	'grep foo file && echo found'
+	'grep foo file 2>/dev/null && cat found' \
+	'grep foo file && cat found'
 
 # Semicolon-separated statements come back one per line (shfmt-canonical).
 check_rewrite "all redirect variants in one command" \
@@ -177,8 +180,8 @@ check_rewrite "multi-line command scrubbed per statement" \
 
 # AST-aware: text that merely CONTAINS the pattern is not a redirect.
 check_rewrite "quoted string containing 2>/dev/null untouched" \
-	'echo "silence with 2>/dev/null here"' \
-	'echo "silence with 2>/dev/null here"'
+	'printf "silence with 2>/dev/null here"' \
+	'printf "silence with 2>/dev/null here"'
 
 # --- Heredocs: banned outright (deny beats everything, incl. pipefail) ---
 
@@ -207,8 +210,8 @@ check_rewrite "herestring kept while 2>/dev/null scrubbed" \
 	'grep x <<<"data"'
 
 check_rewrite "string literal containing <<EOF untouched" \
-	'echo "here is <<EOF in a string"' \
-	'echo "here is <<EOF in a string"'
+	'printf "here is <<EOF in a string"' \
+	'printf "here is <<EOF in a string"'
 
 # The arithmetic shift shares the << token number with heredocs in shfmt's
 # typed JSON; the Redirs-scoped match must not deny it.
@@ -274,9 +277,14 @@ check_rewrite "stdin redirect stays on the producer" \
 	'cmd < in > out' \
 	'cmd <in | tee out'
 
-check_rewrite "tee rewrite inside an && member" \
+# Final-statement anchoring: only the rightmost && / || leaf is "trailing".
+check_rewrite "tee not applied to a non-trailing && member" \
 	'cmd > f && next' \
-	'cmd | tee f && next'
+	'cmd >f && next'
+
+check_rewrite "tee applies to the trailing && member" \
+	'next && cmd > f' \
+	'next && cmd | tee f'
 
 check_rewrite "trailing 2>&1 stripped before tee" \
 	'cmd > f 2>&1' \
@@ -353,12 +361,14 @@ check_rewrite "deep same-filter chain unwinds fully" \
 check_rewrite "grep-interleaved chain unwinds via iteration" \
 	'cmd | head -5 | grep x | tail -2' \
 	'cmd'
-check_rewrite "head/tail stripped in both && members" \
+# Only the trailing (rightmost) && / || member is at the end of the command;
+# a limiting pipe on an earlier member is deliberate and stays.
+check_rewrite "head/tail stripped only in the trailing && member" \
 	'a | head -2 && b | tail -3' \
-	'a && b'
-check_rewrite "combined scrub and head strip across &&" \
+	'a | head -2 && b'
+check_rewrite "scrub is tree-wide but head strip is trailing-only" \
 	'foo 2>/dev/null | head -3 && bar 2> /dev/null' \
-	'foo && bar'
+	'foo | head -3 && bar'
 
 check_rewrite "| headache untouched (word boundary)" 'cmd | headache' 'cmd | headache'
 check_rewrite "| tailscale untouched (word boundary)" 'cmd | tailscale status' 'cmd | tailscale status'
@@ -371,20 +381,28 @@ check_rewrite "head inside plain command substitution preserved" 'echo $(ls | he
 check_rewrite "head inside process substitution preserved" 'diff <(ls | head -2) file' 'diff <(ls | head -2) file'
 
 # AST-aware: pipes inside string literals are not pipelines.
-check_rewrite "quoted string containing | head untouched" 'echo "foo | head"' 'echo "foo | head"'
-check_rewrite "single-quoted trailing | head untouched" "echo 'try: cmd | head -3'" "echo 'try: cmd | head -3'"
+check_rewrite "quoted string containing | head untouched" 'printf "foo | head"' 'printf "foo | head"'
+check_rewrite "single-quoted trailing | head untouched" "printf 'try: cmd | head -3'" "printf 'try: cmd | head -3'"
 
-# Multi-line commands: every top-level statement is in scope for head/tail.
-check_rewrite "head stripped on a non-final line too" \
-	$'foo | head -3\necho done' \
-	$'foo\necho done'
+# Multi-line commands: head/tail is FINAL-statement-only. A limiting pipe on
+# an earlier line is an intentional part of a longer script and is kept; the
+# wild "removed too much" incident is exactly this shape.
+check_rewrite "head on a non-final line preserved" \
+	$'foo | head -3\ncat done' \
+	$'foo | head -3\ncat done'
+check_rewrite "tail on a non-final line preserved" \
+	$'ls -1 "$D" | tail -12\ncat done' \
+	$'ls -1 "$D" | tail -12\ncat done'
+check_rewrite "stdout redirect on a non-final line preserved" \
+	$'make >build.log\ncat build.log' \
+	$'make >build.log\ncat build.log'
 check_rewrite "tail on final line is trailing" \
 	$'foo\nbar | tail -5' \
 	$'foo\nbar'
 
 check_rewrite_raw "multi-line mix of all rules (set -e preserved)" \
 	$'set -e; ls /x 2>/dev/null | head -3\ngrep -r pat . 2>>/dev/null || true' \
-	$'set -o pipefail\nset -e\nls /x\ngrep -r pat .'
+	$'set -o pipefail\nset -e\nls /x | head -3\ngrep -r pat .'
 
 # --- Legacy trailing rules ---
 
@@ -415,14 +433,232 @@ check_rewrite "trailing grep with quoted pipe arg is stripped" \
 	'cmd | grep "foo|bar"' \
 	'cmd'
 
-check_rewrite "|| true mid-command untouched" 'cmd || true && echo done' 'cmd || true && echo done'
+check_rewrite "|| true mid-command untouched" 'cmd || true && cat done' 'cmd || true && cat done'
 check_rewrite "head mid-pipeline untouched" 'cmd | head -5 | wc' 'cmd | head -5 | wc'
 check_rewrite "tail mid-pipeline untouched" 'cmd | tail -10 | wc' 'cmd | tail -10 | wc'
 check_rewrite "grep mid-pipeline untouched" 'cmd | grep foo | wc' 'cmd | grep foo | wc'
-# grep keeps its legacy end-of-command anchoring (unlike head/tail).
-check_rewrite "grep on a non-final line untouched" $'cmd | grep x\necho done' $'cmd | grep x\necho done'
+# grep is end-of-command anchored (same anchoring as head/tail now).
+check_rewrite "grep on a non-final line untouched" $'cmd | grep x\ncat done' $'cmd | grep x\ncat done'
 # Whitespace-only differences are not semantic; only pipefail fires.
 check_rewrite "whitespace-only difference gets only pipefail" '  ls -la  ' 'ls -la'
+
+# --- Multi-statement scripts: mid-script pipes/redirects/2>&1 all preserved ---
+
+# Semicolon-joined statements come back one per line (shfmt-canonical); every
+# non-final limiting pipe, stdout redirect, and 2>&1 survives, as do the
+# assignments between them. Only the final statement is trailing.
+check_rewrite "mid-script limiting pipes and redirects preserved" \
+	'x=1; ls | tail -2; cat f | head -3; du -sh . 2>&1; make >build.log; cat done' \
+	$'x=1\nls | tail -2\ncat f | head -3\ndu -sh . 2>&1\nmake >build.log\ncat done'
+
+check_rewrite "final statement still trailing in a multi-statement script" \
+	$'x=1\nls | tail -2\ncat f | head -3' \
+	$'x=1\nls | tail -2\ncat f'
+
+# --- Sleep cap: every sleep, everywhere, capped at 3 seconds ---
+
+check_rewrite "sleep over-cap integer capped" 'sleep 30' 'sleep 3'
+check_rewrite "sleep over-cap float capped" 'sleep 10.5' 'sleep 3'
+check_rewrite "sleep under cap kept" 'sleep 2' 'sleep 2'
+check_rewrite "sleep boundary 3 kept" 'sleep 3' 'sleep 3'
+check_rewrite "sleep 0.5s suffix under cap kept" 'sleep 0.5s' 'sleep 0.5s'
+check_rewrite "sleep leading-dot float kept" 'sleep .5' 'sleep .5'
+check_rewrite "sleep 30s capped" 'sleep 30s' 'sleep 3'
+check_rewrite "sleep minutes capped" 'sleep 1m' 'sleep 3'
+check_rewrite "sleep hours capped" 'sleep 2h' 'sleep 3'
+check_rewrite "sleep days capped" 'sleep 1d' 'sleep 3'
+check_rewrite "sleep multi-arg sum over cap" 'sleep 1m 30' 'sleep 3'
+check_rewrite "sleep multi-arg sum under cap kept" 'sleep 1 1' 'sleep 1 1'
+check_rewrite "sleep multi-arg float sum just over" 'sleep 1.5 1.6' 'sleep 3'
+check_rewrite "sleep infinity capped" 'sleep infinity' 'sleep 3'
+check_rewrite "sleep variable arg capped" 'sleep $DELAY' 'sleep 3'
+check_rewrite "sleep cmdsubst arg capped" 'sleep "$(get_delay)"' 'sleep 3'
+check_rewrite "sleep junk arg capped" 'sleep abc' 'sleep 3'
+check_rewrite "sleep scientific notation is junk" 'sleep 1e-3' 'sleep 3'
+check_rewrite "sleep zero args capped" 'sleep' 'sleep 3'
+check_rewrite "sleep quoted literal under cap kept" 'sleep "2"' 'sleep "2"'
+check_rewrite "sleep quoted suffix capped" "sleep '1m'" 'sleep 3'
+check_rewrite "sleep prefix assignment preserved" 'FOO=1 sleep 30' 'FOO=1 sleep 3'
+check_rewrite "sleep redirect preserved" 'sleep 30 2>>err.log' 'sleep 3 2>>err.log'
+check_rewrite "sleep capped inside while-loop retry" \
+	'while ! nc -z h 22; do sleep 30; done' \
+	'while ! nc -z h 22; do sleep 3; done'
+check_rewrite "sleep capped inside command substitution" 'VAR=$(sleep 30)' 'VAR=$(sleep 3)'
+check_rewrite "sleep capped inside subshell" '(sleep 45)' '(sleep 3)'
+check_rewrite "sleep capped inside function body" 'f() { sleep 60; }' 'f() { sleep 3; }'
+check_rewrite "sleep capped in || branch" 'nc -z h 22 || sleep 30' 'nc -z h 22 || sleep 3'
+check_rewrite "sleep cap is per command not per script" 'sleep 2 && sleep 2' 'sleep 2 && sleep 2'
+check_rewrite "sleep as timeout arg untouched" 'timeout 5 sleep 30' 'timeout 5 sleep 30'
+check_rewrite "sleep inside string word untouched" 'grep "sleep 30" app.log' 'grep "sleep 30" app.log'
+
+# --- Echo nag: constant echoes whose stdout reaches the terminal ---
+
+check_rewrite "echo separator pattern nagged" 'echo "=== section ==="' "$NAG"
+check_rewrite "echo unquoted narration nagged" 'echo starting build now' "$NAG"
+check_rewrite "echo -n flag dropped by nag" 'echo -n "x"' "$NAG"
+check_rewrite "bare echo nagged" 'echo' "$NAG"
+check_rewrite "echo empty string nagged" 'echo ""' "$NAG"
+check_rewrite "echo ansi-c quoting is constant" "echo \$'a\\nb'" "$NAG"
+check_rewrite "echo exact replacement text" \
+	$'echo "has spaces and \'quotes\'"' \
+	"$NAG"
+check_rewrite "echo nagged in && member" 'echo done && rm -f x' "$NAG && rm -f x"
+check_rewrite "echo nagged as final pipe stage" 'x | echo foo' "x | $NAG"
+check_rewrite "echo nagged in if condition" 'if echo checking; then ls; fi' "if $NAG; then ls; fi"
+check_rewrite "echo nagged in for-loop body" \
+	'for i in a b; do echo checking; done' \
+	"for i in a b; do $NAG; done"
+check_rewrite "echo nagged in until-loop body" \
+	'until ready; do echo waiting; done' \
+	"until ready; do $NAG; done"
+check_rewrite "echo nagged in elif/else chain" \
+	'if a; then echo x; elif b; then echo y; else echo z; fi' \
+	"if a; then $NAG; elif b; then $NAG; else $NAG; fi"
+# from-json puts case items on separate lines once the replaced words carry
+# no position info -- layout artifact only, content identical.
+check_rewrite "echo nagged in case items" \
+	'case $x in a) echo one ;; *) echo other ;; esac' \
+	"case \$x in a) $NAG ;;"$'\n'"*) $NAG ;;"$'\n'"esac"
+check_rewrite "echo nagged under time" 'time echo hi' "time $NAG"
+check_rewrite "negated echo keeps negation" '! echo ok' "! $NAG"
+check_rewrite "echo nagged in nested while+if" \
+	'while x; do if y; then echo deep; fi; done' \
+	"while x; do if y; then $NAG; fi; done"
+check_rewrite "echo nagged in subshell" '(echo hi)' "($NAG)"
+check_rewrite "echo stderr redirect kept by nag" 'echo warn 2>>err.log' "$NAG 2>>err.log"
+check_rewrite "head-strip then echo nag compose" 'echo foo | head -1' "$NAG"
+
+# Not narration: expansions, captures, redirected or pipe-feeding stdout.
+check_rewrite "echo variable untouched" 'echo "$VAR"' 'echo "$VAR"'
+check_rewrite "echo cmdsubst untouched" 'echo $(date)' 'echo $(date)'
+check_rewrite "echo arithmetic untouched" 'echo $((1 + 2))' 'echo $((1 + 2))'
+check_rewrite "echo glob untouched" 'echo *.txt' 'echo *.txt'
+check_rewrite "echo tilde untouched" 'echo ~' 'echo ~'
+check_rewrite "echo assignment capture untouched" 'X=$(echo abc)' 'X=$(echo abc)'
+check_rewrite "echo pipe feed untouched" 'echo foo | cat' 'echo foo | cat'
+check_rewrite "echo data into jq untouched" \
+	"echo '{\"x\":1}' | jq .x" \
+	"echo '{\"x\":1}' | jq .x"
+check_rewrite "echo stderr dup >&2 untouched" 'echo foo >&2' 'echo foo >&2'
+check_rewrite "echo stdout file redirect gets tee only" 'echo foo > file' 'echo foo | tee file'
+check_rewrite "redirected block group stays data" '{ echo a; } > f' '{ echo a; } | tee f'
+check_rewrite "redirected for-loop stays data" \
+	'for i in a; do echo x; done > log' \
+	'for i in a; do echo x; done | tee log'
+check_rewrite "echo in function body untouched" 'f() { echo hi; }' 'f() { echo hi; }'
+check_rewrite "echo in coproc untouched" 'coproc echo hi' 'coproc echo hi'
+check_rewrite "echo in process substitution untouched" \
+	'foo | tee >(echo inside)' \
+	'foo | tee >(echo inside)'
+
+# Idempotency: the rewritten output is a fixpoint (turn 2 does not rewrite).
+check_noop "nag output is a fixpoint" "${PFX}${NAG}"
+check_noop "sleep cap output is a fixpoint" "${PFX}sleep 3"
+
+# Combined multi-statement script: both rules fire, every statement survives.
+check_rewrite "combined script preserves all statements" \
+	$'echo "=== deploy ==="\nscp app host:/srv/ 2>/dev/null\nwhile ! ssh host ok; do sleep 30; done\nout=$(echo probe)\necho done | tee -a log\necho finished' \
+	"$NAG"$'\nscp app host:/srv/\nwhile ! ssh host ok; do sleep 3; done\nout=$(echo probe)\necho done | tee -a log\n'"$NAG"
+
+run_hook "$(payload_bash $'echo "=== deploy ==="\nscp app host:/srv/ 2>/dev/null\nwhile ! ssh host ok; do sleep 30; done\nout=$(echo probe)\necho done | tee -a log\necho finished')"
+NSTMT=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command' | shfmt --to-json | jq '.Stmts | length')
+if [ "$NSTMT" = "7" ]; then
+	ok "combined script statement count is 6 + pipefail"
+else
+	bad "combined script statement count is 6 + pipefail" "got $NSTMT statements"
+fi
+
+# All three new behaviors in one script, with a statement-count assertion:
+# echo_nag on the narration, sleep_cap on the wait, head_tail on the final
+# (and only the final) statement.
+check_rewrite "echo_nag + sleep_cap + final head_tail compose" \
+	$'echo start\nsleep 10\nls | tail -5' \
+	"$NAG"$'\nsleep 3\nls'
+
+run_hook "$(payload_bash $'echo start\nsleep 10\nls | tail -5')"
+NSTMT=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command' | shfmt --to-json | jq '.Stmts | length')
+if [ "$NSTMT" = "4" ]; then
+	ok "composed rewrite statement count is 3 + pipefail"
+else
+	bad "composed rewrite statement count is 3 + pipefail" "got $NSTMT statements"
+fi
+
+# --- Regression: the wild "removed statements after | tail -12" incident ---
+# Byte-exact input from the incident (the stale regex-era hook swallowed
+# every statement after the mid-script `| tail -12`). The AST hook must keep
+# ALL top-level statements: the mid-script tail and its 2>&1 stay, the three
+# constant narration echoes are nagged, and both splat-compare invocations
+# survive verbatim.
+
+REPRO_IN='cd /Users/mhaynie/repos/splat/splat-vulkan
+PRE=/private/tmp/claude-501/-Users-mhaynie-repos-splat/10878a52-8108-4974-ae5c-3ecf2bb62d3f/scratchpad/premerge-wt/splat-vulkan/build/test-out/t5b
+POST=build/test-out/t5b
+echo "=== files present ==="; ls -1 "$PRE" "$POST" 2>&1 | tail -12
+echo "=== REF: pre-merge vs post-merge ==="; ./build/splat-compare "$PRE/odd-size-ref.png" "$POST/odd-size-ref.png" --within 2 --pct 99 --mean 0.5
+echo "=== FROXEL: pre-merge vs post-merge ==="; ./build/splat-compare "$PRE/odd-size-froxel.png" "$POST/odd-size-froxel.png" --within 2 --pct 99 --mean 0.5'
+
+REPRO_WANT='cd /Users/mhaynie/repos/splat/splat-vulkan
+PRE=/private/tmp/claude-501/-Users-mhaynie-repos-splat/10878a52-8108-4974-ae5c-3ecf2bb62d3f/scratchpad/premerge-wt/splat-vulkan/build/test-out/t5b
+POST=build/test-out/t5b
+'"$NAG"'
+ls -1 "$PRE" "$POST" 2>&1 | tail -12
+'"$NAG"'
+./build/splat-compare "$PRE/odd-size-ref.png" "$POST/odd-size-ref.png" --within 2 --pct 99 --mean 0.5
+'"$NAG"'
+./build/splat-compare "$PRE/odd-size-froxel.png" "$POST/odd-size-froxel.png" --within 2 --pct 99 --mean 0.5'
+
+check_rewrite "splat repro keeps every statement (tail -12 and 2>&1 intact)" \
+	"$REPRO_IN" \
+	"$REPRO_WANT"
+
+run_hook "$(payload_bash "$REPRO_IN")"
+RCMD=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command')
+RSTMT=$(printf '%s' "$RCMD" | shfmt --to-json | jq '.Stmts | length')
+if [ "$RSTMT" = "10" ]; then
+	ok "splat repro statement count is 9 + pipefail"
+else
+	bad "splat repro statement count is 9 + pipefail" "got $RSTMT statements"
+fi
+if [ "$(printf '%s' "$RCMD" | grep -cF "$NAG")" = "3" ] &&
+	[ "$(printf '%s' "$RCMD" | grep -cF './build/splat-compare "$PRE')" = "2" ] &&
+	printf '%s' "$RCMD" | grep -qF '2>&1 | tail -12'; then
+	ok "splat repro markers: 3 nags, 2 splat-compares, tail/2>&1 kept"
+else
+	bad "splat repro markers: 3 nags, 2 splat-compares, tail/2>&1 kept" "cmd=$(printf '%q' "$RCMD")"
+fi
+
+# Execution equivalence on a relocated twin (same shape, stub paths under
+# mktemp so it runs unprivileged): the rewritten script must execute ALL
+# statements -- 3 nag lines where the 3 headers were, the same tail-limited
+# ls output, and both splat-compare invocations, line-for-line.
+STUB=$(mktemp -d)
+mkdir -p "$STUB/repo/build/test-out/t5b" "$STUB/pre/t5b"
+printf '#!/bin/sh\nprintf "splat-compare ran: %%s\\n" "$*"\n' >"$STUB/repo/build/splat-compare"
+chmod +x "$STUB/repo/build/splat-compare"
+touch "$STUB/pre/t5b/odd-size-ref.png" "$STUB/pre/t5b/odd-size-froxel.png" \
+	"$STUB/repo/build/test-out/t5b/odd-size-ref.png" "$STUB/repo/build/test-out/t5b/odd-size-froxel.png"
+TWIN_IN='cd '"$STUB"'/repo
+PRE='"$STUB"'/pre/t5b
+POST=build/test-out/t5b
+echo "=== files present ==="; ls -1 "$PRE" "$POST" 2>&1 | tail -12
+echo "=== REF: pre-merge vs post-merge ==="; ./build/splat-compare "$PRE/odd-size-ref.png" "$POST/odd-size-ref.png" --within 2 --pct 99 --mean 0.5
+echo "=== FROXEL: pre-merge vs post-merge ==="; ./build/splat-compare "$PRE/odd-size-froxel.png" "$POST/odd-size-froxel.png" --within 2 --pct 99 --mean 0.5'
+run_hook "$(payload_bash "$TWIN_IN")"
+TWIN_CMD=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command')
+set +e
+ORIG_OUT=$(bash -c "$TWIN_IN" 2>&1)
+TWIN_OUT=$(bash -c "$TWIN_CMD" 2>&1)
+set -e
+orig_lines=$(printf '%s\n' "$ORIG_OUT" | wc -l)
+twin_lines=$(printf '%s\n' "$TWIN_OUT" | wc -l)
+twin_nags=$(printf '%s\n' "$TWIN_OUT" | grep -cF 'system message: do not use echo to communicate with the user')
+twin_splats=$(printf '%s\n' "$TWIN_OUT" | grep -cF 'splat-compare ran:')
+if [ "$twin_lines" = "$orig_lines" ] && [ "$twin_nags" = "3" ] && [ "$twin_splats" = "2" ]; then
+	ok "relocated repro executes all statements (3 nags + ls + 2 splat-compares)"
+else
+	bad "relocated repro executes all statements" "orig_lines=$orig_lines twin_lines=$twin_lines nags=$twin_nags splats=$twin_splats out=$(printf '%q' "$TWIN_OUT")"
+fi
+rm -rf "$STUB"
 
 # --- Payload handling and fail-open behavior ---
 
@@ -490,6 +726,33 @@ if [ "$NOSHFMT_STATUS" -eq 0 ] && [ -z "$NOSHFMT_OUT" ]; then
 else
 	bad "missing shfmt fails open" "status=$NOSHFMT_STATUS out=$(printf '%q' "$NOSHFMT_OUT")"
 fi
+
+# --- No-statement-loss guard: a transform that drops a statement fails open ---
+# Sabotage: a copy of the hook whose transform claims a change but deletes
+# the last top-level statement. The post-regeneration re-parse guard must
+# refuse to emit the truncated rewrite (exit 0, no output, silent) and leave
+# a GUARD line in the debug log. The real transform can never trip this (it
+# only maps over, edits within, or prepends to .Stmts) -- which the rest of
+# this suite proves by never firing the guard on a legitimate rewrite.
+GUARDDIR=$(mktemp -d)
+cp "$HOOK" "$GUARDDIR/hook.sh"
+printf '%s\n' '{deny: false, changed: true, rules: "evil", ast: (.Stmts |= .[0:-1])}' >"$GUARDDIR/transform.jq"
+GUARDLOG=$GUARDDIR/guard.log
+set +e
+GOUT=$(printf '%s' "$(payload_bash $'ls one\nls two')" | CLEANUP_BASH_CMDS_LOG="$GUARDLOG" "$GUARDDIR/hook.sh")
+GSTATUS=$?
+set -e
+if [ "$GSTATUS" -eq 0 ] && [ -z "$GOUT" ]; then
+	ok "statement-eating transform fails open (no rewrite emitted)"
+else
+	bad "statement-eating transform fails open (no rewrite emitted)" "status=$GSTATUS out=$(printf '%q' "$GOUT")"
+fi
+if [ -f "$GUARDLOG" ] && grep -q '^GUARD	original="ls one\\nls two"	cleaned="ls one"	reason="stmt-count"$' "$GUARDLOG"; then
+	ok "guard event logged with GUARD tag and stmt-count reason"
+else
+	bad "guard event logged with GUARD tag and stmt-count reason" "log=$(cat "$GUARDLOG" || printf 'missing')"
+fi
+rm -rf "$GUARDDIR"
 
 # --- Output JSON shape (verified schema, claude-code 2.1.201) ---
 # Same silent shape for every rule combination.
@@ -589,6 +852,14 @@ if [ -f "$LOGFILE" ] && grep -q '^DENY	original="cat <<EOF\\nhi\\nEOF"	reason="h
 	ok "deny is logged with action DENY"
 else
 	bad "deny is logged with action DENY" "log=$(cat "$LOGFILE" || printf 'missing')"
+fi
+
+rm -f "$LOGFILE"
+OUT=$(printf '%s' "$(payload_bash 'sleep 30; echo hi')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
+if grep -qF 'rules="sleep_cap,echo_nag,pipefail"' "$LOGFILE"; then
+	ok "sleep_cap and echo_nag rule tags logged"
+else
+	bad "sleep_cap and echo_nag rule tags logged" "log=$(cat "$LOGFILE" || printf 'missing')"
 fi
 
 rm -rf "$LOGDIR"
