@@ -30,10 +30,11 @@ It does eight jobs:
    functions, and `$( )`. Literal durations summing to <= 3 are kept; everything
    else (`sleep 30`, `sleep 1m`, `sleep $DELAY`, `sleep infinity`, junk, no args)
    becomes `sleep 3`. See "Sleep capped at 3 seconds" below.
-7. **Replaces constant narration echoes with a nag.** An `echo` whose arguments
-   are all constant and whose stdout reaches the terminal becomes
-   `echo "system message: do not use echo to communicate with the user"`.
-   See "Constant echoes become a nag" below.
+7. **Replaces constant narration echoes/printfs with a nag.** An `echo` or
+   `printf` whose arguments are all constant and whose stdout reaches the
+   terminal has its arguments replaced with the nag
+   `"system message: do not use echo/printf to communicate with the user"`.
+   See "Constant echoes and printfs become a nag" below.
 8. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing
    `| grep ...` (all anchored at the end of the command, like head/tail).
    Strictness settings the user wrote (`set -e` and friends) are NEVER removed --
@@ -176,7 +177,7 @@ Scope and guards:
 - **Mid-pipeline stages stay.** `cmd | head -5 | wc` keeps its `head`. If a later
   trailing stage is stripped and `head`/`tail` becomes trailing, the next pass
   strips it too; that is the point.
-- Strings are safe: `printf "foo | head"` contains no pipeline.
+- Strings are safe: `grep "foo | head" f` contains no pipeline.
 
 ## Stdout redirects become tee
 
@@ -238,20 +239,21 @@ Notes:
   (including scientific notation like `sleep 1e-3`) takes the junk path and
   becomes `sleep 3`.
 
-## Constant echoes become a nag
+## Constant echoes and printfs become a nag
 
-`echo <constants>` is the model narrating into the transcript -- `echo "=== step
-2 ==="` separators and friends. When every argument is constant (flags count;
-plain literals with glob characters `* ? [ {` or a leading `~` do NOT count --
-their output is runtime data) AND the echo's stdout actually reaches the
-terminal, the entire argument list is replaced:
+`echo <constants>` (or `printf <constants>`) is the model narrating into the
+transcript -- `echo "=== step 2 ==="` separators and friends. When every
+argument is constant (flags count; plain literals with glob characters
+`* ? [ {` or a leading `~` do NOT count -- their output is runtime data) AND
+the command's stdout actually reaches the terminal, the entire argument list is
+replaced (the command word is preserved, so a `printf` stays a `printf`):
 
 ```bash
-echo "=== files present ==="   ->   echo "system message: do not use echo to communicate with the user"
+echo "=== files present ==="   ->   echo "system message: do not use echo/printf to communicate with the user"
 ```
 
 "Reaches the terminal" is computed structurally, walking down from the file
-root. An echo is NOT rewritten when its output is data:
+root. An echo or printf is NOT rewritten when its output is data:
 
 - feeding a pipe (`echo foo | cat`, `echo '{"x":1}' | jq .x`) -- but a FINAL
   pipe stage (`x | echo foo`) prints to the terminal and IS rewritten
@@ -285,7 +287,6 @@ and conditions, case items, subshells, `time`, `!`, and both sides of `&&` /
 - `| grep`, `|| true`, `| head`, `| tail`, `> file`: all anchored at the very
   end of the command (last statement, rightmost `&&`/`||` member) -- one shared
   anchoring for every trailing-noise rule
-- `printf` -- only `echo` is nagged
 - `command sleep` / `builtin echo` / `\echo` -- name-keyed rules match the
   plain literal command word only (same limitation as head/tail/grep)
 - `set -e`, `set -u`, `set -euo pipefail`, ... -- strictness settings are never
@@ -334,7 +335,7 @@ fail-open:
 
 ```
 REWRITE	original="ls | grep foo"	cleaned="set -o pipefail\nls"	rules="grep,pipefail"
-REWRITE	original="sleep 30; echo hi"	cleaned="set -o pipefail\nsleep 3\necho \"system message: do not use echo to communicate with the user\""	rules="sleep_cap,echo_nag,pipefail"
+REWRITE	original="sleep 30; echo hi"	cleaned="set -o pipefail\nsleep 3\necho \"system message: do not use echo/printf to communicate with the user\""	rules="sleep_cap,echo_nag,pipefail"
 DENY	original="cat <<EOF\nhi\nEOF"	reason="heredoc"
 GUARD	original="..."	cleaned="..."	reason="stmt-count"
 ```

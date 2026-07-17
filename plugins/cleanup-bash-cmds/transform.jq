@@ -293,12 +293,12 @@ def cap_sleep:
     else . end);
 
 # ---------------------------------------------------------------------------
-# Rule: replace narration echoes with a fixed nag. An `echo` CallExpr whose
-# arguments are ALL constant (no ParamExp / CmdSubst / ArithmExp anywhere in
-# any argument; flags and pure-literal quoted strings count as constant) and
-# whose stdout actually reaches the terminal gets its argument list replaced
-# by the single double-quoted word
-#   "system message: do not use echo to communicate with the user"
+# Rule: replace narration echoes/printfs with a fixed nag. An `echo` or
+# `printf` CallExpr whose arguments are ALL constant (no ParamExp / CmdSubst /
+# ArithmExp anywhere in any argument; flags and pure-literal quoted strings
+# count as constant) and whose stdout actually reaches the terminal gets its
+# argument list replaced by the single double-quoted word
+#   "system message: do not use echo/printf to communicate with the user"
 # (flags like -n / -e are dropped with the rest of the arguments).
 #
 # stdout reaches the terminal iff, walking TOP-DOWN from the file root:
@@ -322,7 +322,7 @@ def cap_sleep:
 
 def echo_nag_word:
   {Parts: [{Type: "DblQuoted", Parts: [{Type: "Lit",
-    Value: "system message: do not use echo to communicate with the user"}]}]};
+    Value: "system message: do not use echo/printf to communicate with the user"}]}]};
 
 # A word is constant when every part is a Lit without glob/expansion risk
 # (* ? [ { trigger pathname/brace expansion; leading ~ expands to $HOME), a
@@ -354,7 +354,7 @@ def echo_nag:
     | if (has("Cmd") | not) or (.Cmd == null) then .
       else .Cmd |= (
         if .Type? == "CallExpr" then
-          if $v and (call_name == "echo")
+          if $v and ((call_name == "echo") or (call_name == "printf"))
              and ((.Args[1:]) | all(word_is_constant))
           then .Args = [.Args[0], echo_nag_word]
           else . end

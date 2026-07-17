@@ -19,7 +19,9 @@ HOOK=$SCRIPT_DIR/../hook.sh
 PFX=$'set -o pipefail\n'
 
 # The echo_nag replacement command (exact text, byte-for-byte).
-NAG='echo "system message: do not use echo to communicate with the user"'
+NAG='echo "system message: do not use echo/printf to communicate with the user"'
+# The same nag rendered with the printf command word (Args[0] is preserved).
+NAG_PRINTF='printf "system message: do not use echo/printf to communicate with the user"'
 
 if ! command -v shfmt >/dev/null || ! shfmt --help 2>&1 | grep -q -- '--from-json'; then
 	SHFMT_VERSION=v3.8.0
@@ -179,9 +181,9 @@ check_rewrite "multi-line command scrubbed per statement" \
 	$'ls /a\nls /b'
 
 # AST-aware: text that merely CONTAINS the pattern is not a redirect.
-check_rewrite "quoted string containing 2>/dev/null untouched" \
-	'printf "silence with 2>/dev/null here"' \
-	'printf "silence with 2>/dev/null here"'
+check_rewrite "literal-string carrier containing 2>/dev/null untouched" \
+	': "silence with 2>/dev/null here"' \
+	': "silence with 2>/dev/null here"'
 
 # --- Heredocs: banned outright (deny beats everything, incl. pipefail) ---
 
@@ -210,8 +212,8 @@ check_rewrite "herestring kept while 2>/dev/null scrubbed" \
 	'grep x <<<"data"'
 
 check_rewrite "string literal containing <<EOF untouched" \
-	'printf "here is <<EOF in a string"' \
-	'printf "here is <<EOF in a string"'
+	': "here is <<EOF in a string"' \
+	': "here is <<EOF in a string"'
 
 # The arithmetic shift shares the << token number with heredocs in shfmt's
 # typed JSON; the Redirs-scoped match must not deny it.
@@ -381,8 +383,8 @@ check_rewrite "head inside plain command substitution preserved" 'echo $(ls | he
 check_rewrite "head inside process substitution preserved" 'diff <(ls | head -2) file' 'diff <(ls | head -2) file'
 
 # AST-aware: pipes inside string literals are not pipelines.
-check_rewrite "quoted string containing | head untouched" 'printf "foo | head"' 'printf "foo | head"'
-check_rewrite "single-quoted trailing | head untouched" "printf 'try: cmd | head -3'" "printf 'try: cmd | head -3'"
+check_rewrite "literal-string carrier containing | head untouched" ': "foo | head"' ': "foo | head"'
+check_rewrite "single-quoted trailing | head untouched" ": 'try: cmd | head -3'" ": 'try: cmd | head -3'"
 
 # Multi-line commands: head/tail is FINAL-statement-only. A limiting pipe on
 # an earlier line is an intentional part of a longer script and is kept; the
@@ -551,6 +553,26 @@ check_rewrite "echo in process substitution untouched" \
 	'foo | tee >(echo inside)' \
 	'foo | tee >(echo inside)'
 
+# --- printf nag: same rule as echo, same terminal-visibility guard ---
+# printf is nagged identically to echo; Args[0] (the command word) is
+# preserved, so a nagged printf renders with the printf command word.
+
+check_rewrite "printf separator pattern nagged" 'printf "=== section ==="' "$NAG_PRINTF"
+check_rewrite "printf unquoted narration nagged" 'printf starting build now' "$NAG_PRINTF"
+check_rewrite "printf nagged in && member" 'printf done && rm -f x' "$NAG_PRINTF && rm -f x"
+check_rewrite "printf nagged as final pipe stage" 'x | printf foo' "x | $NAG_PRINTF"
+check_rewrite "printf stderr redirect kept by nag" 'printf warn 2>>err.log' "$NAG_PRINTF 2>>err.log"
+
+# Not narration: expansions, captures, redirected or pipe-feeding stdout --
+# the identical carve-outs to echo, since printf rides the same rule.
+check_rewrite "printf variable untouched" 'printf "$VAR"' 'printf "$VAR"'
+check_rewrite "printf pipe feed untouched" 'printf foo | cat' 'printf foo | cat'
+check_rewrite "printf stdout file redirect gets tee only" 'printf foo > out.txt' 'printf foo | tee out.txt'
+check_rewrite "printf cmdsubst untouched" 'printf "$(date)"' 'printf "$(date)"'
+check_rewrite "printf in function body untouched" 'f() { printf hi; }' 'f() { printf hi; }'
+check_rewrite "printf in coproc untouched" 'coproc printf hi' 'coproc printf hi'
+check_rewrite "printf %s payload into pipe untouched (heredoc-deny form)" "printf '%s' payload | cat" "printf '%s' payload | cat"
+
 # Idempotency: the rewritten output is a fixpoint (turn 2 does not rewrite).
 check_noop "nag output is a fixpoint" "${PFX}${NAG}"
 check_noop "sleep cap output is a fixpoint" "${PFX}sleep 3"
@@ -651,7 +673,7 @@ TWIN_OUT=$(bash -c "$TWIN_CMD" 2>&1)
 set -e
 orig_lines=$(printf '%s\n' "$ORIG_OUT" | wc -l)
 twin_lines=$(printf '%s\n' "$TWIN_OUT" | wc -l)
-twin_nags=$(printf '%s\n' "$TWIN_OUT" | grep -cF 'system message: do not use echo to communicate with the user')
+twin_nags=$(printf '%s\n' "$TWIN_OUT" | grep -cF 'system message: do not use echo/printf to communicate with the user')
 twin_splats=$(printf '%s\n' "$TWIN_OUT" | grep -cF 'splat-compare ran:')
 if [ "$twin_lines" = "$orig_lines" ] && [ "$twin_nags" = "3" ] && [ "$twin_splats" = "2" ]; then
 	ok "relocated repro executes all statements (3 nags + ls + 2 splat-compares)"
