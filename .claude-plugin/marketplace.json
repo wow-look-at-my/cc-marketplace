@@ -28,6 +28,13 @@
       "description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
       "category": "development",
       "keywords": ["bash", "cleanup", "rewrite", "hook"]
+    },
+    {
+      "name": "haiku-compact",
+      "source": "./haiku-compact",
+      "description": "Temporarily switch the active model to Haiku during context compaction",
+      "category": "development",
+      "keywords": ["compact", "haiku", "model", "cost", "hook"]
     }
   ]
 }

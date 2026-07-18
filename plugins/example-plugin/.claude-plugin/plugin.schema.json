@@ -125,7 +125,9 @@
         "PostToolUse": { "$ref": "#/$defs/hookEventArray" },
         "Stop": { "$ref": "#/$defs/hookEventArray" },
         "PermissionRequest": { "$ref": "#/$defs/hookEventArray" },
-        "UserPromptSubmit": { "$ref": "#/$defs/hookEventArray" }
+        "UserPromptSubmit": { "$ref": "#/$defs/hookEventArray" },
+        "PreCompact": { "$ref": "#/$defs/hookEventArray" },
+        "PostCompact": { "$ref": "#/$defs/hookEventArray" }
       }
     },
     "hookEventArray": {
