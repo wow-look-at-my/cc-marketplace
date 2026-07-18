@@ -4,14 +4,16 @@
 # The command is PARSED, not pattern-matched: shfmt --to-json produces the
 # syntax tree, transform.jq inspects and rewrites it, and shfmt --from-json
 # regenerates the command. Commands containing a heredoc (<< or <<-,
-# anywhere in the tree) are DENIED outright. Otherwise the tree is rewritten:
+# anywhere in the tree) or invoking perl (its effective command name matching
+# ^perl[0-9.]*$) are DENIED outright. Otherwise the tree is rewritten:
 # scrub stderr-to-/dev/null redirects everywhere; on the FINAL top-level
 # statement only, kill trailing | head / | tail stages, strip trailing
 # | grep, trailing || true, and trailing 2>&1, and rewrite a trailing stdout
 # file redirect into | tee (mid-script limiting pipes and redirects are
-# deliberate and preserved); cap every sleep at 3 seconds; replace constant
-# terminal-bound echoes with a fixed nag; and ensure `set -o pipefail` is in
-# effect. Only a semantic AST change triggers a rewrite, so string literals
+# deliberate and preserved); cap every sleep at 3 seconds; remove constant
+# terminal-bound echo/printf narration (rewriting it to the no-op `:`); and
+# ensure `set -o pipefail` is in effect. Only a semantic AST change triggers a
+# rewrite, so string literals
 # that merely contain "2>/dev/null" or "| head" are never mangled.
 # Strictness settings the user wrote (set -e etc.) are never removed. After
 # regeneration the cleaned command is re-parsed and the rewrite is dropped
@@ -106,7 +108,7 @@ log_rewrite() {
 log_deny() {
 	local path=${CLEANUP_BASH_CMDS_LOG:-}
 	[ -n "$path" ] || return 0
-	printf 'DENY\toriginal="%s"\treason="heredoc"\n' "$(log_escape "$1")" >>"$path" || true
+	printf 'DENY\toriginal="%s"\treason="%s"\n' "$(log_escape "$1")" "$(log_escape "$2")" >>"$path" || true
 }
 
 log_guard() {
@@ -121,8 +123,18 @@ log_guard() {
 # shares the << token number) is not affected.
 deny=$(printf '%s' "$result" | jq -r '.deny' 2>&1) || exit 0
 if [ "$deny" = "true" ]; then
-	log_deny "$cmd"
-	reason="Heredocs are banned in this environment. Write file content with the Write/Edit tools; for command stdin use printf '%s' ... | cmd or a temp file."
+	# The transform tags the reason via .rules (heredoc | perl); pick the
+	# matching message. Anything else falls back to the heredoc text.
+	deny_rule=$(printf '%s' "$result" | jq -r '.rules' 2>&1) || exit 0
+	log_deny "$cmd" "$deny_rule"
+	case "$deny_rule" in
+	perl)
+		reason="perl is banned in this environment."
+		;;
+	*)
+		reason="Heredocs are banned in this environment. Write file content with the Write/Edit tools; for command stdin use printf '%s' ... | cmd or a temp file."
+		;;
+	esac
 	jq -cn --arg reason "$reason" '{
 		hookSpecificOutput: {
 			hookEventName: "PreToolUse",

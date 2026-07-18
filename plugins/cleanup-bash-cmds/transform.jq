@@ -293,13 +293,25 @@ def cap_sleep:
     else . end);
 
 # ---------------------------------------------------------------------------
-# Rule: replace narration echoes/printfs with a fixed nag. An `echo` or
-# `printf` CallExpr whose arguments are ALL constant (no ParamExp / CmdSubst /
-# ArithmExp anywhere in any argument; flags and pure-literal quoted strings
-# count as constant) and whose stdout actually reaches the terminal gets its
-# argument list replaced by the single double-quoted word
-#   "system message: do not use echo/printf to communicate with the user"
-# (flags like -n / -e are dropped with the rest of the arguments).
+# Rule: REMOVE constant narration echoes/printfs. A CallExpr whose EFFECTIVE
+# command (via effective_command, so `command echo`, `builtin printf`,
+# `\echo`, `"printf"` all resolve) is `echo` or `printf`, and whose stdout
+# actually reaches the terminal, has its ENTIRE .Cmd replaced by the no-op
+# `:` (colon_cmd) -- no output, exit status 0, surrounding statement structure
+# and redirects untouched. `:` is used instead of deleting the statement so the
+# top-level statement count never drops (the hook's no-lost-statement guard
+# stays satisfied) and the command still exits 0.
+#
+#   - echo: removed when every argument after the command word is constant
+#     (word_is_constant: no ParamExp / CmdSubst / ArithmExp, no glob/brace/~;
+#     flags like -n / -e and pure-literal quoted strings count as constant).
+#     Bare `echo` (no args) is removed too.
+#   - printf: removed ONLY for the literal-print form -- exactly ONE argument
+#     after the command word, a static string (word_literal != null) with NO
+#     `%` in it. A `%` directive (`printf '%s'`, `printf '%d' 5`), `%%`, extra
+#     args beyond the format (`printf '%s\n' hi`), or a `$var` / `$()` argument
+#     all leave printf untouched -- that printf is really formatting, not
+#     narration.
 #
 # stdout reaches the terminal iff, walking TOP-DOWN from the file root:
 #   - the statement is not the X side of a | or |& (that stdout feeds the
@@ -316,13 +328,17 @@ def cap_sleep:
 #     skipped) or a coproc (its stdout is captured by the coproc fd).
 # Compound bodies (blocks, subshells, if/while/for/case, time) stay visible
 # unless one of the rules above flips them off; both sides of && / || / ;
-# count as statement position. Node-local: only .Args of the matched
-# CallExpr changes, so the rule cannot drop or reorder statements.
+# count as statement position. Node-local: only the matched CallExpr's .Cmd is
+# replaced, so the rule cannot drop or reorder statements.
 # ---------------------------------------------------------------------------
 
-def echo_nag_word:
-  {Parts: [{Type: "DblQuoted", Parts: [{Type: "Lit",
-    Value: "system message: do not use echo/printf to communicate with the user"}]}]};
+# The no-op replacement: a bare `:` CallExpr (Args = [":"]). Replaces a matched
+# narration command's .Cmd; the enclosing Stmt's Redirs are left in place, so
+# `echo warn 2>>err.log` becomes `: 2>>err.log`. Shape taken from
+# `printf ':' | shfmt --to-json | jq '.Stmts[0].Cmd'` (positions dropped, as
+# with every other node synthesized here).
+def colon_cmd:
+  {Type: "CallExpr", Args: [{Parts: [{Type: "Lit", Value: ":"}]}]};
 
 # A word is constant when every part is a Lit without glob/expansion risk
 # (* ? [ { trigger pathname/brace expansion; leading ~ expands to $HOME), a
@@ -344,53 +360,160 @@ def redirs_stderr_only:
     (.N.Value? == "2")
     and (.Op == $ops.gt or .Op == $ops.app or .Op == $ops.dup)));
 
-def echo_nag:
+# ---------------------------------------------------------------------------
+# Effective-command resolver. Given a CallExpr, work out the command that
+# actually runs -- seeing through a quoted/split command word ("printf",
+# pri'ntf', 'echo'), a single leading backslash (\echo -> echo), and the
+# `command`/`builtin` wrappers (recursively, so `command command echo` and
+# `command -p printf` resolve to their target). Returns {name, index} where
+# `index` is the position of the effective command word in the ORIGINAL .Args
+# (so a caller can preserve the wrapper + flags), or null for "no effective
+# command": a non-static command word ($x, `x`, $(x)) or a lookup invocation
+# (`command -v NAME` / `-V`, including bundled forms whose letters contain v
+# or V -- those print a name, they do not execute it). Uses word_literal for
+# the static-string test (every part a Lit / SglQuoted / DblQuoted-over-Lits;
+# any expansion => null). Never descends into Word parts, so a command name
+# that merely APPEARS as an argument is not resolved.
+def effective_command:
+  . as $call
+  | ($call.Args // []) as $args
+  | def resolve($i; $depth):
+      if $depth <= 0 then null
+      elif $i >= ($args | length) then null
+      else ($args[$i] | word_literal) as $raw
+        | if $raw == null then null                # non-static command word
+          else
+            (if ($raw | startswith("\\")) then ($raw[1:]) else $raw end) as $w
+            | if ($w == "command") or ($w == "builtin")
+              then
+                (($w == "command")) as $is_command
+                | # Scan leading flags after the wrapper; return the index of
+                  # the target command word, "LOOKUP", or null.
+                  def scan($j):
+                    if $j >= ($args | length) then null       # only flags, no cmd
+                    else ($args[$j] | word_literal) as $fl
+                      | if $fl == null then null              # non-static -> bail
+                        elif $fl == "--" then ($j + 1)         # end of flags
+                        elif ($fl | startswith("-")) and (($fl | length) > 1)
+                        then
+                          if $is_command and ($fl | test("[vV]"))
+                          then "LOOKUP"                        # command -v/-V (bundled too)
+                          else scan($j + 1)                     # benign flag (-p): skip
+                          end
+                        else $j                                 # non-flag: command word
+                        end
+                    end;
+                  (scan($i + 1)) as $next
+                  | if $next == null then null
+                    elif $next == "LOOKUP" then null
+                    else resolve($next; $depth - 1)             # recurse into target
+                    end
+              else {name: $w, index: $i}
+              end
+          end
+      end;
+    resolve(0; 10);
+
+# ---------------------------------------------------------------------------
+# Rule: perl is banned. Any statement whose EFFECTIVE command name (via the
+# resolver above, so `command perl`, `\perl`, and `perl5.36` all count while
+# `command -v perl` does not) matches the anchored regex ^perl[0-9.]*$ denies
+# the whole command. Unlike narration_remove there is NO visibility guard --
+# perl anywhere is execution. The walk mirrors narration_remove over statement
+# structure (both sides of pipes / && / ||, blocks, subshells,
+# if/while/for/case/time)
+# and additionally descends FuncDecl bodies (a perl call defined in a function
+# still runs when the function is called). It never enters Word parts, so
+# `grep perl file` and `perlcritic` (perl as an argument / a different command)
+# are not matched.
+def has_perl_invocation:
+  def is_perl: (. != null) and test("^perl[0-9.]*$");
+  def perl_stmt:
+    # . = Stmt
+    if (has("Cmd") | not) or (.Cmd == null) then false
+    else .Cmd
+      | if .Type? == "CallExpr" then
+          (effective_command) as $ec
+          | ($ec != null) and ($ec.name | is_perl)
+        elif .Type? == "BinaryCmd" then
+          (.X | perl_stmt) or (.Y | perl_stmt)
+        elif (.Type? == "Block") or (.Type? == "Subshell") then
+          ((.Stmts // []) | any(perl_stmt))
+        elif .Type? == "WhileClause" then
+          (((.Cond // []) | any(perl_stmt))) or (((.Do // []) | any(perl_stmt)))
+        elif .Type? == "ForClause" then
+          ((.Do // []) | any(perl_stmt))
+        elif .Type? == "IfClause" then
+          def if_chain:
+            (((.Cond // []) | any(perl_stmt))
+             or ((.Then // []) | any(perl_stmt))
+             or (if (has("Else") and (.Else != null))
+                 then (.Else | if_chain) else false end));
+          if_chain
+        elif .Type? == "CaseClause" then
+          ((.Items // []) | any((.Stmts // []) | any(perl_stmt)))
+        elif .Type? == "TimeClause" then
+          (if (has("Stmt") and (.Stmt != null)) then (.Stmt | perl_stmt) else false end)
+        elif .Type? == "FuncDecl" then
+          (if (has("Body") and (.Body != null)) then (.Body | perl_stmt) else false end)
+        else false end
+    end;
+  if has("Stmts") then (.Stmts | any(perl_stmt)) else false end;
+
+def narration_remove:
   # $vis threads "stdout reaches the terminal" top-down; jq's walk is
   # bottom-up with no ancestor info, so the traversal is hand-rolled over
   # statement structure only (never into Words -- captures stay data).
-  def nag_stmt($vis):
+  def remove_stmt($vis):
     # . = Stmt
     ($vis and redirs_stderr_only and (.Coprocess? != true)) as $v
     | if (has("Cmd") | not) or (.Cmd == null) then .
       else .Cmd |= (
         if .Type? == "CallExpr" then
-          if $v and ((call_name == "echo") or (call_name == "printf"))
-             and ((.Args[1:]) | all(word_is_constant))
-          then .Args = [.Args[0], echo_nag_word]
-          else . end
+          (effective_command) as $ec
+          | if $v and ($ec != null)
+               and (
+                 (($ec.name == "echo")
+                  and ((.Args[$ec.index + 1:]) | all(word_is_constant)))
+                 or (($ec.name == "printf")
+                     and (((.Args[$ec.index + 1:]) | length) == 1)
+                     and (((.Args[$ec.index + 1] | word_literal)) as $s
+                          | ($s != null) and (($s | test("%")) | not))))
+            then colon_cmd
+            else . end
         elif .Type? == "BinaryCmd" then
           if (.Op == $ops.pipe or .Op == $ops.pipeall)
-          then (.X |= nag_stmt(false)) | (.Y |= nag_stmt($v))
+          then (.X |= remove_stmt(false)) | (.Y |= remove_stmt($v))
           elif (.Op == $ops.and or .Op == $ops.or)
-          then (.X |= nag_stmt($v)) | (.Y |= nag_stmt($v))
+          then (.X |= remove_stmt($v)) | (.Y |= remove_stmt($v))
           else . end
         elif (.Type? == "Block") or (.Type? == "Subshell") then
-          .Stmts |= map(nag_stmt($v))
+          .Stmts |= map(remove_stmt($v))
         elif .Type? == "WhileClause" then
-          (.Cond |= map(nag_stmt($v))) | (.Do |= map(nag_stmt($v)))
+          (.Cond |= map(remove_stmt($v))) | (.Do |= map(remove_stmt($v)))
         elif .Type? == "ForClause" then
-          .Do |= map(nag_stmt($v))
+          .Do |= map(remove_stmt($v))
         elif .Type? == "IfClause" then
           # The elif/else chain: Else nodes are IfClauses without a Type
           # field (and a plain else has no Cond), so walk the chain by
           # field presence.
-          def nag_ifchain:
+          def remove_ifchain:
             (if has("Cond") and (.Cond != null)
-             then .Cond |= map(nag_stmt($v)) else . end)
+             then .Cond |= map(remove_stmt($v)) else . end)
             | (if has("Then") and (.Then != null)
-               then .Then |= map(nag_stmt($v)) else . end)
+               then .Then |= map(remove_stmt($v)) else . end)
             | (if has("Else") and (.Else != null)
-               then .Else |= nag_ifchain else . end);
-          nag_ifchain
+               then .Else |= remove_ifchain else . end);
+          remove_ifchain
         elif .Type? == "CaseClause" then
           .Items |= map(if has("Stmts") and (.Stmts != null)
-                        then .Stmts |= map(nag_stmt($v)) else . end)
+                        then .Stmts |= map(remove_stmt($v)) else . end)
         elif .Type? == "TimeClause" then
           (if has("Stmt") and (.Stmt != null)
-           then .Stmt |= nag_stmt($v) else . end)
+           then .Stmt |= remove_stmt($v) else . end)
         else . end)  # FuncDecl, CoprocClause, DeclClause, ...: leaf
       end;
-  if has("Stmts") then .Stmts |= map(nag_stmt(true)) else . end;
+  if has("Stmts") then .Stmts |= map(remove_stmt(true)) else . end;
 
 # ---------------------------------------------------------------------------
 # Assemble. State: {ast, fired}. Each step compares before/after (positions
@@ -413,7 +536,7 @@ def pass_once:
   | apply_step("stderr_merge"; on_last_stmt(on_spine_leaf(on_last_stage(strip_trailing_stderr_merge))))
   | apply_step("tee"; on_last_stmt(on_spine_leaf(tee_rewrite)))
   | apply_step("sleep_cap"; cap_sleep)
-  | apply_step("echo_nag"; echo_nag);
+  | apply_step("narration_remove"; narration_remove);
 
 def fix_state:
   . as $st
@@ -426,6 +549,7 @@ def dedupe:
 
 . as $orig
 | if has_heredoc then {deny: true, changed: false, rules: "heredoc", ast: $orig}
+  elif has_perl_invocation then {deny: true, changed: false, rules: "perl", ast: $orig}
   else
     ({ast: $orig, fired: []} | fix_state | apply_step("pipefail"; ensure_pipefail)) as $st
     | {deny: false,
