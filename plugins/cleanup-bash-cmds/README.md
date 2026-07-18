@@ -7,8 +7,10 @@ binary -- bash + jq + shfmt work the same on every platform.
 
 It does eight jobs:
 
-1. **Destroys heredocs.** Any command containing a heredoc is DENIED outright --
-   not rewritten, denied. See "Heredocs: banned" below.
+1. **Destroys heredocs and denies perl.** Any command containing a heredoc, or
+   invoking `perl` (in any position the parser recognizes as a command), is
+   DENIED outright -- not rewritten, denied. See "Heredocs: banned" and
+   "perl: banned" below.
 2. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed,
    wherever it appears -- including inside command substitutions. You cannot
    responsibly use that, so it has to be taken away: silencing stderr hides the
@@ -30,10 +32,14 @@ It does eight jobs:
    functions, and `$( )`. Literal durations summing to <= 3 are kept; everything
    else (`sleep 30`, `sleep 1m`, `sleep $DELAY`, `sleep infinity`, junk, no args)
    becomes `sleep 3`. See "Sleep capped at 3 seconds" below.
-7. **Replaces constant narration echoes with a nag.** An `echo` whose arguments
-   are all constant and whose stdout reaches the terminal becomes
-   `echo "system message: do not use echo to communicate with the user"`.
-   See "Constant echoes become a nag" below.
+7. **Removes constant narration echoes/printfs.** A terminal-bound `echo` with
+   all-constant arguments, or a `printf` that just prints a single constant
+   string with no `%` directive, is removed entirely -- its whole command is
+   rewritten to the no-op `:` (no output, exit status 0, surrounding structure
+   intact). A `printf` that actually formats (a `%` directive, extra args, or an
+   expansion) is kept. The matcher sees through `command` / `builtin` / a leading
+   `\` / quoting wrappers. See "Constant narration echoes and printfs are
+   removed" below.
 8. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing
    `| grep ...` (all anchored at the end of the command, like head/tail).
    Strictness settings the user wrote (`set -e` and friends) are NEVER removed --
@@ -131,6 +137,29 @@ Two implementation notes:
   spacing; `a; b` becomes two lines). Formatting-only differences never trigger a
   rewrite on their own.
 
+## perl: banned
+
+`perl` is banned in this environment. Any command whose **effective command** is
+`perl` -- matched against the anchored pattern `^perl[0-9.]*$`, so `perl5.36`
+counts too -- is **denied**, not rewritten:
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+ "permissionDecisionReason": "perl is banned in this environment."}}
+```
+
+- The **effective-command resolver** applies, so wrappers do not get you past it:
+  `command perl -e 1`, `\perl -e 1`, and `builtin perl` all resolve to `perl` and
+  are denied. Deny beats rewrite, and the deny is logged as a `DENY` line with
+  `reason="perl"`.
+- `perl` as an **argument** or a **different command** is not denied -- the walk
+  never enters word-internal contexts, so `grep perl file` and `perlcritic file`
+  run, and `command -v perl` is a lookup, not an invocation.
+- `perl` inside a **command/process substitution** (`echo $(perl -e 1)`) is a
+  deliberate non-goal (see Non-goals) -- the same word-scoping that keeps
+  `grep perl` safe.
+- Fail-open still applies: an unparseable command passes through.
+
 ## Exactly which forms are scrubbed
 
 Stderr redirections to /dev/null, anywhere in the command, in any of these
@@ -176,7 +205,7 @@ Scope and guards:
 - **Mid-pipeline stages stay.** `cmd | head -5 | wc` keeps its `head`. If a later
   trailing stage is stripped and `head`/`tail` becomes trailing, the next pass
   strips it too; that is the point.
-- Strings are safe: `printf "foo | head"` contains no pipeline.
+- Strings are safe: `grep "foo | head" f` contains no pipeline.
 
 ## Stdout redirects become tee
 
@@ -238,23 +267,59 @@ Notes:
   (including scientific notation like `sleep 1e-3`) takes the junk path and
   becomes `sleep 3`.
 
-## Constant echoes become a nag
+## Constant narration echoes and printfs are removed
 
-`echo <constants>` is the model narrating into the transcript -- `echo "=== step
-2 ==="` separators and friends. When every argument is constant (flags count;
-plain literals with glob characters `* ? [ {` or a leading `~` do NOT count --
-their output is runtime data) AND the echo's stdout actually reaches the
-terminal, the entire argument list is replaced:
+`echo <constants>` (or `printf <constant>`) is the model narrating into the
+transcript -- `echo "=== step 2 ==="` separators and friends. A matched
+narration command is **removed**: its whole command is rewritten to the no-op
+`:`, so it produces no output, exits 0, and leaves every surrounding statement,
+redirect, and pipe stage intact. `:` is used instead of deleting the statement
+so the top-level statement count never drops and exit-0 is preserved.
 
 ```bash
-echo "=== files present ==="   ->   echo "system message: do not use echo to communicate with the user"
+echo "=== files present ==="   ->   :
+echo done && rm -f x           ->   : && rm -f x
+echo warn 2>>err.log           ->   : 2>>err.log     # the redirect stays
 ```
 
+The two commands differ in what counts as narration:
+
+- **`echo`** is removed when every argument after the command word is constant
+  (flags count; plain literals with glob characters `* ? [ {` or a leading `~`
+  do NOT count -- their output is runtime data). Bare `echo` is removed too.
+- **`printf`** is removed only for the literal-print form: exactly ONE argument
+  after the command word, a static string with NO `%` in it. A `%` directive, a
+  `%%`, extra args beyond the format, or an expansion mean it is really
+  formatting and it is kept:
+
+  ```bash
+  printf 'done\n'    ->   :                 # a constant string, no %
+  printf '%s\n' x    ->   printf '%s\n' x   # formats: kept
+  printf '%d' 5      ->   printf '%d' 5     # kept
+  printf 'a%%b'      ->   printf 'a%%b'     # kept (has %)
+  printf x y z       ->   printf x y z      # kept (more than one arg)
+  ```
+
+The matcher **sees through wrappers and quoting** via an effective-command
+resolver, so a wrapped narration command is still removed:
+
+```bash
+command echo hi        ->   :
+builtin printf 'hi'    ->   :
+\echo hi               ->   :
+"printf" hi            ->   :
+command command echo x ->   :
+```
+
+`command -v NAME` / `command -V NAME` are lookups, not invocations, so they are
+left alone (`command -v printf` stays), and `command printf '%s\n' x` is kept
+because the underlying `printf` is formatting.
+
 "Reaches the terminal" is computed structurally, walking down from the file
-root. An echo is NOT rewritten when its output is data:
+root. An echo or printf is NOT removed when its output is data:
 
 - feeding a pipe (`echo foo | cat`, `echo '{"x":1}' | jq .x`) -- but a FINAL
-  pipe stage (`x | echo foo`) prints to the terminal and IS rewritten
+  pipe stage (`x | echo foo`) prints to the terminal and IS removed
 - captured (`X=$(echo abc)`, backticks, `<( )`, `>( )`)
 - redirected (`echo foo > file`, `echo foo >&2`); pure stderr redirects
   (`echo warn 2>>err.log`) do not disqualify, and any redirect on an enclosing
@@ -285,9 +350,19 @@ and conditions, case items, subshells, `time`, `!`, and both sides of `&&` /
 - `| grep`, `|| true`, `| head`, `| tail`, `> file`: all anchored at the very
   end of the command (last statement, rightmost `&&`/`||` member) -- one shared
   anchoring for every trailing-noise rule
-- `printf` -- only `echo` is nagged
-- `command sleep` / `builtin echo` / `\echo` -- name-keyed rules match the
-  plain literal command word only (same limitation as head/tail/grep)
+- `command sleep` / `\sleep` -- the sleep/head/tail/grep/true rules still match
+  the plain literal command word only. Only **narration removal** and the
+  **perl deny** see through `command` / `builtin` / a leading `\` / quoting;
+  the other name-keyed rules do not.
+- `perl` inside a command substitution or process substitution
+  (`echo $(perl -e 1)`, `<(perl ...)`) is NOT denied -- the resolver never
+  descends into word-internal contexts (the same scoping that keeps
+  `grep perl` / `perlcritic` safe). Flag it if you want it closed.
+- `sh -c '...'` / `bash -c '...'` payloads are opaque strings -- the hook parses
+  the outer command, not the quoted script, so narration, perl, and every other
+  rule inside a `-c` payload are not seen (would need recursive sub-parsing)
+- `env echo ...`, aliases, and other non-`command`/`builtin` wrappers are not
+  resolved through
 - `set -e`, `set -u`, `set -euo pipefail`, ... -- strictness settings are never
   removed (and `set -euo pipefail` is recognized, so no duplicate injection)
 
@@ -323,8 +398,8 @@ go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/relea
   permission flow evaluates the rewritten command (verified against
   `@anthropic-ai/claude-code` 2.1.201). This is a change from the original Go
   implementation of this plugin, which returned `permissionDecision: "allow"` and
-  made every rewritten command skip the permission prompt. Only the heredoc ban
-  uses a `permissionDecision` (`"deny"`).
+  made every rewritten command skip the permission prompt. Only the heredoc and
+  perl bans use a `permissionDecision` (`"deny"`).
 ## Logging
 
 The log file is the hook's debug channel (the transcript shows nothing). Set
@@ -334,8 +409,9 @@ fail-open:
 
 ```
 REWRITE	original="ls | grep foo"	cleaned="set -o pipefail\nls"	rules="grep,pipefail"
-REWRITE	original="sleep 30; echo hi"	cleaned="set -o pipefail\nsleep 3\necho \"system message: do not use echo to communicate with the user\""	rules="sleep_cap,echo_nag,pipefail"
+REWRITE	original="sleep 30; echo hi"	cleaned="set -o pipefail\nsleep 3\n:"	rules="sleep_cap,narration_remove,pipefail"
 DENY	original="cat <<EOF\nhi\nEOF"	reason="heredoc"
+DENY	original="perl -e 1"	reason="perl"
 GUARD	original="..."	cleaned="..."	reason="stmt-count"
 ```
 

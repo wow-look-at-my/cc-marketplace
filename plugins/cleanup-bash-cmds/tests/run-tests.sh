@@ -18,8 +18,9 @@ HOOK=$SCRIPT_DIR/../hook.sh
 # Almost every rewritten command gains this prefix (pipefail injection).
 PFX=$'set -o pipefail\n'
 
-# The echo_nag replacement command (exact text, byte-for-byte).
-NAG='echo "system message: do not use echo to communicate with the user"'
+# A matched narration echo/printf is REMOVED: its whole command becomes the
+# no-op `:` (byte-for-byte, on its own shfmt-canonical line).
+COLON=':'
 
 if ! command -v shfmt >/dev/null || ! shfmt --help 2>&1 | grep -q -- '--from-json'; then
 	SHFMT_VERSION=v3.8.0
@@ -111,22 +112,33 @@ check_noop() {
 	fi
 }
 
-# Asserts the hook DENIES command $2: permissionDecision deny plus a reason
-# pointing at the Write tool, but no updatedInput and no systemMessage.
-check_deny() {
-	local name=$1 in_cmd=$2
+# Asserts the hook DENIES command $2 with a reason matching regex $3, but no
+# updatedInput and no systemMessage. Heredoc denies point at the Write tool;
+# perl denies say "perl is banned".
+check_deny_reason() {
+	local name=$1 in_cmd=$2 reason_re=$3
 	run_hook "$(payload_bash "$in_cmd")"
-	if [ "$STATUS" -eq 0 ] && [ -n "$OUT" ] && printf '%s' "$OUT" | jq -e '
+	if [ "$STATUS" -eq 0 ] && [ -n "$OUT" ] && printf '%s' "$OUT" | jq -e --arg re "$reason_re" '
 		(.hookSpecificOutput.hookEventName == "PreToolUse") and
 		(.hookSpecificOutput.permissionDecision == "deny") and
-		(.hookSpecificOutput.permissionDecisionReason | test("Write")) and
+		(.hookSpecificOutput.permissionDecisionReason | test($re)) and
 		(.hookSpecificOutput | has("updatedInput") | not) and
 		(has("systemMessage") | not)
 	' >/dev/null; then
 		ok "$name"
 	else
-		bad "$name" "expected silent deny JSON, got status=$STATUS out=$(printf '%q' "$OUT")"
+		bad "$name" "expected silent deny JSON (reason ~ $reason_re), got status=$STATUS out=$(printf '%q' "$OUT")"
 	fi
+}
+
+# Heredoc deny: reason points at the Write tool.
+check_deny() {
+	check_deny_reason "$1" "$2" "Write"
+}
+
+# Perl deny: reason says perl is banned.
+check_deny_perl() {
+	check_deny_reason "$1" "$2" "perl is banned"
 }
 
 if [ -x "$HOOK" ]; then
@@ -179,9 +191,9 @@ check_rewrite "multi-line command scrubbed per statement" \
 	$'ls /a\nls /b'
 
 # AST-aware: text that merely CONTAINS the pattern is not a redirect.
-check_rewrite "quoted string containing 2>/dev/null untouched" \
-	'printf "silence with 2>/dev/null here"' \
-	'printf "silence with 2>/dev/null here"'
+check_rewrite "literal-string carrier containing 2>/dev/null untouched" \
+	': "silence with 2>/dev/null here"' \
+	': "silence with 2>/dev/null here"'
 
 # --- Heredocs: banned outright (deny beats everything, incl. pipefail) ---
 
@@ -210,8 +222,8 @@ check_rewrite "herestring kept while 2>/dev/null scrubbed" \
 	'grep x <<<"data"'
 
 check_rewrite "string literal containing <<EOF untouched" \
-	'printf "here is <<EOF in a string"' \
-	'printf "here is <<EOF in a string"'
+	': "here is <<EOF in a string"' \
+	': "here is <<EOF in a string"'
 
 # The arithmetic shift shares the << token number with heredocs in shfmt's
 # typed JSON; the Redirs-scoped match must not deny it.
@@ -381,8 +393,8 @@ check_rewrite "head inside plain command substitution preserved" 'echo $(ls | he
 check_rewrite "head inside process substitution preserved" 'diff <(ls | head -2) file' 'diff <(ls | head -2) file'
 
 # AST-aware: pipes inside string literals are not pipelines.
-check_rewrite "quoted string containing | head untouched" 'printf "foo | head"' 'printf "foo | head"'
-check_rewrite "single-quoted trailing | head untouched" "printf 'try: cmd | head -3'" "printf 'try: cmd | head -3'"
+check_rewrite "literal-string carrier containing | head untouched" ': "foo | head"' ': "foo | head"'
+check_rewrite "single-quoted trailing | head untouched" ": 'try: cmd | head -3'" ": 'try: cmd | head -3'"
 
 # Multi-line commands: head/tail is FINAL-statement-only. A limiting pipe on
 # an earlier line is an intentional part of a longer script and is kept; the
@@ -491,42 +503,42 @@ check_rewrite "sleep cap is per command not per script" 'sleep 2 && sleep 2' 'sl
 check_rewrite "sleep as timeout arg untouched" 'timeout 5 sleep 30' 'timeout 5 sleep 30'
 check_rewrite "sleep inside string word untouched" 'grep "sleep 30" app.log' 'grep "sleep 30" app.log'
 
-# --- Echo nag: constant echoes whose stdout reaches the terminal ---
+# --- Narration removal: constant echoes whose stdout reaches the terminal ---
+# A matched echo is REMOVED -- its whole command becomes the no-op `:`, so no
+# output is produced, exit status stays 0, and surrounding structure survives.
 
-check_rewrite "echo separator pattern nagged" 'echo "=== section ==="' "$NAG"
-check_rewrite "echo unquoted narration nagged" 'echo starting build now' "$NAG"
-check_rewrite "echo -n flag dropped by nag" 'echo -n "x"' "$NAG"
-check_rewrite "bare echo nagged" 'echo' "$NAG"
-check_rewrite "echo empty string nagged" 'echo ""' "$NAG"
-check_rewrite "echo ansi-c quoting is constant" "echo \$'a\\nb'" "$NAG"
-check_rewrite "echo exact replacement text" \
+check_rewrite "echo separator pattern removed" 'echo "=== section ==="' "$COLON"
+check_rewrite "echo unquoted narration removed" 'echo starting build now' "$COLON"
+check_rewrite "echo -n flag dropped with removal" 'echo -n "x"' "$COLON"
+check_rewrite "bare echo removed" 'echo' "$COLON"
+check_rewrite "echo empty string removed" 'echo ""' "$COLON"
+check_rewrite "echo ansi-c quoting is constant" "echo \$'a\\nb'" "$COLON"
+check_rewrite "echo with spaces and quotes removed" \
 	$'echo "has spaces and \'quotes\'"' \
-	"$NAG"
-check_rewrite "echo nagged in && member" 'echo done && rm -f x' "$NAG && rm -f x"
-check_rewrite "echo nagged as final pipe stage" 'x | echo foo' "x | $NAG"
-check_rewrite "echo nagged in if condition" 'if echo checking; then ls; fi' "if $NAG; then ls; fi"
-check_rewrite "echo nagged in for-loop body" \
+	"$COLON"
+check_rewrite "echo removed in && member" 'echo done && rm -f x' "$COLON && rm -f x"
+check_rewrite "echo removed as final pipe stage" 'x | echo foo' "x | $COLON"
+check_rewrite "echo removed in if condition" 'if echo checking; then ls; fi' "if $COLON; then ls; fi"
+check_rewrite "echo removed in for-loop body" \
 	'for i in a b; do echo checking; done' \
-	"for i in a b; do $NAG; done"
-check_rewrite "echo nagged in until-loop body" \
+	"for i in a b; do $COLON; done"
+check_rewrite "echo removed in until-loop body" \
 	'until ready; do echo waiting; done' \
-	"until ready; do $NAG; done"
-check_rewrite "echo nagged in elif/else chain" \
+	"until ready; do $COLON; done"
+check_rewrite "echo removed in elif/else chain" \
 	'if a; then echo x; elif b; then echo y; else echo z; fi' \
-	"if a; then $NAG; elif b; then $NAG; else $NAG; fi"
-# from-json puts case items on separate lines once the replaced words carry
-# no position info -- layout artifact only, content identical.
-check_rewrite "echo nagged in case items" \
+	"if a; then $COLON; elif b; then $COLON; else $COLON; fi"
+check_rewrite "echo removed in case items" \
 	'case $x in a) echo one ;; *) echo other ;; esac' \
-	"case \$x in a) $NAG ;;"$'\n'"*) $NAG ;;"$'\n'"esac"
-check_rewrite "echo nagged under time" 'time echo hi' "time $NAG"
-check_rewrite "negated echo keeps negation" '! echo ok' "! $NAG"
-check_rewrite "echo nagged in nested while+if" \
+	"case \$x in a) $COLON ;; *) $COLON ;; esac"
+check_rewrite "echo removed under time" 'time echo hi' "time $COLON"
+check_rewrite "negated echo keeps negation" '! echo ok' "! $COLON"
+check_rewrite "echo removed in nested while+if" \
 	'while x; do if y; then echo deep; fi; done' \
-	"while x; do if y; then $NAG; fi; done"
-check_rewrite "echo nagged in subshell" '(echo hi)' "($NAG)"
-check_rewrite "echo stderr redirect kept by nag" 'echo warn 2>>err.log' "$NAG 2>>err.log"
-check_rewrite "head-strip then echo nag compose" 'echo foo | head -1' "$NAG"
+	"while x; do if y; then $COLON; fi; done"
+check_rewrite "echo removed in subshell" '(echo hi)' "($COLON)"
+check_rewrite "echo stderr redirect kept, command removed" 'echo warn 2>>err.log' "$COLON 2>>err.log"
+check_rewrite "head-strip then echo removal compose" 'echo foo | head -1' "$COLON"
 
 # Not narration: expansions, captures, redirected or pipe-feeding stdout.
 check_rewrite "echo variable untouched" 'echo "$VAR"' 'echo "$VAR"'
@@ -551,14 +563,86 @@ check_rewrite "echo in process substitution untouched" \
 	'foo | tee >(echo inside)' \
 	'foo | tee >(echo inside)'
 
+# --- Narration removal: printf's literal-print form (no % directive) ---
+# printf is removed ONLY when it is really just printing a constant string:
+# exactly ONE argument after the command word, a static string (no expansion)
+# with NO `%` in it. A `%` directive, `%%`, extra args, or an expansion mean it
+# is formatting and it is left untouched. Removal (like echo) rewrites the whole
+# command to the no-op `:`.
+
+check_rewrite "printf bare literal removed" "printf 'hi'" "$COLON"
+check_rewrite "printf literal with escape removed" "printf 'done\\n'" "$COLON"
+check_rewrite "printf separator pattern removed" 'printf "=== section ==="' "$COLON"
+check_rewrite "printf removed in && member" 'printf done && rm -f x' "$COLON && rm -f x"
+check_rewrite "printf removed as final pipe stage" 'x | printf foo' "x | $COLON"
+check_rewrite "printf stderr redirect kept, command removed" 'printf warn 2>>err.log' "$COLON 2>>err.log"
+
+# Kept: a real format string (any %), extra args beyond the format, or an
+# expansion -- printf that formats is not narration.
+check_rewrite "printf %s format kept" "printf '%s\\n' hi" "printf '%s\\n' hi"
+check_rewrite "printf %d format kept" "printf '%d' 5" "printf '%d' 5"
+check_rewrite "printf %s with two data args kept" "printf '%s' a b" "printf '%s' a b"
+check_rewrite "printf escaped %% kept" "printf 'a%%b'" "printf 'a%%b'"
+check_rewrite "printf lone %s kept" "printf '%s'" "printf '%s'"
+check_rewrite "printf multi-arg narration kept (not single const)" 'printf starting build now' 'printf starting build now'
+
+# Not narration: expansions, captures, redirected or pipe-feeding stdout --
+# the identical carve-outs to echo, since printf rides the same rule.
+check_rewrite "printf variable untouched" 'printf "$VAR"' 'printf "$VAR"'
+check_rewrite "printf pipe feed untouched" 'printf foo | cat' 'printf foo | cat'
+check_rewrite "printf stdout file redirect gets tee only" 'printf foo > out.txt' 'printf foo | tee out.txt'
+check_rewrite "printf cmdsubst untouched" 'printf "$(date)"' 'printf "$(date)"'
+check_rewrite "printf in function body untouched" 'f() { printf hi; }' 'f() { printf hi; }'
+check_rewrite "printf in coproc untouched" 'coproc printf hi' 'coproc printf hi'
+check_rewrite "printf %s payload into pipe untouched (heredoc-deny form)" "printf '%s' payload | cat" "printf '%s' payload | cat"
+
+# --- Wrapper / quoting bypass: the matcher sees through the command word ---
+# command / builtin / a leading backslash / quoting all resolve to the
+# underlying command, so a wrapped narration echo/printf is still removed;
+# `command -v/-V X` is a LOOKUP and triggers nothing.
+
+check_rewrite "command echo removed" 'command echo hi' "$COLON"
+check_rewrite "builtin printf literal removed" "builtin printf 'hi'" "$COLON"
+check_rewrite "command -p echo removed" 'command -p echo hi' "$COLON"
+check_rewrite "backslash echo removed" '\echo hi' "$COLON"
+check_rewrite "backslash printf removed" '\printf hi' "$COLON"
+check_rewrite "quoted printf word removed" '"printf" hi' "$COLON"
+check_rewrite "split-quoted printf word removed" "pri'ntf' hi" "$COLON"
+check_rewrite "command command echo removed" 'command command echo hi' "$COLON"
+# Wrapper that does NOT resolve to narration removal.
+check_rewrite "command printf format kept" "command printf '%s\\n' x" "command printf '%s\\n' x"
+check_rewrite "command -v printf is a lookup" 'command -v printf' 'command -v printf'
+check_rewrite "command -V echo is a lookup" 'command -V echo' 'command -V echo'
+
+# --- perl is banned: any invocation is DENIED (deny beats rewrite) ---
+# The effective-command resolver applies, so `command perl` and `\perl` count,
+# and `perl5.36` matches ^perl[0-9.]*$. The reason says perl is banned.
+
+check_deny_perl "plain perl denied" "perl -e 'print 1'"
+check_deny_perl "versioned perl5.36 denied" 'perl5.36 -e 1'
+check_deny_perl "command perl wrapper denied" 'command perl -e 1'
+check_deny_perl "backslash perl denied" '\perl -e 1'
+
+# NOT denied: perl as a substring/argument, a different command, a lookup, or
+# perl inside a command substitution (the walk never enters Word parts, the
+# same scoping that keeps `grep perl` / `perlcritic` safe -- a documented
+# non-goal). These are ordinary rewrites (only pipefail is injected).
+check_rewrite "perlcritic is a different command" 'perlcritic file' 'perlcritic file'
+check_rewrite "perl as a grep argument untouched" 'grep perl file' 'grep perl file'
+check_rewrite "command -v perl is a lookup" 'command -v perl' 'command -v perl'
+check_rewrite "perl inside command substitution not denied" 'echo $(perl -e 1)' 'echo $(perl -e 1)'
+
 # Idempotency: the rewritten output is a fixpoint (turn 2 does not rewrite).
-check_noop "nag output is a fixpoint" "${PFX}${NAG}"
+# A produced `:` is not re-matched -- `:` is neither echo nor printf.
+check_noop "narration removal output is a fixpoint" "${PFX}${COLON}"
 check_noop "sleep cap output is a fixpoint" "${PFX}sleep 3"
 
-# Combined multi-statement script: both rules fire, every statement survives.
+# Combined multi-statement script: all rules fire, every statement survives.
+# The two terminal-visible narration echoes become `:`; the pipe-fed
+# `echo done | tee -a log` and the captured `out=$(echo probe)` are not.
 check_rewrite "combined script preserves all statements" \
 	$'echo "=== deploy ==="\nscp app host:/srv/ 2>/dev/null\nwhile ! ssh host ok; do sleep 30; done\nout=$(echo probe)\necho done | tee -a log\necho finished' \
-	"$NAG"$'\nscp app host:/srv/\nwhile ! ssh host ok; do sleep 3; done\nout=$(echo probe)\necho done | tee -a log\n'"$NAG"
+	"$COLON"$'\nscp app host:/srv/\nwhile ! ssh host ok; do sleep 3; done\nout=$(echo probe)\necho done | tee -a log\n'"$COLON"
 
 run_hook "$(payload_bash $'echo "=== deploy ==="\nscp app host:/srv/ 2>/dev/null\nwhile ! ssh host ok; do sleep 30; done\nout=$(echo probe)\necho done | tee -a log\necho finished')"
 NSTMT=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command' | shfmt --to-json | jq '.Stmts | length')
@@ -569,11 +653,11 @@ else
 fi
 
 # All three new behaviors in one script, with a statement-count assertion:
-# echo_nag on the narration, sleep_cap on the wait, head_tail on the final
-# (and only the final) statement.
-check_rewrite "echo_nag + sleep_cap + final head_tail compose" \
+# narration_remove on the narration, sleep_cap on the wait, head_tail on the
+# final (and only the final) statement.
+check_rewrite "narration_remove + sleep_cap + final head_tail compose" \
 	$'echo start\nsleep 10\nls | tail -5' \
-	"$NAG"$'\nsleep 3\nls'
+	"$COLON"$'\nsleep 3\nls'
 
 run_hook "$(payload_bash $'echo start\nsleep 10\nls | tail -5')"
 NSTMT=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command' | shfmt --to-json | jq '.Stmts | length')
@@ -587,8 +671,8 @@ fi
 # Byte-exact input from the incident (the stale regex-era hook swallowed
 # every statement after the mid-script `| tail -12`). The AST hook must keep
 # ALL top-level statements: the mid-script tail and its 2>&1 stay, the three
-# constant narration echoes are nagged, and both splat-compare invocations
-# survive verbatim.
+# constant narration echoes are removed (rewritten to `:`), and both
+# splat-compare invocations survive verbatim.
 
 REPRO_IN='cd /Users/mhaynie/repos/splat/splat-vulkan
 PRE=/private/tmp/claude-501/-Users-mhaynie-repos-splat/10878a52-8108-4974-ae5c-3ecf2bb62d3f/scratchpad/premerge-wt/splat-vulkan/build/test-out/t5b
@@ -600,11 +684,11 @@ echo "=== FROXEL: pre-merge vs post-merge ==="; ./build/splat-compare "$PRE/odd-
 REPRO_WANT='cd /Users/mhaynie/repos/splat/splat-vulkan
 PRE=/private/tmp/claude-501/-Users-mhaynie-repos-splat/10878a52-8108-4974-ae5c-3ecf2bb62d3f/scratchpad/premerge-wt/splat-vulkan/build/test-out/t5b
 POST=build/test-out/t5b
-'"$NAG"'
+'"$COLON"'
 ls -1 "$PRE" "$POST" 2>&1 | tail -12
-'"$NAG"'
+'"$COLON"'
 ./build/splat-compare "$PRE/odd-size-ref.png" "$POST/odd-size-ref.png" --within 2 --pct 99 --mean 0.5
-'"$NAG"'
+'"$COLON"'
 ./build/splat-compare "$PRE/odd-size-froxel.png" "$POST/odd-size-froxel.png" --within 2 --pct 99 --mean 0.5'
 
 check_rewrite "splat repro keeps every statement (tail -12 and 2>&1 intact)" \
@@ -619,18 +703,19 @@ if [ "$RSTMT" = "10" ]; then
 else
 	bad "splat repro statement count is 9 + pipefail" "got $RSTMT statements"
 fi
-if [ "$(printf '%s' "$RCMD" | grep -cF "$NAG")" = "3" ] &&
+if [ "$(printf '%s' "$RCMD" | grep -c '^:$')" = "3" ] &&
 	[ "$(printf '%s' "$RCMD" | grep -cF './build/splat-compare "$PRE')" = "2" ] &&
 	printf '%s' "$RCMD" | grep -qF '2>&1 | tail -12'; then
-	ok "splat repro markers: 3 nags, 2 splat-compares, tail/2>&1 kept"
+	ok "splat repro markers: 3 removed narrations (:), 2 splat-compares, tail/2>&1 kept"
 else
-	bad "splat repro markers: 3 nags, 2 splat-compares, tail/2>&1 kept" "cmd=$(printf '%q' "$RCMD")"
+	bad "splat repro markers: 3 removed narrations (:), 2 splat-compares, tail/2>&1 kept" "cmd=$(printf '%q' "$RCMD")"
 fi
 
 # Execution equivalence on a relocated twin (same shape, stub paths under
 # mktemp so it runs unprivileged): the rewritten script must execute ALL
-# statements -- 3 nag lines where the 3 headers were, the same tail-limited
-# ls output, and both splat-compare invocations, line-for-line.
+# statements -- the 3 narration headers become silent `:` no-ops (no output),
+# the same tail-limited ls output appears, and both splat-compare invocations
+# run. splats==2 proves the script ran to completion past every `:`.
 STUB=$(mktemp -d)
 mkdir -p "$STUB/repo/build/test-out/t5b" "$STUB/pre/t5b"
 printf '#!/bin/sh\nprintf "splat-compare ran: %%s\\n" "$*"\n' >"$STUB/repo/build/splat-compare"
@@ -645,18 +730,20 @@ echo "=== REF: pre-merge vs post-merge ==="; ./build/splat-compare "$PRE/odd-siz
 echo "=== FROXEL: pre-merge vs post-merge ==="; ./build/splat-compare "$PRE/odd-size-froxel.png" "$POST/odd-size-froxel.png" --within 2 --pct 99 --mean 0.5'
 run_hook "$(payload_bash "$TWIN_IN")"
 TWIN_CMD=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command')
+# Narration is removed, so no `=== ` header lines are emitted (0 -- so grep -c
+# exits nonzero; keep these under `set +e`), both splat-compares run (2), and
+# the tail-limited ls listing is present (the png filenames).
 set +e
-ORIG_OUT=$(bash -c "$TWIN_IN" 2>&1)
 TWIN_OUT=$(bash -c "$TWIN_CMD" 2>&1)
-set -e
-orig_lines=$(printf '%s\n' "$ORIG_OUT" | wc -l)
-twin_lines=$(printf '%s\n' "$TWIN_OUT" | wc -l)
-twin_nags=$(printf '%s\n' "$TWIN_OUT" | grep -cF 'system message: do not use echo to communicate with the user')
+TWIN_STATUS=$?
+twin_headers=$(printf '%s\n' "$TWIN_OUT" | grep -c '^=== ')
 twin_splats=$(printf '%s\n' "$TWIN_OUT" | grep -cF 'splat-compare ran:')
-if [ "$twin_lines" = "$orig_lines" ] && [ "$twin_nags" = "3" ] && [ "$twin_splats" = "2" ]; then
-	ok "relocated repro executes all statements (3 nags + ls + 2 splat-compares)"
+twin_ls=$(printf '%s\n' "$TWIN_OUT" | grep -cF 'odd-size-ref.png')
+set -e
+if [ "$TWIN_STATUS" -eq 0 ] && [ "$twin_headers" = "0" ] && [ "$twin_splats" = "2" ] && [ "$twin_ls" -ge 1 ]; then
+	ok "relocated repro executes all statements (silent : no-ops + ls + 2 splat-compares)"
 else
-	bad "relocated repro executes all statements" "orig_lines=$orig_lines twin_lines=$twin_lines nags=$twin_nags splats=$twin_splats out=$(printf '%q' "$TWIN_OUT")"
+	bad "relocated repro executes all statements" "status=$TWIN_STATUS headers=$twin_headers splats=$twin_splats ls=$twin_ls out=$(printf '%q' "$TWIN_OUT")"
 fi
 rm -rf "$STUB"
 
@@ -849,17 +936,25 @@ fi
 
 OUT=$(printf '%s' "$(payload_bash $'cat <<EOF\nhi\nEOF')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
 if [ -f "$LOGFILE" ] && grep -q '^DENY	original="cat <<EOF\\nhi\\nEOF"	reason="heredoc"$' "$LOGFILE"; then
-	ok "deny is logged with action DENY"
+	ok "heredoc deny is logged with reason=heredoc"
 else
-	bad "deny is logged with action DENY" "log=$(cat "$LOGFILE" || printf 'missing')"
+	bad "heredoc deny is logged with reason=heredoc" "log=$(cat "$LOGFILE" || printf 'missing')"
+fi
+
+rm -f "$LOGFILE"
+OUT=$(printf '%s' "$(payload_bash 'perl -e 1')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
+if [ -f "$LOGFILE" ] && grep -q '^DENY	original="perl -e 1"	reason="perl"$' "$LOGFILE"; then
+	ok "perl deny is logged with reason=perl"
+else
+	bad "perl deny is logged with reason=perl" "log=$(cat "$LOGFILE" || printf 'missing')"
 fi
 
 rm -f "$LOGFILE"
 OUT=$(printf '%s' "$(payload_bash 'sleep 30; echo hi')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
-if grep -qF 'rules="sleep_cap,echo_nag,pipefail"' "$LOGFILE"; then
-	ok "sleep_cap and echo_nag rule tags logged"
+if grep -qF 'rules="sleep_cap,narration_remove,pipefail"' "$LOGFILE"; then
+	ok "sleep_cap and narration_remove rule tags logged"
 else
-	bad "sleep_cap and echo_nag rule tags logged" "log=$(cat "$LOGFILE" || printf 'missing')"
+	bad "sleep_cap and narration_remove rule tags logged" "log=$(cat "$LOGFILE" || printf 'missing')"
 fi
 
 rm -rf "$LOGDIR"
