@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "watchdog-state": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/watchdog-state-mcp.ts"]
+    }
+  }
+}

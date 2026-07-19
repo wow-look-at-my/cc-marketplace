@@ -1,0 +1,12 @@
+{
+  "name": "watchdog-state",
+  "description": "Coordinator read path for the session-liveness map and watchdog arm-state stored in the webhook-state KV: liveness_map, watchdog_state_get, watchdog_state_set",
+  "author": {
+    "name": "wow-look-at-my-code"
+  },
+  "keywords": ["watchdog", "coordinator", "liveness", "session", "kv", "mcp"],
+  "mcpServers": "./.mcp.json",
+  "mh": {
+    "include_in_marketplace": true
+  }
+}
