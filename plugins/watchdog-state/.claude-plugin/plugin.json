@@ -1,0 +1,12 @@
+{
+  "name": "watchdog-state",
+  "description": "Claude Code on the web only: coordinator read path for the session-liveness map stored in the webhook-state KV: liveness_map",
+  "author": {
+    "name": "wow-look-at-my-code"
+  },
+  "keywords": ["claude-code-web", "watchdog", "coordinator", "liveness", "session", "kv", "mcp"],
+  "mcpServers": "./.mcp.json",
+  "mh": {
+    "include_in_marketplace": true
+  }
+}

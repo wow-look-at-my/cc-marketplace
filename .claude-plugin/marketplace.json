@@ -49,6 +49,13 @@
       "description": "MCP server restoring the builtin Glob tool removed from Claude Code 2.1.117: ripgrep-backed file pattern matching sorted by mtime",
       "category": "development",
       "keywords": ["glob", "ripgrep", "files", "pattern", "mcp"]
+    },
+    {
+      "name": "watchdog-state",
+      "source": "./plugins/watchdog-state",
+      "description": "Claude Code on the web only: coordinator read path for the session-liveness map stored in the webhook-state KV: liveness_map",
+      "category": "development",
+      "keywords": ["claude-code-web", "watchdog", "coordinator", "liveness", "session", "kv", "mcp"]
     }
   ]
 }
