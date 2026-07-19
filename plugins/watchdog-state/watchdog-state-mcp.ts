@@ -13,8 +13,11 @@
 //                      (verdict from each value's own ts; sorted stale-first).
 //   watchdog_state_get {session_id?} -> the recorded watchdog:<id>:state
 //                      marker (defaults to this session's own id).
-//   watchdog_state_set {fire_at_epoch?, note?} -> record this session's
-//                      watchdog:<own>:state marker (armed_at=now, via:"mcp").
+//
+// The surface is deliberately READ-ONLY: there is no watchdog_state_set.
+// The PostToolUse arm hook -- which fires only on real send_later /
+// create_trigger calls -- stays the sole writer of guard-trusted state, so
+// a session cannot forge its own compliance through this server.
 //
 // Env contract, checked AT STARTUP: WATCHDOG_STATE_HOOK_API_KEY must be
 // present and non-empty or the server refuses to start (one stderr line,
@@ -168,22 +171,6 @@ const TOOLS = {
         required: [],
       },
     },
-    {
-      name: "watchdog_state_set",
-      description:
-        "Record this session's coordinator watchdog arm state (watchdog:<own>:state) with armed_at=now, an optional fire_at epoch, and an optional note.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          fire_at_epoch: {
-            type: "number",
-            description: "Epoch seconds the armed check-in timer fires at.",
-          },
-          note: { type: "string", description: "Free-form note stored with the marker." },
-        },
-        required: [],
-      },
-    },
   ],
 };
 
@@ -240,30 +227,6 @@ function toolWatchdogStateGet(args: Json): Json {
   return toolText(value === "" ? "absent" : value, false);
 }
 
-function toolWatchdogStateSet(args: Json): Json {
-  const own = process.env.CLAUDE_CODE_SESSION_ID ?? "";
-  if (own === "") {
-    return toolText(
-      "CLAUDE_CODE_SESSION_ID is not set; cannot record this session's watchdog state",
-      true
-    );
-  }
-  const fireAt = args.fire_at_epoch === undefined ? null : args.fire_at_epoch;
-  const note = typeof args.note === "string" ? args.note : "";
-  const marker = JSON.stringify({
-    armed_at: Math.floor(Date.now() / 1000),
-    fire_at: fireAt,
-    note,
-    via: "mcp",
-  });
-  const out = bridgeCall(
-    JSON.stringify({ op: "put", key: `watchdog:${own}:state`, value: marker, ttl: 86400 }),
-    5
-  );
-  if (typeof out === "string") return toolText(out, true);
-  return toolText(`recorded watchdog:${own}:state = ${marker}`, false);
-}
-
 function handleToolsCall(id: unknown, params: Json): Json {
   const name = typeof params.name === "string" ? params.name : "";
   const args = asObject(params.arguments) ?? {};
@@ -275,9 +238,6 @@ function handleToolsCall(id: unknown, params: Json): Json {
         break;
       case "watchdog_state_get":
         out = toolWatchdogStateGet(args);
-        break;
-      case "watchdog_state_set":
-        out = toolWatchdogStateSet(args);
         break;
       default:
         out = toolText(`unknown tool: ${name === "" ? "<none>" : name}`, true);

@@ -53,7 +53,7 @@
     {
       "name": "watchdog-state",
       "source": "./plugins/watchdog-state",
-      "description": "Claude Code on the web only: coordinator read path for the session-liveness map and watchdog arm-state stored in the webhook-state KV: liveness_map, watchdog_state_get, watchdog_state_set",
+      "description": "Claude Code on the web only: coordinator read path for the session-liveness map and watchdog arm-state stored in the webhook-state KV: liveness_map, watchdog_state_get",
       "category": "development",
       "keywords": ["claude-code-web", "watchdog", "coordinator", "liveness", "session", "kv", "mcp"]
     }

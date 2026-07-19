@@ -41,17 +41,9 @@ Fetch the recorded coordinator watchdog arm state (`watchdog:<session>:state`) f
 |-----------|------|----------|-------------|
 | `session_id` | string | No | Session ID to inspect (default: this session's `CLAUDE_CODE_SESSION_ID`) |
 
-### `watchdog_state_set`
-
-Record this session's coordinator watchdog arm state (`watchdog:<own>:state`) with `armed_at` = now, an optional `fire_at` epoch, and an optional note.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `fire_at_epoch` | number | No | Epoch seconds the armed check-in timer fires at |
-| `note` | string | No | Free-form note stored with the marker |
-
 ## Behavior notes
 
+- The tool surface is deliberately **read-only** — there is no `watchdog_state_set`, so a session cannot forge its own compliance; the only writer of guard-trusted state is the PostToolUse arm hook, which fires only on real `send_later`/`create_trigger` calls.
 - Startup is gated on `WATCHDOG_STATE_HOOK_API_KEY`: when the variable is missing the server exits immediately with a stderr message naming it, before serving `initialize`. Provision the variable by name in the environment; never embed its value anywhere.
 - Runtime failures on tool calls (bridge unreachable, malformed bridge response) return `isError` tool results — never a crash; the serve loop survives bad requests and unparseable input lines.
 - The liveness verdict comes from each heartbeat value's own `ts` field, not from KV TTLs — TTLs are garbage collection, not a liveness signal.
