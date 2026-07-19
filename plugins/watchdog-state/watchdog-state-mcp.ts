@@ -11,13 +11,12 @@
 //   liveness_map       {stale_after_secs?=300} -> per-session alive/stale map
 //                      built from session:<id>:last_seen heartbeat values
 //                      (verdict from each value's own ts; sorted stale-first).
-//   watchdog_state_get {session_id?} -> the recorded watchdog:<id>:state
-//                      marker (defaults to this session's own id).
 //
-// The surface is deliberately READ-ONLY: there is no watchdog_state_set.
-// The PostToolUse arm hook -- which fires only on real send_later /
-// create_trigger calls -- stays the sole writer of guard-trusted state, so
-// a session cannot forge its own compliance through this server.
+// liveness_map is deliberately the ONLY tool: the surface is read-only and
+// never touches watchdog:* markers. The PostToolUse arm hook -- which fires
+// only on real send_later / create_trigger calls -- stays the sole writer
+// of guard-trusted state, so a session cannot forge its own compliance
+// through this server.
 //
 // Env contract, checked AT STARTUP: WATCHDOG_STATE_HOOK_API_KEY must be
 // present and non-empty or the server refuses to start (one stderr line,
@@ -156,21 +155,6 @@ const TOOLS = {
         required: [],
       },
     },
-    {
-      name: "watchdog_state_get",
-      description:
-        "Fetch the recorded coordinator watchdog arm state (watchdog:<session>:state) for a session; defaults to this session.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          session_id: {
-            type: "string",
-            description: "CLAUDE_CODE_SESSION_ID of the session to inspect (default: this session).",
-          },
-        },
-        required: [],
-      },
-    },
   ],
 };
 
@@ -215,18 +199,6 @@ function toolLivenessMap(args: Json): Json {
   return toolText(JSON.stringify(entries, null, 2), false);
 }
 
-function toolWatchdogStateGet(args: Json): Json {
-  let sid = typeof args.session_id === "string" ? args.session_id : "";
-  if (sid === "") sid = process.env.CLAUDE_CODE_SESSION_ID ?? "";
-  if (sid === "") {
-    return toolText("no session_id given and CLAUDE_CODE_SESSION_ID is not set", true);
-  }
-  const out = bridgeCall(JSON.stringify({ op: "get", key: `watchdog:${sid}:state` }), 5);
-  if (typeof out === "string") return toolText(out, true);
-  const value = typeof out.value === "string" ? out.value : "";
-  return toolText(value === "" ? "absent" : value, false);
-}
-
 function handleToolsCall(id: unknown, params: Json): Json {
   const name = typeof params.name === "string" ? params.name : "";
   const args = asObject(params.arguments) ?? {};
@@ -235,9 +207,6 @@ function handleToolsCall(id: unknown, params: Json): Json {
     switch (name) {
       case "liveness_map":
         out = toolLivenessMap(args);
-        break;
-      case "watchdog_state_get":
-        out = toolWatchdogStateGet(args);
         break;
       default:
         out = toolText(`unknown tool: ${name === "" ? "<none>" : name}`, true);

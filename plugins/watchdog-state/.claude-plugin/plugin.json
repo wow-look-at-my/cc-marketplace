@@ -1,6 +1,6 @@
 {
   "name": "watchdog-state",
-  "description": "Claude Code on the web only: coordinator read path for the session-liveness map and watchdog arm-state stored in the webhook-state KV: liveness_map, watchdog_state_get",
+  "description": "Claude Code on the web only: coordinator read path for the session-liveness map stored in the webhook-state KV: liveness_map",
   "author": {
     "name": "wow-look-at-my-code"
   },

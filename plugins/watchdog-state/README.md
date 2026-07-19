@@ -2,7 +2,7 @@
 
 **This plugin is ONLY for Claude Code on the web sessions running this org's session infrastructure — it depends on the private coordinator-watchdog-state webhook bridge and its API key, refuses to start without `WATCHDOG_STATE_HOOK_API_KEY`, and is useless outside that environment.**
 
-MCP server giving those web-session coordinators a direct read path to the session-liveness map and coordinator watchdog arm-state stored in the webhook-state KV, over the coordinator-watchdog-state bridge hook.
+MCP server giving those web-session coordinators a direct read path to the session-liveness map stored in the webhook-state KV, over the coordinator-watchdog-state bridge hook.
 
 ## Installation
 
@@ -33,17 +33,9 @@ Map every session heartbeat (`session:<id>:last_seen`) in the watchdog KV to an 
 |-----------|------|----------|-------------|
 | `stale_after_secs` | number | No | Age in seconds beyond which a heartbeat counts as stale (default 300) |
 
-### `watchdog_state_get`
-
-Fetch the recorded coordinator watchdog arm state (`watchdog:<session>:state`) for a session.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `session_id` | string | No | Session ID to inspect (default: this session's `CLAUDE_CODE_SESSION_ID`) |
-
 ## Behavior notes
 
-- The tool surface is deliberately **read-only** — there is no `watchdog_state_set`, so a session cannot forge its own compliance; the only writer of guard-trusted state is the PostToolUse arm hook, which fires only on real `send_later`/`create_trigger` calls.
+- `liveness_map` is deliberately the **only** tool — the surface is read-only and never touches the watchdog arm markers, so a session cannot forge its own compliance; the only writer of guard-trusted state is the PostToolUse arm hook, which fires only on real `send_later`/`create_trigger` calls.
 - Startup is gated on `WATCHDOG_STATE_HOOK_API_KEY`: when the variable is missing the server exits immediately with a stderr message naming it, before serving `initialize`. Provision the variable by name in the environment; never embed its value anywhere.
 - Runtime failures on tool calls (bridge unreachable, malformed bridge response) return `isError` tool results — never a crash; the serve loop survives bad requests and unparseable input lines.
 - The liveness verdict comes from each heartbeat value's own `ts` field, not from KV TTLs — TTLs are garbage collection, not a liveness signal.
