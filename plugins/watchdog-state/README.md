@@ -1,8 +1,12 @@
 # watchdog-state
 
-MCP server giving coordinator sessions a direct read path to the session-liveness map and coordinator watchdog arm-state stored in the webhook-state KV, over the coordinator-watchdog-state bridge hook.
+**This plugin is ONLY for Claude Code on the web sessions running this org's session infrastructure — it depends on the private coordinator-watchdog-state webhook bridge and its API key, refuses to start without `WATCHDOG_STATE_HOOK_API_KEY`, and is useless outside that environment.**
+
+MCP server giving those web-session coordinators a direct read path to the session-liveness map and coordinator watchdog arm-state stored in the webhook-state KV, over the coordinator-watchdog-state bridge hook.
 
 ## Installation
+
+In practice you do not install this by hand: claude-code-web-config's `install-plugins.sh` installs it automatically into Claude Code web sessions whose environment provisions the bridge key. For manual installs (only meaningful inside such a session):
 
 ```bash
 # Add the marketplace (if not already added)
