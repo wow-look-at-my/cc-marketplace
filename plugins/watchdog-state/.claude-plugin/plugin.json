@@ -1,10 +1,47 @@
 {
   "name": "watchdog-state",
-  "description": "Claude Code on the web only: coordinator read path for the session-liveness map stored in the webhook-state KV: liveness_map",
+  "description": "Claude Code on the web only: the complete coordinator-watchdog unit. Three hooks (PreToolUse dispatch guard on the local arm marker, PostToolUse arm-state recorder for send_later/create_trigger, async all-web-sessions heartbeat speaking the liveness bridge's two-action contract) plus the read-only liveness_map MCP tool over the bridge's list action. Unset WATCHDOG_STATE_HOOK_API_KEY = documented clean no-op; set key + failing bridge = loud systemMessage",
   "author": {
     "name": "wow-look-at-my-code"
   },
-  "keywords": ["claude-code-web", "watchdog", "coordinator", "liveness", "session", "kv", "mcp"],
+  "keywords": ["claude-code-web", "watchdog", "coordinator", "liveness", "heartbeat", "hooks", "session", "mcp"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__webagent__start_project_session|mcp__claude-code-remote__send_message|mcp__Claude_Code_Remote__send_message",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/watchdog-guard.ts\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__claude-code-remote__send_later|mcp__Claude_Code_Remote__send_later|mcp__claude-code-remote__create_trigger|mcp__Claude_Code_Remote__create_trigger|mcp__claude-code-remote__delete_trigger|mcp__Claude_Code_Remote__delete_trigger",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/watchdog-state.ts\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-heartbeat.ts\"",
+            "async": true,
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
   "mcpServers": "./.mcp.json",
   "mh": {
     "include_in_marketplace": true

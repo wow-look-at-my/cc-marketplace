@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // watchdog-state: a single-file stdio MCP server (JSON-RPC 2.0, one message
-// per line) giving coordinator sessions direct access to the off-VM
-// webhook-runner KV through the coordinator-watchdog-state bridge hook.
+// per line) giving coordinator sessions the off-VM session-liveness registry
+// served by the coordinator-watchdog-state hook (wow-look-at-my/webhooks) --
+// a frozen two-action domain contract: workers POST
+// {"action":"heartbeat",...} (server-stamped ts, fixed TTL) and this server
+// POSTs {"action":"list"} to read every session's last-seen record back.
 //
 // Destined for the wow-look-at-my/cc-marketplace `watchdog-state` plugin
 // (installed into sessions via install-plugins.sh); self-contained on
@@ -9,8 +12,10 @@
 //
 // Tools:
 //   liveness_map       {stale_after_secs?=300} -> per-session alive/stale map
-//                      built from session:<id>:last_seen heartbeat values
-//                      (verdict from each value's own ts; sorted stale-first).
+//                      from the bridge's list action (entries carry the
+//                      server-stamped ts and server-computed age_seconds;
+//                      verdict = age_seconds vs stale_after_secs; sorted
+//                      stale-first).
 //
 // liveness_map is deliberately the ONLY tool: the surface is read-only and
 // never touches watchdog:* markers. The PostToolUse arm hook -- which fires
@@ -143,7 +148,7 @@ const TOOLS = {
     {
       name: "liveness_map",
       description:
-        "Map every session heartbeat (session:<id>:last_seen) in the watchdog KV to an alive/stale verdict based on the heartbeat value timestamp. Stale entries sort first.",
+        "Map every session heartbeat in the liveness registry (the bridge's list action) to an alive/stale verdict from its server-computed age_seconds. Stale entries sort first.",
       inputSchema: {
         type: "object",
         properties: {
@@ -164,32 +169,29 @@ function toolLivenessMap(args: Json): Json {
   let stale = 300;
   const s = args.stale_after_secs;
   if (typeof s === "number" && Number.isFinite(s) && s >= 0) stale = s;
-  const out = bridgeCall('{"op":"map","prefix":"session:"}', 5);
+  // The bridge's list action: the SERVER walks its session:<id>:last_seen
+  // records and answers {"ok":true,"sessions":[{session, ts (UTC ISO,
+  // server-stamped), age_seconds (server-computed, clamped >= 0), cc?, ccr?,
+  // cwd?, tool?}, ...]} newest-first, capped at 500.
+  const out = bridgeCall('{"action":"list"}', 5);
   if (typeof out === "string") return toolText(out, true);
-  const map = asObject(out.value) ?? {};
-  const now = Math.floor(Date.now() / 1000);
+  const sessions = Array.isArray(out.sessions) ? out.sessions : null;
+  if (sessions === null) {
+    return toolText('bridge list reply carried no "sessions" array', true);
+  }
   const entries: Json[] = [];
-  for (const [key, rawValue] of Object.entries(map)) {
-    let v: Json;
-    if (typeof rawValue === "string") {
-      try {
-        v = asObject(JSON.parse(rawValue)) ?? { raw: rawValue };
-      } catch {
-        v = { raw: rawValue };
-      }
-    } else {
-      v = asObject(rawValue) ?? { raw: rawValue };
-    }
-    const ts = typeof v.ts === "number" ? v.ts : null;
-    const age = ts === null ? null : now - ts;
+  for (const raw of sessions) {
+    const v = asObject(raw);
+    if (v === null) continue; // never emitted by the bridge; skip defensively
+    const age = typeof v.age_seconds === "number" && Number.isFinite(v.age_seconds) ? v.age_seconds : null;
     entries.push({
-      key,
+      session: v.session ?? null,
       verdict: age === null ? "unknown" : age < stale ? "alive" : "stale",
-      age_secs: age,
+      age_seconds: age,
+      ts: v.ts ?? null,
       cc: v.cc ?? null,
       ccr: v.ccr ?? null,
       cwd: v.cwd ?? null,
-      ts,
       tool: v.tool ?? null,
     });
   }
