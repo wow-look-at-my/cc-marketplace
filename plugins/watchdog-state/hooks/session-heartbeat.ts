@@ -7,7 +7,7 @@
 // hook's heartbeat action:
 //   {"action":"heartbeat","session":"<id>","cc":"…","ccr":"…","cwd":"…","tool":"…"}
 // The SERVER owns the stored key (session:<id>:last_seen), the timestamp
-// (ts is server-stamped UTC ISO), and the TTL (fixed 86400s -- garbage
+// (ts is server-stamped UTC ISO), and the TTL (fixed 1800s -- garbage
 // collection only; liveness is judged from ts by the reader). Optional
 // fields are clamped to the gate's 200-char bound client-side.
 //
