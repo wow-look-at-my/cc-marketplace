@@ -93,6 +93,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       id-token: write
+      contents: write
+      actions: read
+      checks: read
     strategy:
       fail-fast: false
       matrix:
@@ -108,7 +111,7 @@ jobs:
 
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
-        uses: wow-look-at-my/go-toolchain@latest
+        uses: wow-look-at-my/go-toolchain@v1
         with:
           working-directory: plugins/${{ matrix.plugin }}
           os: linux,darwin
