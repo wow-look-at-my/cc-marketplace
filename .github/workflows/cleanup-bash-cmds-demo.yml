@@ -12,25 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Build hook binary
-        uses: wow-look-at-my/go-toolchain@latest
-        with:
-          working-directory: plugins/cleanup-bash-cmds
-          os: linux
-          arch: amd64
-          upload-artifacts: 'false'
-          codeql: 'false'
-
-      - name: Stage hook binary at the path plugin.json expects
-        run: |
-          set -euxo pipefail
-          src=plugins/cleanup-bash-cmds/build/cleanup-bash-cmds_linux_amd64
-          dst=plugins/cleanup-bash-cmds/build/cleanup-bash-cmds
-          cp "$src" "$dst"
-          chmod +x "$dst"
-          ls -la plugins/cleanup-bash-cmds/build/
+      # The hook is a bash + jq + shfmt script (hook.sh) checked into the
+      # plugin, so there is no binary to build or stage. It does need shfmt
+      # (--to-json/--from-json) on the machine running Claude.
+      - name: Install shfmt
+        run: sudo apt-get update -q && sudo apt-get install -y -q shfmt
 
       - uses: ./.github/actions/setup-claude-code
 
@@ -77,8 +65,9 @@ jobs:
             echo "::error::hook log has no REWRITE entries"
             exit 1
           fi
-          if ! grep -q 'cleaned="seq 1 10"' "$log"; then
-            echo "::error::expected the trailing | head to be stripped"
+          # The rewrite strips the trailing | head and injects set -o pipefail.
+          if ! grep -qF 'cleaned="set -o pipefail\nseq 1 10"' "$log"; then
+            echo "::error::expected | head stripped and pipefail injected"
             exit 1
           fi
-          echo "OK: hook stripped the trailing | head as expected"
+          echo "OK: hook stripped the trailing | head and injected pipefail"

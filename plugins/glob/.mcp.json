@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "glob": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/build/glob",
+      "alwaysLoad": true
+    }
+  }
+}

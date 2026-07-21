@@ -40,6 +40,10 @@
             "cwd": {
               "type": "string",
               "description": "Working directory. Supports ${CLAUDE_PLUGIN_ROOT}."
+            },
+            "alwaysLoad": {
+              "type": "boolean",
+              "description": "When true, all tools from this server are always included in the prompt and never deferred behind tool search. As a side effect, startup blocks (up to the 5s connect timeout) until the server is connected so the tools are present when the turn-1 prompt is built."
             }
           }
         },

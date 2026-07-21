@@ -28,6 +28,34 @@
       "description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
       "category": "development",
       "keywords": ["bash", "cleanup", "rewrite", "hook"]
+    },
+    {
+      "name": "finish-your-todos",
+      "source": "./finish-your-todos",
+      "description": "Blocks the Stop event while the TodoWrite list still has pending or in-progress items, so the assistant doesn't accidentally stop with work unfinished",
+      "category": "development",
+      "keywords": ["stop", "todo", "todowrite", "tasks", "autonomy", "hook"]
+    },
+    {
+      "name": "grep",
+      "source": "./plugins/grep",
+      "description": "MCP server restoring the builtin Grep tool removed from Claude Code 2.1.117, with a grouped filenames_with_matches default mode",
+      "category": "development",
+      "keywords": ["grep", "ripgrep", "search", "regex", "mcp"]
+    },
+    {
+      "name": "glob",
+      "source": "./plugins/glob",
+      "description": "MCP server restoring the builtin Glob tool removed from Claude Code 2.1.117: ripgrep-backed file pattern matching sorted by mtime",
+      "category": "development",
+      "keywords": ["glob", "ripgrep", "files", "pattern", "mcp"]
+    },
+    {
+      "name": "watchdog-state",
+      "source": "./plugins/watchdog-state",
+      "description": "Claude Code on the web only: coordinator read path for the session-liveness map stored in the webhook-state KV: liveness_map",
+      "category": "development",
+      "keywords": ["claude-code-web", "watchdog", "coordinator", "liveness", "session", "kv", "mcp"]
     }
   ]
 }
