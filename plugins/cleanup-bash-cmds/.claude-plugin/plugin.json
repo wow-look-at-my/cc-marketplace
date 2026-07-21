@@ -1,11 +1,11 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "cleanup-bash-cmds",
-	"description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
+	"description": "Parses Bash commands with shfmt's syntax tree: denies heredocs and any perl invocation, strips 2>/dev/null everywhere plus trailing | head / | tail / | grep / || true / 2>&1 from the final statement only, rewrites a final trailing > file into | tee file, caps every sleep at 3 seconds, removes constant narration echo/printf entirely by rewriting it to the no-op : (seeing through command/builtin/backslash/quoting wrappers while keeping real printf formatting), ensures set -o pipefail, and never emits a rewrite that lost a statement",
 	"author": {
 		"name": "mhaynie"
 	},
-	"keywords": ["bash", "cleanup", "rewrite", "hook"],
+	"keywords": ["bash", "cleanup", "rewrite", "hook", "stderr", "devnull", "shfmt", "ast", "tee", "pipefail", "sleep", "echo", "printf", "perl", "narration"],
 	"hooks": {
 		"PreToolUse": [
 			{
@@ -13,7 +13,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/cleanup-bash-cmds"
+						"command": "${CLAUDE_PLUGIN_ROOT}/hook.sh"
 					}
 				]
 			}
