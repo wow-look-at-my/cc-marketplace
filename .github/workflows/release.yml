@@ -13,6 +13,8 @@ jobs:
     permissions:
       actions: read
       id-token: write
+      contents: write
+      checks: read
     outputs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
@@ -212,6 +214,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       id-token: write
+      contents: write
+      actions: read
+      checks: read
     steps:
       - uses: actions/checkout@v7
 
