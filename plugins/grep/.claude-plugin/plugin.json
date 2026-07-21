@@ -1,0 +1,12 @@
+{
+  "name": "grep",
+  "description": "Restores the builtin Grep tool that Claude Code removed in 2.1.117: ripgrep-backed content search mirroring 2.1.116 behavior, with a clearer output-mode set",
+  "author": {
+    "name": "wow-look-at-my-code"
+  },
+  "keywords": ["grep", "search", "content", "regex", "ripgrep", "mcp", "builtin"],
+  "mcpServers": "./.mcp.json",
+  "mh": {
+    "include_in_marketplace": true
+  }
+}
