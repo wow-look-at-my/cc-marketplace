@@ -95,6 +95,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       id-token: write
+      # go-toolchain submits the module graph to GitHub's dependency graph,
+      # which the API gates behind contents: write.
       contents: write
       actions: read
       checks: read
