@@ -181,7 +181,7 @@ func (g *grepTool) formatFilenamesWithMatches(rawLines []string, a *grepArgs) st
 		if it.grp != cur {
 			cur = it.grp
 			numFiles++
-			body.WriteString(relativizePath(cur.path, g.root) + ":\n")
+			body.WriteString(g.displayPath(cur.path, a) + ":\n")
 		} else if separators && it.line.num > prevNum+1 {
 			body.WriteString("  --\n")
 		}

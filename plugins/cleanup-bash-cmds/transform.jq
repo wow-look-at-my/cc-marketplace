@@ -268,6 +268,33 @@ def word_literal:
     | if ($texts | any(. == null)) then null else ($texts | join("")) end
   end;
 
+# ---------------------------------------------------------------------------
+# Rule: replace `docker compose restart` with a forced detached recreation.
+# This applies to every real CallExpr in the tree, including loops, functions,
+# and command substitutions. Only the first three static words are matched;
+# service names, flags, assignments, redirects, and surrounding statement
+# structure are preserved verbatim. String literals and the separate
+# `docker-compose` executable are structurally out of scope.
+# ---------------------------------------------------------------------------
+
+def lit_word($value):
+  {Parts: [{Type: "Lit", Value: $value}]};
+
+def rewrite_docker_compose_restart_call:
+  if (((.Args? // []) | length) >= 3)
+     and ((.Args[0] | word_literal) == "docker")
+     and ((.Args[1] | word_literal) == "compose")
+     and ((.Args[2] | word_literal) == "restart")
+  then .Args = (.Args[0:2]
+                + [lit_word("up"), lit_word("-d"), lit_word("--force-recreate")]
+                + .Args[3:])
+  else . end;
+
+def rewrite_docker_compose_restart:
+  walk(if (type == "object") and (.Type? == "CallExpr")
+    then rewrite_docker_compose_restart_call
+    else . end);
+
 # GNU sleep duration in seconds; null when unparseable. Deliberately strict:
 # plain decimals with an optional s/m/h/d suffix. Scientific notation,
 # signs, inf/infinity, and junk all yield null (=> capped to `sleep 3`).
@@ -530,6 +557,7 @@ def apply_step($name; f):
 
 def pass_once:
   apply_step("devnull"; scrub_devnull)
+  | apply_step("docker_compose_restart"; rewrite_docker_compose_restart)
   | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]))))
   | apply_step("or_true"; on_last_stmt(strip_or_true))
   | apply_step("grep"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["grep"]))))

@@ -467,6 +467,32 @@ check_rewrite "final statement still trailing in a multi-statement script" \
 	$'x=1\nls | tail -2\ncat f | head -3' \
 	$'x=1\nls | tail -2\ncat f'
 
+# --- docker compose restart becomes forced detached recreation ---
+
+check_rewrite "docker compose restart rewritten" \
+	'docker compose restart' \
+	'docker compose up -d --force-recreate'
+
+check_rewrite "docker compose restart preserves service arguments" \
+	'docker compose restart api worker' \
+	'docker compose up -d --force-recreate api worker'
+
+check_rewrite "docker compose restart rewritten everywhere" \
+	'docker compose restart api && x=$(docker compose restart worker)' \
+	'docker compose up -d --force-recreate api && x=$(docker compose up -d --force-recreate worker)'
+
+check_rewrite "docker compose restart composes with redirect cleanup" \
+	'docker compose restart api 2>/dev/null > deploy.log' \
+	'docker compose up -d --force-recreate api | tee deploy.log'
+
+check_rewrite "docker-compose executable is not rewritten" \
+	'docker-compose restart api' \
+	'docker-compose restart api'
+
+check_rewrite "docker compose text used as arguments is not rewritten" \
+	'printf "%s\n" docker compose restart' \
+	'printf "%s\n" docker compose restart'
+
 # --- Sleep cap: every sleep, everywhere, capped at 3 seconds ---
 
 check_rewrite "sleep over-cap integer capped" 'sleep 30' 'sleep 3'

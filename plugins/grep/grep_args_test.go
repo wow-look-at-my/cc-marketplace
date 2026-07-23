@@ -132,6 +132,12 @@ func TestBuildRgArgsOrder(t *testing.T) {
 	want = append(append([]string{}, base...), "--json", "-B", "1", "-A", "2", "p")
 	assert.Equal(t, want, buildRgArgs(a))
 
+	// Explicit files in fwm mode force text so binary lines are stable
+	// across ripgrep's platform-specific binary scanners.
+	a.explicitFile = true
+	want = append(append([]string{}, base...), "--json", "--text", "-B", "1", "-A", "2", "p")
+	assert.Equal(t, want, buildRgArgs(a))
+
 	// content without -n; -C fallback when context absent.
 	a = parseOK(t, `{"pattern":"p","output_mode":"content","-n":false,"-C":4}`)
 	want = append(append([]string{}, base...), "-C", "4", "p")

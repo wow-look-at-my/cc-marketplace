@@ -5,7 +5,7 @@ A PreToolUse hook that rewrites Bash tool commands before they run. The command 
 rewrites the tree, and shfmt turns the tree back into a command. No compiled
 binary -- bash + jq + shfmt work the same on every platform.
 
-It does eight jobs:
+It does nine jobs:
 
 1. **Destroys heredocs and denies perl.** Any command containing a heredoc, or
    invoking `perl` (in any position the parser recognizes as a command), is
@@ -28,11 +28,15 @@ It does eight jobs:
 5. **Ensures `set -o pipefail`.** Every command runs with pipefail enabled --
    silently prepended unless the command already turns it on. This also keeps the
    producer's exit status observable through the injected `| tee`.
-6. **Caps every `sleep` at 3 seconds.** Anywhere in the tree, including loops,
+6. **Recreates Docker Compose services instead of restarting them.**
+   `docker compose restart` becomes
+   `docker compose up -d --force-recreate`, preserving service arguments and
+   surrounding command structure.
+7. **Caps every `sleep` at 3 seconds.** Anywhere in the tree, including loops,
    functions, and `$( )`. Literal durations summing to <= 3 are kept; everything
    else (`sleep 30`, `sleep 1m`, `sleep $DELAY`, `sleep infinity`, junk, no args)
    becomes `sleep 3`. See "Sleep capped at 3 seconds" below.
-7. **Removes constant narration echoes/printfs.** A terminal-bound `echo` with
+8. **Removes constant narration echoes/printfs.** A terminal-bound `echo` with
    all-constant arguments, or a `printf` that just prints a single constant
    string with no `%` directive, is removed entirely -- its whole command is
    rewritten to the no-op `:` (no output, exit status 0, surrounding structure
@@ -40,7 +44,7 @@ It does eight jobs:
    expansion) is kept. The matcher sees through `command` / `builtin` / a leading
    `\` / quoting wrappers. See "Constant narration echoes and printfs are
    removed" below.
-8. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing
+9. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing
    `| grep ...` (all anchored at the end of the command, like head/tail).
    Strictness settings the user wrote (`set -e` and friends) are NEVER removed --
    this hook only ever adds strictness.
@@ -235,6 +239,23 @@ Exclusions (left exactly as written, deliberately):
 - statements with more than one stdout file redirect (`cmd > a > b`)
 - anything inside `$(...)` or `<(...)` -- `VAR=$(cmd > f)` is untouched
 - non-stdout redirects (`cmd 2> err.log`, `cmd < in`)
+
+## Docker Compose restarts become forced recreations
+
+Every real command whose first three static words are
+`docker compose restart` is rewritten to use a detached forced recreation:
+
+```bash
+docker compose restart             -> docker compose up -d --force-recreate
+docker compose restart api worker  -> docker compose up -d --force-recreate api worker
+```
+
+The rewrite applies anywhere commands execute, including loops, functions,
+subshells, and command substitutions. Trailing service names and flags,
+assignments, redirects, and surrounding `&&` / `||` / pipeline structure are
+preserved, and the rule composes with the other cleanup passes. It does not
+touch the separate `docker-compose` executable, text passed as arguments to
+another command, or opaque `sh -c` / `bash -c` strings.
 
 ## Sleep capped at 3 seconds
 

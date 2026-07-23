@@ -93,6 +93,29 @@ type globTool struct {
 	logf             func(string, ...any)
 }
 
+// resolveSymlinks is EvalSymlinks that falls back to the input unchanged
+// when resolution fails (nonexistent path, permission error).
+func resolveSymlinks(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
+}
+
+// rebasePath maps p from resolved space back to argv space: when p sits
+// under resolved, its prefix is swapped for orig. Everything the tool
+// reports stays in the form the caller supplied (see execute).
+func rebasePath(p, resolved, orig string) string {
+	if resolved == orig || !strings.HasPrefix(p, resolved) {
+		return p
+	}
+	rest := p[len(resolved):]
+	if rest != "" && rest[0] != filepath.Separator {
+		return p // prefix match mid-component, not a child path
+	}
+	return orig + rest
+}
+
 // newGlobTool builds the production tool: root = $CLAUDE_PROJECT_DIR
 // (injected into every plugin MCP server by claude-code) falling back to
 // the process cwd.
@@ -205,6 +228,13 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 			searchPath, pat = base, rel
 		}
 	}
+	// rg roots its --glob matcher at the child's RESOLVED cwd but builds
+	// candidate paths from the search-path ARGV, so an unresolved
+	// (symlinked) argv makes every slash-containing glob silently match
+	// nothing (macOS /var -> /private/var, any symlinked project dir).
+	// Hand rg the resolved form; output is rebased back below so results
+	// keep the caller-supplied spelling.
+	rgSearchPath := resolveSymlinks(searchPath)
 
 	rgPath, err := g.resolveRg()
 	if err != nil {
@@ -222,7 +252,7 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 	if envTruthyDefault("CLAUDE_CODE_GLOB_HIDDEN", "true") {
 		args = append(args, "--hidden")
 	}
-	args = append(args, searchPath)
+	args = append(args, rgSearchPath)
 
 	runner := &rgRunner{timeout: g.timeout, timeoutLabel: g.timeoutLabel, maxOutput: g.maxOutput}
 	lines, err := runner.run(rgPath, args, g.root)
@@ -235,7 +265,7 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 		if !filepath.IsAbs(l) {
 			l = filepath.Join(searchPath, l)
 		}
-		files = append(files, l)
+		files = append(files, rebasePath(l, rgSearchPath, searchPath))
 	}
 	sortFilesByMtimeAsc(files)
 	truncated := len(files) > g.maxResults
