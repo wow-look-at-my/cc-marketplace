@@ -84,16 +84,21 @@ older:colon.txt:
   lines across all files (headers and `--` separators are not counted); a
   file whose lines are entirely cut is omitted. Default `head_limit` is
   250 lines; `0` means unlimited.
-- Lines whose byte length (including the terminator) exceeds 500 render as
-  ripgrep's `[Omitted long matching line]` / `[Omitted long context line]`,
-  exactly like content mode's `--max-columns 500`.
+- A matching line is never dropped. The builtin's `--max-columns 500` cap
+  replaced any longer line with `[Omitted long matching line]`; this plugin
+  instead shows the line, bounded to ~4096 characters. A line wider than
+  that renders as a 4096-rune window with an ellipsis (`…`) marking each cut
+  edge — centered on the match here (rg's JSON gives the match column) so it
+  stays visible however deep into the line it sits, whereas content mode has
+  no column and anchors the window at the start.
 
 ### Search behavior (inherited from the 2.1.116 builtin)
 
-- Runs ripgrep with `--hidden`, explicit `!` exclusions for
-  `.git .svn .hg .bzr .jj .sl`, and `--max-columns 500`; `.gitignore` IS
-  respected (no `--no-ignore`) — note this is the opposite of the sibling
-  glob plugin's default. A positive `glob` parameter acts as a ripgrep
+- Runs ripgrep with `--hidden` and explicit `!` exclusions for
+  `.git .svn .hg .bzr .jj .sl`; `.gitignore` IS respected (no `--no-ignore`)
+  — note this is the opposite of the sibling glob plugin's default. (The
+  builtin's `--max-columns 500` is dropped so long lines are shown, then
+  clamped in Go; see the mode notes above.) A positive `glob` parameter acts as a ripgrep
   whitelist: a gitignored or type-filtered file that directly matches it is
   still searched (builtin parity — same argv).
 - `path` may be a file or a directory; it is whitespace-trimmed and
