@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -246,6 +247,28 @@ func TestGlobFilter(t *testing.T) {
 	assert.True(t, containsLine(got, "t.js:1:var needle = 1"), got)
 	assert.True(t, containsLine(got, "t.py:1:needle = 2"), got)
 	assert.NotContains(t, got, "u.js")
+}
+
+// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix: rg
+// roots its --glob matcher at the child's RESOLVED cwd but builds
+// candidates from the search-path argv, so an unresolved (symlinked)
+// argv made every slash-containing glob match nothing (macOS /var ->
+// /private/var broke every t.TempDir() root this way). The tool must
+// hand rg resolved paths and still display root-relative results.
+func TestSlashGlobThroughSymlinkedRoot(t *testing.T) {
+	real := filepath.Join(t.TempDir(), "real")
+	mkTree(t, real,
+		tf{"src/x.ts", "needle here\n"},
+		tf{"src/a/b/y.ts", "needle deep\n"},
+		tf{"other/z.ts", "needle other\n"})
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(real, link))
+	g := testTool(t, link)
+
+	got := grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "glob": "src/**"}))
+	assert.True(t, containsLine(got, "src/x.ts:1:needle here"), got)
+	assert.True(t, containsLine(got, "src/a/b/y.ts:1:needle deep"), got)
+	assert.NotContains(t, got, "other/z.ts")
 }
 
 func TestGlobParamTokenization(t *testing.T) {

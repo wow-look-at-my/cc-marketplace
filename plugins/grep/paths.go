@@ -47,6 +47,29 @@ func resolveAgainst(p, root string) (string, error) {
 	return filepath.Join(root, p), nil
 }
 
+// resolveSymlinks is EvalSymlinks that falls back to the input unchanged
+// when resolution fails (nonexistent path, permission error).
+func resolveSymlinks(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
+}
+
+// rebasePath maps p from resolved space back to argv space: when p sits
+// under resolved, its prefix is swapped for orig. Everything the tool
+// reports stays in the form the caller supplied (see execute).
+func rebasePath(p, resolved, orig string) string {
+	if resolved == orig || !strings.HasPrefix(p, resolved) {
+		return p
+	}
+	rest := p[len(resolved):]
+	if rest != "" && rest[0] != filepath.Separator {
+		return p // prefix match mid-component, not a child path
+	}
+	return orig + rest
+}
+
 // relativizePath mirrors QZH (2.1.116:cli.js:35616-35619): root-relative
 // when under root, absolute otherwise (including the faithful quirk that
 // any relative form starting with ".." — even a "..foo" sibling name —
