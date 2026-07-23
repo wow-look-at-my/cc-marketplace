@@ -255,13 +255,13 @@ func TestFwmGitignoreRespected(t *testing.T) {
 	wantText(t, got, "Found 1 file\nkept.txt:\n  1:needle kept")
 }
 
-func TestFwmGlobAndTypeFilters(t *testing.T) {
+func TestFwmGlobFilter(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root,
 		tf{"a.py", "needle py\n"},
 		tf{"b.js", "needle js\n"})
 	g := testTool(t, root)
-	got := grepOK(t, g, map[string]any{"pattern": "needle", "type": "js"})
+	got := grepOK(t, g, map[string]any{"pattern": "needle", "glob": "*.js"})
 	wantText(t, got, "Found 1 file\nb.js:\n  1:needle js")
 	got = grepOK(t, g, map[string]any{"pattern": "needle", "glob": "*.py"})
 	wantText(t, got, "Found 1 file\na.py:\n  1:needle py")

@@ -18,43 +18,54 @@ import (
 
 const globToolName = "Glob"
 
-// globDescription is the verbatim builtin description
-// (2.1.116:cli.js:114088-114093; no trailing newline, well under the
-// 2048-char cap claude-code applies to MCP tool descriptions).
-const globDescription = `- Fast file pattern matching tool that works with any codebase size
-- Supports glob patterns like "**/*.js" or "src/**/*.ts"
-- Returns matching file paths sorted by modification time
-- Use this tool when you need to find files by name patterns
-- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead`
+// globDescription is a streamlined rewrite of the 2.1.116 builtin
+// description (2.1.116:cli.js:114088-114093): same facts, minus the
+// marketing filler and the Agent-tool bullet. Parameters are documented
+// in the schema, not here. The tool is alwaysLoad, so every description
+// byte is paid in every prompt.
+const globDescription = `- Finds files by glob pattern
+- Returns matching file paths sorted by modification time`
 
-// globInputSchemaJSON is the verbatim builtin input schema
+// schemaProp is one JSON Schema property entry.
+type schemaProp struct {
+	Type        string   `json:"type"`
+	Enum        []string `json:"enum,omitempty"`
+	Description string   `json:"description"`
+}
+
+// globSchema is the builtin input schema shape
 // (2.1.116:cli.js:286491-286496; zod strictObject -> additionalProperties
-// false, required: pattern). Kept as raw JSON so the property order and
-// description strings reach the model byte-for-byte.
-const globInputSchemaJSON = `{
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["pattern"],
-  "properties": {
-    "pattern": {
-      "type": "string",
-      "description": "The glob pattern to match files against"
-    },
-    "path": {
-      "type": "string",
-      "description": "The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter \"undefined\" or \"null\" - simply omit it for the default behavior. Must be a valid directory path if provided."
-    }
-  }
-}`
+// false, required: pattern) with the path description condensed: the
+// builtin's anti-"undefined" lecture is gone because resolveAgainst now
+// maps those literals to the root instead. Struct field order is the
+// property order the model sees.
+type globSchema struct {
+	Type                 string          `json:"type"`
+	AdditionalProperties bool            `json:"additionalProperties"`
+	Required             []string        `json:"required"`
+	Properties           globSchemaProps `json:"properties"`
+}
 
-var globInputSchemaCompact = mustCompactJSON(globInputSchemaJSON)
+type globSchemaProps struct {
+	Pattern schemaProp `json:"pattern"`
+	Path    schemaProp `json:"path"`
+}
 
-func mustCompactJSON(s string) json.RawMessage {
-	var buf bytes.Buffer
-	if err := json.Compact(&buf, []byte(s)); err != nil {
+var globInputSchemaCompact = mustMarshalJSON(globSchema{
+	Type:     "object",
+	Required: []string{"pattern"},
+	Properties: globSchemaProps{
+		Pattern: schemaProp{Type: "string", Description: "The glob pattern to match files against, e.g. \"**/*.js\" or \"src/**/*.ts\""},
+		Path:    schemaProp{Type: "string", Description: "The directory to search in. Defaults to the current working directory."},
+	},
+})
+
+func mustMarshalJSON(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
 		panic(err)
 	}
-	return json.RawMessage(buf.Bytes())
+	return b
 }
 
 const (
@@ -279,18 +290,20 @@ func (g *globTool) validateDir(rawPath, resolved string) (string, bool) {
 // equivalent): null bytes are rejected with the builtin's exact error,
 // the input is whitespace-trimmed (whitespace-only resolves to root), a
 // bare "~" or "~/..." prefix expands to the home directory ("~user" is
-// NOT expanded — the builtin didn't support it either, resolving it as a
+// NOT expanded -- the builtin didn't support it either, resolving it as a
 // literal name against root), absolute paths pass through cleaned, and
 // anything else joins onto root like Node path.resolve. Divergences: no
 // unicode NFC normalization (the builtin NFC-normalizes; stdlib-only
-// here), and an unresolvable home directory leaves "~" literal instead
-// of throwing.
+// here), an unresolvable home directory leaves "~" literal instead
+// of throwing, and the literal strings "undefined" and "null" resolve to
+// root (models emit them for "no path"; the builtin instead begged the
+// model not to in the schema description).
 func resolveAgainst(p, root string) (string, error) {
 	if strings.ContainsRune(p, 0) {
 		return "", errors.New("Path contains null bytes")
 	}
 	p = strings.TrimSpace(p)
-	if p == "" {
+	if p == "" || p == "undefined" || p == "null" {
 		return root, nil
 	}
 	if p == "~" || strings.HasPrefix(p, "~/") {
