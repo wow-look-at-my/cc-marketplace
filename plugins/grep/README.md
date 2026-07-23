@@ -45,8 +45,59 @@ notes.txt:
 The old builtin's default only returned bare filenames, which forced a
 second search to see the matches.
 
+- Match lines render `N:text`, context lines `N-text`, and an indented `--`
+  separates non-contiguous chunks within a file (only when a context flag
+  with nonzero width is in effect, mirroring ripgrep's own printer); with
+  `"-n": false` the two-space indent stays but the `N:`/`N-` prefixes are
+  dropped.
+- Parsing rule: after the `Found N files` header, every line starting with
+  two spaces belongs to the current file; any other line is the next file's
+  header (strip the one trailing `:`). This holds for filenames containing
+  `:` and content that looks like a path — the one blind spot is a filename
+  that itself begins with two spaces, whose header line is
+  indistinguishable from content.
+- `head_limit`/`offset` paginate the flattened stream of match/context
+  lines across all files (headers and `--` separators are not counted); a
+  file whose lines are entirely cut is omitted. Default `head_limit` is
+  250 lines; `0` means unlimited.
+- A matching line is never dropped. The builtin's `--max-columns 500` cap
+  replaced any longer line with `[Omitted long matching line]`; this plugin
+  instead shows the line, bounded to ~4096 characters. A line wider than
+  that renders as a 4096-rune window with an ellipsis (`…`) marking each cut
+  edge — centered on the match here (rg's JSON gives the match column) so it
+  stays visible however deep into the line it sits, whereas content mode has
+  no column and anchors the window at the start.
+
 `.gitignore` is respected (the opposite of the glob plugin). Searches time
 out after 20 seconds (`CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`).
+
+- Runs ripgrep with `--hidden` and explicit `!` exclusions for
+  `.git .svn .hg .bzr .jj .sl`; `.gitignore` IS respected (no `--no-ignore`)
+  — note this is the opposite of the sibling glob plugin's default. (The
+  builtin's `--max-columns 500` is dropped so long lines are shown, then
+  clamped in Go; see the mode notes above.) A positive `glob` parameter acts as a ripgrep
+  whitelist: a gitignored or type-filtered file that directly matches it is
+  still searched (builtin parity — same argv).
+- `path` may be a file or a directory; it is whitespace-trimmed and
+  accepts `~` / `~/sub` (expanded to the home directory) like the
+  builtin's path resolution — `~user` is NOT expanded (the builtin didn't
+  either) and null bytes are rejected with `Path contains null bytes`.
+  Missing paths return
+  `Path does not exist: ... Note: your current working directory is ...`
+  with a did-you-mean suggestion when a re-rooted candidate exists.
+- `filenames_with_matches` and `filenames` order files newest-first;
+  equal mtimes tie-break by the builtin's localeCompare (ported via ICU
+  root collation — case-insensitive at primary strength, so `a.txt`
+  sorts before `B.txt`).
+- Context precedence: `context` beats `-C` beats `-B`/`-A`. `-n` defaults
+  to true. Patterns starting with `-` are passed via `-e`.
+- Searches time out after 20 seconds (60 on WSL), overridable via
+  `CLAUDE_CODE_GLOB_TIMEOUT_SECONDS` (the builtin's env var — it governed
+  both Grep and Glob); output is capped at 20MB per stream; a timeout or
+  cap kill with partial output returns the complete lines seen so far.
+- Results over 20000 characters (UTF-16 units, matching the builtin's
+  maxResultSizeChars) are written to a temp file and replaced by a
+  `<persisted-output>` block with a ~2KB preview.
 
 Differences from the old builtin:
 

@@ -369,19 +369,23 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 }
 
 // buildRgArgs constructs the rg argv in the builtin's exact order
-// (2.1.116:cli.js:286337-286368) with three amendments: the mode-flag
-// slot emits --json for filenames_with_matches (rendered in Go from rg's
-// JSON events), count mode gains -H (claude-code's own >=2.1.175 fix for
-// single-file count parsing), and the context flags apply to
-// filenames_with_matches as well as content. The permission deny-rule
-// and claude-internal cache exclusions the builtin appended are not
-// available to a plugin and are omitted.
+// (2.1.116:cli.js:286337-286368) with four amendments: the builtin's
+// --max-columns 500 is dropped (long lines are shown, then clamped in Go
+// per clamp.go, instead of omitted by rg), the mode-flag slot emits --json
+// for filenames_with_matches (rendered in Go from rg's JSON events), count
+// mode gains -H (claude-code's own >=2.1.175 fix for single-file count
+// parsing), and the context flags apply to filenames_with_matches as well
+// as content. The permission deny-rule and claude-internal cache
+// exclusions the builtin appended are not available to a plugin and are
+// omitted.
 func buildRgArgs(a *grepArgs) []string {
 	args := []string{"--hidden"}
 	for _, d := range vcsExclusions {
 		args = append(args, "--glob", "!"+d)
 	}
-	args = append(args, "--max-columns", "500")
+	// No --max-columns: the builtin capped rg at 500 columns and omitted
+	// longer lines; per decree they are shown, then clamped in Go (clamp.go).
+	// filenames_with_matches always relied on full lines (rg --json ignores it).
 	if a.multiline {
 		args = append(args, "-U", "--multiline-dotall")
 	}
