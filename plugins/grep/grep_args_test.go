@@ -106,7 +106,6 @@ func TestBuildRgArgsOrder(t *testing.T) {
 		"--hidden",
 		"--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg",
 		"--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl",
-		"--max-columns", "500",
 	}
 	// Content mode, everything set: multiline, -i, -n, context
 	// precedence, dash pattern via -e, tokenized globs.
