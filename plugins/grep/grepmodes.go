@@ -96,14 +96,19 @@ func plural(n int, word string) string {
 }
 
 // formatContent ports the content branch: paginate the raw rg lines,
-// relativize the prefix before the FIRST colon of each line, join; empty
-// content becomes "No matches found"; a pagination note is appended when
-// a limit was applied or a positive offset given.
+// relativize the prefix before the FIRST colon of each line, clamp any
+// over-long line to clampWidth (clamp.go) so a huge line is bounded rather
+// than dropped, join; empty content becomes "No matches found"; a
+// pagination note is appended when a limit was applied or a positive
+// offset given. Text mode carries no match column, so the clamp anchors at
+// the start (the path:line: prefix always stays visible and only the tail
+// is cut); the grouped filenames_with_matches mode, which has rg's JSON
+// submatch offsets, centers its window on the match instead.
 func (g *grepTool) formatContent(lines []string, a *grepArgs) string {
 	items, appliedLimit := paginate(lines, a.headLimit, a.offset)
 	mapped := make([]string, len(items))
 	for i, l := range items {
-		mapped[i] = g.displayColonPrefix(l, a, strings.Index(l, ":"))
+		mapped[i] = clampLine(g.displayColonPrefix(l, a, strings.Index(l, ":")), -1)
 	}
 	body := strings.Join(mapped, "\n")
 	if body == "" {

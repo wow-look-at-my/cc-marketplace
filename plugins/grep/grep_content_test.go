@@ -152,21 +152,25 @@ func TestContentUnicodeMatch(t *testing.T) {
 	wantText(t, got, "nfd-e\u0301.txt:1:needle in NFD-named file")
 }
 
-func TestContentLongLineOmitted(t *testing.T) {
+func TestContentLongLineShown(t *testing.T) {
 	root := t.TempDir()
-	// 500 content chars + newline = 501 bytes > 500: omitted by rg.
-	mkTree(t, root, tf{"long.txt", strings.Repeat("y", 496) + "LONG\n"})
+	// 998 content chars: the old --max-columns 500 dropped this as
+	// "[Omitted long matching line]"; it is now shown in full.
+	line := strings.Repeat("y", 994) + "LONG"
+	mkTree(t, root, tf{"long.txt", line + "\n"})
 	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "LONG"}))
-	wantText(t, got, "long.txt:1:[Omitted long matching line]")
+	wantText(t, got, "long.txt:1:"+line)
 }
 
-func TestContentLongLineBoundaryNotOmitted(t *testing.T) {
+func TestContentHugeLineClamped(t *testing.T) {
 	root := t.TempDir()
-	// 499 content chars + newline = 500 bytes: printed in full.
-	line := strings.Repeat("y", 495) + "LONG"
-	mkTree(t, root, tf{"edge.txt", line + "\n"})
-	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "LONG"}))
-	wantText(t, got, "edge.txt:1:"+line)
+	// A line far past clampWidth is clamped, never dropped: the path:line:
+	// prefix and as much content as fits are kept, then an ellipsis. Text
+	// mode carries no match column, so the window anchors at the start.
+	mkTree(t, root, tf{"long.txt", strings.Repeat("y", 5000) + "\n"})
+	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "y"}))
+	// budget = clampWidth-1 = 4095; "long.txt:1:" is 11 runes, leaving 4084.
+	wantText(t, got, "long.txt:1:"+strings.Repeat("y", 4084)+ellipsis)
 }
 
 func TestContentMultilineMode(t *testing.T) {

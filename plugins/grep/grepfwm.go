@@ -38,19 +38,15 @@ import (
 	"strings"
 )
 
-// maxRenderColumns mirrors the builtin's --max-columns 500. rg's JSON
-// printer ignores the flag (it is a standard-printer option), so the
-// omission rule is re-applied here to render lines exactly the way
-// content mode would: a line whose byte length including its terminator
-// exceeds 500 is replaced by rg's own omission message. (Empirical rg
-// 14.1.0: 499 chars + newline prints, 500 chars + newline is omitted.)
-const maxRenderColumns = 500
-
 type fwmLine struct {
-	num      int64
-	text     string
-	match    bool
-	overLong bool
+	num   int64
+	text  string
+	match bool
+	// matchCol is the byte offset of the first match within text, or -1
+	// for a context line or a line with no recorded match. It steers the
+	// clamp window (clamp.go) so a match stays visible even far into a
+	// very long line.
+	matchCol int
 }
 
 type fwmGroup struct {
@@ -82,6 +78,12 @@ type rgJSONEvent struct {
 		Path       rgJSONText `json:"path"`
 		Lines      rgJSONText `json:"lines"`
 		LineNumber *int64     `json:"line_number"`
+		// Submatches carries each match's byte offsets within Lines.text;
+		// only match events populate it. The first entry's Start steers
+		// the clamp window for an over-long matching line.
+		Submatches []struct {
+			Start int64 `json:"start"`
+		} `json:"submatches"`
 	} `json:"data"`
 }
 
@@ -110,18 +112,23 @@ func parseFwmEvents(lines []string) []*fwmGroup {
 			byPath[path] = grp
 			groups = append(groups, grp)
 		}
-		grp.lines = append(grp.lines, expandEventLines(ev.Data.Lines.value(), *ev.Data.LineNumber, isMatch)...)
+		matchByte := -1
+		if isMatch && len(ev.Data.Submatches) > 0 {
+			matchByte = int(ev.Data.Submatches[0].Start)
+		}
+		grp.lines = append(grp.lines, expandEventLines(ev.Data.Lines.value(), *ev.Data.LineNumber, isMatch, matchByte)...)
 	}
 	return groups
 }
 
 // expandEventLines splits one event's text (spanning several lines for
 // multiline-mode matches) into individually numbered lines. Trailing
-// \r\n / \n terminators are stripped from the rendered text (matching
-// the shared runner's handling of rg's standard output) but count toward
-// the 500-byte omission check, which rg applies to the raw line
-// including its terminator.
-func expandEventLines(text string, firstNum int64, match bool) []fwmLine {
+// \r\n / \n terminators are stripped from the rendered text (matching the
+// shared runner's handling of rg's standard output). matchByte is the
+// first submatch's byte offset within the whole event text (-1 for a
+// context event); it is mapped onto whichever sub-line contains it so the
+// clamp window can keep that match visible.
+func expandEventLines(text string, firstNum int64, match bool, matchByte int) []fwmLine {
 	if text == "" {
 		return nil
 	}
@@ -130,14 +137,20 @@ func expandEventLines(text string, firstNum int64, match bool) []fwmLine {
 		parts = parts[:len(parts)-1]
 	}
 	out := make([]fwmLine, 0, len(parts))
+	byteOff := 0
 	for i, part := range parts {
 		content := strings.TrimSuffix(strings.TrimSuffix(part, "\n"), "\r")
+		col := -1
+		if match && matchByte >= byteOff && matchByte < byteOff+len(content) {
+			col = matchByte - byteOff
+		}
 		out = append(out, fwmLine{
 			num:      firstNum + int64(i),
 			text:     content,
 			match:    match,
-			overLong: len(part) > maxRenderColumns,
+			matchCol: col,
 		})
+		byteOff += len(part)
 	}
 	return out
 }
@@ -212,14 +225,7 @@ func contextSeparatorsEnabled(a *grepArgs) bool {
 }
 
 func renderFwmLine(ln fwmLine, lineNums bool) string {
-	text := ln.text
-	if ln.overLong {
-		if ln.match {
-			text = "[Omitted long matching line]"
-		} else {
-			text = "[Omitted long context line]"
-		}
-	}
+	text := clampLine(ln.text, ln.matchCol)
 	if !lineNums {
 		return text
 	}
