@@ -7,10 +7,12 @@ binary -- bash + jq + shfmt work the same on every platform.
 
 It does eight jobs:
 
-1. **Destroys heredocs and denies perl.** Any command containing a heredoc, or
-   invoking `perl` (in any position the parser recognizes as a command), is
-   DENIED outright -- not rewritten, denied. See "Heredocs: banned" and
-   "perl: banned" below.
+1. **Destroys heredocs, denies perl, and denies file reads.** Any command
+   containing a heredoc, invoking `perl` (in any position the parser recognizes
+   as a command), or reading a file with `cat`/`head`/`tail` (a static file
+   operand that is not a `/proc`, `/sys`, or `/dev` pseudo-file -- use the Read
+   tool) is DENIED outright -- not rewritten, denied. See "Heredocs: banned",
+   "perl: banned", and "File reads via cat/head/tail: banned" below.
 2. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed,
    wherever it appears -- including inside command substitutions. You cannot
    responsibly use that, so it has to be taken away: silencing stderr hides the
@@ -55,9 +57,9 @@ model something to blame for its own command mistakes.
 
 The only observable trace of a rewrite is the executed command itself; for
 debugging, set `CLEANUP_BASH_CMDS_LOG` (see Logging) -- the log records every
-rewrite with the rules that fired. The single exception is the heredoc ban,
-which must return a `permissionDecisionReason` (without one the model would
-retry heredocs forever); it carries no `systemMessage` either.
+rewrite with the rules that fired. The single exception is the bans (heredoc,
+perl, file reads), which must return a `permissionDecisionReason` (without one
+the model would retry forever); they carry no `systemMessage` either.
 
 ## Before / After
 
@@ -84,7 +86,8 @@ stderr stays visible: `ls: cannot access '/nope': No such file or directory`.
 hook stdin JSON -> jq (extract .tool_input.command)
                 -> shfmt --to-json          (parse to a typed syntax tree)
                 -> jq -f transform.jq       (inspect + rewrite the tree)
-                -> heredoc found?           (emit permissionDecision deny; stop)
+                -> banned?                  (heredoc / perl / file read: emit
+                                             permissionDecision deny; stop)
                 -> shfmt --from-json        (regenerate the command)
                 -> statement-count guard    (fewer top-level statements than
                                              the original? fail open: no rewrite)
@@ -206,6 +209,64 @@ Scope and guards:
   trailing stage is stripped and `head`/`tail` becomes trailing, the next pass
   strips it too; that is the point.
 - Strings are safe: `grep "foo | head" f` contains no pipeline.
+
+## File reads via cat/head/tail: banned
+
+Reading a file with `cat`, `head`, or `tail` is what the Read tool is for.
+Any invocation of one of the three, in any statement position the parser
+recognizes (the same walk as the perl deny: both sides of pipes and `&&` /
+`||`, compound bodies, function bodies), that names at least one **static,
+non-magic file operand** is **denied**, not rewritten:
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+ "permissionDecisionReason": "Reading files with cat/head/tail is banned in this
+ environment. Use the Read tool instead. Only /proc, /sys, and /dev pseudo-files
+ are exempt."}}
+```
+
+```bash
+cd repo && head -60 src/usage.test.ts    # DENIED (the incident shape)
+cat notes.md                             # DENIED
+cat config.json | jq .x                  # DENIED (jq can read the file itself)
+tail -f /var/log/syslog                  # DENIED (a regular file)
+cat a.txt b.txt > merged.txt             # DENIED (use Read + Write)
+f() { cat secret.txt; }                  # DENIED (runs when f is called)
+```
+
+**Magic pseudo-files are exempt.** An operand under `/proc`, `/sys`, or
+`/dev` is not something the Read tool can meaningfully read, and truncating
+an unbounded stream there is legitimate:
+
+```bash
+cat /proc/meminfo            # allowed
+cat /sys/class/net/eth0/address   # allowed
+head -c 100 /dev/urandom     # allowed -- and NOT rewritten (bounded read of
+                             # an unbounded stream)
+```
+
+Also not a banned file read:
+
+- **No operands / stdin.** `cmd | head -5`, `x | cat`, `cat -` are pipeline
+  plumbing, not file reads. The trailing `| head` stage-strip rule still
+  applies as usual.
+- **Process substitutions.** `cat <(cmd)` reads a stream, not a file.
+- **Expansion operands.** `cat "$F"` is not statically resolvable; like the
+  rest of the hook, unknown means hands off (a deliberate non-goal, same as
+  `$x` command words elsewhere).
+- **Word-internal contexts.** `x=$(cat f)` and `echo $(cat f)` are capture --
+  the walk never enters Word parts (the same scoping that keeps `grep perl`
+  out of the perl deny). Deliberate non-goal.
+- **Lookalike names.** `catalog`, `headache`, `head5` are different commands,
+  and `command -v cat` is a lookup.
+
+Flags are understood when finding operands, so a flag value is never mistaken
+for a file: the separated value of `-n` / `-c` / `-s` (`head -n 20
+/proc/meminfo` is exempt -- `20` is a value), bundled clusters ending in a
+value-taking letter (`-qn 3`), value-taking GNU long forms (`--lines 20`),
+and old-style limits (`head -60`, `tail +5`) are all skipped. The
+**effective-command resolver** applies, so `command cat f` and `\head -5 f`
+are denied too.
 
 ## Stdout redirects become tee
 
@@ -343,17 +404,21 @@ and conditions, case items, subshells, `time`, `!`, and both sides of `&&` /
 - `2>&1` anywhere except the very end of the command (e.g. `cmd 2>&1 | wc`, or
   on a non-final statement of a longer script)
 - `2 >/dev/null` (that is an argument `2` plus a stdout redirect)
-- `head`/`tail` used mid-pipeline, standalone (`head -5 file`), on a non-final
-  statement, or inside command/process substitutions
+- `head`/`tail` as operand-less pipeline stages (`cmd | head -5 | wc`) or on a
+  non-final statement, and cat/head/tail inside command/process substitutions
+  (`x=$(cat f)`) -- but a cat/head/tail that NAMES a non-magic file, anywhere
+  in statement position, is denied (see "File reads via cat/head/tail:
+  banned")
 - `> file` on a non-final statement (only the final statement's redirect
   becomes tee)
 - `| grep`, `|| true`, `| head`, `| tail`, `> file`: all anchored at the very
   end of the command (last statement, rightmost `&&`/`||` member) -- one shared
   anchoring for every trailing-noise rule
-- `command sleep` / `\sleep` -- the sleep/head/tail/grep/true rules still match
-  the plain literal command word only. Only **narration removal** and the
-  **perl deny** see through `command` / `builtin` / a leading `\` / quoting;
-  the other name-keyed rules do not.
+- `command sleep` / `\sleep` -- the sleep, stage-strip head/tail, grep, and
+  `|| true` rules still match the plain literal command word only. Only
+  **narration removal**, the **perl deny**, and the **file-read deny** see
+  through `command` / `builtin` / a leading `\` / quoting; the other
+  name-keyed rules do not.
 - `perl` inside a command substitution or process substitution
   (`echo $(perl -e 1)`, `<(perl ...)`) is NOT denied -- the resolver never
   descends into word-internal contexts (the same scoping that keeps
@@ -398,8 +463,8 @@ go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/relea
   permission flow evaluates the rewritten command (verified against
   `@anthropic-ai/claude-code` 2.1.201). This is a change from the original Go
   implementation of this plugin, which returned `permissionDecision: "allow"` and
-  made every rewritten command skip the permission prompt. Only the heredoc and
-  perl bans use a `permissionDecision` (`"deny"`).
+  made every rewritten command skip the permission prompt. Only the heredoc,
+  perl, and file-read bans use a `permissionDecision` (`"deny"`).
 ## Logging
 
 The log file is the hook's debug channel (the transcript shows nothing). Set
@@ -412,6 +477,7 @@ REWRITE	original="ls | grep foo"	cleaned="set -o pipefail\nls"	rules="grep,pipef
 REWRITE	original="sleep 30; echo hi"	cleaned="set -o pipefail\nsleep 3\n:"	rules="sleep_cap,narration_remove,pipefail"
 DENY	original="cat <<EOF\nhi\nEOF"	reason="heredoc"
 DENY	original="perl -e 1"	reason="perl"
+DENY	original="cat notes.txt"	reason="file_read"
 GUARD	original="..."	cleaned="..."	reason="stmt-count"
 ```
 
