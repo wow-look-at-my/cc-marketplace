@@ -93,9 +93,12 @@ func TestParseArgsRequiredAndStrictness(t *testing.T) {
 	parseErr(t, `{"pattern":"x","path":null}`)
 	parseErr(t, `{"pattern":"x","path":[]}`)
 	parseErr(t, `{"pattern":"x","glob":7}`)
-	parseErr(t, `{"pattern":"x","type":{}}`)
 	msg = parseErr(t, `{"pattern":"x","bogus":1}`)
 	assert.Contains(t, msg, `"bogus"`)
+	// The builtin's "type" parameter was removed (ambiguous name); it is
+	// now just another unknown argument.
+	msg = parseErr(t, `{"pattern":"x","type":"js"}`)
+	assert.Contains(t, msg, `"type"`)
 }
 
 func TestBuildRgArgsOrder(t *testing.T) {
@@ -105,11 +108,11 @@ func TestBuildRgArgsOrder(t *testing.T) {
 		"--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl",
 	}
 	// Content mode, everything set: multiline, -i, -n, context
-	// precedence, dash pattern via -e, type, tokenized globs.
-	a := parseOK(t, `{"pattern":"-dash","output_mode":"content","multiline":true,"-i":true,"context":2,"-C":1,"-B":9,"-A":9,"type":"js","glob":"*.go,*.ts *.{a,b}"}`)
+	// precedence, dash pattern via -e, tokenized globs.
+	a := parseOK(t, `{"pattern":"-dash","output_mode":"content","multiline":true,"-i":true,"context":2,"-C":1,"-B":9,"-A":9,"glob":"*.go,*.ts *.{a,b}"}`)
 	want := append(append([]string{}, base...),
 		"-U", "--multiline-dotall", "-i", "-n", "-C", "2",
-		"-e", "-dash", "--type", "js",
+		"-e", "-dash",
 		"--glob", "*.go", "--glob", "*.ts", "--glob", "*.{a,b}")
 	assert.Equal(t, want, buildRgArgs(a))
 

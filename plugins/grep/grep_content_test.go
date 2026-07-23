@@ -229,7 +229,7 @@ func TestGlobParamWhitelistsGitignoredFiles(t *testing.T) {
 	wantText(t, got, "app.log:1:needle logged")
 }
 
-func TestGlobAndTypeFilters(t *testing.T) {
+func TestGlobFilter(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root,
 		tf{"t.js", "var needle = 1\n"},
@@ -237,20 +237,12 @@ func TestGlobAndTypeFilters(t *testing.T) {
 		tf{"u.js", "let needle = 3\n"})
 	g := testTool(t, root)
 
-	got := grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "type": "js"}))
+	got := grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "glob": "*.js"}))
 	assert.True(t, containsLine(got, "t.js:1:var needle = 1"), got)
 	assert.True(t, containsLine(got, "u.js:1:let needle = 3"), got)
 	assert.NotContains(t, got, "t.py")
 
 	got = grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "glob": "t.*"}))
-	assert.True(t, containsLine(got, "t.js:1:var needle = 1"), got)
-	assert.True(t, containsLine(got, "t.py:1:needle = 2"), got)
-	assert.NotContains(t, got, "u.js")
-
-	// Both together: the positive glob whitelist overrides the type
-	// filter for files it matches (empirical rg behavior, same argv as
-	// the builtin).
-	got = grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "type": "js", "glob": "t.*"}))
 	assert.True(t, containsLine(got, "t.js:1:var needle = 1"), got)
 	assert.True(t, containsLine(got, "t.py:1:needle = 2"), got)
 	assert.NotContains(t, got, "u.js")
@@ -317,6 +309,16 @@ func TestEmptyPathTreatedAsOmitted(t *testing.T) {
 	mkTree(t, root, tf{"a.txt", "needle\n"})
 	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "needle", "path": ""}))
 	wantText(t, got, "a.txt:1:needle")
+}
+
+func TestUndefinedAndNullPathTreatedAsOmitted(t *testing.T) {
+	root := t.TempDir()
+	mkTree(t, root, tf{"a.txt", "needle\n"})
+	g := testTool(t, root)
+	for _, p := range []string{"undefined", "null"} {
+		got := grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "path": p}))
+		wantText(t, got, "a.txt:1:needle")
+	}
 }
 
 func TestPathDoesNotExist(t *testing.T) {
