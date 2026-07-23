@@ -141,6 +141,11 @@ check_deny_perl() {
 	check_deny_reason "$1" "$2" "perl is banned"
 }
 
+# File-read deny: reason points at the Read tool.
+check_deny_read() {
+	check_deny_reason "$1" "$2" "Use the Read tool"
+}
+
 if [ -x "$HOOK" ]; then
 	ok "hook script is executable"
 else
@@ -154,8 +159,8 @@ check_rewrite "simple trailing scrub" \
 	'ls /nope'
 
 check_rewrite "mid-command scrub before &&" \
-	'grep foo file 2>/dev/null && cat found' \
-	'grep foo file && cat found'
+	'grep foo file 2>/dev/null && ls found' \
+	'grep foo file && ls found'
 
 # Semicolon-separated statements come back one per line (shfmt-canonical).
 check_rewrite "all redirect variants in one command" \
@@ -359,10 +364,10 @@ check_rewrite_raw "set -e on its own line is preserved" \
 
 # --- Trailing | head / | tail: arbitrary flags, chains, word boundaries ---
 
-check_rewrite "trailing |head without spaces" 'cat file.txt|head -50' 'cat file.txt'
-check_rewrite "trailing | head -c 4k" 'cat file.txt | head -c 4k' 'cat file.txt'
-check_rewrite "trailing | tail -f" 'cat /var/log/syslog | tail -f' 'cat /var/log/syslog'
-check_rewrite "trailing | tail -n +2" 'cat file.txt | tail -n +2' 'cat file.txt'
+check_rewrite "trailing |head without spaces" 'foo file.txt|head -50' 'foo file.txt'
+check_rewrite "trailing | head -c 4k" 'foo file.txt | head -c 4k' 'foo file.txt'
+check_rewrite "trailing | tail -f" 'foo /var/log/syslog | tail -f' 'foo /var/log/syslog'
+check_rewrite "trailing | tail -n +2" 'foo file.txt | tail -n +2' 'foo file.txt'
 check_rewrite "head then tail chain unwinds fully" 'cmd | head -5 | tail -2' 'cmd'
 check_rewrite "deep alternating head/tail chain unwinds fully" \
 	'cmd | head -9 | tail -8 | head -7 | tail -6 | head -5 | tail -4 | head -3 | tail -2 | head -1 | tail -1 | head -2 | tail -3' \
@@ -400,14 +405,14 @@ check_rewrite "single-quoted trailing | head untouched" ": 'try: cmd | head -3'"
 # an earlier line is an intentional part of a longer script and is kept; the
 # wild "removed too much" incident is exactly this shape.
 check_rewrite "head on a non-final line preserved" \
-	$'foo | head -3\ncat done' \
-	$'foo | head -3\ncat done'
+	$'foo | head -3\nls done' \
+	$'foo | head -3\nls done'
 check_rewrite "tail on a non-final line preserved" \
-	$'ls -1 "$D" | tail -12\ncat done' \
-	$'ls -1 "$D" | tail -12\ncat done'
+	$'ls -1 "$D" | tail -12\nls done' \
+	$'ls -1 "$D" | tail -12\nls done'
 check_rewrite "stdout redirect on a non-final line preserved" \
-	$'make >build.log\ncat build.log' \
-	$'make >build.log\ncat build.log'
+	$'make >build.log\nwc -l build.log' \
+	$'make >build.log\nwc -l build.log'
 check_rewrite "tail on final line is trailing" \
 	$'foo\nbar | tail -5' \
 	$'foo\nbar'
@@ -416,6 +421,60 @@ check_rewrite_raw "multi-line mix of all rules (set -e preserved)" \
 	$'set -e; ls /x 2>/dev/null | head -3\ngrep -r pat . 2>>/dev/null || true' \
 	$'set -o pipefail\nset -e\nls /x | head -3\ngrep -r pat .'
 
+# --- Reading files with cat/head/tail is DENIED: use the Read tool ---
+# The incident shape: `cd x && head -60 file` has no pipeline, so the
+# stage-strip rule could not see it. Any cat/head/tail invocation in
+# statement position (same walk as the perl deny) naming a static,
+# non-magic file operand denies the whole command. Only /proc, /sys, and
+# /dev pseudo-files are exempt.
+
+check_deny_read "direct head after cd && (the incident)" \
+	'cd /Users/mhaynie/repos/model-benchmark-ue5/model-benchmark && head -60 src/usage.test.ts'
+check_deny_read "cat on a file denied" 'cat file.txt'
+check_deny_read "cat on multiple files denied" 'cat notes.md extra.md'
+check_deny_read "cat with flag still names a file" 'cat -n file.txt'
+check_deny_read "head old-style -60 denied" 'head -60 file.txt'
+check_deny_read "head -n 20 (separated value) denied" 'head -n 20 file.txt'
+check_deny_read "head --lines=20 denied" 'head --lines=20 file.txt'
+check_deny_read "tail -20 denied" 'tail -20 build.log'
+check_deny_read "tail -f on a regular file denied" 'tail -f /var/log/syslog'
+check_deny_read "cat feeding a pipe still denied" 'cat config.json | jq .x'
+check_deny_read "head feeding a pipe still denied" 'head -1 f | wc'
+check_deny_read "cat in a non-leaf && member denied" 'foo && cat f && bar'
+check_deny_read "cat to a file redirect (concatenation) denied" 'cat a.txt b.txt > merged.txt'
+check_deny_read "cat inside a function body denied" 'f() { cat secret.txt; }'
+check_deny_read "cat inside an if branch denied" 'if true; then cat f; fi'
+check_deny_read "cat on a mid-script line denied" $'cat notes.txt\nmake'
+check_deny_read "command cat wrapper denied" 'command cat f'
+check_deny_read "backslash head denied" '\head -5 f'
+check_deny_read "deny beats rewrite (2>/dev/null not scrubbed)" 'cat file.txt 2>/dev/null'
+check_deny_read "dev lookalike path is not magic" 'cat /development/f'
+
+# NOT denied: magic pseudo-files, stdin/pipe plumbing, process
+# substitutions, expansion operands, word-internal contexts, lookalike
+# command names, and lookups. These pass through as ordinary rewrites
+# (only pipefail is injected).
+check_rewrite "cat /proc file allowed" 'cat /proc/meminfo' 'cat /proc/meminfo'
+check_rewrite "cat /sys file allowed" 'cat /sys/class/net/eth0/address' 'cat /sys/class/net/eth0/address'
+check_rewrite "bounded read of /dev/urandom allowed (and NOT rewritten)" \
+	'head -c 100 /dev/urandom' \
+	'head -c 100 /dev/urandom'
+check_rewrite "head -n 20 on /proc: 20 is a value, not a file" \
+	'head -n 20 /proc/meminfo' \
+	'head -n 20 /proc/meminfo'
+check_rewrite "bare cat (stdin) allowed" 'x | cat' 'x | cat'
+check_rewrite "cat - (explicit stdin) allowed" 'foo | cat -' 'foo | cat -'
+check_rewrite "cat process substitution allowed" 'cat <(ls)' 'cat <(ls)'
+check_rewrite "cat expansion operand allowed (not statically known)" 'cat "$F"' 'cat "$F"'
+check_rewrite "head with no operands mid-pipeline untouched" 'cmd | head -5 | wc' 'cmd | head -5 | wc'
+check_rewrite "cat capture is word-internal (non-goal)" 'x=$(cat f)' 'x=$(cat f)'
+check_rewrite "cat in command substitution is word-internal (non-goal)" 'echo $(cat f)' 'echo $(cat f)'
+check_rewrite "catalog is a different command" 'catalog f' 'catalog f'
+check_rewrite "headache is a different command" 'headache -5 f' 'headache -5 f'
+check_rewrite "head5 is a different command" 'head5 f' 'head5 f'
+check_rewrite "command -v cat is a lookup" 'command -v cat' 'command -v cat'
+check_rewrite "cat as a grep argument untouched" 'grep cat file2' 'grep cat file2'
+
 # --- Legacy trailing rules ---
 
 check_rewrite "trailing 2>&1 removed" \
@@ -423,19 +482,19 @@ check_rewrite "trailing 2>&1 removed" \
 	'ls -la'
 
 check_rewrite "trailing || true" 'rm -f foo || true' 'rm -f foo'
-check_rewrite "trailing | head" 'cat file.txt | head' 'cat file.txt'
-check_rewrite "trailing | head -5" 'cat file.txt | head -5' 'cat file.txt'
-check_rewrite "trailing | head -n 20" 'cat file.txt | head -n 20' 'cat file.txt'
-check_rewrite "trailing | tail" 'cat file.txt | tail' 'cat file.txt'
-check_rewrite "trailing | tail -10" 'cat file.txt | tail -10' 'cat file.txt'
-check_rewrite "trailing | tail -n +5" 'cat file.txt | tail -n +5' 'cat file.txt'
-check_rewrite "trailing | grep foo" 'cat file.txt | grep foo' 'cat file.txt'
-check_rewrite "trailing | grep -i foo" 'cat file.txt | grep -i foo' 'cat file.txt'
-check_rewrite "trailing | grep -v -i foo" 'cat file.txt | grep -v -i foo' 'cat file.txt'
-check_rewrite "trailing | grep -A 3 foo" 'cat file.txt | grep -A 3 foo' 'cat file.txt'
-check_rewrite "trailing | grep -E pattern" 'cat file.txt | grep -E pattern' 'cat file.txt'
+check_rewrite "trailing | head" 'foo file.txt | head' 'foo file.txt'
+check_rewrite "trailing | head -5" 'foo file.txt | head -5' 'foo file.txt'
+check_rewrite "trailing | head -n 20" 'foo file.txt | head -n 20' 'foo file.txt'
+check_rewrite "trailing | tail" 'foo file.txt | tail' 'foo file.txt'
+check_rewrite "trailing | tail -10" 'foo file.txt | tail -10' 'foo file.txt'
+check_rewrite "trailing | tail -n +5" 'foo file.txt | tail -n +5' 'foo file.txt'
+check_rewrite "trailing | grep foo" 'foo file.txt | grep foo' 'foo file.txt'
+check_rewrite "trailing | grep -i foo" 'foo file.txt | grep -i foo' 'foo file.txt'
+check_rewrite "trailing | grep -v -i foo" 'foo file.txt | grep -v -i foo' 'foo file.txt'
+check_rewrite "trailing | grep -A 3 foo" 'foo file.txt | grep -A 3 foo' 'foo file.txt'
+check_rewrite "trailing | grep -E pattern" 'foo file.txt | grep -E pattern' 'foo file.txt'
 check_rewrite "grep after 2>&1" 'ls -la 2>&1 | grep foo' 'ls -la'
-check_rewrite "grep then head chain" 'cat file.txt | grep foo | head -5' 'cat file.txt'
+check_rewrite "grep then head chain" 'foo file.txt | grep foo | head -5' 'foo file.txt'
 check_rewrite "2>&1 with || true" 'cmd 2>&1 || true' 'cmd'
 check_rewrite "head after 2>&1" 'ls -la 2>&1 | head -20' 'ls -la'
 check_rewrite "tail then grep chain" 'cmd | tail -10 | grep foo' 'cmd'
@@ -445,12 +504,12 @@ check_rewrite "trailing grep with quoted pipe arg is stripped" \
 	'cmd | grep "foo|bar"' \
 	'cmd'
 
-check_rewrite "|| true mid-command untouched" 'cmd || true && cat done' 'cmd || true && cat done'
+check_rewrite "|| true mid-command untouched" 'cmd || true && ls done' 'cmd || true && ls done'
 check_rewrite "head mid-pipeline untouched" 'cmd | head -5 | wc' 'cmd | head -5 | wc'
 check_rewrite "tail mid-pipeline untouched" 'cmd | tail -10 | wc' 'cmd | tail -10 | wc'
 check_rewrite "grep mid-pipeline untouched" 'cmd | grep foo | wc' 'cmd | grep foo | wc'
 # grep is end-of-command anchored (same anchoring as head/tail now).
-check_rewrite "grep on a non-final line untouched" $'cmd | grep x\ncat done' $'cmd | grep x\ncat done'
+check_rewrite "grep on a non-final line untouched" $'cmd | grep x\nls done' $'cmd | grep x\nls done'
 # Whitespace-only differences are not semantic; only pipefail fires.
 check_rewrite "whitespace-only difference gets only pipefail" '  ls -la  ' 'ls -la'
 
@@ -460,12 +519,12 @@ check_rewrite "whitespace-only difference gets only pipefail" '  ls -la  ' 'ls -
 # non-final limiting pipe, stdout redirect, and 2>&1 survives, as do the
 # assignments between them. Only the final statement is trailing.
 check_rewrite "mid-script limiting pipes and redirects preserved" \
-	'x=1; ls | tail -2; cat f | head -3; du -sh . 2>&1; make >build.log; cat done' \
-	$'x=1\nls | tail -2\ncat f | head -3\ndu -sh . 2>&1\nmake >build.log\ncat done'
+	'x=1; ls | tail -2; foo f | head -3; du -sh . 2>&1; make >build.log; ls done' \
+	$'x=1\nls | tail -2\nfoo f | head -3\ndu -sh . 2>&1\nmake >build.log\nls done'
 
 check_rewrite "final statement still trailing in a multi-statement script" \
-	$'x=1\nls | tail -2\ncat f | head -3' \
-	$'x=1\nls | tail -2\ncat f'
+	$'x=1\nls | tail -2\nfoo f | head -3' \
+	$'x=1\nls | tail -2\nfoo f'
 
 # --- Sleep cap: every sleep, everywhere, capped at 3 seconds ---
 
@@ -947,6 +1006,14 @@ if [ -f "$LOGFILE" ] && grep -q '^DENY	original="perl -e 1"	reason="perl"$' "$LO
 	ok "perl deny is logged with reason=perl"
 else
 	bad "perl deny is logged with reason=perl" "log=$(cat "$LOGFILE" || printf 'missing')"
+fi
+
+rm -f "$LOGFILE"
+OUT=$(printf '%s' "$(payload_bash 'cat notes.txt')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
+if [ -f "$LOGFILE" ] && grep -q '^DENY	original="cat notes.txt"	reason="file_read"$' "$LOGFILE"; then
+	ok "file-read deny is logged with reason=file_read"
+else
+	bad "file-read deny is logged with reason=file_read" "log=$(cat "$LOGFILE" || printf 'missing')"
 fi
 
 rm -f "$LOGFILE"
