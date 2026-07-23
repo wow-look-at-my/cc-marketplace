@@ -12,10 +12,11 @@
 # statement only, kill trailing | head / | tail stages, strip trailing
 # | grep, trailing || true, and trailing 2>&1, and rewrite a trailing stdout
 # file redirect into | tee (mid-script limiting pipes and redirects are
-# deliberate and preserved); cap every sleep at 3 seconds; remove constant
-# terminal-bound echo/printf narration (rewriting it to the no-op `:`); and
-# ensure `set -o pipefail` is in effect. Only a semantic AST change triggers a
-# rewrite, so string literals
+# deliberate and preserved); rewrite `docker compose restart` as
+# `docker compose up -d --force-recreate`; cap every sleep at 3 seconds;
+# remove constant terminal-bound echo/printf narration (rewriting it to the
+# no-op `:`); and ensure `set -o pipefail` is in effect. Only a semantic AST
+# change triggers a rewrite, so string literals
 # that merely contain "2>/dev/null" or "| head" are never mangled.
 # Strictness settings the user wrote (set -e etc.) are never removed. After
 # regeneration the cleaned command is re-parsed and the rewrite is dropped

@@ -143,6 +143,14 @@ type grepArgs struct {
 	headLimit  *float64 // nil = default 250; 0 = unlimited
 	offset     float64
 	multiline  bool
+
+	// Set by execute, not parsed from input: the search path as supplied
+	// (argv space) and its symlink-resolved form handed to rg. The
+	// formatters rebase rg's output paths from the resolved form back to
+	// the supplied one (see execute).
+	searchPath   string
+	rgSearchPath string
+	explicitFile bool
 }
 
 type grepTool struct {
@@ -341,13 +349,26 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 		}
 		searchPath = resolved
 	}
+	// rg roots its --glob matcher at the child's RESOLVED cwd but builds
+	// candidate paths from the search-path ARGV, so an unresolved
+	// (symlinked) argv makes every slash-containing glob silently match
+	// nothing (macOS /var -> /private/var, any symlinked project dir).
+	// Hand rg the resolved form; the formatters rebase output paths back
+	// so results keep the caller-supplied spelling.
+	a.searchPath = searchPath
+	a.rgSearchPath = resolveSymlinks(searchPath)
+	if a.path != "" {
+		if info, err := os.Stat(a.rgSearchPath); err == nil {
+			a.explicitFile = info.Mode().IsRegular()
+		}
+	}
 
 	rgPath, err := g.resolveRg()
 	if err != nil {
 		return err.Error(), true
 	}
 
-	args := append(buildRgArgs(a), searchPath)
+	args := append(buildRgArgs(a), a.rgSearchPath)
 	runner := &rgRunner{timeout: g.timeout, timeoutLabel: g.timeoutLabel, maxOutput: g.maxOutput}
 	lines, err := runner.run(rgPath, args, g.root)
 	if err != nil {
@@ -369,13 +390,16 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 }
 
 // buildRgArgs constructs the rg argv in the builtin's exact order
-// (2.1.116:cli.js:286337-286368) with four amendments: the builtin's
+// (2.1.116:cli.js:286337-286368) with five amendments: the builtin's
 // --max-columns 500 is dropped (long lines are shown, then clamped in Go
 // per clamp.go, instead of omitted by rg), the mode-flag slot emits --json
 // for filenames_with_matches (rendered in Go from rg's JSON events), count
 // mode gains -H (claude-code's own >=2.1.175 fix for single-file count
-// parsing), and the context flags apply to filenames_with_matches as well
-// as content. The permission deny-rule and claude-internal cache
+// parsing), the context flags apply to filenames_with_matches as well as
+// content, and an explicit regular-file target in filenames_with_matches
+// mode gains --text so rg reports a binary file's complete raw line
+// consistently across platforms (directory searches retain rg's normal
+// binary skipping). The permission deny-rule and claude-internal cache
 // exclusions the builtin appended are not available to a plugin and are
 // omitted.
 func buildRgArgs(a *grepArgs) []string {
@@ -399,6 +423,9 @@ func buildRgArgs(a *grepArgs) []string {
 		args = append(args, "-c", "-H")
 	case modeFilenamesWithMatches:
 		args = append(args, "--json")
+		if a.explicitFile {
+			args = append(args, "--text")
+		}
 	}
 	if a.lineNums && a.mode == modeContent {
 		args = append(args, "-n")
