@@ -65,7 +65,7 @@ func TestCountCaseInsensitiveAndFilters(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"a.js", "NEEDLE\n"}, tf{"b.py", "needle\n"})
 	g := testTool(t, root)
-	got := grepOK(t, g, countArgs(map[string]any{"pattern": "needle", "-i": true, "type": "js"}))
+	got := grepOK(t, g, countArgs(map[string]any{"pattern": "needle", "-i": true, "glob": "*.js"}))
 	wantText(t, got, "a.js:1\n\nFound 1 total occurrence across 1 file.")
 	got = grepOK(t, g, countArgs(map[string]any{"pattern": "needle", "glob": "*.py"}))
 	wantText(t, got, "b.py:1\n\nFound 1 total occurrence across 1 file.")
