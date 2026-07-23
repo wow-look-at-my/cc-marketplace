@@ -390,6 +390,21 @@ func TestEmptyPathTreatedAsOmitted(t *testing.T) {
 	wantText(t, got, "a.txt")
 }
 
+func TestUndefinedAndNullPathTreatedAsOmitted(t *testing.T) {
+	// Models emit the literal strings "undefined"/"null" for "no path";
+	// resolveAgainst maps them to the root instead of erroring on a
+	// nonexistent directory of that name.
+	root := t.TempDir()
+	mkFiles(t, root, "a.txt")
+	g := testTool(t, root)
+	for _, p := range []string{"undefined", "null", "  undefined  "} {
+		got, isErr := runGlob(t, g, "*.txt", p)
+		require.False(t, isErr, "path %q", p)
+
+		wantText(t, got, "a.txt")
+	}
+}
+
 func TestTruncationAtInjectedCap(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "f1.txt", "f2.txt", "f3.txt", "f4.txt", "f5.txt")

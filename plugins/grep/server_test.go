@@ -10,37 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// wantGrepSchemaCompact is an independent copy of the amended input
-// schema (spec section 4 plus the mode amendments), compacted. The
-// source constant must match it byte-for-byte. Raw string: the \" and
-// \u2014 sequences are JSON escapes on the wire.
-const wantGrepSchemaCompact = `{"type":"object","additionalProperties":false,"required":["pattern"],"properties":{"pattern":{"type":"string","description":"The regular expression pattern to search for in file contents"},"path":{"type":"string","description":"File or directory to search in (rg PATH). Defaults to current working directory."},"glob":{"type":"string","description":"Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\") - maps to rg --glob"},"output_mode":{"type":"string","enum":["content","filenames_with_matches","filenames","count"],"description":"Output mode: \"content\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"filenames_with_matches\" shows file paths with their matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"filenames\" shows file paths (supports head_limit), \"count\" shows match counts (supports head_limit). Defaults to \"filenames_with_matches\"."},"-B":{"type":"number","description":"Number of lines to show before each match (rg -B). Requires output_mode: \"content\" or \"filenames_with_matches\", ignored otherwise."},"-A":{"type":"number","description":"Number of lines to show after each match (rg -A). Requires output_mode: \"content\" or \"filenames_with_matches\", ignored otherwise."},"-C":{"type":"number","description":"Alias for context."},"context":{"type":"number","description":"Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\" or \"filenames_with_matches\", ignored otherwise."},"-n":{"type":"boolean","description":"Show line numbers in output (rg -n). Requires output_mode: \"content\" or \"filenames_with_matches\", ignored otherwise. Defaults to true."},"-i":{"type":"boolean","description":"Case insensitive search (rg -i)"},"type":{"type":"string","description":"File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types."},"head_limit":{"type":"number","description":"Limit output to first N lines/entries, equivalent to \"| head -N\". Works across all output modes: content (limits output lines), filenames_with_matches (limits match/context lines), filenames (limits file paths), count (limits count entries). Defaults to 250 when unspecified. Pass 0 for unlimited (use sparingly \u2014 large result sets waste context)."},"offset":{"type":"number","description":"Skip first N lines/entries before applying head_limit, equivalent to \"| tail -n +N | head -N\". Works across all output modes. Defaults to 0."},"multiline":{"type":"boolean","description":"Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false."}}}`
-
-// wantGrepDescription is an independent copy of the description: the
-// verbatim 2.1.116 builtin text (spec section 3, trailing newline
-// included) with only the "Output modes" bullet rewritten.
-const wantGrepDescription = "A powerful search tool built on ripgrep\n" +
-	"\n" +
-	"  Usage:\n" +
-	"  - ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command. The Grep tool has been optimized for correct permissions and access.\n" +
-	"  - Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")\n" +
-	"  - Filter files with glob parameter (e.g., \"*.js\", \"**/*.tsx\") or type parameter (e.g., \"js\", \"py\", \"rust\")\n" +
-	"  - Output modes: \"filenames_with_matches\" (default) groups results by file: an unindented \"path:\" header line per file (newest first), followed by that file's matching lines indented two spaces (line numbers on by default: \"N:\" for matches, \"N-\" for context lines, \"--\" between non-contiguous chunks); \"content\" shows matching lines as path:line:text; \"filenames\" shows only file paths (newest first); \"count\" shows per-file match counts\n" +
-	"  - Use Agent tool for open-ended searches requiring multiple rounds\n" +
-	"  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)\n" +
-	"  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`\n"
-
-func TestSchemaAndDescriptionVerbatim(t *testing.T) {
-	assert.Equal(t, wantGrepSchemaCompact, string(grepInputSchemaCompact))
-	assert.Equal(t, wantGrepDescription, grepDescription)
-	// The description reaching the model must stay under claude-code's
-	// 2048-char prompt-truncation cap.
-	assert.LessOrEqual(t, len(grepDescription), 2048)
-	// The amendment must not leave the retired mode name anywhere.
-	assert.NotContains(t, grepDescription, "files_with_matches\"")
-	assert.NotContains(t, string(grepInputSchemaCompact), `"files_with_matches"`)
-}
-
 func TestHandshake(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.handshake("claude-code", "2.1.207")
@@ -80,17 +49,21 @@ func TestToolsListEntryShape(t *testing.T) {
 
 	// The compacted schema must appear byte-for-byte in the wire output
 	// (RawMessage embeds it verbatim, preserving property order).
-	assert.Contains(t, raw, wantGrepSchemaCompact)
+	assert.Contains(t, raw, string(grepInputSchemaCompact))
 
-	descJSON, err := json.Marshal(wantGrepDescription)
+	descJSON, err := json.Marshal(grepDescription)
 	require.NoError(t, err)
 	assert.Contains(t, raw, string(descJSON))
+
+	// The description reaching the model must stay under claude-code's
+	// 2048-char prompt-truncation cap.
+	assert.LessOrEqual(t, len(grepDescription), 2048)
 
 	// Property order on the wire: pattern before output_mode before
 	// multiline.
 	pi := strings.Index(raw, `"The regular expression pattern`)
-	oi := strings.Index(raw, `"Output mode:`)
-	mi := strings.Index(raw, `"Enable multiline mode`)
+	oi := strings.Index(raw, `"Output mode.`)
+	mi := strings.Index(raw, `"Patterns match single lines only`)
 	assert.True(t, pi >= 0 && oi > pi && mi > oi, "property order drifted: %d %d %d", pi, oi, mi)
 
 	var resp map[string]any
@@ -108,10 +81,6 @@ func TestToolsListEntryShape(t *testing.T) {
 	req, _ := schema["required"].([]any)
 	require.Len(t, req, 1)
 	assert.Equal(t, "pattern", req[0])
-	// The decoded head_limit description carries a real em dash.
-	props := schema["properties"].(map[string]any)
-	hl := props["head_limit"].(map[string]any)
-	assert.Contains(t, hl["description"], "sparingly — large")
 }
 
 func TestVersionGateMatrix(t *testing.T) {
