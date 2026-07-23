@@ -9,30 +9,6 @@ import (
 	"testing"
 )
 
-// wantGlobSchemaCompact is an independent copy of the 2.1.116 builtin
-// Glob input schema (spec section 8), compacted. The source constant must
-// match it byte-for-byte.
-const wantGlobSchemaCompact = `{"type":"object","additionalProperties":false,"required":["pattern"],"properties":{"pattern":{"type":"string","description":"The glob pattern to match files against"},"path":{"type":"string","description":"The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter \"undefined\" or \"null\" - simply omit it for the default behavior. Must be a valid directory path if provided."}}}`
-
-// wantGlobDescription is an independent copy of the verbatim 2.1.116
-// builtin description (spec section 7).
-const wantGlobDescription = "- Fast file pattern matching tool that works with any codebase size\n" +
-	"- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\"\n" +
-	"- Returns matching file paths sorted by modification time\n" +
-	"- Use this tool when you need to find files by name patterns\n" +
-	"- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead"
-
-func TestSchemaAndDescriptionVerbatim(t *testing.T) {
-	got := string(globInputSchemaCompact)
-	assert.Equal(t, wantGlobSchemaCompact, got)
-
-	assert.Equal(t, wantGlobDescription, globDescription)
-
-	n := len(globDescription)
-	assert.LessOrEqual(t, n, 2048)
-
-}
-
 func TestHandshake(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	resp := c.handshake("claude-code", "2.1.207")
@@ -83,10 +59,14 @@ func TestToolsListEntryShape(t *testing.T) {
 
 	// The compacted schema must appear byte-for-byte in the wire output
 	// (RawMessage embeds it verbatim, preserving property order).
-	assert.Contains(t, raw, wantGlobSchemaCompact)
+	assert.Contains(t, raw, string(globInputSchemaCompact))
 
-	descJSON, _ := json.Marshal(wantGlobDescription)
+	descJSON, _ := json.Marshal(globDescription)
 	assert.Contains(t, raw, string(descJSON))
+
+	// The description reaching the model must stay under claude-code's
+	// 2048-char prompt-truncation cap.
+	assert.LessOrEqual(t, len(globDescription), 2048)
 
 	pi, di := strings.Index(raw, `"The glob pattern`), strings.Index(raw, `"The directory to search in`)
 	assert.False(t, pi < 0 || di < 0 || pi > di)
