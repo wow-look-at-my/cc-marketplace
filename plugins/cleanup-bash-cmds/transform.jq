@@ -446,46 +446,52 @@ def effective_command:
 # resolver above, so `command perl`, `\perl`, and `perl5.36` all count while
 # `command -v perl` does not) matches the anchored regex ^perl[0-9.]*$ denies
 # the whole command. Unlike narration_remove there is NO visibility guard --
-# perl anywhere is execution. The walk mirrors narration_remove over statement
-# structure (both sides of pipes / && / ||, blocks, subshells,
-# if/while/for/case/time)
-# and additionally descends FuncDecl bodies (a perl call defined in a function
-# still runs when the function is called). It never enters Word parts, so
-# `grep perl file` and `perlcritic` (perl as an argument / a different command)
-# are not matched.
-def has_perl_invocation:
-  def is_perl: (. != null) and test("^perl[0-9.]*$");
-  def perl_stmt:
+# perl anywhere is execution. Word-part scoping (see any_call_in_stmts) keeps
+# `grep perl file` and `perlcritic` (perl as an argument / a different
+# command) unmatched.
+# Shared deny walker: does any CallExpr in statement position satisfy pred?
+# Mirrors narration_remove over statement structure (both sides of pipes /
+# && / ||, blocks, subshells, if/while/for/case/time) and additionally
+# descends FuncDecl bodies (a banned call defined in a function still runs
+# when the function is called). It never enters Word parts, so a command
+# name that merely APPEARS as an argument or inside $() / <() is not
+# matched. Used by the perl deny and the file-read deny below.
+def any_call_in_stmts(pred):
+  def stmt_hit:
     # . = Stmt
     if (has("Cmd") | not) or (.Cmd == null) then false
     else .Cmd
       | if .Type? == "CallExpr" then
-          (effective_command) as $ec
-          | ($ec != null) and ($ec.name | is_perl)
+          pred
         elif .Type? == "BinaryCmd" then
-          (.X | perl_stmt) or (.Y | perl_stmt)
+          (.X | stmt_hit) or (.Y | stmt_hit)
         elif (.Type? == "Block") or (.Type? == "Subshell") then
-          ((.Stmts // []) | any(perl_stmt))
+          ((.Stmts // []) | any(stmt_hit))
         elif .Type? == "WhileClause" then
-          (((.Cond // []) | any(perl_stmt))) or (((.Do // []) | any(perl_stmt)))
+          (((.Cond // []) | any(stmt_hit))) or (((.Do // []) | any(stmt_hit)))
         elif .Type? == "ForClause" then
-          ((.Do // []) | any(perl_stmt))
+          ((.Do // []) | any(stmt_hit))
         elif .Type? == "IfClause" then
           def if_chain:
-            (((.Cond // []) | any(perl_stmt))
-             or ((.Then // []) | any(perl_stmt))
+            (((.Cond // []) | any(stmt_hit))
+             or ((.Then // []) | any(stmt_hit))
              or (if (has("Else") and (.Else != null))
                  then (.Else | if_chain) else false end));
           if_chain
         elif .Type? == "CaseClause" then
-          ((.Items // []) | any((.Stmts // []) | any(perl_stmt)))
+          ((.Items // []) | any((.Stmts // []) | any(stmt_hit)))
         elif .Type? == "TimeClause" then
-          (if (has("Stmt") and (.Stmt != null)) then (.Stmt | perl_stmt) else false end)
+          (if (has("Stmt") and (.Stmt != null)) then (.Stmt | stmt_hit) else false end)
         elif .Type? == "FuncDecl" then
-          (if (has("Body") and (.Body != null)) then (.Body | perl_stmt) else false end)
+          (if (has("Body") and (.Body != null)) then (.Body | stmt_hit) else false end)
         else false end
     end;
-  if has("Stmts") then (.Stmts | any(perl_stmt)) else false end;
+  if has("Stmts") then (.Stmts | any(stmt_hit)) else false end;
+
+def has_perl_invocation:
+  def is_perl: (. != null) and test("^perl[0-9.]*$");
+  any_call_in_stmts((effective_command) as $ec
+    | ($ec != null) and ($ec.name | is_perl));
 
 def narration_remove:
   # $vis threads "stdout reaches the terminal" top-down; jq's walk is
@@ -543,6 +549,70 @@ def narration_remove:
   if has("Stmts") then .Stmts |= map(remove_stmt(true)) else . end;
 
 # ---------------------------------------------------------------------------
+# Rule: reading files with cat/head/tail is banned -- use the Read tool.
+# Any CallExpr in statement position (same walk as the perl deny: pipes,
+# && / ||, compounds, FuncDecl bodies; never Word parts) whose EFFECTIVE
+# command is cat, head, or tail AND that names at least one static,
+# non-"magic" file operand denies the whole command. `cd x && head -60 f`
+# is the incident shape: no pipe for the stage-strip rule to see, and the
+# model should have used the Read tool.
+#
+# What still runs (NOT a file read, or not resolvable statically):
+#   - "magic" pseudo-file operands: paths under /proc, /sys, or /dev
+#     (`cat /proc/meminfo`, `head -c 100 /dev/urandom` -- the Read tool
+#     cannot meaningfully read those, and truncating an unbounded stream
+#     is legitimate there)
+#   - no operands / stdin only: `x | cat`, `cmd | head -5`, `cat -`
+#   - process-substitution operands: `cat <(cmd)` is stream plumbing
+#   - operands carrying any expansion (`cat "$F"`): not statically known,
+#     same fail-open posture as the rest of the hook
+#   - cat/head/tail inside $() / <() word contexts (`x=$(cat f)`): capture
+#     is scripting, and the walk never enters Word parts anyway (the same
+#     scoping that keeps `grep perl` out of the perl deny)
+# Flags are skipped when finding operands, including the separated value
+# of -n / -c / -s, bundled clusters ending in a value-taking letter
+# (-qn 3), value-taking GNU long forms (--lines 20), and old-style limits
+# (-60, +5), so `head -n 20 /proc/meminfo` does not mistake `20` for a
+# file. cat has no value-taking flags, so for it every dash word is just
+# dropped.
+# ---------------------------------------------------------------------------
+
+# Operand words of a cat/head/tail call. $args excludes the command word;
+# $valued enables head/tail's value-taking flag handling. `--` ends flag
+# parsing; a lone `-` is stdin, not a file, and is not an operand here.
+def read_operands($args; $valued):
+  reduce $args[] as $w ({ops: [], skip: false, done: false};
+    if .skip then .skip = false
+    elif .done then .ops += [$w]
+    else ($w | word_literal) as $lit
+      | if $lit == null then .ops += [$w]
+        elif $lit == "--" then .done = true
+        elif $lit == "-" then .
+        elif ($lit | startswith("--")) then
+          if $valued and ($lit | test("^--(lines|bytes|sleep-interval|pid|max-unchanged-stats)$"))
+          then .skip = true else . end
+        elif ($lit | startswith("-")) and (($lit | length) > 1) then
+          if $valued and ($lit | test("^-[A-Za-z]*[ncs]$")) then .skip = true else . end
+        elif $valued and ($lit | test("^\\+[0-9]+$")) then .
+        else .ops += [$w] end
+      end)
+  | .ops;
+
+def is_magic_path: test("^/(proc|sys|dev)(/|$)");
+
+def call_reads_banned_file:
+  # . = CallExpr
+  (effective_command) as $ec
+  | ($ec != null)
+    and ($ec.name == "cat" or $ec.name == "head" or $ec.name == "tail")
+    and (read_operands(.Args[$ec.index + 1:]; ($ec.name != "cat"))
+         | any(.[]; (word_literal) as $lit
+               | ($lit != null) and (($lit | is_magic_path) | not)));
+
+def has_banned_file_read:
+  any_call_in_stmts(call_reads_banned_file);
+
+# ---------------------------------------------------------------------------
 # Assemble. State: {ast, fired}. Each step compares before/after (positions
 # stripped) and records the rule name when it changed something. The fired
 # list feeds ONLY the CLEANUP_BASH_CMDS_LOG debug log; the hook never
@@ -578,6 +648,7 @@ def dedupe:
 . as $orig
 | if has_heredoc then {deny: true, changed: false, rules: "heredoc", ast: $orig}
   elif has_perl_invocation then {deny: true, changed: false, rules: "perl", ast: $orig}
+  elif has_banned_file_read then {deny: true, changed: false, rules: "file_read", ast: $orig}
   else
     ({ast: $orig, fired: []} | fix_state | apply_step("pipefail"; ensure_pipefail)) as $st
     | {deny: false,
