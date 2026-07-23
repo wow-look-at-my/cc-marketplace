@@ -1,0 +1,45 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "focus-please",
+	"description": "When the user's message contains a question mark, blocks every tool call until the assistant answers the user in plain text",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["focus", "question", "attention", "block", "tools", "hook", "userpromptsubmit", "pretooluse", "stop"],
+	"hooks": {
+		"UserPromptSubmit": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please"
+					}
+				]
+			}
+		],
+		"PreToolUse": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please"
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
