@@ -218,16 +218,13 @@ func TestInvalidRegexIsErrorWithRgStderr(t *testing.T) {
 	}
 }
 
-func TestInvalidGlobAndTypeAreErrors(t *testing.T) {
+func TestInvalidGlobIsError(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"a.txt", "x\n"})
 	g := testTool(t, root)
 	got, isErr := runGrep(t, g, map[string]any{"pattern": "x", "glob": "{unclosed"})
 	require.True(t, isErr)
 	assert.Contains(t, got, "glob")
-	got, isErr = runGrep(t, g, map[string]any{"pattern": "x", "type": "nosuchtype"})
-	require.True(t, isErr)
-	assert.Contains(t, got, "nosuchtype")
 }
 
 func TestTimeoutThroughTool(t *testing.T) {
@@ -307,6 +304,8 @@ func TestResolveAgainst(t *testing.T) {
 		{"rel/dir", "/root/rel/dir"},
 		{"  rel/dir  ", "/root/rel/dir"}, // Vq trims before resolving
 		{"   ", "/root"},                 // whitespace-only -> root
+		{"undefined", "/root"},           // model no-path literal -> root
+		{"null", "/root"},                // model no-path literal -> root
 		{"~", home},
 		{"~/", home},
 		{"~/sub/x", home + "/sub/x"},

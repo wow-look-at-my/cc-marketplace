@@ -17,18 +17,20 @@ const cwdNote = "Note: your current working directory is"
 // equivalent): null bytes are rejected with the builtin's exact error,
 // the input is whitespace-trimmed (whitespace-only resolves to root), a
 // bare "~" or "~/..." prefix expands to the home directory ("~user" is
-// NOT expanded — the builtin didn't support it either, resolving it as a
+// NOT expanded -- the builtin didn't support it either, resolving it as a
 // literal name against root), absolute paths pass through cleaned, and
 // anything else joins onto root like Node path.resolve. Divergences: no
 // unicode NFC normalization (the builtin NFC-normalizes; stdlib-only
-// here), and an unresolvable home directory leaves "~" literal instead
-// of throwing.
+// here), an unresolvable home directory leaves "~" literal instead
+// of throwing, and the literal strings "undefined" and "null" resolve to
+// root (models emit them for "no path"; the builtin instead begged the
+// model not to in the schema description).
 func resolveAgainst(p, root string) (string, error) {
 	if strings.ContainsRune(p, 0) {
 		return "", errors.New("Path contains null bytes")
 	}
 	p = strings.TrimSpace(p)
-	if p == "" {
+	if p == "" || p == "undefined" || p == "null" {
 		return root, nil
 	}
 	if p == "~" || strings.HasPrefix(p, "~/") {
