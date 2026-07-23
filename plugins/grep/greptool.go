@@ -34,103 +34,82 @@ const (
 	modeCount                = "count"
 )
 
-// grepDescription is the verbatim 2.1.116 builtin description
-// (2.1.116:cli.js:113993-114005, trailing newline included) with ONE
-// surgical edit: the "Output modes" bullet is rewritten for the amended
-// mode set, documenting the grouped default format precisely.
-const grepDescription = "A powerful search tool built on ripgrep\n" +
-	"\n" +
-	"  Usage:\n" +
-	"  - ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command. The Grep tool has been optimized for correct permissions and access.\n" +
-	"  - Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")\n" +
-	"  - Filter files with glob parameter (e.g., \"*.js\", \"**/*.tsx\") or type parameter (e.g., \"js\", \"py\", \"rust\")\n" +
-	"  - Output modes: \"filenames_with_matches\" (default) groups results by file: an unindented \"path:\" header line per file (newest first), followed by that file's matching lines indented two spaces (line numbers on by default: \"N:\" for matches, \"N-\" for context lines, \"--\" between non-contiguous chunks); \"content\" shows matching lines as path:line:text; \"filenames\" shows only file paths (newest first); \"count\" shows per-file match counts\n" +
-	"  - Use Agent tool for open-ended searches requiring multiple rounds\n" +
-	"  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)\n" +
-	"  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`\n"
+// grepDescription is a streamlined rewrite of the 2.1.116 builtin
+// description (2.1.116:cli.js:113993-114005). Parameters are documented
+// in the schema, not here. The builtin's brace-escaping caveat is gone:
+// it existed because the builtin swallowed rg parse errors as "No
+// matches found", whereas this plugin surfaces them, so a bad pattern
+// explains itself. The tool is alwaysLoad, so every description byte is
+// paid in every prompt.
+const grepDescription = "A search tool built on ripgrep; patterns use ripgrep's full regex syntax.\n" +
+	"ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command.\n"
 
-// grepInputSchemaJSON is the 2.1.116 builtin input schema (zod
-// strictObject -> additionalProperties false, required: pattern;
-// 2.1.116:cli.js:286206-286229) with surgical edits for the amended
-// output modes: the enum swaps files_with_matches for
-// filenames_with_matches + filenames, and the descriptions of
-// output_mode, -B, -A, context, -n, and head_limit name the modes they
-// now apply to. Every other description string is byte-identical to the
-// builtin (the \u2014 escape decodes to the original em dash). Kept as
-// raw JSON so property order reaches the model unchanged.
-const grepInputSchemaJSON = `{
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["pattern"],
-  "properties": {
-    "pattern": {
-      "type": "string",
-      "description": "The regular expression pattern to search for in file contents"
-    },
-    "path": {
-      "type": "string",
-      "description": "File or directory to search in (rg PATH). Defaults to current working directory."
-    },
-    "glob": {
-      "type": "string",
-      "description": "Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\") - maps to rg --glob"
-    },
-    "output_mode": {
-      "type": "string",
-      "enum": ["content", "filenames_with_matches", "filenames", "count"],
-      "description": "Output mode: \"content\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"filenames_with_matches\" shows file paths with their matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"filenames\" shows file paths (supports head_limit), \"count\" shows match counts (supports head_limit). Defaults to \"filenames_with_matches\"."
-    },
-    "-B": {
-      "type": "number",
-      "description": "Number of lines to show before each match (rg -B). Requires output_mode: \"content\" or \"filenames_with_matches\", ignored otherwise."
-    },
-    "-A": {
-      "type": "number",
-      "description": "Number of lines to show after each match (rg -A). Requires output_mode: \"content\" or \"filenames_with_matches\", ignored otherwise."
-    },
-    "-C": {
-      "type": "number",
-      "description": "Alias for context."
-    },
-    "context": {
-      "type": "number",
-      "description": "Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\" or \"filenames_with_matches\", ignored otherwise."
-    },
-    "-n": {
-      "type": "boolean",
-      "description": "Show line numbers in output (rg -n). Requires output_mode: \"content\" or \"filenames_with_matches\", ignored otherwise. Defaults to true."
-    },
-    "-i": {
-      "type": "boolean",
-      "description": "Case insensitive search (rg -i)"
-    },
-    "type": {
-      "type": "string",
-      "description": "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types."
-    },
-    "head_limit": {
-      "type": "number",
-      "description": "Limit output to first N lines/entries, equivalent to \"| head -N\". Works across all output modes: content (limits output lines), filenames_with_matches (limits match/context lines), filenames (limits file paths), count (limits count entries). Defaults to 250 when unspecified. Pass 0 for unlimited (use sparingly \u2014 large result sets waste context)."
-    },
-    "offset": {
-      "type": "number",
-      "description": "Skip first N lines/entries before applying head_limit, equivalent to \"| tail -n +N | head -N\". Works across all output modes. Defaults to 0."
-    },
-    "multiline": {
-      "type": "boolean",
-      "description": "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false."
-    }
-  }
-}`
+// schemaProp is one JSON Schema property entry.
+type schemaProp struct {
+	Type        string   `json:"type"`
+	Enum        []string `json:"enum,omitempty"`
+	Description string   `json:"description"`
+}
 
-var grepInputSchemaCompact = mustCompactJSON(grepInputSchemaJSON)
+// grepSchema is the builtin input schema shape (zod strictObject ->
+// additionalProperties false, required: pattern;
+// 2.1.116:cli.js:286206-286229) with the amended output-mode enum and
+// condensed property descriptions. The output modes and their formats
+// are documented solely on output_mode. Struct field order is the
+// property order the model sees.
+type grepSchema struct {
+	Type                 string          `json:"type"`
+	AdditionalProperties bool            `json:"additionalProperties"`
+	Required             []string        `json:"required"`
+	Properties           grepSchemaProps `json:"properties"`
+}
 
-func mustCompactJSON(s string) json.RawMessage {
-	var buf bytes.Buffer
-	if err := json.Compact(&buf, []byte(s)); err != nil {
+type grepSchemaProps struct {
+	Pattern    schemaProp `json:"pattern"`
+	Path       schemaProp `json:"path"`
+	Glob       schemaProp `json:"glob"`
+	OutputMode schemaProp `json:"output_mode"`
+	DashB      schemaProp `json:"-B"`
+	DashA      schemaProp `json:"-A"`
+	DashC      schemaProp `json:"-C"`
+	Context    schemaProp `json:"context"`
+	DashN      schemaProp `json:"-n"`
+	DashI      schemaProp `json:"-i"`
+	HeadLimit  schemaProp `json:"head_limit"`
+	Offset     schemaProp `json:"offset"`
+	Multiline  schemaProp `json:"multiline"`
+}
+
+var grepInputSchemaCompact = mustMarshalJSON(grepSchema{
+	Type:     "object",
+	Required: []string{"pattern"},
+	Properties: grepSchemaProps{
+		Pattern: schemaProp{Type: "string", Description: "The regular expression pattern to search for in file contents"},
+		Path:    schemaProp{Type: "string", Description: "File or directory to search in (rg PATH). Defaults to current working directory."},
+		Glob:    schemaProp{Type: "string", Description: "Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\") - maps to rg --glob"},
+		OutputMode: schemaProp{
+			Type:        "string",
+			Enum:        []string{modeContent, modeFilenamesWithMatches, modeFilenames, modeCount},
+			Description: "Output mode. \"filenames_with_matches\" (default): results grouped by file - an unindented \"path:\" header per file (newest first), that file's matching lines indented beneath (\"N:\" match, \"N-\" context, \"--\" between non-contiguous chunks); \"content\": matching lines as path:line:text; \"filenames\": file paths only (newest first); \"count\": per-file match counts.",
+		},
+		DashB:     schemaProp{Type: "number", Description: "Lines to show before each match (rg -B). content and filenames_with_matches modes only."},
+		DashA:     schemaProp{Type: "number", Description: "Lines to show after each match (rg -A). content and filenames_with_matches modes only."},
+		DashC:     schemaProp{Type: "number", Description: "Alias for context."},
+		Context:   schemaProp{Type: "number", Description: "Lines to show before and after each match (rg -C). content and filenames_with_matches modes only."},
+		DashN:     schemaProp{Type: "boolean", Description: "Show line numbers (rg -n). content and filenames_with_matches modes only. Defaults to true."},
+		DashI:     schemaProp{Type: "boolean", Description: "Case insensitive search (rg -i)"},
+		HeadLimit: schemaProp{Type: "number", Description: "Limit output to the first N lines/entries. Defaults to 250; 0 = unlimited. Applies to all output modes."},
+		Offset:    schemaProp{Type: "number", Description: "Skip the first N lines/entries before applying head_limit. Defaults to 0."},
+		Multiline: schemaProp{Type: "boolean", Description: "Patterns match single lines only unless this is set; then . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false."},
+	},
+})
+
+func mustMarshalJSON(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
 		panic(err)
 	}
-	return json.RawMessage(buf.Bytes())
+	return b
 }
 
 const (
@@ -159,9 +138,8 @@ type grepArgs struct {
 	after      *float64 // -A
 	dashC      *float64 // -C
 	context    *float64
-	lineNums   bool // -n, default true
-	ignoreCase bool // -i
-	fileType   string
+	lineNums   bool     // -n, default true
+	ignoreCase bool     // -i
 	headLimit  *float64 // nil = default 250; 0 = unlimited
 	offset     float64
 	multiline  bool
@@ -241,7 +219,7 @@ func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rpcError) {
 	seenPattern := false
 	for k, v := range m {
 		switch k {
-		case "pattern", "path", "glob", "type", "output_mode":
+		case "pattern", "path", "glob", "output_mode":
 			var s string
 			// Explicit null check: Unmarshal treats JSON null as a no-op
 			// on Go scalars, but zod rejects null for these fields.
@@ -255,8 +233,6 @@ func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rpcError) {
 				a.path = s
 			case "glob":
 				a.globPat = s
-			case "type":
-				a.fileType = s
 			default: // output_mode
 				if !slices.Contains(grepOutputModes, s) {
 					return invalid(`%s output_mode must be one of "content", "filenames_with_matches", "filenames", "count"`, grepToolName)
@@ -442,9 +418,6 @@ func buildRgArgs(a *grepArgs) []string {
 		args = append(args, "-e", a.pattern)
 	} else {
 		args = append(args, a.pattern)
-	}
-	if a.fileType != "" {
-		args = append(args, "--type", a.fileType)
 	}
 	for _, gl := range tokenizeGlobParam(a.globPat) {
 		args = append(args, "--glob", gl)
