@@ -416,6 +416,67 @@ check_rewrite_raw "multi-line mix of all rules (set -e preserved)" \
 	$'set -e; ls /x 2>/dev/null | head -3\ngrep -r pat . 2>>/dev/null || true' \
 	$'set -o pipefail\nset -e\nls /x | head -3\ngrep -r pat .'
 
+# --- Direct head/tail invocation becomes cat (no pipe to strip) ---
+# The incident shape: `cd x && head -60 file` has no pipeline, so the
+# stage-strip rule cannot see it. The direct rule rewrites the head/tail
+# call itself to `cat` of its file operands (flags and their separated
+# values dropped, operand words kept verbatim), anchored at the same place:
+# the final statement's rightmost && / || leaf.
+
+check_rewrite "direct head after cd && (the incident)" \
+	'cd /Users/mhaynie/repos/model-benchmark-ue5/model-benchmark && head -60 src/usage.test.ts' \
+	'cd /Users/mhaynie/repos/model-benchmark-ue5/model-benchmark && cat src/usage.test.ts'
+check_rewrite "direct head bare" 'head file.txt' 'cat file.txt'
+check_rewrite "direct head old-style -60" 'head -60 file.txt' 'cat file.txt'
+check_rewrite "direct head -n 20 (separated value)" 'head -n 20 file.txt' 'cat file.txt'
+check_rewrite "direct head -n20 (attached value)" 'head -n20 file.txt' 'cat file.txt'
+check_rewrite "direct head -c 1K" 'head -c 1K file.txt' 'cat file.txt'
+check_rewrite "direct head --lines=20" 'head --lines=20 file.txt' 'cat file.txt'
+check_rewrite "direct head --lines 20 (separated)" 'head --lines 20 file.txt' 'cat file.txt'
+check_rewrite "direct head bundled -qn 3" 'head -qn 3 file.txt' 'cat file.txt'
+check_rewrite "direct head multiple files" 'head -5 a.txt b.txt' 'cat a.txt b.txt'
+check_rewrite "direct tail -f becomes one-shot cat" 'tail -f /var/log/syslog' 'cat /var/log/syslog'
+check_rewrite "direct tail -n +5" 'tail -n +5 file.txt' 'cat file.txt'
+check_rewrite "direct tail old-style +5 dropped" 'tail +5 file.txt' 'cat file.txt'
+check_rewrite "direct head -- end of flags (-- kept for cat)" 'head -3 -- -weird-name' 'cat -- -weird-name'
+check_rewrite "direct head expansion operand kept verbatim" \
+	'head -12 "$D"/app.log' \
+	'cat "$D"/app.log'
+check_rewrite "direct head prefix assignment preserved" \
+	'LC_ALL=C head -5 f' \
+	'LC_ALL=C cat f'
+check_rewrite "command head wrapper resolves (wrapper dropped)" 'command head -5 f' 'cat f'
+check_rewrite "backslash tail resolves" '\tail -5 f' 'cat f'
+check_rewrite "direct head stderr redirect kept" 'head -5 f 2>>err.log' 'cat f 2>>err.log'
+
+# NOT rewritten: pipes are the stage-strip rule's territory, captures and
+# redirected stdout are data, non-leaf positions are mid-script, and
+# lookalike names are different commands.
+check_rewrite "head feeding a pipe untouched" 'head -1 f | wc' 'head -1 f | wc'
+check_rewrite "head with stdout redirect keeps its limit (tee applies)" \
+	'head -5 f > out' \
+	'head -5 f | tee out'
+check_rewrite "direct head capture untouched" 'x=$(head -1 f)' 'x=$(head -1 f)'
+check_rewrite "direct head on a non-final line preserved" \
+	$'head -2 a.txt\ncat done' \
+	$'head -2 a.txt\ncat done'
+check_rewrite "direct head in non-leaf && member preserved" \
+	'head -3 f && foo' \
+	'head -3 f && foo'
+check_rewrite "headache is a different command" 'headache -5 f' 'headache -5 f'
+check_rewrite "head5 is a different command" 'head5 f' 'head5 f'
+check_rewrite "command -v head is a lookup" 'command -v head' 'command -v head'
+check_rewrite "direct head in coproc untouched" 'coproc head -5 f' 'coproc head -5 f'
+
+# Composition: the direct rule fires on the leaf the other final-statement
+# rules anchor to, in the same pass.
+check_rewrite "direct head composes with 2>/dev/null scrub" \
+	'head -30 f 2>/dev/null' \
+	'cat f'
+check_rewrite "direct tail as final statement of a script" \
+	$'make\ntail -20 build.log' \
+	$'make\ncat build.log'
+
 # --- Legacy trailing rules ---
 
 check_rewrite "trailing 2>&1 removed" \

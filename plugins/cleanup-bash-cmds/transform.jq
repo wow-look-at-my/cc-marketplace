@@ -516,6 +516,61 @@ def narration_remove:
   if has("Stmts") then .Stmts |= map(remove_stmt(true)) else . end;
 
 # ---------------------------------------------------------------------------
+# Rule: a DIRECT head/tail invocation at the end of the command is a
+# truncated file read that the stage-strip rule above cannot see --
+# `cd x && head -60 file` has no pipe, so strip_trailing_stages never
+# matches. Rewrite it to `cat` of its file operands so the full content
+# shows, mirroring what stripping `| head` does for pipelines: flags are
+# dropped (including the separated value of -n / -c / -s and the GNU long
+# forms that take one), operand Words are kept verbatim (quoting, globs,
+# and expansions preserved). Anchored exactly like head_tail: the final
+# top-level statement's rightmost && / || leaf only, and only when the
+# statement is a bare CallExpr -- a pipeline ending in head is the
+# stage-strip rule's job, and a head FEEDING a pipe (`head -1 f | wc`) is
+# data processing, not display, so the CallExpr guard excludes it by
+# construction. Redirects must leave stdout alone (redirs_stderr_only):
+# `head -5 f > out` is deliberate extraction and is preserved (the tee rule
+# then makes it visible anyway). Effective-command resolution applies
+# (`command head`, `\tail`, `"head"` all count); the wrapper is dropped in
+# the rewrite -- `cat` needs none. Coprocs are skipped like narration.
+# ---------------------------------------------------------------------------
+
+# Drop head/tail flags, keep file operands. $args excludes the command word.
+# State machine: skip eats the separated value of a value-taking flag; done
+# (after `--`) makes everything an operand -- the `--` itself is KEPT so a
+# dash-leading filename stays an operand for cat too. Old-style `-60` /
+# tail `+5` limits are dropped; a lone `-` is the stdin operand and is
+# kept; a word with any expansion (word_literal == null) is assumed to be
+# a filename.
+def head_tail_operands($args):
+  reduce $args[] as $w ({ops: [], skip: false, done: false};
+    if .skip then .skip = false
+    elif .done then .ops += [$w]
+    else ($w | word_literal) as $lit
+      | if $lit == null then .ops += [$w]
+        elif $lit == "--" then .done = true | .ops += [$w]
+        elif $lit == "-" then .ops += [$w]
+        elif ($lit | startswith("--")) then
+          if ($lit | test("^--(lines|bytes|sleep-interval|pid|max-unchanged-stats)$"))
+          then .skip = true else . end
+        elif ($lit | startswith("-")) and (($lit | length) > 1) then
+          if ($lit | test("^-[A-Za-z]*[ncs]$")) then .skip = true else . end
+        elif ($lit | test("^\\+[0-9]+$")) then .
+        else .ops += [$w] end
+      end)
+  | .ops;
+
+def head_tail_direct:
+  # . = Stmt (already at the final statement's spine leaf).
+  if (.Cmd.Type? == "CallExpr") and redirs_stderr_only and (.Coprocess? != true)
+  then (.Cmd | effective_command) as $ec
+    | if ($ec != null) and ($ec.name == "head" or $ec.name == "tail")
+      then .Cmd.Args = ([{Parts: [{Type: "Lit", Value: "cat"}]}]
+                        + head_tail_operands(.Cmd.Args[$ec.index + 1:]))
+      else . end
+  else . end;
+
+# ---------------------------------------------------------------------------
 # Assemble. State: {ast, fired}. Each step compares before/after (positions
 # stripped) and records the rule name when it changed something. The fired
 # list feeds ONLY the CLEANUP_BASH_CMDS_LOG debug log; the hook never
@@ -531,6 +586,7 @@ def apply_step($name; f):
 def pass_once:
   apply_step("devnull"; scrub_devnull)
   | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]))))
+  | apply_step("head_tail_cat"; on_last_stmt(on_spine_leaf(head_tail_direct)))
   | apply_step("or_true"; on_last_stmt(strip_or_true))
   | apply_step("grep"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["grep"]))))
   | apply_step("stderr_merge"; on_last_stmt(on_spine_leaf(on_last_stage(strip_trailing_stderr_merge))))

@@ -7,7 +7,9 @@
 # anywhere in the tree) or invoking perl (its effective command name matching
 # ^perl[0-9.]*$) are DENIED outright. Otherwise the tree is rewritten:
 # scrub stderr-to-/dev/null redirects everywhere; on the FINAL top-level
-# statement only, kill trailing | head / | tail stages, strip trailing
+# statement only, kill trailing | head / | tail stages, rewrite a direct
+# terminal-bound head/tail invocation (`cd x && head -60 f`) into `cat` of
+# its file operands, strip trailing
 # | grep, trailing || true, and trailing 2>&1, and rewrite a trailing stdout
 # file redirect into | tee (mid-script limiting pipes and redirects are
 # deliberate and preserved); cap every sleep at 3 seconds; remove constant
