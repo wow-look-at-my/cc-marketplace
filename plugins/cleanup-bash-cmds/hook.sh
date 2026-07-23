@@ -4,12 +4,12 @@
 # The command is PARSED, not pattern-matched: shfmt --to-json produces the
 # syntax tree, transform.jq inspects and rewrites it, and shfmt --from-json
 # regenerates the command. Commands containing a heredoc (<< or <<-,
-# anywhere in the tree) or invoking perl (its effective command name matching
-# ^perl[0-9.]*$) are DENIED outright. Otherwise the tree is rewritten:
+# anywhere in the tree), invoking perl (its effective command name matching
+# ^perl[0-9.]*$), or reading a file with cat/head/tail (a static file
+# operand that is not a /proc, /sys, or /dev pseudo-file -- use the Read
+# tool) are DENIED outright. Otherwise the tree is rewritten:
 # scrub stderr-to-/dev/null redirects everywhere; on the FINAL top-level
-# statement only, kill trailing | head / | tail stages, rewrite a direct
-# terminal-bound head/tail invocation (`cd x && head -60 f`) into `cat` of
-# its file operands, strip trailing
+# statement only, kill trailing | head / | tail stages, strip trailing
 # | grep, trailing || true, and trailing 2>&1, and rewrite a trailing stdout
 # file redirect into | tee (mid-script limiting pipes and redirects are
 # deliberate and preserved); cap every sleep at 3 seconds; remove constant
@@ -125,13 +125,16 @@ log_guard() {
 # shares the << token number) is not affected.
 deny=$(printf '%s' "$result" | jq -r '.deny' 2>&1) || exit 0
 if [ "$deny" = "true" ]; then
-	# The transform tags the reason via .rules (heredoc | perl); pick the
-	# matching message. Anything else falls back to the heredoc text.
+	# The transform tags the reason via .rules (heredoc | perl | file_read);
+	# pick the matching message. Anything else falls back to the heredoc text.
 	deny_rule=$(printf '%s' "$result" | jq -r '.rules' 2>&1) || exit 0
 	log_deny "$cmd" "$deny_rule"
 	case "$deny_rule" in
 	perl)
 		reason="perl is banned in this environment."
+		;;
+	file_read)
+		reason="Reading files with cat/head/tail is banned in this environment. Use the Read tool instead. Only /proc, /sys, and /dev pseudo-files are exempt."
 		;;
 	*)
 		reason="Heredocs are banned in this environment. Write file content with the Write/Edit tools; for command stdin use printf '%s' ... | cmd or a temp file."
