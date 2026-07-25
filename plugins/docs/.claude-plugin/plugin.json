@@ -1,0 +1,12 @@
+{
+  "$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+  "name": "docs",
+  "description": "Corrective reference notes the model loads before touching things it reliably gets wrong from stale training data",
+  "author": {
+    "name": "wow-look-at-my-code"
+  },
+  "keywords": ["docs", "reference", "dockerfile", "docker-compose", "skills"],
+  "mh": {
+    "include_in_marketplace": true
+  }
+}
