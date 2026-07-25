@@ -1,5 +1,5 @@
 ---
-description: Read before writing or editing a compose.yaml, compose.yml, docker-compose.yml, or any `docker compose` invocation. Corrects the specific things the model consistently gets wrong about Compose from stale training data - the obsolete top-level `version` key, depends_on health conditions, file naming, merge/override rules, watch, lifecycle hooks, and v2/v5 CLI differences.
+description: Read before writing or editing a compose.yaml, compose.yml, docker-compose.yml, or any `docker compose` invocation. Corrects the specific things the model consistently gets wrong about Compose from stale training data - why `docker compose restart` never applies edits to the file, the obsolete top-level `version` key, depends_on health conditions, file naming, merge/override rules, watch, lifecycle hooks, and v2/v5 CLI differences.
 ---
 
 # Docker Compose: what is actually true
@@ -24,6 +24,41 @@ instincts and the docs disagree, **the docs win**.
    (2025)** is functionally identical to v2 and adds an official Go SDK - the jump from
    2 to 5 exists to avoid colliding with the old "file format v2/v3" names. Compose file
    format 1 (no `services:` key) does not run at all on v2/v5.
+
+## `docker compose restart` does not apply file changes. Ever.
+
+The loop to never run again: edit `compose.yaml`, run `docker compose restart`, watch
+the container come back with the *old* config, and be baffled. The reference says it
+outright:
+
+> If you make changes to your `compose.yml` configuration, these changes are not
+> reflected after running this command. For example, changes to environment variables
+> (which are added after a container is built, but before the container's command is
+> executed) are not updated after restarting.
+
+`restart` bounces the **existing** containers. Container config is fixed at creation
+time, so anything the file changes - `environment`, `ports`, `volumes`, `command`,
+`image` - requires a **new container**, not a restarted one. Same trap with
+`stop`+`start`: `stop` explicitly "stops running containers without removing them," and
+`start` starts "existing containers." Neither reads the file.
+
+**After editing `compose.yaml`, the command is `docker compose up -d`.** Per the `up`
+reference, when a service's configuration or image changed after its container was
+created, `up` picks up the change by stopping and recreating the container (preserving
+mounted volumes). So plain `up -d` is usually enough, and it only touches services that
+actually changed.
+
+- `--force-recreate` recreates even when config and image are unchanged. Use it when
+  recreation must happen regardless (or when unsure - it is never *wrong*, only broader).
+- `--no-deps` restricts the blast radius to the named service.
+- Changed the Dockerfile rather than the Compose file? Rebuild first:
+  `docker compose build web && docker compose up --no-deps -d web`. `up` alone won't
+  rebuild an image whose source changed.
+- `--no-recreate` is the opposite request - keep existing containers, ignore changes.
+
+Legitimate uses for `restart` are narrow: bouncing a process that has wedged, or
+re-reading a config file the app itself loads from a mounted volume. Neither involves
+having edited `compose.yaml`. If the compose file changed, `restart` is the wrong verb.
 
 ## `depends_on` does not do what it looks like it does
 
