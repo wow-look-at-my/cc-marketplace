@@ -1,5 +1,4 @@
 ---
-name: dockerfile
 description: Read before writing or editing a Dockerfile, Containerfile, or any `docker build` invocation. Corrects the specific things the model consistently gets wrong about Dockerfiles from stale training data - ADD tar extraction, BuildKit RUN mounts, syntax directives, exec form, ARG/ENV scoping, and cache behavior.
 ---
 

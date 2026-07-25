@@ -16,9 +16,13 @@ its own when it is about to edit one of these files. Invoking them by name also 
 
 ## Adding a skill
 
-Add `skills/<topic>/SKILL.md` with `name` and `description` front matter. Write the
+Add `skills/<topic>/SKILL.md` with a `description` in the front matter. Write the
 description as a trigger ("Read before ..."), not a summary — it is the only thing the
 model sees when deciding whether to load the skill.
+
+Do not set a `name`. The directory name already determines the command
+(`skills/dockerfile/` → `/docs:dockerfile`); adding `name` additionally registers the
+bare `/dockerfile` as an alias, which pollutes the root slash namespace.
 
 Write the body as notes to yourself, not documentation for a human. State what is
 actually true, name the specific wrong instinct it replaces, and cite the behavior

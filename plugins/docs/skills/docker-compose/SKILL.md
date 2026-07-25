@@ -1,5 +1,4 @@
 ---
-name: docker-compose
 description: Read before writing or editing a compose.yaml, compose.yml, docker-compose.yml, or any `docker compose` invocation. Corrects the specific things the model consistently gets wrong about Compose from stale training data - the obsolete top-level `version` key, depends_on health conditions, file naming, merge/override rules, watch, lifecycle hooks, and v2/v5 CLI differences.
 ---
 
