@@ -1,11 +1,11 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "focus-please",
-	"description": "When the user's message contains a question mark, blocks every tool call until the assistant answers the user in plain text",
+	"description": "When the user's message contains a question mark, blocks every tool call except read-only lookups (Read/Grep/Glob) until the assistant answers in plain text; a message that interrupts a running turn also makes the assistant resume the interrupted work instead of stopping after its reply",
 	"author": {
 		"name": "mhaynie"
 	},
-	"keywords": ["focus", "question", "attention", "block", "tools", "hook", "userpromptsubmit", "pretooluse", "stop"],
+	"keywords": ["focus", "question", "attention", "block", "tools", "hook", "userpromptsubmit", "pretooluse", "stop", "interrupt", "resume"],
 	"hooks": {
 		"UserPromptSubmit": [
 			{

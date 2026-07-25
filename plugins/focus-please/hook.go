@@ -1,25 +1,31 @@
 // Command focus-please is a Claude Code hook that enforces one blunt rule:
-// when the user's prompt contains a question mark, every tool call is
-// blocked until the assistant answers the user in plain text. It is a
-// mechanical "answer the human first" guard -- the big-guns response to an
-// assistant that runs tools for ten minutes while a question goes ignored.
+// when the user's prompt contains a question mark, the assistant must answer
+// them before it does anything else. It is a mechanical "answer the human
+// first" guard -- the big-guns response to an assistant that runs tools for
+// ten minutes while a question goes ignored.
 //
 // A single binary serves three hook events, dispatched on hook_event_name:
 //
-//   - UserPromptSubmit: if the submitted prompt contains "?", drop a
-//     per-session marker file and inject a context note telling the model
-//     every tool is blocked until it replies. A prompt with no "?" removes
-//     any stale marker so tools flow normally.
-//   - PreToolUse: while the marker exists, deny the tool with a reason that
-//     tells the model to answer the user first. Otherwise allow.
-//   - Stop: the assistant has finished its reply and is ending the turn, so
-//     remove the marker; the next turn's tools are unblocked.
+//   - UserPromptSubmit: if the submitted prompt contains "?", arm the block
+//     (a per-session marker file) and inject a context note telling the model
+//     what is blocked. A prompt with no "?" disarms it. Either way, a prompt
+//     that arrives while a turn is still in flight is recorded as a mid-turn
+//     interjection (see Stop below).
+//   - PreToolUse: while the block is armed, deny the tool with a reason that
+//     tells the model to answer first -- EXCEPT read-only lookups (Read,
+//     Grep, Glob), which stay available so the model can keep looking around
+//     for a moment if the answer genuinely needs grounding. It just cannot
+//     act (Bash, Write, Edit, Task, ...) before replying.
+//   - Stop: the assistant has produced its reply, so the block lifts. If the
+//     user's message had arrived mid-turn, this stop is refused ONCE (exit 2
+//     with a reason) so the assistant resumes the work the interjection
+//     interrupted instead of mistaking "I answered" for "I finished".
 //
-// The marker lives at <tempdir>/focus-please/<session>.pending, keyed by a
-// hash of the session id so concurrent sessions never block one another and
-// an odd id can never escape the marker directory. Every error path fails
-// OPEN (no marker written, no denial emitted) so the plugin can never wedge
-// a session shut.
+// Markers live at <tempdir>/focus-please/<hash(session_id)>.<kind>, keyed by
+// a hash of the session id so concurrent sessions never block one another
+// and an odd id can never escape the marker directory. Every error path
+// fails OPEN (no marker written, no denial emitted, no stop refused) so the
+// plugin can never wedge a session shut.
 package main
 
 import (
@@ -36,9 +42,11 @@ import (
 // HookInput is the subset of the hook payload this plugin reads; the CLI
 // sends more fields and the extras are ignored.
 type HookInput struct {
-	HookEventName string `json:"hook_event_name"`
-	SessionID     string `json:"session_id"`
-	Prompt        string `json:"prompt"`
+	HookEventName  string `json:"hook_event_name"`
+	SessionID      string `json:"session_id"`
+	Prompt         string `json:"prompt"`
+	ToolName       string `json:"tool_name"`
+	StopHookActive bool   `json:"stop_hook_active"`
 }
 
 // upsOutput injects context back to the model on UserPromptSubmit.
@@ -62,26 +70,56 @@ type denySpecific struct {
 	PermissionDecisionReason string `json:"permissionDecisionReason"`
 }
 
-// contextNote is added to the prompt so the model learns, before it acts,
-// that focus-please has engaged for this turn.
-const contextNote = "Your most recent message from the user contains a question mark, so the focus-please plugin has engaged: every tool call is blocked until you answer them. Respond to the user's question directly, in plain text, before doing anything else -- do not attempt any tool use. Tools become available again once you have replied and your turn ends."
-
-// denyReason is shown to the model when it tries to call a tool while the
-// block is active.
-const denyReason = "Blocked by focus-please: the user's last message contained a question and you have not answered it yet. Do not call tools right now. Reply to the user in plain text first -- the block clears automatically once you end your turn with a response."
-
-func main() {
-	fmt.Print(run(os.Stdin))
+// result is what one hook invocation emits: JSON on stdout for the events
+// that speak JSON, plus an exit code and a stderr reason for the Stop
+// refusal (exit 2 with stderr is the documented way a Stop hook declines a
+// stop and hands the model the reason).
+type result struct {
+	stdout string
+	stderr string
+	code   int
 }
 
-// run reads a hook payload from r and returns the JSON to print on stdout.
-// Unparseable input or an unrecognized event yields "{}", a no-op that
-// leaves the tool/turn untouched.
-func run(r io.Reader) string {
+// noop is the do-nothing result: allow the tool, allow the stop, add no
+// context.
+func noop() result { return result{stdout: "{}"} }
+
+// contextNote is added to the prompt so the model learns, before it acts,
+// that focus-please has engaged for this turn.
+const contextNote = "Your most recent message from the user contains a question mark, so the focus-please plugin has engaged: tool calls are blocked until you answer, EXCEPT the read-only lookups Read, Grep and Glob -- those stay available so you can check a file or search the code if the answer genuinely needs grounding. Answer the user's question directly, in plain text. Do not run commands, edit files, or start any other work before that reply."
+
+// interjectionNote is appended to contextNote when the message arrived
+// while a turn was still running, so the model knows its reply is not the
+// end of the turn.
+const interjectionNote = "You were also mid-task when this message arrived: answer it first, then resume the work it interrupted -- replying does not finish your turn."
+
+// denyReason is shown to the model when it tries to act while the block is
+// armed.
+const denyReason = "Blocked by focus-please: the user's last message contained a question and you have not answered it yet. Reply to the user in plain text first. Read, Grep and Glob still work if you need to look something up in order to answer -- every other tool unblocks once you have replied and your turn ends."
+
+// resumeReason is handed to the model when it tries to end a turn that was
+// interrupted by a user message. It fires at most once per interjection.
+const resumeReason = "Do not stop here. A user message arrived while you were mid-task, so this turn is an interruption that you have now answered -- but the work you were doing when it arrived is still unfinished. Pick it back up now: re-read your plan or todo list and continue where you left off. If the user's message redirected you, follow that new direction instead. If the interrupted work is genuinely complete, say so and end your turn again -- focus-please refuses a stop only once per interruption, so your next stop always goes through."
+
+func main() {
+	res := run(os.Stdin)
+	if res.stdout != "" {
+		fmt.Print(res.stdout)
+	}
+	if res.stderr != "" {
+		fmt.Fprint(os.Stderr, res.stderr)
+	}
+	os.Exit(res.code)
+}
+
+// run reads a hook payload from r and returns what to emit. Unparseable
+// input or an unrecognized event yields a no-op that leaves the tool/turn
+// untouched.
+func run(r io.Reader) result {
 	data, _ := io.ReadAll(r)
 	var in HookInput
 	if err := json.Unmarshal(data, &in); err != nil {
-		return "{}"
+		return noop()
 	}
 	switch in.HookEventName {
 	case "UserPromptSubmit":
@@ -91,74 +129,156 @@ func run(r io.Reader) string {
 	case "Stop":
 		return onStop(in)
 	default:
-		return "{}"
+		return noop()
 	}
 }
 
 // onUserPromptSubmit arms the block when the prompt asks a question and
-// disarms it otherwise (clearing any marker a prior turn left behind).
-func onUserPromptSubmit(in HookInput) string {
-	if strings.Contains(in.Prompt, "?") {
-		setMarker(in.SessionID)
-		out, _ := json.Marshal(upsOutput{upsSpecific{
-			HookEventName:     "UserPromptSubmit",
-			AdditionalContext: contextNote,
-		}})
-		return string(out)
+// disarms it otherwise (clearing any marker a prior turn left behind). It
+// also records whether this prompt interrupted a turn that had not stopped
+// yet, which is what onStop uses to push the assistant back to work.
+func onUserPromptSubmit(in HookInput) result {
+	// The active marker outlives a turn only until that turn's Stop. Finding
+	// it still set means no Stop has fired since the last prompt: the
+	// assistant is mid-task and this message is an interjection.
+	interjection := markerExists(in.SessionID, markerActive)
+	if interjection {
+		setMarker(in.SessionID, markerResume)
 	}
-	clearMarker(in.SessionID)
-	return "{}"
+	setMarker(in.SessionID, markerActive)
+
+	if !strings.Contains(in.Prompt, "?") {
+		clearMarker(in.SessionID, markerPending)
+		return noop()
+	}
+
+	setMarker(in.SessionID, markerPending)
+	note := contextNote
+	if interjection {
+		note += " " + interjectionNote
+	}
+	out, _ := json.Marshal(upsOutput{upsSpecific{
+		HookEventName:     "UserPromptSubmit",
+		AdditionalContext: note,
+	}})
+	return result{stdout: string(out)}
 }
 
-// onPreToolUse denies the tool while the block is armed for this session.
-func onPreToolUse(in HookInput) string {
-	if !markerExists(in.SessionID) {
-		return "{}"
+// onPreToolUse denies acting tools while the block is armed for this
+// session, letting read-only lookups through.
+func onPreToolUse(in HookInput) result {
+	if !markerExists(in.SessionID, markerPending) {
+		return noop()
+	}
+	if isLookupTool(in.ToolName) {
+		return noop()
 	}
 	out, _ := json.Marshal(denyOutput{denySpecific{
 		HookEventName:            "PreToolUse",
 		PermissionDecision:       "deny",
 		PermissionDecisionReason: denyReason,
 	}})
-	return string(out)
+	return result{stdout: string(out)}
 }
 
-// onStop disarms the block: the assistant has produced its reply, so the
-// next turn is free to use tools.
-func onStop(in HookInput) string {
-	clearMarker(in.SessionID)
-	return "{}"
+// onStop lifts the question block -- the reply has happened -- and, when the
+// turn was interrupted by a user message, refuses the stop once so the
+// interrupted work gets picked back up.
+func onStop(in HookInput) result {
+	// However this stop resolves, the assistant has replied, so the block is
+	// over. Clearing it here also means the continuation after a refusal
+	// starts with full tool access.
+	clearMarker(in.SessionID, markerPending)
+
+	// Loop guard: this stop is already the retry after a refusal of ours, so
+	// let it through unconditionally. A session can never be wedged shut.
+	if in.StopHookActive {
+		clearMarker(in.SessionID, markerResume)
+		clearMarker(in.SessionID, markerActive)
+		return noop()
+	}
+
+	if markerExists(in.SessionID, markerResume) {
+		// One refusal per interjection: clear the flag before refusing so the
+		// next stop goes through even if the model stops again immediately.
+		// The active marker stays set -- the turn is still running.
+		clearMarker(in.SessionID, markerResume)
+		return result{code: 2, stderr: resumeReason}
+	}
+
+	clearMarker(in.SessionID, markerActive)
+	return noop()
 }
+
+// lookupTools are the read-only tools that stay available while the block is
+// armed: the model may keep reading and searching to ground its answer, it
+// just may not act before replying.
+var lookupTools = map[string]bool{
+	"Read": true,
+	"Grep": true,
+	"Glob": true,
+}
+
+// isLookupTool reports whether a tool is one of the permitted read-only
+// lookups. MCP tools are named mcp__<server>__<Tool>, so they are judged by
+// their bare tool name -- that way this marketplace's own grep and glob
+// plugins, which restore the builtins Claude Code disabled in 2.1.117 as
+// mcp__plugin_grep_grep__Grep and mcp__plugin_glob_glob__Glob, count as
+// lookups too.
+func isLookupTool(name string) bool {
+	if lookupTools[name] {
+		return true
+	}
+	if strings.HasPrefix(name, "mcp__") {
+		if i := strings.LastIndex(name, "__"); i > 0 {
+			return lookupTools[name[i+2:]]
+		}
+	}
+	return false
+}
+
+// Marker kinds. Each is its own file under markerDir so the three pieces of
+// per-session state never collide.
+const (
+	// markerPending: a question is unanswered, so acting tools are blocked.
+	markerPending = "pending"
+	// markerActive: a turn is in flight (no Stop seen since its prompt).
+	markerActive = "active"
+	// markerResume: a user message interrupted the turn, so the next stop is
+	// refused once.
+	markerResume = "resume"
+)
 
 // markerDir is the per-user directory holding session marker files.
 func markerDir() string {
 	return filepath.Join(os.TempDir(), "focus-please")
 }
 
-// markerPath maps a session id to its marker file. The id is hashed so the
-// filename is always a safe, flat token; an empty id hashes to a stable
-// fallback so the plugin still functions (all such sessions share it).
-func markerPath(sessionID string) string {
+// markerPath maps a session id and marker kind to a file. The id is hashed
+// so the filename is always a safe, flat token; an empty id hashes to a
+// stable fallback so the plugin still functions (all such sessions share
+// it).
+func markerPath(sessionID, kind string) string {
 	sum := sha256.Sum256([]byte(sessionID))
-	return filepath.Join(markerDir(), hex.EncodeToString(sum[:16])+".pending")
+	return filepath.Join(markerDir(), hex.EncodeToString(sum[:16])+"."+kind)
 }
 
-// setMarker arms the block for a session. Failure to create the directory
-// or file is swallowed: a missing marker simply means tools stay allowed.
-func setMarker(sessionID string) {
+// setMarker records a marker. Failure to create the directory or file is
+// swallowed: a missing marker simply means the guard stays open.
+func setMarker(sessionID, kind string) {
 	if err := os.MkdirAll(markerDir(), 0o755); err != nil {
 		return
 	}
-	_ = os.WriteFile(markerPath(sessionID), []byte("1"), 0o644)
+	_ = os.WriteFile(markerPath(sessionID, kind), []byte("1"), 0o644)
 }
 
-// clearMarker disarms the block for a session; a missing marker is fine.
-func clearMarker(sessionID string) {
-	_ = os.Remove(markerPath(sessionID))
+// clearMarker removes a marker; a missing marker is fine.
+func clearMarker(sessionID, kind string) {
+	_ = os.Remove(markerPath(sessionID, kind))
 }
 
-// markerExists reports whether the block is armed for a session.
-func markerExists(sessionID string) bool {
-	_, err := os.Stat(markerPath(sessionID))
+// markerExists reports whether a marker is set for a session.
+func markerExists(sessionID, kind string) bool {
+	_, err := os.Stat(markerPath(sessionID, kind))
 	return err == nil
 }
