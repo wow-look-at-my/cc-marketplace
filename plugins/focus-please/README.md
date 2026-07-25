@@ -1,23 +1,26 @@
 # focus-please
 
-When your message contains a question mark, this plugin blocks **every** tool
-call until Claude answers you in plain text. It is a blunt "answer the human
+When your message contains a question mark, this plugin blocks Claude from
+acting until it answers you in plain text. Read-only lookups still work, so it
+can check a file first if the answer needs it. It is a blunt "answer the human
 first" guard for when the assistant keeps running tools instead of replying.
 
 ## How it works
 
-One Go binary serves three hooks, keyed by a per-session marker file:
+One Go binary serves three hooks, keyed by per-session marker files:
 
 - **UserPromptSubmit** — if your prompt contains `?`, it arms the block and adds
-  a note telling Claude that tools are blocked until it replies. A prompt with
-  no `?` disarms it.
-- **PreToolUse** — while armed, any tool call is denied with a reason to answer
-  you first.
-- **Stop** — when Claude finishes its reply and ends the turn, the block clears,
-  so the next turn's tools work normally.
+  a note telling Claude what is blocked. A prompt with no `?` disarms it.
+- **PreToolUse** — while armed, tool calls are denied with a reason to answer
+  you first. `Read`, `Grep` and `Glob` are exempt (including the MCP versions
+  this marketplace ships), so Claude can keep looking around for an answer.
+- **Stop** — when Claude finishes its reply the block lifts. If your message
+  had interrupted a turn that was still running, this stop is refused **once**
+  so Claude resumes the interrupted work instead of treating "I answered" as
+  "I finished".
 
-The block therefore lasts exactly one turn: ask a question, Claude must reply
-before it can touch a tool again.
+So a question costs Claude its ability to act, not its ability to look — and
+interrupting mid-task no longer silently drops whatever it was doing.
 
 ## Install
 
@@ -28,10 +31,8 @@ before it can touch a tool again.
 
 ## Notes
 
-- The marker lives at `<tempdir>/focus-please/<session>.pending`, keyed by
+- Markers live at `<tempdir>/focus-please/<hash(session)>.<kind>`, keyed by
   session id, so parallel sessions never block one another.
-- Every failure path fails open (no block), so the plugin can never wedge a
-  session shut.
-- It is deliberately aggressive: Claude cannot use tools *at all* on a turn where
-  you asked a question, even to research the answer. That is the point — reply
-  first, act next turn.
+- The stop refusal fires at most once per interruption and always yields to
+  `stop_hook_active`, so a session can never be wedged shut.
+- Every failure path fails open (no block, no refusal).
