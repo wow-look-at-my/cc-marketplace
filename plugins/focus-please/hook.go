@@ -12,10 +12,13 @@
 //     that arrives while a turn is still in flight is recorded as a mid-turn
 //     interjection (see Stop below).
 //   - PreToolUse: while the block is armed, deny the tool with a reason that
-//     tells the model to answer first -- EXCEPT read-only lookups (Read,
-//     Grep, Glob), which stay available so the model can keep looking around
-//     for a moment if the answer genuinely needs grounding. It just cannot
-//     act (Bash, Write, Edit, Task, ...) before replying.
+//     tells the model to answer first -- with two exits. Read-only lookups
+//     (Read, Grep, Glob) are always allowed, so the model can keep looking
+//     around while it composes an answer. And the block is lifted outright
+//     once the assistant has actually written a reply, detected by reading
+//     the transcript (see transcript.go): the guard is text-scoped, not
+//     turn-scoped, so "reply, run the command, then answer properly" happens
+//     inside ONE turn.
 //   - Stop: the assistant has produced its reply, so the block lifts. If the
 //     user's message had arrived mid-turn, this stop is refused ONCE (exit 2
 //     with a reason) so the assistant resumes the work the interjection
@@ -44,6 +47,7 @@ import (
 type HookInput struct {
 	HookEventName  string `json:"hook_event_name"`
 	SessionID      string `json:"session_id"`
+	TranscriptPath string `json:"transcript_path"`
 	Prompt         string `json:"prompt"`
 	ToolName       string `json:"tool_name"`
 	StopHookActive bool   `json:"stop_hook_active"`
@@ -85,17 +89,23 @@ type result struct {
 func noop() result { return result{stdout: "{}"} }
 
 // contextNote is added to the prompt so the model learns, before it acts,
-// that focus-please has engaged for this turn.
-const contextNote = "Your most recent message from the user contains a question mark, so the focus-please plugin has engaged: tool calls are blocked until you answer, EXCEPT the read-only lookups Read, Grep and Glob -- those stay available so you can check a file or search the code if the answer genuinely needs grounding. Answer the user's question directly, in plain text. Do not run commands, edit files, or start any other work before that reply."
+// that focus-please has engaged for this turn. It states the rule the way
+// the hook actually enforces it: the block is lifted by TEXT, not by ending
+// the turn. Saying otherwise taught models to hand control back to the user
+// instead of just replying and carrying on.
+const contextNote = "Your most recent message from the user contains a question mark, so the focus-please plugin has engaged: until you write a reply, tool calls are blocked -- except the read-only lookups Read, Grep and Glob, which stay available so you can check a file or search the code before answering. Write your reply FIRST, as ordinary text, in THIS turn. The moment that text exists every tool unblocks, in this same turn -- so if answering needs a command, say what you are about to check (one line is enough), run it, then give the real answer. Do NOT end your turn to escape the block, and do not guess at an answer you could verify: reply, then verify, then answer."
 
 // interjectionNote is appended to contextNote when the message arrived
 // while a turn was still running, so the model knows its reply is not the
 // end of the turn.
 const interjectionNote = "You were also mid-task when this message arrived: answer it first, then resume the work it interrupted -- replying does not finish your turn."
 
-// denyReason is shown to the model when it tries to act while the block is
-// armed.
-const denyReason = "Blocked by focus-please: the user's last message contained a question and you have not answered it yet. Reply to the user in plain text first. Read, Grep and Glob still work if you need to look something up in order to answer -- every other tool unblocks once you have replied and your turn ends."
+// denyReason is shown to the model when it tries to act before writing
+// anything. It must make the escape hatch unmistakable -- emit text and
+// retry IN THIS TURN -- because the previous wording ("...once you end your
+// turn") convinced models the only way through was to stop and wait for the
+// user, which is the opposite of the point.
+const denyReason = "Blocked by focus-please: the user's last message contained a question and you have not written any reply yet. Emit your reply as plain text right now, in THIS turn -- one sentence is enough (\"checking X now\") -- and then call this tool again; it will go through, because this block is lifted by your text, not by the end of your turn. Do NOT end your turn to get past this, and do NOT substitute a guess for the check you were about to run. Read, Grep and Glob work meanwhile."
 
 // resumeReason is handed to the model when it tries to end a turn that was
 // interrupted by a user message. It fires at most once per interjection.
@@ -165,12 +175,21 @@ func onUserPromptSubmit(in HookInput) result {
 }
 
 // onPreToolUse denies acting tools while the block is armed for this
-// session, letting read-only lookups through.
+// session, letting read-only lookups through -- and lifting the block
+// entirely as soon as the assistant has actually replied, so a reply and the
+// tools that follow it fit in ONE turn.
 func onPreToolUse(in HookInput) result {
 	if !markerExists(in.SessionID, markerPending) {
 		return noop()
 	}
 	if isLookupTool(in.ToolName) {
+		return noop()
+	}
+	if hasRepliedSince(in.TranscriptPath) {
+		// The reply is out, so the guard has done its job. Clear the marker so
+		// the rest of the turn runs without re-reading the transcript before
+		// every tool call.
+		clearMarker(in.SessionID, markerPending)
 		return noop()
 	}
 	out, _ := json.Marshal(denyOutput{denySpecific{
