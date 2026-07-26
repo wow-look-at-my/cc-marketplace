@@ -33,11 +33,18 @@ func ups(session, prompt string) string {
 	})
 }
 
+// pre builds a PreToolUse payload with no transcript path, so the reply
+// check finds nothing and the block stays armed.
 func pre(session, tool string) string {
+	return preWithTranscript(session, tool, "")
+}
+
+func preWithTranscript(session, tool, transcript string) string {
 	return payload(map[string]any{
 		"hook_event_name": "PreToolUse",
 		"session_id":      session,
 		"tool_name":       tool,
+		"transcript_path": transcript,
 	})
 }
 
