@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -185,6 +187,56 @@ func TestCreateTarball(t *testing.T) {
 	// Entries are rooted under package/ so npm unpacks them correctly.
 	files := listTarballContents(t, outPath)
 	require.Contains(t, files, "package/file.txt")
+}
+
+// TestCreateTarball_PackageJSONFirst pins the tar member ORDER, not just its
+// presence. A .tgz has no index, so a registry reading package.json has to
+// inflate everything ahead of it: with the manifest behind the platform
+// binaries, buildhost's npm packument had to decompress 33 MB per release to
+// reach 191 bytes. `npm pack` puts package.json first for the same reason.
+func TestCreateTarball_PackageJSONFirst(t *testing.T) {
+	srcDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "build"), 0755))
+	// Written first, so readdir order alone would not put package.json first.
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "build", "app_linux_amd64"), []byte("elf"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".mcp.json"), []byte("{}"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "package.json"), []byte(`{"name":"x","version":"1.0.0"}`), 0644))
+
+	outPath := filepath.Join(t.TempDir(), "out.tgz")
+	require.NoError(t, createTarball(srcDir, outPath))
+
+	files := listTarballContents(t, outPath)
+	require.Equal(t, "package/package.json", files[0], "the manifest must be the first member: %v", files)
+	require.Equal(t, 1, countString(files, "package/package.json"), "exactly one manifest entry: %v", files)
+	// The rest of the tree still ships, executable bits and all.
+	require.Contains(t, files, "package/build/app_linux_amd64")
+	require.Contains(t, files, "package/.mcp.json")
+	require.Equal(t, "-rwxr-xr-x", tarballEntryMode(t, outPath, "package/build/app_linux_amd64"))
+}
+
+func countString(haystack []string, want string) int {
+	n := 0
+	for _, s := range haystack {
+		if s == want {
+			n++
+		}
+	}
+	return n
+}
+
+// tarballEntryMode returns the `tar -tvzf` permission column for one member.
+func tarballEntryMode(t *testing.T, path, member string) string {
+	t.Helper()
+	out, err := exec.Command("tar", "-tvzf", path).Output()
+	require.NoError(t, err)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[len(fields)-1] == member {
+			return fields[0]
+		}
+	}
+	t.Fatalf("member %q not found in %s", member, out)
+	return ""
 }
 
 func TestCreateTarball_BadSrcDir(t *testing.T) {

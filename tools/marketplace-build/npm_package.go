@@ -142,9 +142,17 @@ func buildMainPackageDir(srcDir string, bins []platformBinary) (string, error) {
 var createTarball = createTarballReal
 
 func createTarballReal(srcDir, outputPath string) error {
-	cmd := exec.Command("bash", "-c",
-		`set -eo pipefail; tar -cf - --transform 's,^\./,package/,' -C "$1" . | gzip -9 > "$2"`,
-		"--", srcDir, outputPath)
+	script := `set -eo pipefail; tar -cf - --transform 's,^\./,package/,' -C "$1" . | gzip -9 > "$2"`
+	if _, err := os.Stat(filepath.Join(srcDir, "package.json")); err == nil {
+		// package/package.json goes FIRST, which is what `npm pack` itself does.
+		// A .tgz is one DEFLATE stream with no index, so anything reading the
+		// manifest -- buildhost's packument, any registry -- must inflate every
+		// byte ahead of it. In readdir order it landed behind the platform
+		// binaries: 33 MB to reach 191 bytes, per release.
+		script = `set -eo pipefail; tar -cf - --transform 's,^\./,package/,' -C "$1" ` +
+			`--no-recursion ./package.json --recursion --exclude=./package.json . | gzip -9 > "$2"`
+	}
+	cmd := exec.Command("bash", "-c", script, "--", srcDir, outputPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s: %w", out, err)
 	}
