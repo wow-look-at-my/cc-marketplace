@@ -5,10 +5,16 @@
 # syntax tree, transform.jq inspects and rewrites it, and shfmt --from-json
 # regenerates the command. Commands containing a heredoc (<< or <<-,
 # anywhere in the tree), invoking perl (its effective command name matching
-# ^perl[0-9.]*$), or reading a file with cat/head/tail (a static file
-# operand that is not a /proc, /sys, or /dev pseudo-file -- use the Read
-# tool) are DENIED outright. Otherwise the tree is rewritten:
-# scrub stderr-to-/dev/null redirects everywhere; on the FINAL top-level
+# ^perl[0-9.]*$), reading a file with cat/head/tail (a static file operand
+# that is not a /proc, /sys, or /dev pseudo-file -- use the Read tool), or
+# destroying data in a form that cannot be rewritten into a
+# move-to-recycle-bin (shred/srm, find -delete, git rm on the working tree,
+# truncate -s 0, and an rm carrying a flag that does not translate) are
+# DENIED outright. Otherwise the tree is rewritten:
+# scrub stderr-to-/dev/null redirects everywhere; rewrite every `rm` (and
+# `xargs rm`) as `recycler trash` so deletion is non-destructive by
+# construction -- the target lands in the platform recycle bin where
+# `recycler restore` puts it back; on the FINAL top-level
 # statement only, kill trailing | head / | tail stages, strip trailing
 # | grep, trailing || true, and trailing 2>&1, and rewrite a trailing stdout
 # file redirect into | tee (mid-script limiting pipes and redirects are
@@ -17,7 +23,14 @@
 # remove constant terminal-bound echo/printf narration (rewriting it to the
 # no-op `:`); and ensure `set -o pipefail` is in effect. Only a semantic AST
 # change triggers a rewrite, so string literals
-# that merely contain "2>/dev/null" or "| head" are never mangled.
+# that merely contain "2>/dev/null", "| head", or "rm -rf /" are never
+# mangled.
+#
+# recycler is a hard dependency of the rm rule exactly as jq and shfmt are
+# hard dependencies of the hook: it is simply the command the transform
+# emits. There is deliberately NO probe and NO fallback to rm -- if
+# `recycler trash` fails at runtime (permissions, unreachable bin) the file
+# is still on disk and the command reports the error, which is correct.
 # Strictness settings the user wrote (set -e etc.) are never removed. After
 # regeneration the cleaned command is re-parsed and the rewrite is dropped
 # entirely (fail open) if it somehow contains fewer top-level statements
@@ -126,8 +139,9 @@ log_guard() {
 # shares the << token number) is not affected.
 deny=$(printf '%s' "$result" | jq -r '.deny' 2>&1) || exit 0
 if [ "$deny" = "true" ]; then
-	# The transform tags the reason via .rules (heredoc | perl | file_read);
-	# pick the matching message. Anything else falls back to the heredoc text.
+	# The transform tags the reason via .rules (heredoc | perl | file_read |
+	# shred | find_delete | git_rm | truncate_zero | rm_flag); pick the
+	# matching message. Anything else falls back to the heredoc text.
 	deny_rule=$(printf '%s' "$result" | jq -r '.rules' 2>&1) || exit 0
 	log_deny "$cmd" "$deny_rule"
 	case "$deny_rule" in
@@ -136,6 +150,21 @@ if [ "$deny" = "true" ]; then
 		;;
 	file_read)
 		reason="Reading files with cat/head/tail is banned in this environment. Use the Read tool instead. Only /proc, /sys, and /dev pseudo-files are exempt."
+		;;
+	shred)
+		reason="shred/srm destroy data unrecoverably by design and are banned in this environment. There is no safe equivalent; if the file must go, use recycler trash <path> and it can be restored."
+		;;
+	find_delete)
+		reason="find -delete destroys files unrecoverably and is banned in this environment. Use find ... -exec recycler trash {} + instead, which moves each match to the recycle bin."
+		;;
+	git_rm)
+		reason="git rm deletes the working-tree file and is banned in this environment. Use recycler trash <path> && git add -A instead. (git rm --cached only unstages and is allowed.)"
+		;;
+	truncate_zero)
+		reason="truncate -s 0 empties a file in place, destroying its contents unrecoverably. Use recycler trash <path> instead, which moves it to the recycle bin."
+		;;
+	rm_flag)
+		reason="This rm carries a flag that cannot be translated to recycler trash. rm is rewritten to recycler trash (which understands only paths), so only -r/-R/--recursive, -f/--force, -v/--verbose, -i/-I/--interactive, and -- are accepted. Rerun with just the paths."
 		;;
 	*)
 		reason="Heredocs are banned in this environment. Write file content with the Write/Edit tools; for command stdin use printf '%s' ... | cmd or a temp file."
