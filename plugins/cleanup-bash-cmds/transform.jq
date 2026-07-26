@@ -442,6 +442,181 @@ def effective_command:
     resolve(0; 10);
 
 # ---------------------------------------------------------------------------
+# Rule: `rm` becomes `recycler trash` -- deletion is made non-destructive by
+# construction rather than detected after the fact. `recycler` moves each
+# target to the platform's native recycle bin (FreeDesktop trash can, macOS
+# ~/.Trash, Windows Recycle Bin), where `recycler list` finds it and
+# `recycler restore` puts it back where it came from.
+#
+#   rm -rf build/ old.js   ->   recycler trash build/ old.js
+#
+# Applied to every CallExpr in the tree (the same walk as the docker compose
+# rule), NOT anchored to the last statement: an `rm` mid-script, inside a
+# pipe, a loop body, a function, or under `xargs` destroys just as much as a
+# trailing one. `xargs rm` does NOT fall out of this walk for free -- there
+# `rm` is an argument word of xargs, not a command word, so the
+# effective-command resolver never sees it; it gets its own case in
+# rewrite_xargs_rm_call below.
+# Because the edit is node-local (only .Args of the matched CallExpr), the
+# surrounding statement structure, assignments, and redirects survive, so the
+# rule can never drop a statement.
+#
+# Flag translation, since `recycler trash` takes only paths:
+#   -r / -R / --recursive   dropped (directories are recycled whole)
+#   -f / --force            dropped
+#   -v / --verbose          dropped
+#   -i / -I / --interactive dropped (prompts are meaningless here)
+#   --                      dropped (targets pass positionally)
+#   anything else           NOT rewritten -- has_untranslatable_rm denies the
+#                           whole command rather than guess a translation
+#
+# Guards: only a call whose effective command is exactly `rm` matches, so
+# `recycler trash` is never re-rewritten (the transform runs pass_once inside
+# a fix_state loop, and an unguarded rule would re-fire forever); the rule
+# only ever emits `recycler trash` -- never `purge` or `empty`, which are
+# permanent deletes; and `recycler` is emitted as a bare word so PATH
+# resolves it. Globs need no handling: the shell expands them before recycler
+# runs, and trash takes many targets.
+# ---------------------------------------------------------------------------
+
+# `rm` flags that translate to nothing. Bundled short clusters count when
+# EVERY letter in the cluster is droppable (-rf, -fr, -rfv), so an unknown
+# letter anywhere in a cluster (-rd) falls through to the deny.
+def is_droppable_rm_flag:
+  . as $f
+  | ($f | test("^--(recursive|force|verbose|interactive)$"))
+    or ($f | test("^-[rRfvIi]+$"));
+
+# The words of an `rm` call that are real targets: every non-flag operand
+# after the command word, with `--` ending flag parsing. $args excludes the
+# command word. A lone `-` is a file named "-", not a flag. An operand
+# carrying an expansion ($f, "$@") is passed through verbatim -- recycler
+# takes whatever the shell hands it.
+#
+# A `--` separator is RE-EMITTED (once, in front of the targets) whenever any
+# target is dash-leading, so `rm -- -weirdname` becomes
+# `recycler trash -- -weirdname` and the filename is not re-read as a
+# recycler flag. Dropping the separator there would change which file is
+# deleted -- exactly the class of mistake this rule exists to prevent.
+def rm_targets($args):
+  (reduce $args[] as $w ({ops: [], done: false};
+    if .done then .ops += [$w]
+    else ($w | word_literal) as $lit
+      | if $lit == null then .ops += [$w]          # expansion: a target
+        elif $lit == "--" then .done = true
+        elif ($lit | startswith("-")) and (($lit | length) > 1) then .
+        else .ops += [$w] end
+      end)
+   | .ops) as $ops
+  | if ($ops | any((word_literal) as $l | ($l != null) and ($l | startswith("-")) and ($l != "-")))
+    then [lit_word("--")] + $ops
+    else $ops end;
+
+# Flags of an `rm` call that this rule refuses to translate. `--` ends flag
+# parsing (everything after it is a path, however dash-leading), and a lone
+# `-` is a filename, not a flag.
+def rm_unknown_flags($args):
+  reduce $args[] as $w ({bad: [], done: false};
+    if .done then .
+    else ($w | word_literal) as $lit
+      | if $lit == null then .
+        elif $lit == "--" then .done = true
+        elif ($lit | startswith("-")) and (($lit | length) > 1)
+        then (if ($lit | is_droppable_rm_flag) then . else .bad += [$lit] end)
+        else . end
+      end)
+  | .bad;
+
+# . = CallExpr; is this a real `rm` invocation? The effective-command
+# resolver applies, so `command rm` and `\rm` count while `rm` appearing as
+# an ARGUMENT (`grep rm f`) does not.
+def is_rm_call:
+  (effective_command) as $ec
+  | ($ec != null) and ($ec.name == "rm");
+
+def rewrite_rm_call:
+  # . = CallExpr
+  (effective_command) as $ec
+  | if ($ec == null) or ($ec.name != "rm") then .
+    else .Args = (.Args[0:$ec.index]
+                  + [lit_word("recycler"), lit_word("trash")]
+                  + rm_targets(.Args[$ec.index + 1:]))
+    end;
+
+# `xargs rm`: here `rm` is an ARGUMENT word of xargs, not a command word, so
+# the effective-command resolver (which never leaves .Args[0]) does not see
+# it -- it needs its own case. The utility xargs runs is its first non-flag
+# argument; that word becomes `recycler trash` and xargs appends the paths
+# it reads from stdin, exactly as it appended them to rm. Any remaining
+# arguments (`xargs rm -f`) are rm flags and go through the same translation
+# and the same unknown-flag deny.
+def rewrite_xargs_rm_call:
+  # . = CallExpr
+  (effective_command) as $ec
+  | if ($ec == null) or ($ec.name != "xargs") then .
+    else . as $call
+      | ($ec.index + 1) as $start
+      | # Walk xargs' own flags to find the utility word. xargs flags that
+        # take a separated value (-n N, -P N, -I R, -s N, -L N, -d D, -E S,
+        # -a F) must not be mistaken for the utility.
+        (reduce range($start; ($call.Args | length)) as $i
+          ({idx: null, skip: false};
+           if (.idx != null) then .
+           elif .skip then .skip = false
+           else ($call.Args[$i] | word_literal) as $lit
+             | if $lit == null then .idx = "OPAQUE"
+               elif ($lit | test("^-[nPIisLdEa]$")) then .skip = true
+               elif ($lit | startswith("-")) and (($lit | length) > 1) then .
+               else .idx = $i end
+             end)
+         | .idx) as $u
+      | if ($u == null) or ($u == "OPAQUE")
+           or (($call.Args[$u] | word_literal) != "rm") then $call
+        else $call.Args = ($call.Args[0:$u]
+                           + [lit_word("recycler"), lit_word("trash")]
+                           + rm_targets($call.Args[$u + 1:]))
+        end
+    end;
+
+def rewrite_rm:
+  walk(if (type == "object") and (.Type? == "CallExpr")
+    then (rewrite_rm_call | rewrite_xargs_rm_call)
+    else . end);
+
+# Deny when any `rm` carries a flag this rule will not translate. Checked
+# BEFORE the rewrite (in the deny chain), so an untranslatable rm is blocked
+# with an explanation instead of silently losing a flag. The scan is
+# tree-wide (`..`, the same reach as the rewrite's `walk`, so an `rm` inside
+# `$( )` is covered too) but CallExpr-scoped, so `echo "rm --nonsense"` is a
+# string literal and matches nothing.
+def has_untranslatable_rm:
+  [.. | objects | select(.Type? == "CallExpr")
+   | . as $call
+   | (effective_command) as $ec
+   | if ($ec == null) then empty
+     elif ($ec.name == "rm") then rm_unknown_flags($call.Args[$ec.index + 1:])
+     elif ($ec.name == "xargs") then
+       # Same utility-word scan as rewrite_xargs_rm_call; only an xargs whose
+       # utility is rm is in scope.
+       (reduce range($ec.index + 1; ($call.Args | length)) as $i
+         ({idx: null, skip: false};
+          if (.idx != null) then .
+          elif .skip then .skip = false
+          else ($call.Args[$i] | word_literal) as $lit
+            | if $lit == null then .idx = "OPAQUE"
+              elif ($lit | test("^-[nPIisLdEa]$")) then .skip = true
+              elif ($lit | startswith("-")) and (($lit | length) > 1) then .
+              else .idx = $i end
+            end)
+        | .idx) as $u
+       | if ($u == null) or ($u == "OPAQUE")
+            or (($call.Args[$u] | word_literal) != "rm") then empty
+         else rm_unknown_flags($call.Args[$u + 1:]) end
+     else empty end
+   | select(length > 0)]
+  | length > 0;
+
+# ---------------------------------------------------------------------------
 # Rule: perl is banned. Any statement whose EFFECTIVE command name (via the
 # resolver above, so `command perl`, `\perl`, and `perl5.36` all count while
 # `command -v perl` does not) matches the anchored regex ^perl[0-9.]*$ denies
@@ -613,6 +788,76 @@ def has_banned_file_read:
   any_call_in_stmts(call_reads_banned_file);
 
 # ---------------------------------------------------------------------------
+# Rule: destructive forms that CANNOT be rewritten into a move-to-recycle-bin
+# are denied, each with the alternative that can. Unlike `rm`, there is no
+# source file to move here -- either the delete is the command's entire
+# purpose and it overwrites in place (shred, truncate), or it is buried in
+# another tool's argument grammar where a target list cannot be extracted
+# (find -delete, git rm). Same statement-position walk as the perl and
+# file-read denies.
+#
+#   shred / srm         unrecoverable by design; no alternative exists
+#   find ... -delete    -> find ... -exec recycler trash {} +
+#   git rm <path>       -> recycler trash <path> && git add -A
+#   truncate -s 0 f     -> recycler trash f
+#
+# `git rm --cached` does NOT touch the working tree (it only unstages), so it
+# passes through untouched.
+#
+# Deliberately NOT denied: a plain `> file` stdout redirect. It truncates,
+# but stdout redirection is overwhelmingly ordinary output routing, and the
+# tee_rewrite rule already owns that shape. Denying it would fight the
+# plugin's own behavior and fire constantly on non-deletions. `: > file`
+# still truncates -- a known, accepted gap.
+# ---------------------------------------------------------------------------
+
+def has_shred_invocation:
+  any_call_in_stmts((effective_command) as $ec
+    | ($ec != null) and (($ec.name == "shred") or ($ec.name == "srm")));
+
+# `find ... -delete`: the -delete primary as a literal argument word. -delete
+# is find's own primary, so it can only appear in find's argument list.
+def has_find_delete:
+  any_call_in_stmts((effective_command) as $ec
+    | ($ec != null) and ($ec.name == "find")
+      and ((.Args[$ec.index + 1:]) | any((word_literal) == "-delete")));
+
+# `git rm <path>` removes from the working tree; `git rm --cached` does not.
+# The SUBCOMMAND is the first non-flag word after `git` (so `git -C dir rm f`
+# counts), not merely an `rm` anywhere in the arguments -- otherwise
+# `git commit -m rm` and `git log --grep rm` would false-positive.
+def has_git_rm:
+  any_call_in_stmts(
+    (effective_command) as $ec
+    | ($ec != null) and ($ec.name == "git")
+      and ((.Args[$ec.index + 1:] | map(word_literal)) as $a
+           | # First non-flag word = the subcommand. git's own pre-subcommand
+             # flags that take a separated value (-C path, -c cfg) are skipped.
+             (reduce range(0; ($a | length)) as $i
+               ({sub: null, skip: false};
+                if (.sub != null) then .
+                elif .skip then .skip = false
+                else ($a[$i]) as $w
+                  | if $w == null then .sub = "OPAQUE"
+                    elif ($w == "-C") or ($w == "-c") then .skip = true
+                    elif ($w | startswith("-")) then .
+                    else .sub = $w end
+                  end)
+              | .sub) as $subcmd
+           | ($subcmd == "rm")
+             and (($a | index("--cached")) == null)));
+
+# `truncate -s 0 file` (or --size=0 / -s0) empties a file in place.
+def has_truncate_zero:
+  any_call_in_stmts((effective_command) as $ec
+    | ($ec != null) and ($ec.name == "truncate")
+      and ((.Args[$ec.index + 1:] | map(word_literal)) as $a
+           | any($a[]; . != null and test("^(-s|--size=)0+$"))
+             or any(range(0; ($a | length) - 1);
+                    ($a[.] == "-s" or $a[.] == "--size")
+                    and (($a[. + 1] // "") | test("^0+$")))));
+
+# ---------------------------------------------------------------------------
 # Assemble. State: {ast, fired}. Each step compares before/after (positions
 # stripped) and records the rule name when it changed something. The fired
 # list feeds ONLY the CLEANUP_BASH_CMDS_LOG debug log; the hook never
@@ -628,6 +873,7 @@ def apply_step($name; f):
 def pass_once:
   apply_step("devnull"; scrub_devnull)
   | apply_step("docker_compose_restart"; rewrite_docker_compose_restart)
+  | apply_step("rm_recycle"; rewrite_rm)
   | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]))))
   | apply_step("or_true"; on_last_stmt(strip_or_true))
   | apply_step("grep"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["grep"]))))
@@ -649,6 +895,11 @@ def dedupe:
 | if has_heredoc then {deny: true, changed: false, rules: "heredoc", ast: $orig}
   elif has_perl_invocation then {deny: true, changed: false, rules: "perl", ast: $orig}
   elif has_banned_file_read then {deny: true, changed: false, rules: "file_read", ast: $orig}
+  elif has_shred_invocation then {deny: true, changed: false, rules: "shred", ast: $orig}
+  elif has_find_delete then {deny: true, changed: false, rules: "find_delete", ast: $orig}
+  elif has_git_rm then {deny: true, changed: false, rules: "git_rm", ast: $orig}
+  elif has_truncate_zero then {deny: true, changed: false, rules: "truncate_zero", ast: $orig}
+  elif has_untranslatable_rm then {deny: true, changed: false, rules: "rm_flag", ast: $orig}
   else
     ({ast: $orig, fired: []} | fix_state | apply_step("pipefail"; ensure_pipefail)) as $st
     | {deny: false,

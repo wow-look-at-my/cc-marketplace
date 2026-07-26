@@ -146,6 +146,11 @@ check_deny_read() {
 	check_deny_reason "$1" "$2" "Use the Read tool"
 }
 
+# Untranslatable-rm-flag deny: reason names the accepted flags.
+check_deny_rm_flag() {
+	check_deny_reason "$1" "$2" "cannot be translated to recycler trash"
+}
+
 if [ -x "$HOOK" ]; then
 	ok "hook script is executable"
 else
@@ -475,13 +480,171 @@ check_rewrite "head5 is a different command" 'head5 f' 'head5 f'
 check_rewrite "command -v cat is a lookup" 'command -v cat' 'command -v cat'
 check_rewrite "cat as a grep argument untouched" 'grep cat file2' 'grep cat file2'
 
+# --- rm becomes recycler trash: deletion is non-destructive by construction ---
+# The rewrite is unconditional and tree-wide (NOT anchored to the last
+# statement): an rm mid-script, in a loop, in a function, or under xargs
+# destroys just as much as a trailing one. recycler moves each target to the
+# platform's native recycle bin, where `recycler restore` puts it back.
+
+check_rewrite "rm -rf two targets" 'rm -rf a b' 'recycler trash a b'
+check_rewrite "plain rm" 'rm file.txt' 'recycler trash file.txt'
+check_rewrite "rm -r directory" 'rm -r build/' 'recycler trash build/'
+check_rewrite "rm -R capital recursive" 'rm -R build/' 'recycler trash build/'
+check_rewrite "rm --recursive --force long forms" \
+	'rm --recursive --force build/' \
+	'recycler trash build/'
+check_rewrite "rm -v verbose dropped" 'rm -v a' 'recycler trash a'
+check_rewrite "rm -i interactive dropped" 'rm -i a' 'recycler trash a'
+check_rewrite "rm -I dropped" 'rm -I a b c' 'recycler trash a b c'
+check_rewrite "rm bundled -fr cluster" 'rm -fr a' 'recycler trash a'
+check_rewrite "rm bundled -rfv cluster" 'rm -rfv a' 'recycler trash a'
+check_rewrite "rm with no targets" 'rm' 'recycler trash'
+check_rewrite "rm expansion target passed through" 'rm -rf "$DIR"' 'recycler trash "$DIR"'
+check_rewrite "rm glob target passed through (shell expands it)" 'rm -f *.tmp' 'recycler trash *.tmp'
+check_rewrite "lone dash is a filename not a flag" 'rm -' 'recycler trash -'
+
+# THE INCIDENT: the delete was chained onto the command meant to prove the
+# replacement worked, so it ran regardless of the outcome. Only the rm
+# segment is rewritten -- that falls out of editing per-CallExpr on the AST.
+check_rewrite "the incident: rm chained onto its own verification" \
+	'rm -f budget-guard.js && node budget-guard.ts --verify' \
+	'recycler trash budget-guard.js && node budget-guard.ts --verify'
+
+# A `--` separator is re-emitted when any target is dash-leading, so the
+# filename is not re-read as a recycler flag. Dropping it would change WHICH
+# file is deleted -- exactly the class of mistake this rule prevents.
+check_rewrite "-- separator kept for a dash-leading filename" \
+	'rm -- -weirdname' \
+	'recycler trash -- -weirdname'
+check_rewrite "-- dropped when no target needs it" 'rm -rf -- build/' 'recycler trash build/'
+
+# Tree-wide, not last-statement-anchored.
+check_rewrite "rm on a non-final line rewritten" \
+	$'rm -f stale.txt\nmake' \
+	$'recycler trash stale.txt\nmake'
+check_rewrite "rm inside a loop body rewritten" \
+	'ls | while read f; do rm -f "$f"; done' \
+	'ls | while read f; do recycler trash "$f"; done'
+check_rewrite "rm inside a function body rewritten" \
+	'clean() { rm -rf build; }' \
+	'clean() { recycler trash build; }'
+check_rewrite "rm inside a command substitution rewritten" \
+	'x=$(rm -f a)' \
+	'x=$(recycler trash a)'
+check_rewrite "rm in an if branch rewritten" \
+	'if stale; then rm -f a; fi' \
+	'if stale; then recycler trash a; fi'
+check_rewrite "command rm wrapper resolved" 'command rm -f x' 'command recycler trash x'
+check_rewrite "backslash rm resolved" '\rm -f x' 'recycler trash x'
+
+# xargs rm: `rm` is an ARGUMENT of xargs, not a command word, so it needs its
+# own case -- the effective-command resolver never leaves .Args[0].
+check_rewrite "xargs rm" 'xargs rm' 'xargs recycler trash'
+check_rewrite "xargs -0 rm -f after find -print0" \
+	'find . -name "*.o" -print0 | xargs -0 rm -f' \
+	'find . -name "*.o" -print0 | xargs -0 recycler trash'
+check_rewrite "xargs -n 1 rm (separated flag value skipped)" \
+	'xargs -n 1 rm' \
+	'xargs -n 1 recycler trash'
+check_rewrite "xargs -I{} rm {}" 'xargs -I{} rm {}' 'xargs -I{} recycler trash {}'
+check_rewrite "xargs with a different utility untouched" 'xargs ls' 'xargs ls'
+
+# No recursion: the transform runs pass_once inside a fix_state loop, so an
+# unguarded rule would re-fire forever. recycler is not rm.
+check_noop "recycler trash is not re-rewritten" "${PFX}recycler trash a"
+check_rewrite "recycler trash passes through" 'recycler trash a' 'recycler trash a'
+check_rewrite "recycler restore passes through" 'recycler restore a' 'recycler restore a'
+
+# AST-aware: a string literal that merely CONTAINS an rm is never mangled.
+# This is the test that proves the rule is parsing, not pattern matching.
+check_rewrite "string literal containing rm -rf / untouched" \
+	'echo "rm -rf /"' \
+	"$COLON"
+check_rewrite "quoted rm in a grep pattern untouched" \
+	'grep "rm -rf" script.sh' \
+	'grep "rm -rf" script.sh'
+check_rewrite "rm as a grep argument untouched" 'grep rm file' 'grep rm file'
+check_rewrite "rmdir is a different command" 'rmdir empty/' 'rmdir empty/'
+
+# An untranslatable flag is DENIED, never guessed at.
+check_deny_rm_flag "rm --nonsense denied" 'rm --nonsense a'
+check_deny_rm_flag "rm -d (remove empty dirs) denied" 'rm -d empty'
+check_deny_rm_flag "rm --one-file-system denied" 'rm -rf --one-file-system /mnt/x'
+check_deny_rm_flag "rm --no-preserve-root denied" 'rm -rf --no-preserve-root /'
+check_deny_rm_flag "bundled cluster with an unknown letter denied" 'rm -rd a'
+check_deny_rm_flag "unknown flag inside a command substitution denied" 'x=$(rm --nonsense a)'
+check_deny_rm_flag "xargs rm with an unknown flag denied" 'xargs rm --nonsense'
+# A string is not a flag.
+check_rewrite "string containing --nonsense is not a flag" \
+	'grep "rm --nonsense" f' \
+	'grep "rm --nonsense" f'
+
+# --- Destructive forms that CANNOT be rewritten are denied with the fix ---
+
+check_deny_reason "shred denied" 'shred /tmp/secret' 'recycler trash'
+check_deny_reason "srm denied" 'srm /tmp/secret' 'recycler trash'
+check_deny_reason "find -delete denied" \
+	'find . -name "*.tmp" -delete' \
+	'find \.\.\. -exec recycler trash \{\} \+'
+check_deny_reason "find -delete mid-chain denied" \
+	'cd /tmp && find . -name "*.o" -delete' \
+	'recycler trash'
+check_deny_reason "git rm denied" 'git rm foo' 'recycler trash <path> && git add -A'
+check_deny_reason "git rm -r denied" 'git rm -r src/old' 'recycler trash'
+check_deny_reason "git -C dir rm denied (pre-subcommand flag skipped)" \
+	'git -C /repo rm foo' 'recycler trash'
+check_deny_reason "truncate -s 0 denied" 'truncate -s 0 build.log' 'recycler trash'
+check_deny_reason "truncate --size=0 denied" 'truncate --size=0 build.log' 'recycler trash'
+check_deny_reason "truncate -s0 (joined) denied" 'truncate -s0 build.log' 'recycler trash'
+
+# git rm --cached only unstages; the working tree is untouched, so it passes.
+check_rewrite "git rm --cached passes through" \
+	'git rm --cached foo' \
+	'git rm --cached foo'
+check_rewrite "git rm -r --cached passes through" \
+	'git rm -r --cached src/' \
+	'git rm -r --cached src/'
+# Non-deletions that merely mention these words.
+check_rewrite "find without -delete untouched" 'find . -name "*.tmp"' 'find . -name "*.tmp"'
+check_rewrite "truncate to a nonzero size untouched" 'truncate -s 100 f' 'truncate -s 100 f'
+check_rewrite "git rm as a string argument untouched" 'grep "git rm" notes' 'grep "git rm" notes'
+# The subcommand is the first non-flag word, so "rm" appearing merely as a
+# VALUE of another git subcommand is not a deletion.
+check_rewrite "git commit -m rm is not git rm" \
+	'git commit -m rm' \
+	'git commit -m rm'
+check_rewrite "git log --grep rm is not git rm" \
+	'git log --grep rm' \
+	'git log --grep rm'
+check_rewrite "shredder is a different command" 'shredder f' 'shredder f'
+
+# The rewrite depends only on the PARSED command -- never on the filesystem
+# or on PATH. The hook stats nothing and looks nothing up: `recycler` is
+# simply the word it emits, exactly as jq and shfmt are hard dependencies
+# rather than branches in the rewrite logic. A target that does not exist
+# rewrites identically to one that does.
+check_rewrite "nonexistent target rewrites the same as an existing one" \
+	'rm -f /nonexistent/path/that/does/not/exist.txt' \
+	'recycler trash /nonexistent/path/that/does/not/exist.txt'
+
+# There is exactly ONE code path: recycler is a hard dependency, like jq and
+# shfmt, not a branch in the rewrite logic. The hook never probes for it and
+# never falls back to rm, so a runtime failure (permissions, unreachable
+# bin) surfaces as a visible nonzero exit with the file still on disk --
+# which is the correct outcome. Assert no probe exists.
+if grep -qE 'command -v recycler|which recycler|-x .*recycler' "$HOOK"; then
+	bad "recycler is a hard dependency, never probed" "hook.sh probes for recycler"
+else
+	ok "recycler is a hard dependency, never probed (no fallback-to-rm path)"
+fi
+
 # --- Legacy trailing rules ---
 
 check_rewrite "trailing 2>&1 removed" \
 	'ls -la 2>&1' \
 	'ls -la'
 
-check_rewrite "trailing || true" 'rm -f foo || true' 'rm -f foo'
+check_rewrite "trailing || true" 'rm -f foo || true' 'recycler trash foo'
 check_rewrite "trailing | head" 'foo file.txt | head' 'foo file.txt'
 check_rewrite "trailing | head -5" 'foo file.txt | head -5' 'foo file.txt'
 check_rewrite "trailing | head -n 20" 'foo file.txt | head -n 20' 'foo file.txt'
@@ -601,7 +764,7 @@ check_rewrite "echo ansi-c quoting is constant" "echo \$'a\\nb'" "$COLON"
 check_rewrite "echo with spaces and quotes removed" \
 	$'echo "has spaces and \'quotes\'"' \
 	"$COLON"
-check_rewrite "echo removed in && member" 'echo done && rm -f x' "$COLON && rm -f x"
+check_rewrite "echo removed in && member" 'echo done && rm -f x' "$COLON && recycler trash x"
 check_rewrite "echo removed as final pipe stage" 'x | echo foo' "x | $COLON"
 check_rewrite "echo removed in if condition" 'if echo checking; then ls; fi' "if $COLON; then ls; fi"
 check_rewrite "echo removed in for-loop body" \
@@ -658,7 +821,7 @@ check_rewrite "echo in process substitution untouched" \
 check_rewrite "printf bare literal removed" "printf 'hi'" "$COLON"
 check_rewrite "printf literal with escape removed" "printf 'done\\n'" "$COLON"
 check_rewrite "printf separator pattern removed" 'printf "=== section ==="' "$COLON"
-check_rewrite "printf removed in && member" 'printf done && rm -f x' "$COLON && rm -f x"
+check_rewrite "printf removed in && member" 'printf done && rm -f x' "$COLON && recycler trash x"
 check_rewrite "printf removed as final pipe stage" 'x | printf foo' "x | $COLON"
 check_rewrite "printf stderr redirect kept, command removed" 'printf warn 2>>err.log' "$COLON 2>>err.log"
 
@@ -1040,6 +1203,31 @@ if [ -f "$LOGFILE" ] && grep -q '^DENY	original="cat notes.txt"	reason="file_rea
 	ok "file-read deny is logged with reason=file_read"
 else
 	bad "file-read deny is logged with reason=file_read" "log=$(cat "$LOGFILE" || printf 'missing')"
+fi
+
+rm -f "$LOGFILE"
+OUT=$(printf '%s' "$(payload_bash 'rm -rf build')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
+if [ -f "$LOGFILE" ] && grep -qF 'cleaned="set -o pipefail\nrecycler trash build"' "$LOGFILE" &&
+	grep -qF 'rules="rm_recycle,pipefail"' "$LOGFILE"; then
+	ok "rm rewrite logged with rules=rm_recycle"
+else
+	bad "rm rewrite logged with rules=rm_recycle" "log=$(cat "$LOGFILE" || printf 'missing')"
+fi
+
+rm -f "$LOGFILE"
+OUT=$(printf '%s' "$(payload_bash 'rm --nonsense a')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
+if [ -f "$LOGFILE" ] && grep -q '^DENY	original="rm --nonsense a"	reason="rm_flag"$' "$LOGFILE"; then
+	ok "untranslatable rm deny is logged with reason=rm_flag"
+else
+	bad "untranslatable rm deny is logged with reason=rm_flag" "log=$(cat "$LOGFILE" || printf 'missing')"
+fi
+
+rm -f "$LOGFILE"
+OUT=$(printf '%s' "$(payload_bash 'git rm foo')" | CLEANUP_BASH_CMDS_LOG="$LOGFILE" "$HOOK")
+if [ -f "$LOGFILE" ] && grep -q '^DENY	original="git rm foo"	reason="git_rm"$' "$LOGFILE"; then
+	ok "git rm deny is logged with reason=git_rm"
+else
+	bad "git rm deny is logged with reason=git_rm" "log=$(cat "$LOGFILE" || printf 'missing')"
 fi
 
 rm -f "$LOGFILE"

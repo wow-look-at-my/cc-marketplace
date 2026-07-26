@@ -5,7 +5,7 @@ A PreToolUse hook that rewrites Bash tool commands before they run. The command 
 rewrites the tree, and shfmt turns the tree back into a command. No compiled
 binary -- bash + jq + shfmt work the same on every platform.
 
-It does nine jobs:
+It does ten jobs:
 
 1. **Destroys heredocs, denies perl, and denies file reads.** Any command
    containing a heredoc, invoking `perl` (in any position the parser recognizes
@@ -13,32 +13,37 @@ It does nine jobs:
    operand that is not a `/proc`, `/sys`, or `/dev` pseudo-file -- use the Read
    tool) is DENIED outright -- not rewritten, denied. See "Heredocs: banned",
    "perl: banned", and "File reads via cat/head/tail: banned" below.
-2. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed,
+2. **Makes deletion non-destructive.** Every `rm` (and `xargs rm`) becomes
+   `recycler trash`, which moves the target to the platform's native recycle
+   bin instead of destroying it. Forms that cannot be rewritten that way --
+   `shred`/`srm`, `find ... -delete`, `git rm`, `truncate -s 0` -- are denied
+   with the alternative that can. See "rm becomes recycler trash" below.
+3. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed,
    wherever it appears -- including inside command substitutions. You cannot
    responsibly use that, so it has to be taken away: silencing stderr hides the
    very errors you need to see.
-3. **Kills trailing `| head` / `| tail` stages** -- on the FINAL statement only.
+4. **Kills trailing `| head` / `| tail` stages** -- on the FINAL statement only.
    Any flags or arguments (`| head`, `|head -50`, `| head -n 100`, `| head -c 4k`,
    `| tail -n +2`, `| tail -f`, ...), unwound until stable, so `cmd | head -5 |
    tail -2` collapses all the way to `cmd`. Truncating output hides the rest of
    it. A limiting pipe on an EARLIER statement of a multi-statement script is a
    deliberate part of that script and is preserved.
-4. **Turns a trailing `> file` into `| tee file`** -- same final-statement scope.
+5. **Turns a trailing `> file` into `| tee file`** -- same final-statement scope.
    The output lands in the file AND stays visible (`cmd >> f` becomes
    `cmd | tee -a f`). Mid-script redirects are preserved. See "Stdout redirects
    become tee" below.
-5. **Ensures `set -o pipefail`.** Every command runs with pipefail enabled --
+6. **Ensures `set -o pipefail`.** Every command runs with pipefail enabled --
    silently prepended unless the command already turns it on. This also keeps the
    producer's exit status observable through the injected `| tee`.
-6. **Recreates Docker Compose services instead of restarting them.**
+7. **Recreates Docker Compose services instead of restarting them.**
    `docker compose restart` becomes
    `docker compose up -d --force-recreate`, preserving service arguments and
    surrounding command structure.
-7. **Caps every `sleep` at 3 seconds.** Anywhere in the tree, including loops,
+8. **Caps every `sleep` at 3 seconds.** Anywhere in the tree, including loops,
    functions, and `$( )`. Literal durations summing to <= 3 are kept; everything
    else (`sleep 30`, `sleep 1m`, `sleep $DELAY`, `sleep infinity`, junk, no args)
    becomes `sleep 3`. See "Sleep capped at 3 seconds" below.
-8. **Removes constant narration echoes/printfs.** A terminal-bound `echo` with
+9. **Removes constant narration echoes/printfs.** A terminal-bound `echo` with
    all-constant arguments, or a `printf` that just prints a single constant
    string with no `%` directive, is removed entirely -- its whole command is
    rewritten to the no-op `:` (no output, exit status 0, surrounding structure
@@ -46,10 +51,10 @@ It does nine jobs:
    expansion) is kept. The matcher sees through `command` / `builtin` / a leading
    `\` / quoting wrappers. See "Constant narration echoes and printfs are
    removed" below.
-9. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing
-   `| grep ...` (all anchored at the end of the command, like head/tail).
-   Strictness settings the user wrote (`set -e` and friends) are NEVER removed --
-   this hook only ever adds strictness.
+10. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing
+    `| grep ...` (all anchored at the end of the command, like head/tail).
+    Strictness settings the user wrote (`set -e` and friends) are NEVER removed --
+    this hook only ever adds strictness.
 
 ## Fully silent by design
 
@@ -272,6 +277,129 @@ and old-style limits (`head -60`, `tail +5`) are all skipped. The
 **effective-command resolver** applies, so `command cat f` and `\head -5 f`
 are denied too.
 
+## rm becomes recycler trash
+
+Deletion is made **non-destructive by construction** -- not detected, not
+warned about, not gated on whether the file happens to be recoverable. Every
+`rm` is rewritten to [`recycler`](https://github.com/wow-look-at-my/recycler)
+`trash`, which moves each target to the platform's native recycle bin (the
+FreeDesktop trash can on Linux and the BSDs, `~/.Trash` on macOS, the Recycle
+Bin via the shell on Windows):
+
+```bash
+rm -rf build/ old.js     ->   recycler trash build/ old.js
+rm file.txt              ->   recycler trash file.txt
+xargs rm                 ->   xargs recycler trash
+```
+
+Getting it back:
+
+```bash
+recycler list              # what is in there, newest first (--json for scripts)
+recycler restore notes.txt # put it back where it came from
+```
+
+### Why a rewrite and not a warning
+
+There is already a control on the adjacent case: the `no-overwrites` plugin
+blocks `Write` on a path that exists and tells you to use `Edit`.
+**Delete-then-Write is the loophole around that hook** -- once the path is
+gone, `Write` is legal again. And in the window between the delete and the
+Write, the only copy of that file's content is in the model's context: a
+compaction, an interruption, a rejected tool call, or a turn that simply ends
+there destroys it permanently, with nothing on disk to recover from.
+
+A control that acts on the `Write` is already a full step too late, and a
+ledger entry naming the destroyed path does not bring the bytes back. Nor can
+this lean on version control: the incident that motivated the rule happened in
+a scratchpad with no git at all. The only thing that helps is for `rm` to stop
+being able to destroy anything.
+
+### The rewrite is unconditional and tree-wide
+
+Unlike the trailing-noise rules, this one is **not** anchored to the last
+statement -- an `rm` mid-script, inside a pipe, a loop body, a function, or a
+command substitution destroys just as much as a trailing one:
+
+```bash
+rm -f a.js && node b.ts        ->  recycler trash a.js && node b.ts
+ls | while read f; do rm "$f"; done
+                               ->  ls | while read f; do recycler trash "$f"; done
+clean() { rm -rf build; }      ->  clean() { recycler trash build; }
+```
+
+Because the edit happens per-`CallExpr` on the syntax tree, "only the `rm`
+segment is rewritten" falls out for free, and a string literal that merely
+*contains* an `rm` is never touched:
+
+```bash
+echo "rm -rf /"           # untouched -- a string, not a command
+grep "rm -rf" script.sh   # untouched
+rmdir empty/              # a different command
+```
+
+`recycler` is emitted as a bare word so `PATH` resolves it, and a call that is
+already `recycler` is never rewritten again (the transform runs to a fixpoint,
+so an unguarded rule would recurse). The rule only ever emits `recycler trash`
+-- never `purge` or `empty`, which are themselves permanent deletes.
+
+### Flag translation
+
+`recycler trash` takes paths, so `rm`'s flags are dropped:
+
+| `rm` flag | handling |
+|---|---|
+| `-r`, `-R`, `--recursive` | dropped -- `recycler trash` takes directories natively |
+| `-f`, `--force` | dropped |
+| `-v`, `--verbose` | dropped |
+| `-i`, `-I`, `--interactive` | dropped -- prompts are meaningless here |
+| `--` | dropped, targets pass positionally (re-emitted if a target is dash-leading, so `rm -- -weirdname` stays correct) |
+| anything else | **DENIED** -- blocked with an explanation rather than guessing a translation |
+
+Bundled clusters count when every letter is droppable (`-rf`, `-rfv`), so an
+unknown letter anywhere in a cluster (`-rd`) takes the deny path, as do
+`--no-preserve-root`, `--one-file-system`, and `-d`.
+
+`xargs rm` gets its own case rather than falling out of the walk: there `rm`
+is an *argument* of `xargs`, not a command word, so the effective-command
+resolver never sees it. `xargs`'s own value-taking flags (`-n N`, `-I R`,
+`-P N`, ...) are understood, so the utility word is found correctly.
+
+### One code path
+
+`recycler` is a **hard dependency** of this rule, exactly as `jq` and `shfmt`
+are hard dependencies of the hook. It is simply the command the transform
+emits: there is no probe, no `command -v`, no conditional, and **no fallback
+to `rm`**. If `recycler trash` fails at runtime -- permissions, an unreachable
+recycle bin -- the file is still there and the command reports the error,
+which is the correct outcome. The failure is never caught and never retried as
+`rm`.
+
+One consequence worth knowing: `rm -f nonexistent` is silent success for real
+`rm`, but `recycler trash nonexistent` is a visible error. That is the same
+fail-loud posture as the rest of the hook.
+
+### Destructive forms that cannot be rewritten are denied
+
+There is no source file to move in these, so they are **denied** with the
+alternative that works:
+
+| form | reason names |
+|---|---|
+| `shred`, `srm` | unrecoverable by design; no safe equivalent |
+| `find ... -delete` | `find ... -exec recycler trash {} +` |
+| `git rm <path>` | `recycler trash <path> && git add -A` |
+| `truncate -s 0 file` | `recycler trash file` |
+
+`git rm --cached` does not touch the working tree and passes through
+untouched.
+
+**A plain `> file` redirect is deliberately NOT denied.** It truncates, but
+stdout redirection is overwhelmingly ordinary output routing -- and the
+`tee` rule above already owns that shape. Denying it would fight the plugin's
+own behavior and fire constantly on non-deletions. So `: > file` still
+truncates: a known, accepted gap, and the right trade.
+
 ## Stdout redirects become tee
 
 A trailing stdout file redirect on the FINAL top-level statement (rightmost
@@ -462,6 +590,14 @@ open** (the command runs unmodified):
 | bash | orchestration | |
 | jq | JSON handling + AST transform | 1.6+ |
 | shfmt | parse/print bash | needs `--to-json` / `--from-json` (v3.7.0+; verified with 3.8.0 and 3.13.1) |
+| recycler | the target of the `rm` rewrite | must be on `PATH` when a rewritten `rm` RUNS; the hook itself never invokes or probes it |
+
+`bash`, `jq`, and `shfmt` are needed by the hook itself -- if `jq` or `shfmt`
+is missing the hook fails open and emits no rewrite. `recycler` is different:
+it is needed by the *rewritten command*, not by the hook, so a missing
+`recycler` does not disable the rewrite. It surfaces as a visible
+"command not found" with the file still on disk, which is the correct failure
+mode (see "One code path" above).
 
 Installing shfmt:
 
@@ -471,6 +607,12 @@ sudo apt-get install shfmt     brew install shfmt         scoop install shfmt
 
 # Anywhere with Go                             # Static binaries
 go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/releases
+```
+
+Installing recycler:
+
+```bash
+go install github.com/wow-look-at-my/recycler@latest
 ```
 
 ## Caveats
@@ -484,8 +626,12 @@ go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/relea
   permission flow evaluates the rewritten command (verified against
   `@anthropic-ai/claude-code` 2.1.201). This is a change from the original Go
   implementation of this plugin, which returned `permissionDecision: "allow"` and
-  made every rewritten command skip the permission prompt. Only the heredoc,
-  perl, and file-read bans use a `permissionDecision` (`"deny"`).
+  made every rewritten command skip the permission prompt. Only the bans use a
+  `permissionDecision` (`"deny"`): heredoc, perl, file reads, `shred`/`srm`,
+  `find -delete`, `git rm`, `truncate -s 0`, and an untranslatable `rm` flag.
+- **A rewritten `rm` needs `recycler` on PATH at execution time.** The rewrite
+  itself never checks; a missing `recycler` is a visible failure with the file
+  intact, not a silent fallback to `rm`.
 ## Logging
 
 The log file is the hook's debug channel (the transcript shows nothing). Set
@@ -496,9 +642,15 @@ fail-open:
 ```
 REWRITE	original="ls | grep foo"	cleaned="set -o pipefail\nls"	rules="grep,pipefail"
 REWRITE	original="sleep 30; echo hi"	cleaned="set -o pipefail\nsleep 3\n:"	rules="sleep_cap,narration_remove,pipefail"
+REWRITE	original="rm -rf build"	cleaned="set -o pipefail\nrecycler trash build"	rules="rm_recycle,pipefail"
 DENY	original="cat <<EOF\nhi\nEOF"	reason="heredoc"
 DENY	original="perl -e 1"	reason="perl"
 DENY	original="cat notes.txt"	reason="file_read"
+DENY	original="rm --nonsense a"	reason="rm_flag"
+DENY	original="shred /tmp/x"	reason="shred"
+DENY	original="find . -name '*.tmp' -delete"	reason="find_delete"
+DENY	original="git rm foo"	reason="git_rm"
+DENY	original="truncate -s 0 f"	reason="truncate_zero"
 GUARD	original="..."	cleaned="..."	reason="stmt-count"
 ```
 
