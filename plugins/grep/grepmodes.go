@@ -96,14 +96,19 @@ func plural(n int, word string) string {
 }
 
 // formatContent ports the content branch: paginate the raw rg lines,
-// relativize the prefix before the FIRST colon of each line, join; empty
-// content becomes "No matches found"; a pagination note is appended when
-// a limit was applied or a positive offset given.
+// relativize the prefix before the FIRST colon of each line, clamp any
+// over-long line to clampWidth (clamp.go) so a huge line is bounded rather
+// than dropped, join; empty content becomes "No matches found"; a
+// pagination note is appended when a limit was applied or a positive
+// offset given. Text mode carries no match column, so the clamp anchors at
+// the start (the path:line: prefix always stays visible and only the tail
+// is cut); the grouped filenames_with_matches mode, which has rg's JSON
+// submatch offsets, centers its window on the match instead.
 func (g *grepTool) formatContent(lines []string, a *grepArgs) string {
 	items, appliedLimit := paginate(lines, a.headLimit, a.offset)
 	mapped := make([]string, len(items))
 	for i, l := range items {
-		mapped[i] = relativizeColonPrefix(l, g.root, strings.Index(l, ":"))
+		mapped[i] = clampLine(g.displayColonPrefix(l, a, strings.Index(l, ":")), -1)
 	}
 	body := strings.Join(mapped, "\n")
 	if body == "" {
@@ -125,7 +130,7 @@ func (g *grepTool) formatCount(lines []string, a *grepArgs) string {
 	mapped := make([]string, len(items))
 	numMatches, numFiles := 0, 0
 	for i, l := range items {
-		m := relativizeColonPrefix(l, g.root, strings.LastIndex(l, ":"))
+		m := g.displayColonPrefix(l, a, strings.LastIndex(l, ":"))
 		mapped[i] = m
 		if r := strings.LastIndex(m, ":"); r > 0 {
 			if n, ok := jsParseInt(m[r+1:]); ok {
@@ -158,7 +163,7 @@ func (g *grepTool) formatFilenames(lines []string, a *grepArgs) string {
 	}
 	rel := make([]string, len(items))
 	for i, p := range items {
-		rel[i] = relativizePath(p, g.root)
+		rel[i] = g.displayPath(p, a)
 	}
 	head := fmt.Sprintf("Found %d %s", len(items), plural(len(items), "file"))
 	if note := paginationNote(appliedLimit, a.offset); note != "" {
@@ -167,14 +172,30 @@ func (g *grepTool) formatFilenames(lines []string, a *grepArgs) string {
 	return head + "\n" + strings.Join(rel, "\n")
 }
 
-// relativizeColonPrefix applies the builtin's line mapping: when a colon
-// exists past position 0, the prefix before it is relativized (QZH) and
-// the rest of the line (colon included) is kept verbatim.
-func relativizeColonPrefix(line, root string, colon int) string {
+// displayPath maps an rg output path back to argv space (see execute)
+// and relativizes it against the root (QZH).
+func (g *grepTool) displayPath(p string, a *grepArgs) string {
+	return relativizePath(rebasePath(p, a.rgSearchPath, a.searchPath), g.root)
+}
+
+// displayColonPrefix applies the builtin's line mapping: when a colon
+// exists past position 0, the prefix before it is mapped through
+// displayPath and the rest of the line (colon included) is kept verbatim.
+// A line with no colon (a context line whose path and text both lack one)
+// is left UNTOUCHED by the builtin's first-colon mapping, so context
+// lines stay ABSOLUTE while match lines are relativized -- the faithful
+// wart locked by TestContentContextLinesKeepAbsolutePaths. rg emits those
+// absolute lines in resolved-space spelling (a.rgSearchPath is resolved so
+// slash-containing globs match through a symlinked root); rebase back to
+// the caller's spelling so the absolute form comes out the way the caller
+// supplied it, not rg's resolved form. Relative/no-colon lines and absolute
+// lines outside the resolved root pass through unchanged (rebasePath is a
+// no-op for them), so the wart holds in every case.
+func (g *grepTool) displayColonPrefix(line string, a *grepArgs, colon int) string {
 	if colon > 0 {
-		return relativizePath(line[:colon], root) + line[colon:]
+		return g.displayPath(line[:colon], a) + line[colon:]
 	}
-	return line
+	return rebasePath(line, a.rgSearchPath, a.searchPath)
 }
 
 // jsParseInt mirrors parseInt(s, 10): optional leading whitespace and

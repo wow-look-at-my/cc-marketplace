@@ -106,7 +106,6 @@ func TestBuildRgArgsOrder(t *testing.T) {
 		"--hidden",
 		"--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg",
 		"--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl",
-		"--max-columns", "500",
 	}
 	// Content mode, everything set: multiline, -i, -n, context
 	// precedence, dash pattern via -e, tokenized globs.
@@ -130,6 +129,12 @@ func TestBuildRgArgsOrder(t *testing.T) {
 	// fwm mode: --json, context translated, no -n even when true.
 	a = parseOK(t, `{"pattern":"p","-B":1,"-A":2}`)
 	want = append(append([]string{}, base...), "--json", "-B", "1", "-A", "2", "p")
+	assert.Equal(t, want, buildRgArgs(a))
+
+	// Explicit files in fwm mode force text so binary lines are stable
+	// across ripgrep's platform-specific binary scanners.
+	a.explicitFile = true
+	want = append(append([]string{}, base...), "--json", "--text", "-B", "1", "-A", "2", "p")
 	assert.Equal(t, want, buildRgArgs(a))
 
 	// content without -n; -C fallback when context absent.

@@ -196,25 +196,43 @@ func TestFwmMultilinePattern(t *testing.T) {
 	wantText(t, got, "Found 1 file\nml.txt:\n  1:one A\n  2:two B")
 }
 
-func TestFwmLongLinesOmitted(t *testing.T) {
+// TestFwmLongLinesShown: lines the old --max-columns 500 cap would have
+// dropped are now rendered in full (both sit well under clampWidth).
+func TestFwmLongLinesShown(t *testing.T) {
 	root := t.TempDir()
-	longCtx := strings.Repeat("y", 500) // +\n = 501 bytes: omitted
+	longCtx := strings.Repeat("y", 500) // omitted at the old 500 cap; now shown
 	mkTree(t, root,
-		tf{"match.txt", strings.Repeat("x", 495) + "needle\n"}, // 501 chars +\n
+		tf{"match.txt", strings.Repeat("x", 495) + "needle\n"},
 		tf{"ctx.txt", longCtx + "\nz needle\n"})
 	got := grepOK(t, testTool(t, root), map[string]any{"pattern": "needle", "-B": 1})
 	want := "Found 2 files\n" +
 		"ctx.txt:\n" +
-		"  1-[Omitted long context line]\n" +
+		"  1-" + longCtx + "\n" +
 		"  2:z needle\n" +
 		"match.txt:\n" +
-		"  1:[Omitted long matching line]"
+		"  1:" + strings.Repeat("x", 495) + "needle"
 	wantText(t, got, want)
 }
 
-func TestFwmLongLineBoundaryKept(t *testing.T) {
+// TestFwmHugeMatchLineWindowed: a match far past clampWidth stays visible
+// because the window centers on it, cutting both ends with an ellipsis.
+func TestFwmHugeMatchLineWindowed(t *testing.T) {
 	root := t.TempDir()
-	line := strings.Repeat("y", 493) + "needle" // 499 chars +\n = 500: kept
+	line := strings.Repeat("a", 5000) + "NEEDLE" + strings.Repeat("b", 5000)
+	mkTree(t, root, tf{"big.txt", line + "\n"})
+	got := grepOK(t, testTool(t, root), map[string]any{"pattern": "NEEDLE"})
+	// budget = clampWidth-2 = 4094; window starts at 5000 - 4094/2 = 2953,
+	// so it holds 2047 a's, NEEDLE, then 2041 b's, ellipsis-fenced.
+	want := "Found 1 file\nbig.txt:\n  1:" + ellipsis +
+		strings.Repeat("a", 2047) + "NEEDLE" + strings.Repeat("b", 2041) + ellipsis
+	wantText(t, got, want)
+}
+
+// TestFwmClampBoundaryKept: a line of exactly clampWidth runes is rendered
+// verbatim (the boundary is inclusive; only wider lines get a window).
+func TestFwmClampBoundaryKept(t *testing.T) {
+	root := t.TempDir()
+	line := strings.Repeat("y", clampWidth-6) + "needle" // clampWidth runes total
 	mkTree(t, root, tf{"edge.txt", line + "\n"})
 	got := grepOK(t, testTool(t, root), map[string]any{"pattern": "needle"})
 	wantText(t, got, "Found 1 file\nedge.txt:\n  1:"+line)
@@ -345,34 +363,36 @@ func TestSortPathsByMtimeDescUnits(t *testing.T) {
 
 func TestExpandEventLinesUnits(t *testing.T) {
 	// Multi-line text (multiline match): consecutive numbers, all match.
-	lines := expandEventLines("one\ntwo\n", 5, true)
+	// matchByte -1 means no recorded column, so every line gets matchCol -1.
+	lines := expandEventLines("one\ntwo\n", 5, true, -1)
 	require.Len(t, lines, 2)
-	assert.Equal(t, fwmLine{num: 5, text: "one", match: true}, lines[0])
-	assert.Equal(t, fwmLine{num: 6, text: "two", match: true}, lines[1])
+	assert.Equal(t, fwmLine{num: 5, text: "one", match: true, matchCol: -1}, lines[0])
+	assert.Equal(t, fwmLine{num: 6, text: "two", match: true, matchCol: -1}, lines[1])
 
 	// No trailing newline (EOF).
-	lines = expandEventLines("tail", 9, false)
+	lines = expandEventLines("tail", 9, false, -1)
 	require.Len(t, lines, 1)
-	assert.Equal(t, fwmLine{num: 9, text: "tail", match: false}, lines[0])
+	assert.Equal(t, fwmLine{num: 9, text: "tail", match: false, matchCol: -1}, lines[0])
 
-	// CRLF terminators are stripped from the display text but count
-	// toward the omission size.
-	lines = expandEventLines("win\r\n", 1, true)
+	// CRLF terminators are stripped from the display text.
+	lines = expandEventLines("win\r\n", 1, true, -1)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "win", lines[0].text)
 
-	// A 500-byte line + newline is over the limit; 499 + newline is not.
-	lines = expandEventLines(strings.Repeat("a", 500)+"\n", 1, true)
-	assert.True(t, lines[0].overLong)
-	lines = expandEventLines(strings.Repeat("a", 499)+"\n", 1, true)
-	assert.False(t, lines[0].overLong)
-	// Without a terminator the raw length alone decides.
-	lines = expandEventLines(strings.Repeat("a", 501), 1, true)
-	assert.True(t, lines[0].overLong)
-	lines = expandEventLines(strings.Repeat("a", 500), 1, true)
-	assert.False(t, lines[0].overLong)
+	// The submatch byte offset is mapped onto whichever sub-line contains
+	// it; the other sub-lines get matchCol -1. In "alpha\nbravo\n" byte 8
+	// lands inside "bravo" (which starts at byte 6), so its column is 2.
+	lines = expandEventLines("alpha\nbravo\n", 10, true, 8)
+	require.Len(t, lines, 2)
+	assert.Equal(t, -1, lines[0].matchCol)
+	assert.Equal(t, 2, lines[1].matchCol)
 
-	assert.Empty(t, expandEventLines("", 1, true))
+	// A match at offset 0 on a single line maps directly to column 0.
+	lines = expandEventLines("needle\n", 1, true, 0)
+	require.Len(t, lines, 1)
+	assert.Equal(t, 0, lines[0].matchCol)
+
+	assert.Empty(t, expandEventLines("", 1, true, -1))
 }
 
 func TestParseFwmEventsUnits(t *testing.T) {
@@ -381,7 +401,7 @@ func TestParseFwmEventsUnits(t *testing.T) {
 		`{"type":"match","data":{"path":{"text":"/r/a"},"lines":{"text":"hit\n"},"line_number":3}}`,
 		`{"type":"context","data":{"path":{"text":"/r/a"},"lines":{"text":"ctx\n"},"line_number":4}}`,
 		`{"type":"end","data":{"path":{"text":"/r/a"},"binary_offset":null}}`,
-		`{"type":"match","data":{"path":{"text":"/r/b"},"lines":{"text":"other\n"},"line_number":1}}`,
+		`{"type":"match","data":{"path":{"text":"/r/b"},"lines":{"text":"other\n"},"line_number":1,"submatches":[{"start":2}]}}`,
 		`{"type":"summary","data":{}}`,
 		`{"type":"match","data":{"path":{"text":"/r/nope"},"lines":{"text":"x\n"}}}`, // no line_number: skipped
 		`{truncated garbage`, // unparseable: skipped
@@ -389,9 +409,13 @@ func TestParseFwmEventsUnits(t *testing.T) {
 	require.Len(t, groups, 2)
 	assert.Equal(t, "/r/a", groups[0].path)
 	require.Len(t, groups[0].lines, 2)
-	assert.Equal(t, fwmLine{num: 3, text: "hit", match: true}, groups[0].lines[0])
-	assert.Equal(t, fwmLine{num: 4, text: "ctx", match: false}, groups[0].lines[1])
+	assert.Equal(t, fwmLine{num: 3, text: "hit", match: true, matchCol: -1}, groups[0].lines[0])
+	assert.Equal(t, fwmLine{num: 4, text: "ctx", match: false, matchCol: -1}, groups[0].lines[1])
 	assert.Equal(t, "/r/b", groups[1].path)
+	// /r/b's match event carries a submatch at byte 2, so parseFwmEvents
+	// threads that offset through as the line's matchCol.
+	require.Len(t, groups[1].lines, 1)
+	assert.Equal(t, fwmLine{num: 1, text: "other", match: true, matchCol: 2}, groups[1].lines[0])
 }
 
 func TestRgJSONTextBytesFallback(t *testing.T) {

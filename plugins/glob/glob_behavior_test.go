@@ -175,6 +175,23 @@ func TestDoubleStarScopedToSubdir(t *testing.T) {
 	wantText(t, got, "src/x.ts\nsrc/a/b/y.ts")
 }
 
+// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix: rg
+// roots its --glob matcher at the child's RESOLVED cwd but builds
+// candidates from the search-path argv, so an unresolved (symlinked)
+// argv made every slash-containing glob match nothing (macOS /var ->
+// /private/var broke every t.TempDir() root this way). The tool must
+// hand rg resolved paths and still display root-relative results.
+func TestSlashGlobThroughSymlinkedRoot(t *testing.T) {
+	real := filepath.Join(t.TempDir(), "real")
+	mkFiles(t, real, "src/x.ts", "src/a/b/y.ts", "other/z.ts")
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(real, link))
+
+	got, isErr := runGlob(t, testTool(t, link), "src/**/*.ts")
+	require.False(t, isErr)
+	wantText(t, got, "src/x.ts\nsrc/a/b/y.ts")
+}
+
 func TestGlobsAreCaseSensitive(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "Upper.TXT", "lower.txt")
