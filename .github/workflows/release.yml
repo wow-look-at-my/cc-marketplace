@@ -13,6 +13,11 @@ jobs:
     permissions:
       actions: read
       id-token: write
+      # setup-marketplace-build runs go-toolchain whenever the cached CLI is
+      # stale, and go-toolchain submits the module graph to GitHub's dependency
+      # graph, which the API gates behind contents: write. Missing here, it only
+      # surfaces on a commit that touches tools/marketplace-build.
+      contents: write
     outputs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
