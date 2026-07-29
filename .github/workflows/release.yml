@@ -96,6 +96,7 @@ jobs:
       # go-toolchain submits the module graph to GitHub's dependency graph,
       # which the API gates behind contents: write.
       contents: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
