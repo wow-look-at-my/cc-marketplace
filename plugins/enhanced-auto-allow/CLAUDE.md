@@ -6,10 +6,6 @@ The enhanced-auto-allow plugin lives at `plugins/enhanced-auto-allow/`. It white
 - **Hook code**: `plugins/enhanced-auto-allow/cmd/hook.go` -- Go binary that evaluates permissions
 - **Plugin config**: `plugins/enhanced-auto-allow/.claude-plugin/plugin.json` -- one PermissionRequest hook on matcher `*`
 
-Nothing the hook does not allow gets auto-allowed: in current CLI builds the
-auto-mode classifier is inert, so a tool missing from these rules asks. That
-makes an out-of-date MCP allowlist read as the plugin forcing asks.
-
 The trust unit for MCP is the **server**, never a tool-name pattern. Tool names
 are author-chosen, so `get_`/`query_` guarantee nothing, and a server-name glob
 would extend the allowlist to servers nobody has connected yet. A glob inside a
