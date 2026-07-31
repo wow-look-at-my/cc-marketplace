@@ -843,10 +843,54 @@
     </allowedArgPrefixes>
   </cmd>
 
+  <!-- MCP tools. The trust unit is the SERVER, never a tool-name pattern.
+       tool names are author-chosen, so "get_"/"query_" guarantee nothing,
+       and a server-name glob would extend the allowlist to servers nobody
+       has connected yet. A glob inside a server is only used where every
+       tool it matches on that server's real surface was checked read-only. -->
   <mcpServer name="grafana">
     <tool>get_*</tool>
     <tool>list_*</tool>
     <tool>search_*</tool>
     <tool>query_*</tool>
+  </mcpServer>
+
+  <!-- github: prefixes are safe here (every mutating tool is named
+       otherwise), the four exact names are the read-only tools that do not
+       carry a read-only prefix. actions_* is deliberately NOT a glob; it would
+       swallow actions_run_trigger. -->
+  <mcpServer name="github">
+    <tool>get_*</tool>
+    <tool>list_*</tool>
+    <tool>search_*</tool>
+    <tool>issue_read</tool>
+    <tool>pull_request_read</tool>
+    <tool>actions_get</tool>
+    <tool>actions_list</tool>
+  </mcpServer>
+
+  <mcpServer name="Context7*">
+    <tool>resolve-library-id</tool>
+    <tool>query-docs</tool>
+  </mcpServer>
+
+  <!-- Playwright: observation only. browser_evaluate, browser_run_code_unsafe,
+       and everything that drives the page stay out. -->
+  <mcpServer name="Playwright">
+    <tool>browser_snapshot</tool>
+    <tool>browser_console_messages</tool>
+    <tool>browser_network_request</tool>
+    <tool>browser_network_requests</tool>
+    <tool>browser_take_screenshot</tool>
+    <tool>browser_find</tool>
+  </mcpServer>
+
+  <!-- This marketplace's own grep/glob servers: the same builtin read-only
+       tools the hook already allows by bare name. -->
+  <mcpServer name="plugin_grep_*">
+    <tool>Grep</tool>
+  </mcpServer>
+  <mcpServer name="plugin_glob_*">
+    <tool>Glob</tool>
   </mcpServer>
 </rules>
