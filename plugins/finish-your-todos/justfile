@@ -2,6 +2,12 @@
 help:
 	@just --list
 
+# The entry-side hooks are node TypeScript with no build step, so their tests
+# run here; the Stop hook is Go and is built and tested by go-toolchain.
+prebuild:
+	node tests/run-tests.ts
+
 build:
 
 test: build
+	node tests/run-tests.ts
