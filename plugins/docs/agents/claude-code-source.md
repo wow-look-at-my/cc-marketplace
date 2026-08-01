@@ -23,16 +23,20 @@ The branch name in `PazerOP/claude-docs-gaps` is EXACTLY the version string.
 
 ```bash
 V=$(claude --version | awk '{print $1}')                          # e.g. 2.1.220
-gh api "repos/PazerOP/claude-docs-gaps/branches/$V" --jq .name    # confirm it exists
 gh api -H "Accept: application/vnd.github.raw" \
   "repos/PazerOP/claude-docs-gaps/contents/cli.js?ref=$V" > "/tmp/cli-$V.js"
 ```
 
 - Check `/tmp/cli-$V.js` first — a previous agent in this session may already have downloaded it.
+- **Confirm the size before searching**: a real `cli.js` is ~27 MB / ~720k lines. `gh` exits non-zero
+  on a bad ref (`No commit found for the ref ...`) but still writes its error JSON to stdout, so a
+  failed fetch leaves a ~127-byte file rather than none. `wc -c` once; do not grep a stub.
 - **`master` is almost never the right branch.** It holds extraction tooling, no product `cli.js`.
   Same for `claude/*`, `doc-js-extraction-*` and `analysis-framework`.
-- Use the version actually running unless asked about a different one. No branch for your exact
-  build? Take the highest below it and **say which version you actually read**.
+- Use the version actually running unless asked about a different one. A missing branch announces
+  itself in that fetch — list the branches then
+  (`gh api repos/PazerOP/claude-docs-gaps/branches --paginate --jq '.[].name'`), take the highest
+  below your version, and **say which version you actually read**.
 - Cheap first stop: the `docs/` directory on the version branch and the `docs-aggregate` branch's
   `INDEX.md` hold prior investigations. Read those before re-deriving — then still confirm the
   specific claim in source.
