@@ -120,14 +120,8 @@ func snapshot(cwd string) map[string]string {
 }
 
 // changedFiles refreshes the snapshot and returns the instruction files that
-// CHANGED since the last check.
-//
-// This is what closes the hole that made the whole guard skippable: a hook keyed
-// on tool_input.file_path sees only Write, Edit and MultiEdit, so a CLAUDE.md
-// rewritten by Bash -- a heredoc, sed -i, tee, a formatter -- named no path, was
-// never measured, was never recorded, and therefore never reached the Stop gate
-// either. Watching the FILES is the only version of this that cannot be walked
-// around by choosing a different tool.
+// CHANGED since the last check. Watching files rather than tool_input.file_path
+// is what makes the guard un-walk-aroundable: a Bash edit names no path.
 func changedFiles(sessionID, cwd string) []string {
 	if sessionID == "" {
 		return nil

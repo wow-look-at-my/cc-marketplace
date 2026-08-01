@@ -1,18 +1,8 @@
-// Command claude-md-budget keeps instruction files inside the size budget an
-// agent session pays on every request.
+// Command claude-md-budget keeps CLAUDE.md and @-imported snippets inside the
+// character budget. Nothing truncates them, so every excess character is re-sent
+// on every request for the life of the session.
 //
-// Claude Code loads every CLAUDE.md and every @-imported snippet VERBATIM into
-// the prompt. Nothing truncates them: the only hard cap skips a file over 4 MiB
-// entirely, and the "limit" the CLI mentions is a warning threshold that changes
-// what gets sent not at all. So an oversized instruction file is billed, in
-// full, on every request for the life of the session -- and the CLI's own
-// warning renders only in the terminal UI, never on the web surface and never
-// to the model. This closes that loop.
-//
-// It ships as a plugin, not as config, because config is installed once when a
-// container is built: a session whose snapshot predates the guard never gets it
-// and has no way to fetch it. Plugins are reinstalled from the marketplace every
-// session, so this reaches an environment the config cannot.
+// see README.md
 package main
 
 import (

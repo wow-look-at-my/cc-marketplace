@@ -112,14 +112,9 @@ func editReport(in hookInput, limit int) string {
 	return editReportText(worst, limit, growth, hasGrowth)
 }
 
-// stopBlock decides whether to refuse the end of the turn.
-//
-// Fires once per (file, content) rather than once per session. A file left
-// exactly as the gate found it never blocks twice -- that is the no-wedge
-// property, and it is why this can be a hard block at all. But a file the
-// session then CHANGES and still leaves broken is a new violation and blocks
-// again, as is a second file. "Blocks once, ever" was the other half of how this
-// guard became ignorable: one nag, then silence for the rest of a session.
+// stopBlock decides whether to refuse the end of the turn. It fires once per
+// (file, content): a file left as the gate found it never blocks twice, which is
+// what makes a hard block safe, but re-breaking one is a new violation.
 func stopBlock(in hookInput, limit int) string {
 	if in.StopHookActive || in.SessionID == "" {
 		return ""
