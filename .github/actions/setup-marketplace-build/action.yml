@@ -48,6 +48,8 @@ runs:
         working-directory: "tools/marketplace-build"
         os: linux
         arch: amd64
+        # An internal CI helper, not a release artifact.
+        autorelease: "false"
 
     - name: Install marketplace-build
       shell: bash

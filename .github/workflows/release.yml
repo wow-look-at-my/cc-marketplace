@@ -126,6 +126,11 @@ jobs:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
           upload-artifacts: 'false'
+          # A plugin is distributed as an orphan tag, never a buildhost release, so
+          # nothing here should publish. autorelease defaults TRUE and fires on
+          # every branch push -- and its GitHub Deployment + storage record are
+          # hard failures without deployments/artifact-metadata write.
+          autorelease: 'false'
 
       - name: Build
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
