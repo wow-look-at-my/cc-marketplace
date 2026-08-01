@@ -28,7 +28,12 @@ jobs:
           CLEANUP_BASH_CMDS_LOG: ${{ runner.temp }}/hook.log
         run: |
           : > "$CLEANUP_BASH_CMDS_LOG"
+          # --model sonnet is deliberate: this job asserts that a HOOK rewrote a
+          # command, which no model tier affects, and it runs on every push.
+          # Without the flag it inherits the account default and bills Opus for
+          # a one-line smoke test.
           claude -p "Run exactly this Bash command and report the output: seq 1 10 | head -3" \
+            --model sonnet \
             --plugin-dir ./plugins/cleanup-bash-cmds \
             --allowedTools "Bash" \
             --permission-mode bypassPermissions \

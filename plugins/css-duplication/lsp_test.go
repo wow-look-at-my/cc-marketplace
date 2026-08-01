@@ -70,6 +70,43 @@ func TestServerHandshakeAdvertisesSyncAndDiagnostics(t *testing.T) {
 	require.Contains(t, string(raw), `"includeText":true`)
 }
 
+// Every response must carry `result` or `error` -- a success response with
+// NEITHER is malformed, and vscode-jsonrpc (what Claude Code uses) rejects it
+// with "The received response has neither a result nor an error property".
+// This is asserted on the RAW JSON on purpose: unmarshalling into a struct
+// silently turns a missing key into a zero value, which is exactly why the
+// original shutdown bug survived a green test suite and only showed up when a
+// real client tried to stop the server.
+func TestEveryResponseCarriesResultOrError(t *testing.T) {
+	var out bytes.Buffer
+	in := frame(t, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}}) +
+		frame(t, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "shutdown"}) +
+		frame(t, map[string]any{"jsonrpc": "2.0", "id": 3, "method": "textDocument/rename", "params": map[string]any{}}) +
+		frame(t, map[string]any{"jsonrpc": "2.0", "method": "exit"})
+
+	require.NoError(t, NewServer(&out).Serve(strings.NewReader(in)))
+
+	r := bufio.NewReader(bytes.NewReader(out.Bytes()))
+	seen := 0
+	for {
+		body, err := readMessage(r)
+		if err != nil {
+			break
+		}
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(body, &raw))
+		if _, isResponse := raw["id"]; !isResponse {
+			continue
+		}
+		seen++
+		_, hasResult := raw["result"]
+		_, hasError := raw["error"]
+		require.True(t, hasResult || hasError, "response without result or error: %s", body)
+		require.False(t, hasResult && hasError, "response with both: %s", body)
+	}
+	require.Equal(t, 3, seen, "initialize, shutdown and the unknown method are all answered")
+}
+
 func TestDidOpenPublishesOneDiagnosticPerCopy(t *testing.T) {
 	uri := "file:///repo/dashboard.css"
 	var out bytes.Buffer
