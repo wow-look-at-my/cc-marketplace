@@ -10,30 +10,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// makePackagedPlugin creates a fake packaged plugin directory under root by
-// running packagePluginToDir on a temp cooked dir built with the given
-// plugin.json + .mcp.json strings.
+// makePackagedPlugin creates a released plugin directory under root: the
+// cooked tree plus the manifest.json release-plugin writes. There is no npm
+// tarball any more -- the cooked directory IS what gets published, as a git
+// orphan tag.
 func makePackagedPlugin(t *testing.T, root, name, version, pluginJSON, mcpJSON string) string {
 	t.Helper()
 
-	cookedDir := t.TempDir()
-	pkg := map[string]string{
-		"name":    "test-owner-" + name,
-		"version": version,
-	}
-	pkgData, _ := json.Marshal(pkg)
-	require.NoError(t, os.WriteFile(filepath.Join(cookedDir, "package.json"), pkgData, 0644))
-
+	outDir := filepath.Join(root, name)
+	require.NoError(t, os.MkdirAll(outDir, 0o755))
 	if pluginJSON != "" {
-		require.NoError(t, os.MkdirAll(filepath.Join(cookedDir, ".claude-plugin"), 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(cookedDir, ".claude-plugin", "plugin.json"), []byte(pluginJSON), 0644))
+		require.NoError(t, os.MkdirAll(filepath.Join(outDir, ".claude-plugin"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(outDir, ".claude-plugin", "plugin.json"), []byte(pluginJSON), 0o644))
 	}
 	if mcpJSON != "" {
-		require.NoError(t, os.WriteFile(filepath.Join(cookedDir, ".mcp.json"), []byte(mcpJSON), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(outDir, ".mcp.json"), []byte(mcpJSON), 0o644))
 	}
-
-	outDir := filepath.Join(root, name)
-	require.NoError(t, packagePluginToDir(cookedDir, "test-owner-"+name, version, outDir))
+	require.NoError(t, writeReleaseManifest(outDir, name, version, fmt.Sprintf("%s#%s", name, version)))
 	return outDir
 }
 
@@ -52,13 +45,16 @@ func TestReadPackagedPlugins(t *testing.T) {
 	require.Equal(t, "1.0.0", plugins[1].manifest.Version)
 }
 
+// A plugin whose release output can't be read is a FAILED RELEASE, not one to
+// skip: warning and continuing published a marketplace.json with that plugin
+// missing, so nobody could install it and every check stayed green.
 func TestReadPackagedPlugins_NoManifest(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "broken"), 0755))
 
-	plugins, err := readPackagedPlugins(dir)
-	require.NoError(t, err)
-	require.Empty(t, plugins)
+	_, err := readPackagedPlugins(dir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "broken")
 }
 
 func TestReadPackagedPlugins_BadManifest(t *testing.T) {
@@ -67,9 +63,20 @@ func TestReadPackagedPlugins_BadManifest(t *testing.T) {
 	require.NoError(t, os.MkdirAll(pluginDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte("{not json"), 0644))
 
-	plugins, err := readPackagedPlugins(dir)
-	require.NoError(t, err)
-	require.Empty(t, plugins)
+	_, err := readPackagedPlugins(dir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "broken")
+}
+
+func TestReadPackagedPlugins_IncompleteManifest(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "broken")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte(`{"name":"broken"}`), 0644))
+
+	_, err := readPackagedPlugins(dir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing name, version or tag")
 }
 
 func TestReadPackagedPlugins_MissingDir(t *testing.T) {
@@ -84,9 +91,10 @@ func TestWriteSummary(t *testing.T) {
 	plugins := []packagedPlugin{
 		{
 			name: "my-plugin",
-			manifest: pluginPackageManifest{
-				Name:    "owner-my-plugin",
-				Version: "3.0.0",
+			manifest: pluginReleaseManifest{
+				Name:    "my-plugin",
+				Version: "3",
+				Tag:     "my-plugin#3",
 			},
 		},
 	}
@@ -100,8 +108,8 @@ func TestWriteSummary(t *testing.T) {
 	require.Contains(t, content, "## Marketplace Updated")
 	require.Contains(t, content, "master")
 	require.Contains(t, content, "my-plugin")
-	require.Contains(t, content, "owner-my-plugin")
-	require.Contains(t, content, "3.0.0")
+	require.Contains(t, content, "my-plugin#3")
+	require.Contains(t, content, "3")
 }
 
 func TestWriteSummary_BadPath(t *testing.T) {
@@ -133,7 +141,7 @@ func TestBuildPluginsArray(t *testing.T) {
 		},
 	}
 
-	result := buildPluginsArray(plugins, existing, "https://test-owner.github.io/test-repo", "test-owner")
+	result := buildPluginsArray(plugins, existing, "test-owner/test-repo", "test-owner")
 	require.Len(t, result, 1)
 
 	p := result[0].(map[string]interface{})
@@ -142,11 +150,15 @@ func TestBuildPluginsArray(t *testing.T) {
 	require.Equal(t, "3", p["version"])
 	require.Equal(t, "development", p["category"])
 
+	// A git source, not npm: installing a plugin is a shallow clone of its
+	// orphan tag, so nothing on the far side needs node. The ref is the
+	// immutable per-release tag, never the moving "#latest" pointer.
 	src := p["source"].(map[string]interface{})
-	require.Equal(t, "npm", src["source"])
-	require.Equal(t, "test-owner-alpha", src["package"])
-	require.Equal(t, "3.0.0", src["version"])
-	require.Equal(t, "https://test-owner.github.io/test-repo", src["registry"])
+	require.Equal(t, "github", src["source"])
+	require.Equal(t, "test-owner/test-repo", src["repo"])
+	require.Equal(t, "alpha#3.0.0", src["ref"])
+	require.NotContains(t, src, "package", "no npm package name survives")
+	require.NotContains(t, src, "registry", "no npm registry survives")
 }
 
 func TestBuildPluginsArray_WithMCP(t *testing.T) {
@@ -165,7 +177,7 @@ func TestBuildPluginsArray_WithMCP(t *testing.T) {
 	plugins, err := readPackagedPlugins(dir)
 	require.NoError(t, err)
 
-	result := buildPluginsArray(plugins, map[string]interface{}{}, "https://test-owner.github.io/test-repo", "test-owner")
+	result := buildPluginsArray(plugins, map[string]interface{}{}, "test-owner/test-repo", "test-owner")
 	require.Len(t, result, 1)
 
 	p := result[0].(map[string]interface{})
