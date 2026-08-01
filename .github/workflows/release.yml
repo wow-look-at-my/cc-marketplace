@@ -327,8 +327,11 @@ jobs:
             const runNumber = env.GITHUB_RUN_NUMBER ?? "";
             const mktUrl = `https://sites.pazer.build/cc-marketplace/branch/${branch}/marketplace.json`;
 
+            // -L is load-bearing: buildhost redirects /branch/<b>/ to the
+            // canonical /@<b>/, and without it curl returns the redirect body,
+            // which parses as no version at all and never converges.
             async function fetchJson(url: string): Promise<any> {
-              const r = await exec.getExecOutput("curl", ["-fsS", "-m", "25", url], { silent: true, ignoreReturnCode: true });
+              const r = await exec.getExecOutput("curl", ["-fsSL", "-m", "25", url], { silent: true, ignoreReturnCode: true });
               if (r.exitCode !== 0) return null;
               try { return JSON.parse(r.stdout); } catch { return null; }
             }
