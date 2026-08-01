@@ -1,0 +1,20 @@
+{
+  "name": "docs",
+  "version": "978",
+  "tag": "docs#978",
+  "pluginJson": {
+    "author": {
+      "name": "wow-look-at-my-code"
+    },
+    "description": "Corrective reference notes the model loads before touching things it reliably gets wrong from stale training data",
+    "keywords": [
+      "docs",
+      "reference",
+      "dockerfile",
+      "docker-compose",
+      "skills"
+    ],
+    "name": "docs",
+    "version": "978"
+  }
+}
