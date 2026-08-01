@@ -69,56 +69,31 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("hook validation failed: %w", err)
 	}
 
-	// Generate package.json for npm registry publishing. The buildhost project
-	// is cc-marketplace/<plugin> (OIDC from this repo authorizes that
-	// namespace), but npm package names allow only one slash, so buildhost
-	// serves the package with the namespace slash encoded as "__". The name
-	// here must match what buildhost serves so marketplace.json resolves it.
-	npmPackageName := fmt.Sprintf("@buildhost/cc-marketplace__%s", pluginName)
-	npmVersion := fmt.Sprintf("%d.0.0", newVersion)
-	if err := writeNPMPackageJSON(tmpDir, npmPackageName, npmVersion); err != nil {
-		return fmt.Errorf("failed to write package.json: %w", err)
+	// A plugin that ships a binary ships exactly one: the fat APE, plus the
+	// launcher the manifests already name (see ape_package.go for why the APE
+	// cannot be the command itself).
+	if err := stageBinaries(tmpDir, pluginName); err != nil {
+		return fmt.Errorf("failed to stage plugin binary: %w", err)
+	}
+
+	// Distribution is a git orphan tag, not an npm package: a plugin installs
+	// by `git clone --depth 1 --branch <tag>`, so nothing on the far side needs
+	// node or npm. The immutable per-release tag is what marketplace.json
+	// pins; `#latest` is the human-facing pointer the orphan-release action
+	// also moves.
+	tag := fmt.Sprintf("%s#%d", pluginName, newVersion)
+	if err := writeReleaseManifest(tmpDir, pluginName, fmt.Sprintf("%d", newVersion), tag); err != nil {
+		return fmt.Errorf("failed to write release manifest: %w", err)
 	}
 
 	// Output for GitHub Actions (parsed by workflow)
 	fmt.Printf("source_dir=%s\n", tmpDir)
-	fmt.Printf("package_name=%s\n", npmPackageName)
-	fmt.Printf("package_version=%s\n", npmVersion)
-	fmt.Printf("message=Release %s\n", pluginName)
+	fmt.Printf("tag=%s\n", tag)
+	fmt.Printf("version=%d\n", newVersion)
+	fmt.Printf("message=Release %s\n", tag)
 
 	fmt.Fprintf(os.Stderr, "Prepared release in %s\n", tmpDir)
 	return nil
-}
-
-func writeNPMPackageJSON(dir, packageName, version string) error {
-	description := ""
-	license := ""
-	pluginJSONPath := filepath.Join(dir, ".claude-plugin", "plugin.json")
-	if data, err := os.ReadFile(pluginJSONPath); err == nil {
-		var pluginJSON map[string]interface{}
-		if json.Unmarshal(data, &pluginJSON) == nil {
-			if desc, ok := pluginJSON["description"].(string); ok {
-				description = desc
-			}
-			if lic, ok := pluginJSON["license"].(string); ok {
-				license = lic
-			}
-		}
-	}
-
-	pkg := map[string]interface{}{
-		"name":    packageName,
-		"version": version,
-	}
-	if description != "" {
-		pkg["description"] = description
-	}
-	if license != "" {
-		pkg["license"] = license
-	}
-
-	data, _ := json.MarshalIndent(pkg, "", "  ")
-	return os.WriteFile(filepath.Join(dir, "package.json"), data, 0644)
 }
 
 type releaseMetadata struct {
