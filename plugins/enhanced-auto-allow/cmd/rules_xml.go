@@ -124,7 +124,7 @@ func convertXMLProcess(xc xmlCommand, behavior string) ProcessRule {
 		Name:            xc.Process,
 		Behavior:        behavior,
 		Message:         xc.Message,
-		InlineScript:    xc.InlineScript,
+		InlineOnly:      xc.InlineScript,
 		EvalFlags:       splitList(xc.EvalFlags),
 		EvalSubcommands: splitList(xc.EvalSubcommands),
 	}

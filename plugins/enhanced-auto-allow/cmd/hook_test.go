@@ -37,7 +37,10 @@ func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 			walk(cmd.Subcommands)
 		}
 	}
-	walk(xr.Commands)
+	// Tests live wherever their rule lives, in any of the three sections.
+	walk(xr.Allow.Rules)
+	walk(xr.Ask.Rules)
+	walk(xr.Deny.Rules)
 	require.NotEmpty(t, cases, "no embedded tests found in rules.xml")
 	return cases
 }
@@ -57,7 +60,7 @@ func TestDuplicateEntriesMerged(t *testing.T) {
 	defer func() { rules = saved }()
 
 	rules = Rules{
-		Commands: []CommandNode{
+		Allow: []CommandNode{
 			{
 				Name:        "mycmd",
 				Description: "first entry",
@@ -90,7 +93,7 @@ func TestDuplicateEntriesDenyWins(t *testing.T) {
 	defer func() { rules = saved }()
 
 	rules = Rules{
-		Commands: []CommandNode{
+		Allow: []CommandNode{
 			{
 				Name: "mycmd",
 				Subcommands: []CommandNode{

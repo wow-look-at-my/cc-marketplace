@@ -22,9 +22,22 @@ type ToolInput struct {
 	Command string `json:"command"`
 }
 
-// Rules configuration - array-based recursive structure
+// Rules configuration - array-based recursive structure.
+//
+// Three sections, evaluated deny > ask > allow. Within each, a rule is either a
+// COMMAND rule (matched against argv as written, with flag and argument
+// constraints) or a PROCESS rule (matched against the resolved process name,
+// however it is spelled). The same node type means the same rule can deny under
+// <deny> and allow under <allow>.
 type Rules struct {
-	Commands   []CommandNode       `json:"commands"`
+	Allow []CommandNode `json:"allow"`
+	Ask   []CommandNode `json:"ask"`
+	Deny  []CommandNode `json:"deny"`
+
+	AllowProcesses []ProcessRule `json:"allowProcesses"`
+	AskProcesses   []ProcessRule `json:"askProcesses"`
+	DenyProcesses  []ProcessRule `json:"denyProcesses"`
+
 	MCPServers map[string][]string `json:"mcpServers"`
 }
 
@@ -113,16 +126,53 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
+	// Process rules first, and deny before ask before allow. They are answered
+	// by walking the parse tree rather than by matching argv, so they still see
+	// a command the allow path below refuses to read -- a `$(...)`, a subshell,
+	// anything with a redirect. A denied program must not be reachable by
+	// wrapping it in a construct that makes the whitelist give up.
+	for _, section := range []struct {
+		rules    []ProcessRule
+		behavior string
+	}{
+		{rules.DenyProcesses, "deny"},
+		{rules.AskProcesses, "ask"},
+	} {
+		if name, msg := matchProcessRule(command, section.rules); name != "" {
+			if msg == "" {
+				msg = name + " may not be run here."
+			}
+			return section.behavior, msg
+		}
+	}
+
 	commands := parseAllCommands(command)
 	if len(commands) == 0 {
 		return "", ""
 	}
 
-	// All commands must be allowed (or passthrough)
-	// If any is denied, deny. If all allowed, allow. Otherwise passthrough.
+	// Command rules, same precedence. Every command in a compound must clear
+	// the bar: if any is denied, deny; if all are allowed, allow; otherwise
+	// passthrough and let the normal permission flow decide.
+	for _, section := range []struct {
+		nodes    []CommandNode
+		behavior string
+	}{
+		{rules.Deny, "deny"},
+		{rules.Ask, "ask"},
+	} {
+		for _, args := range commands {
+			if decision, msg := evaluateArgs(args, section.nodes); decision == "allow" || decision == "deny" {
+				// A match in a deny/ask section means that section's behavior,
+				// whatever the rule's internal verdict was.
+				return section.behavior, msg
+			}
+		}
+	}
+
 	allAllowed := true
 	for _, args := range commands {
-		decision, msg := evaluateArgs(args, rules.Commands)
+		decision, msg := evaluateArgs(args, rules.Allow)
 		if decision == "deny" {
 			return "deny", msg
 		}
@@ -132,6 +182,9 @@ func evaluateCommand(command string) (string, string) {
 	}
 
 	if allAllowed {
+		if name, _ := matchProcessRule(command, rules.AllowProcesses); name != "" {
+			return "allow", ""
+		}
 		return "allow", ""
 	}
 	return "", ""
@@ -252,7 +305,7 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 	if len(node.ExecFlags) > 0 {
 		subCmds := extractExecSubCommands(remaining, node.ExecFlags)
 		for _, subCmd := range subCmds {
-			decision, msg := evaluateArgs(subCmd, rules.Commands)
+			decision, msg := evaluateArgs(subCmd, rules.Allow)
 			if decision == "deny" {
 				return "deny", msg
 			}

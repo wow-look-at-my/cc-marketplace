@@ -2,7 +2,7 @@
 <rules>
   <!-- Cross-cutting tests: compounds, redirects, pipes, passthrough -->
   <test cmd="git status &amp;&amp; git diff" expect="allow"/>
-  <test cmd="git status &amp;&amp; python --version" expect=""/>
+  <test cmd="git status &amp;&amp; python --version" expect="deny"/>
   <test cmd="git status || git diff" expect="allow"/>
   <test cmd="git fetch origin latest &amp;&amp; git show HEAD" expect="allow"/>
   <test cmd="ls &amp;&amp; cat file.txt" expect="allow"/>
@@ -11,8 +11,7 @@
   <test cmd="git status; git diff" expect="allow"/>
   <test cmd="cd some/folder &amp;&amp; git diff Config/DefaultEngine.ini" expect="allow"/>
   <test cmd="git log $(echo test)" expect=""/>
-  <test cmd="git log | python" expect=""/>
-  <test cmd="python --version" expect=""/>
+  <test cmd="git log | python" expect="deny"/>
   <test cmd="echo foo > file.txt" expect=""/>
   <test cmd="echo foo >> file.txt" expect=""/>
   <test cmd="sort input.txt > output.txt" expect=""/>

@@ -21,9 +21,11 @@ import (
 // never be finished. `python3`, `/usr/bin/python3`, `env python3`, `python3.11`,
 // `sudo -E python`, `uv run python` are one process start wearing six spellings,
 // and the next one is always the spelling nobody enumerated.
-type DenyProcess struct {
-	Name    string
-	Message string
+type ProcessRule struct {
+	Name string
+	// Behavior is the section this rule came from: allow, ask or deny.
+	Behavior string
+	Message  string
 	// InlineOnly denies just the forms that execute a script handed to the
 	// interpreter on the command line or on stdin, leaving `node script.js`
 	// alone. Interpreters that must stay usable (node runs this environment's
@@ -102,7 +104,7 @@ func matchesDenied(name, denied string) bool {
 // rather than pointing it at a file: an eval flag, an eval subcommand, a stdin
 // marker, or a heredoc/pipe feeding it. fedByStdin carries the cases the
 // argument list alone cannot show.
-func isInlineScript(d DenyProcess, args []string, fedByStdin bool) bool {
+func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 	if fedByStdin {
 		return true
 	}
@@ -138,7 +140,7 @@ func isInlineScript(d DenyProcess, args []string, fedByStdin bool) bool {
 // Known limit: a program named only inside a string handed to another
 // interpreter (`bash -c "python3 x.py"`) is not visible here, because at parse
 // time that is an opaque argument, not a command.
-func deniedProcess(command string, denies []DenyProcess) (string, string) {
+func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 	if len(denies) == 0 {
 		return "", ""
 	}
