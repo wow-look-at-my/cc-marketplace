@@ -87,8 +87,55 @@ var auxOpeners = regexp.MustCompile(`(?i)^\s*(is|are|was|were|do|does|did|can|co
 
 var ackOnly = regexp.MustCompile(`(?i)^\s*(ok(ay)?|k|yes|yep|yeah|no|nope|sure|thanks|thank you|ty|nice|cool|great|perfect|good|lgtm|ship it|go ahead|continue|proceed|please do|sounds good|👍|\+1)[\s.!?]*$`)
 
-// A slash command is the CLI's own control surface, not an assignment.
-var slashCommand = regexp.MustCompile(`^\s*/`)
+// A slash command is the CLI's own control surface -- but its ARGUMENTS are
+// not. The hook never sees a command's expansion, only the raw `/name args`
+// the user typed, so `/goal fix the flaky test` arrives as exactly that string.
+// Skipping the whole line on the leading "/" is how assignments handed over
+// that way went unfiled for a whole session. Strip the command word and judge
+// what is left; a bare `/review` leaves nothing and passes through as before.
+var slashCommand = regexp.MustCompile(`^\s*/\S*\s*`)
+
+// stripSlashCommand removes a leading `/command` token and returns the
+// argument text. Input with no leading slash is returned unchanged.
+func stripSlashCommand(text string) string {
+	if prefix := slashCommand.FindString(text); prefix != "" {
+		return strings.TrimSpace(text[len(prefix):])
+	}
+	return text
+}
+
+// commandArgs splits a slash command into its argument text.
+func commandArgs(text string) (args string, isCommand bool) {
+	if !strings.HasPrefix(strings.TrimSpace(text), "/") {
+		return "", false
+	}
+	return stripSlashCommand(strings.TrimSpace(text)), true
+}
+
+// argWordFloor is where command arguments stop looking like a parameter and
+// start looking like prose. Settings and knobs are short -- "high", "5m /foo";
+// an assignment typed at a command is a sentence.
+const argWordFloor = 5
+
+// assignsWorkAsCommand judges the ARGUMENTS of a slash command.
+//
+// The permissive rule used for prose cannot be reused here. Prose that is not a
+// question is almost always an instruction, but command arguments are just as
+// often parameters -- "/effort high", "/loop 5m /foo" -- and treating those as
+// assignments would arm the gate on routine control input. So an imperative
+// carries it on its own, and otherwise the arguments have to read like a
+// sentence rather than a setting.
+func assignsWorkAsCommand(args string) bool {
+	if args == "" {
+		return false
+	}
+	if whOpeners.MatchString(args) || (auxOpeners.MatchString(args) && strings.Contains(args, "?")) {
+		// A question typed at a command is still a question -- unless it also
+		// carries an instruction, which is the part that gets forgotten.
+		return hasImperative(args)
+	}
+	return hasImperative(args) || len(strings.Fields(args)) >= argWordFloor
+}
 
 // Verbs that mean "do something to the codebase". Matched at the start of any
 // line or clause, which is where an instruction actually sits.
@@ -110,24 +157,31 @@ func hasImperative(text string) bool { return imperativePattern.MatchString(text
 //
 // Deliberately biased toward YES. A false positive costs one TaskCreate call;
 // a false negative is the exact failure this plugin exists to stop. The only
-// things that get a pass are pure questions, bare acknowledgements, and slash
-// commands -- and a question that also contains an imperative ("why is X? fix
-// it") still arms, because the imperative is the part that gets forgotten.
+// things that get a pass are pure questions, bare acknowledgements, and bare
+// slash commands -- and a question that also contains an imperative ("why is
+// X? fix it") still arms, because the imperative is the part that gets
+// forgotten.
 func assignsWork(prompt string) bool {
 	text := strings.TrimSpace(prompt)
-	if text == "" || slashCommand.MatchString(text) || ackOnly.MatchString(text) {
+	if args, isCommand := commandArgs(text); isCommand {
+		return assignsWorkAsCommand(args)
+	}
+	if text == "" || ackOnly.MatchString(text) {
 		return false
 	}
 	isQuestion := whOpeners.MatchString(text) || (auxOpeners.MatchString(text) && strings.Contains(text, "?"))
 	return !isQuestion || hasImperative(text)
 }
 
-// hookPayload is the subset of the hook JSON both entry-side halves read.
+// hookPayload is the subset of the hook JSON the entry-side halves read.
 type hookPayload struct {
 	SessionID string `json:"session_id"`
 	Prompt    string `json:"prompt"`
 	ToolName  string `json:"tool_name"`
 	EventName string `json:"hook_event_name"`
+	// TranscriptPath is how the PreToolUse gate sees assignments that never
+	// reached UserPromptSubmit at all -- see interject.go.
+	TranscriptPath string `json:"transcript_path"`
 }
 
 // parsePayload fails open: garbage stdin yields an empty session id, which

@@ -88,12 +88,34 @@ func TestQuestionWithImperativeArms(t *testing.T) {
 	require.Equal(t, "deny", decision(t, gate("Bash", "s")), "a question carrying an imperative must arm")
 }
 
-func TestAcksAndSlashCommandsDoNotArm(t *testing.T) {
-	for _, p := range []string{"ok", "thanks!", "lgtm", "go ahead", "  ", "/compact", "/goal do the thing"} {
+// Bare commands and settings-shaped arguments stay out. `/goal do the thing`
+// sits on the settings side of that line rather than the assignment side: four
+// words with no imperative reads like a parameter, and the argument rule errs
+// toward silence for short command input.
+func TestAcksAndSettingsCommandsDoNotArm(t *testing.T) {
+	for _, p := range []string{"ok", "thanks!", "lgtm", "go ahead", "  ", "/compact", "/goal do the thing", "/effort high"} {
 		t.Run(p, func(t *testing.T) {
 			isolate(t)
 			arm(p, "s")
 			require.Emptyf(t, decision(t, gate("Bash", "s")), "an ack/command must not arm the gate: %q", p)
+		})
+	}
+}
+
+// ...but a command carrying real work DOES arm now. It used to be skipped on
+// the leading "/" alone, and since the hook only ever sees the raw `/name args`
+// and never the expansion, that skipped every assignment handed over as
+// `/goal <work>` -- a whole session of them, unfiled and forgotten.
+func TestSlashCommandCarryingWorkArms(t *testing.T) {
+	for _, p := range []string{
+		"/goal fix the flaky test",
+		"/goal add the missing plugins and fix the hook",
+		"/goal next up, figure out what is wrong with the todo plugin",
+	} {
+		t.Run(p, func(t *testing.T) {
+			isolate(t)
+			arm(p, "s")
+			require.Equalf(t, "deny", decision(t, gate("Bash", "s")), "a command carrying work must arm the gate: %q", p)
 		})
 	}
 }
