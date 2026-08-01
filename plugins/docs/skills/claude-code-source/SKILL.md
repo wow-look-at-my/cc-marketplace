@@ -18,7 +18,6 @@ The branch name is EXACTLY the version string. Take it from the running CLI:
 
 ```bash
 V=$(claude --version | awk '{print $1}')        # e.g. 2.1.220
-gh api "repos/PazerOP/claude-docs-gaps/branches/$V" --jq .name   # confirm it exists
 gh api -H "Accept: application/vnd.github.raw" \
   "repos/PazerOP/claude-docs-gaps/contents/cli.js?ref=$V" > "/tmp/cli-$V.js"
 ```
@@ -35,6 +34,7 @@ Measured on 2.1.220: 26,975,385 bytes, 720,910 lines, ~1.2 s to download.
   list (`gh api repos/PazerOP/claude-docs-gaps/branches --paginate --jq '.[].name'`)
   is the changelog you diff against.
 - No branch for your exact version (a build newer than the last extraction)?
+  The download 404s and tells you so — no need to probe for the branch first.
   Take the highest branch below it and SAY which version you actually read.
   Never silently answer from a different build.
 - **Cheap first stop before any of this**: the `docs/` directory on a version

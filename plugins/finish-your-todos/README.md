@@ -10,8 +10,17 @@ reminder is text, and text is skippable. These are refusals.
 | Hook | When | What it does |
 |---|---|---|
 | `UserPromptSubmit` | you assign work | Records that a task is owed for this session |
-| `PreToolUse` (`*`) | every tool call | **Denies** everything except the task tools until the task is filed |
+| `PreToolUse` (`*`) | every tool call | Picks up assignments `UserPromptSubmit` never saw, then **denies** everything except the task tools until the task is filed |
 | `Stop` | end of turn | **Blocks** the stop while any task is `pending` or `in_progress` |
+
+`UserPromptSubmit` does not see every user message, which is why the entry gate
+reads the transcript as well. A message sent **while a turn is running** is
+enqueued rather than submitted and fires no prompt hook at all — and on a web
+surface every message goes through that queue whenever the session is busy, so
+those were most of them. Slash commands arrive raw too (`/goal fix the thing`,
+never the expansion), so an assignment can hide in the arguments. Both channels
+are covered from `PreToolUse`; see
+[docs/missed-assignment-channels.md](docs/missed-assignment-channels.md).
 
 ## The entry gate
 
