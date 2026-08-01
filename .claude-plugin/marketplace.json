@@ -30,6 +30,13 @@
       "keywords": ["bash", "cleanup", "rewrite", "hook"]
     },
     {
+      "name": "css-duplication",
+      "source": "./css-duplication",
+      "description": "Language server that flags identical CSS declaration blocks as diagnostics while you edit, so a rule copied under a new selector gets hoisted into the cascade instead of shipped",
+      "category": "development",
+      "keywords": ["css", "cascade", "duplication", "stylesheet", "refactor", "lsp", "diagnostics"]
+    },
+    {
       "name": "finish-your-todos",
       "source": "./finish-your-todos",
       "description": "Blocks the Stop event while the TodoWrite list still has pending or in-progress items, so the assistant doesn't accidentally stop with work unfinished",
