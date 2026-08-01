@@ -12,11 +12,22 @@ type xmlTest struct {
 	Expected string `xml:"expect,attr"`
 }
 
+// Three sections, one rule type. A <rule> is either a COMMAND rule (name plus
+// flag/argument constraints, matched against the command as written) or a
+// PROCESS rule (process=, matched against the resolved process name however it
+// is spelled). Sections give the same rule its meaning: the identical node
+// denies under <deny> and allows under <allow>.
 type xmlRules struct {
 	XMLName    xml.Name       `xml:"rules"`
 	Tests      []xmlTest      `xml:"test"`
-	Commands   []xmlCommand   `xml:"cmd"`
+	Allow      xmlSection     `xml:"allow"`
+	Ask        xmlSection     `xml:"ask"`
+	Deny       xmlSection     `xml:"deny"`
 	MCPServers []xmlMCPServer `xml:"mcpServer"`
+}
+
+type xmlSection struct {
+	Rules []xmlCommand `xml:"rule"`
 }
 
 type xmlMCPServer struct {
@@ -25,8 +36,19 @@ type xmlMCPServer struct {
 }
 
 type xmlCommand struct {
-	Name               string          `xml:"name,attr"`
-	Description        string          `xml:"description,attr,omitempty"`
+	Name        string `xml:"name,attr"`
+	Description string `xml:"description,attr,omitempty"`
+
+	// Process rule: matches by resolved process name (basename, wrappers
+	// stripped, trailing version ignored) rather than by command spelling.
+	// `inlineScript` narrows it to invocations handed a script rather than a
+	// file, so an interpreter this environment needs stays usable.
+	Process         string `xml:"process,attr,omitempty"`
+	InlineScript    bool   `xml:"inlineScript,attr,omitempty"`
+	EvalFlags       string `xml:"evalFlags,attr,omitempty"`
+	EvalSubcommands string `xml:"evalSubcommands,attr,omitempty"`
+	Message         string `xml:"message,attr,omitempty"`
+
 	AllowedFlagsAttr   string          `xml:"allowedFlags,attr,omitempty"`
 	DenyWithMessage    string          `xml:"denyWithMessage,attr,omitempty"`
 	HelpAlwaysAllowed  bool            `xml:"helpAlwaysAllowed,attr,omitempty"`
@@ -40,7 +62,7 @@ type xmlCommand struct {
 	DenyArgSubstrings  *xmlStringList  `xml:"denyArgSubstrings"`
 	AllowedArgPrefixes *xmlStringList  `xml:"allowedArgPrefixes"`
 	RequireFlagValue   *xmlRequireFlag `xml:"requireFlagValue"`
-	Subcommands        []xmlCommand    `xml:"subcmd"`
+	Subcommands        []xmlCommand    `xml:"rule"`
 }
 
 type xmlFlagList struct {
@@ -67,8 +89,26 @@ func loadXMLRules(data []byte) (Rules, error) {
 		return Rules{}, err
 	}
 	var r Rules
-	for _, xc := range xr.Commands {
-		r.Commands = append(r.Commands, convertXMLCommand(xc))
+	// Command rules keep their per-section list; process rules are collected
+	// separately because they are answered by walking the parse tree, not by
+	// matching argv.
+	for _, section := range []struct {
+		rules    []xmlCommand
+		commands *[]CommandNode
+		procs    *[]ProcessRule
+		behavior string
+	}{
+		{xr.Allow.Rules, &r.Allow, &r.AllowProcesses, "allow"},
+		{xr.Ask.Rules, &r.Ask, &r.AskProcesses, "ask"},
+		{xr.Deny.Rules, &r.Deny, &r.DenyProcesses, "deny"},
+	} {
+		for _, xc := range section.rules {
+			if xc.Process != "" {
+				*section.procs = append(*section.procs, convertXMLProcess(xc, section.behavior))
+				continue
+			}
+			*section.commands = append(*section.commands, convertXMLCommand(xc))
+		}
 	}
 	if len(xr.MCPServers) > 0 {
 		r.MCPServers = make(map[string][]string, len(xr.MCPServers))
@@ -77,6 +117,27 @@ func loadXMLRules(data []byte) (Rules, error) {
 		}
 	}
 	return r, nil
+}
+
+func convertXMLProcess(xc xmlCommand, behavior string) ProcessRule {
+	return ProcessRule{
+		Name:            xc.Process,
+		Behavior:        behavior,
+		Message:         xc.Message,
+		InlineOnly:      xc.InlineScript,
+		EvalFlags:       splitList(xc.EvalFlags),
+		EvalSubcommands: splitList(xc.EvalSubcommands),
+	}
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func convertXMLCommand(xc xmlCommand) CommandNode {
