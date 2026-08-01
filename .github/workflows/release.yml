@@ -10,9 +10,16 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # setup-marketplace-build runs go-toolchain on a cache miss, so every job
+    # using it needs go-toolchain's full permission set (see that action's own
+    # notes). A composite cannot request permissions, and the miss only happens
+    # when tools/marketplace-build changes -- which is why an incomplete set
+    # here stayed green until the day someone edited the tool.
     permissions:
-      actions: read
       id-token: write
+      contents: write
+      actions: read
+      checks: read
     outputs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
@@ -94,8 +101,12 @@ jobs:
     permissions:
       id-token: write
       # go-toolchain submits the module graph to GitHub's dependency graph,
-      # which the API gates behind contents: write.
+      # which the API gates behind contents: write. Its no-all-builds guard
+      # scans the run's jobs and the head commit's check runs, and fails closed
+      # without the two read grants.
       contents: write
+      actions: read
+      checks: read
       artifact-metadata: write
     strategy:
       fail-fast: false
@@ -211,8 +222,12 @@ jobs:
       (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Same reason as prepare: setup-marketplace-build can run go-toolchain here.
     permissions:
       id-token: write
+      contents: write
+      actions: read
+      checks: read
     steps:
       - uses: actions/checkout@v7
 
