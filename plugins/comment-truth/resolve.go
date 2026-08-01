@@ -59,9 +59,11 @@ func (r *Repo) checkMechanically(blocks []Block) (findings []Finding, needJudgme
 		if len(c.Tombstones) > 0 {
 			findings = append(findings, Finding{
 				File: b.File, Line: b.Line, Kind: ClaimTombstone,
-				Problem:  "narrates the change rather than the code (" + strings.Join(c.Tombstones, ", ") + ")",
-				Evidence: "A comment carries current truth only -- git already stores when it changed and who asked. Write what the thing IS.",
-				Excerpt:  excerpt(b.Text),
+				Problem: "narrates the change rather than the code",
+				Evidence: "A comment carries current truth only -- git already stores when something " +
+					"changed and who asked. Write what the thing IS; the story belongs in the commit " +
+					"message, or in a doc if it produced an invariant worth keeping.",
+				Excerpt: excerpt(b.Text),
 			})
 		}
 
@@ -70,9 +72,10 @@ func (r *Repo) checkMechanically(blocks []Block) (findings []Finding, needJudgme
 		if len(c.Hedges) > 0 {
 			findings = append(findings, Finding{
 				File: b.File, Line: b.Line, Kind: ClaimHedge,
-				Problem:  fmt.Sprintf("hedged claim (%s)", strings.Join(c.Hedges, ", ")),
-				Evidence: "A hedge is an unverified claim with an escape hatch. Check it and state it, or cut it.",
-				Excerpt:  excerpt(b.Text),
+				Problem: "states a claim it does not commit to",
+				Evidence: "A hedge is an unverified claim with an escape hatch. Check it and state it, " +
+					"or cut it -- rewording the hedge away leaves the same unchecked claim.",
+				Excerpt: excerpt(b.Text),
 			})
 		}
 
