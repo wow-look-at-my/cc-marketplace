@@ -42,6 +42,29 @@ func (r *Repo) checkMechanically(blocks []Block) (findings []Finding, needJudgme
 	for _, b := range blocks {
 		c := Analyze(b)
 
+		// Length, measured against what the comment is attached to.
+		if decl, over := bloated(b); over {
+			findings = append(findings, Finding{
+				File: b.File, Line: b.Line, Kind: ClaimBloat,
+				Problem: "a " + sizeOf(b) + " comment on a one-line declaration",
+				Evidence: "It annotates: " + decl + "\n      " +
+					"Length alone is fine; length out of proportion to what it explains is a " +
+					"document that has not been written yet. Keep the line a reader would " +
+					"otherwise get wrong, and move the rest to a doc with a pointer back.",
+				Excerpt: excerpt(b.Text),
+			})
+		}
+
+		// A changelog bolted onto code that still exists.
+		if len(c.Tombstones) > 0 {
+			findings = append(findings, Finding{
+				File: b.File, Line: b.Line, Kind: ClaimTombstone,
+				Problem:  "narrates the change rather than the code (" + strings.Join(c.Tombstones, ", ") + ")",
+				Evidence: "A comment carries current truth only -- git already stores when it changed and who asked. Write what the thing IS.",
+				Excerpt:  excerpt(b.Text),
+			})
+		}
+
 		// A hedge is settled by reading it: the author is telling you they did
 		// not check. There is nothing for a model to weigh.
 		if len(c.Hedges) > 0 {
@@ -242,6 +265,11 @@ func (r *Repo) readDoc(path, from string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("not found: %s", path)
+}
+
+// sizeOf describes a block the way a reader experiences it.
+func sizeOf(b Block) string {
+	return fmt.Sprintf("%d-line, %d-word", countProseLines(b.Text), len(strings.Fields(b.Text)))
 }
 
 func excerpt(text string) string {

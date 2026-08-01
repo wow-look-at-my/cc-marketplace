@@ -32,6 +32,15 @@ const (
 	ClaimCausal ClaimKind = "causal"
 	// A hedge. Settled immediately: an unverified claim with an escape hatch.
 	ClaimHedge ClaimKind = "hedge"
+	// A comment out of all proportion to what it annotates -- a manual wearing
+	// a comment's clothes. Length alone is never the defect; a long comment on
+	// something that needs it is correct. Nineteen lines on a string constant
+	// is not.
+	ClaimBloat ClaimKind = "bloat"
+	// A changelog bolted onto code that still exists: dates, PR numbers, what
+	// something USED to be. Git already stores the past, and a comment carries
+	// current truth only.
+	ClaimTombstone ClaimKind = "tombstone"
 )
 
 // Claims is what a block asserts, by kind.
@@ -43,6 +52,8 @@ type Claims struct {
 	Universal []string
 	Causal    []string
 	Hedges    []string
+	// Tombstones are phrases whose subject is the change rather than the code.
+	Tombstones []string
 }
 
 // NeedsJudgment reports whether anything is left that mechanical checks cannot
@@ -80,6 +91,11 @@ var (
 	universalRe = regexp.MustCompile(`(?i)\b(always|never|every|all of|none of|only|cannot|can't|must not|must|guaranteed|impossible|no way to)\b`)
 	causalRe    = regexp.MustCompile(`(?i)\b(because|which is (?:how|why)|so that|the reason|this is why|used to|caused by|due to|otherwise)\b`)
 
+	// Dates and PR numbers only. The prose forms ("used to", "no longer") read
+	// the same whether they narrate this code's history or describe a case it
+	// handles, so they belong to the model pass -- see README, Accuracy.
+	tombstoneRe = regexp.MustCompile(`(\b20\d\d-\d\d(?:-\d\d)?\b|\B#\d+\b|\b[\w.-]+#\d+\b)`)
+
 	// Epistemic hedges only. "should" alone is excluded: "callers should drain"
 	// is a normative statement about the contract, not an unsure one.
 	hedgeRe = regexp.MustCompile(`(?i)\b(probably|presumably|i believe|i think|seems to|appears to|as far as i know|afaik|not sure|might be wrong|maybe|possibly)\b`)
@@ -93,7 +109,7 @@ func Analyze(b Block) Claims {
 	seen := map[string]bool{}
 	addRef := func(s string) {
 		s = strings.TrimSuffix(s, "()")
-		if s == "" || seen[s] {
+		if s == "" || seen[s] || isPattern(s) {
 			return
 		}
 		seen[s] = true
@@ -132,6 +148,7 @@ func Analyze(b Block) Claims {
 		})
 	}
 
+	c.Tombstones = uniqueMatches(tombstoneRe, citations(text))
 	c.Universal = uniqueMatches(universalRe, text)
 	c.Causal = uniqueMatches(causalRe, text)
 	c.Hedges = uniqueMatches(hedgeRe, text)
@@ -157,6 +174,13 @@ func citations(text string) string {
 	text = absPathRe.ReplaceAllString(text, " ")
 	return quotedRe.ReplaceAllString(text, " ")
 }
+
+// patternRe spots a placeholder rather than a name: a glob, an angle-bracket
+// slot, or a version template like vX.Y.Z. Naming the SHAPE of a thing is not
+// a claim that a thing with that literal name exists.
+var patternRe = regexp.MustCompile(`[*<>{}]|\b[A-Z](?:\.[A-Z])+\b|\bv[A-Z]\b`)
+
+func isPattern(s string) bool { return patternRe.MatchString(s) }
 
 func isDoc(path string) bool {
 	return strings.HasSuffix(path, ".md")
