@@ -213,9 +213,10 @@ func TestRunFromReader(t *testing.T) {
 		TranscriptPath: path,
 	})
 	require.NoError(t, err)
-	code, msg := run(strings.NewReader(string(data)))
+	code, msg, stdout := run(strings.NewReader(string(data)))
 	assert.Equal(t, 2, code)
 	assert.Contains(t, msg, "Wire up the endpoint")
+	assert.Empty(t, stdout, "a Stop block reports on stderr, not stdout")
 }
 
 func TestUnknownStatusFailsOpen(t *testing.T) {

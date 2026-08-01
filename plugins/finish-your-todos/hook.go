@@ -206,16 +206,36 @@ func evaluate(input []byte) (int, string) {
 	return 2, blockReason(inProgress, pending)
 }
 
-// run reads the hook payload from r and returns the exit code and stderr message.
-func run(r io.Reader) (int, string) {
+// run reads the hook payload from r and returns the exit code, the stderr
+// message (a Stop block reports that way) and the stdout payload (the
+// entry-side hooks answer in JSON).
+//
+// One binary serves all three events, dispatched on hook_event_name: they share
+// the debt marker and the task-tool vocabulary, so splitting them into separate
+// programs is what let half this plugin drift into another language.
+func run(r io.Reader) (code int, stderr, stdout string) {
 	input, _ := io.ReadAll(r)
-	return evaluate(input)
+	payload := parsePayload(input)
+
+	switch payload.EventName {
+	case "UserPromptSubmit":
+		return 0, "", promptArm(payload)
+	case "PreToolUse":
+		return 0, "", todoGate(payload)
+	default:
+		// Stop, and anything unrecognized: an unknown event must not block.
+		c, msg := evaluate(input)
+		return c, msg, ""
+	}
 }
 
 func main() {
-	code, msg := run(os.Stdin)
-	if msg != "" {
-		fmt.Fprint(os.Stderr, msg)
+	code, stderr, stdout := run(os.Stdin)
+	if stdout != "" {
+		fmt.Print(stdout)
+	}
+	if stderr != "" {
+		fmt.Fprint(os.Stderr, stderr)
 	}
 	os.Exit(code)
 }

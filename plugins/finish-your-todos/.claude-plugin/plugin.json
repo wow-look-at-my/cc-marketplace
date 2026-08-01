@@ -1,47 +1,56 @@
 {
-	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
-	"name": "finish-your-todos",
-	"description": "Enforces the task list at both ends: a PreToolUse gate refuses every non-task tool until work the user just assigned is filed, and a Stop hook refuses to end the turn while any task is still pending or in progress. Reminders about the task list are demonstrably ignored; these are refusals",
-	"author": {
-		"name": "mhaynie"
-	},
-	"keywords": ["stop", "todo", "todowrite", "tasks", "taskcreate", "autonomy", "hook", "enforcement"],
-	"hooks": {
-		"UserPromptSubmit": [
-			{
-				"hooks": [
-					{
-						"type": "command",
-						"command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt-arm.ts\"",
-						"timeout": 10
-					}
-				]
-			}
-		],
-		"PreToolUse": [
-			{
-				"matcher": "*",
-				"hooks": [
-					{
-						"type": "command",
-						"command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/todo-gate.ts\"",
-						"timeout": 10
-					}
-				]
-			}
-		],
-		"Stop": [
-			{
-				"hooks": [
-					{
-						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos"
-					}
-				]
-			}
-		]
-	},
-	"mh": {
-		"include_in_marketplace": true
-	}
+  "$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+  "name": "finish-your-todos",
+  "description": "Enforces the task list at both ends: a PreToolUse gate refuses every non-task tool until work the user just assigned is filed, and a Stop hook refuses to end the turn while any task is still pending or in progress. Reminders about the task list are demonstrably ignored; these are refusals",
+  "author": {
+    "name": "mhaynie"
+  },
+  "keywords": [
+    "stop",
+    "todo",
+    "todowrite",
+    "tasks",
+    "taskcreate",
+    "autonomy",
+    "hook",
+    "enforcement"
+  ],
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos"
+          }
+        ]
+      }
+    ]
+  },
+  "mh": {
+    "include_in_marketplace": true
+  }
 }
