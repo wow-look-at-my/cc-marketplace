@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // The debt marker lives under os.TempDir(); t.Setenv("TMPDIR") gives each test
@@ -33,22 +35,17 @@ func decision(t *testing.T, out string) string {
 			PermissionDecision string `json:"permissionDecision"`
 		} `json:"hookSpecificOutput"`
 	}
-	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
-		t.Fatalf("gate emitted invalid JSON: %v (%q)", err, out)
-	}
+	require.NoErrorf(t, json.Unmarshal([]byte(out), &parsed), "gate emitted invalid JSON: %q", out)
 	return parsed.HookSpecificOutput.PermissionDecision
 }
 
 func TestAssignmentArmsTheGate(t *testing.T) {
 	isolate(t)
 	arm("add deny support to the enhanced-auto-allow plugin", "s")
-	if got := decision(t, gate("Bash", "s")); got != "deny" {
-		t.Fatalf("an assignment must arm the gate, got %q", got)
-	}
+	require.Equal(t, "deny", decision(t, gate("Bash", "s")), "an assignment must arm the gate")
 }
 
 func TestQuestionsDoNotArm(t *testing.T) {
-	isolate(t)
 	for _, q := range []string{
 		"what does this plugin do?",
 		"why is the hook failing",
@@ -60,9 +57,7 @@ func TestQuestionsDoNotArm(t *testing.T) {
 		t.Run(q, func(t *testing.T) {
 			isolate(t)
 			arm(q, "s")
-			if got := decision(t, gate("Bash", "s")); got != "" {
-				t.Fatalf("a question must not arm the gate: %q -> %q", q, got)
-			}
+			require.Emptyf(t, decision(t, gate("Bash", "s")), "a question must not arm the gate: %q", q)
 		})
 	}
 }
@@ -71,7 +66,6 @@ func TestQuestionsDoNotArm(t *testing.T) {
 // is an instruction, and reading it as a question is how an assignment goes
 // unfiled.
 func TestInstructionsArm(t *testing.T) {
-	isolate(t)
 	for _, p := range []string{
 		"do the thing",
 		"can you add a test for this",
@@ -83,9 +77,7 @@ func TestInstructionsArm(t *testing.T) {
 		t.Run(p, func(t *testing.T) {
 			isolate(t)
 			arm(p, "s")
-			if got := decision(t, gate("Bash", "s")); got != "deny" {
-				t.Fatalf("an instruction must arm the gate: %q -> %q", p, got)
-			}
+			require.Equalf(t, "deny", decision(t, gate("Bash", "s")), "an instruction must arm the gate: %q", p)
 		})
 	}
 }
@@ -93,9 +85,7 @@ func TestInstructionsArm(t *testing.T) {
 func TestQuestionWithImperativeArms(t *testing.T) {
 	isolate(t)
 	arm("why is the build red? fix it", "s")
-	if got := decision(t, gate("Bash", "s")); got != "deny" {
-		t.Fatalf("a question carrying an imperative must arm, got %q", got)
-	}
+	require.Equal(t, "deny", decision(t, gate("Bash", "s")), "a question carrying an imperative must arm")
 }
 
 func TestAcksAndSlashCommandsDoNotArm(t *testing.T) {
@@ -103,9 +93,7 @@ func TestAcksAndSlashCommandsDoNotArm(t *testing.T) {
 		t.Run(p, func(t *testing.T) {
 			isolate(t)
 			arm(p, "s")
-			if got := decision(t, gate("Bash", "s")); got != "" {
-				t.Fatalf("an ack/command must not arm the gate: %q -> %q", p, got)
-			}
+			require.Emptyf(t, decision(t, gate("Bash", "s")), "an ack/command must not arm the gate: %q", p)
 		})
 	}
 }
@@ -115,9 +103,7 @@ func TestEveryNonTaskToolIsRefused(t *testing.T) {
 		t.Run(tool, func(t *testing.T) {
 			isolate(t)
 			arm("port the hooks to go", "s")
-			if got := decision(t, gate(tool, "s")); got != "deny" {
-				t.Fatalf("%s must be refused while a task is owed, got %q", tool, got)
-			}
+			require.Equalf(t, "deny", decision(t, gate(tool, "s")), "%s must be refused while a task is owed", tool)
 		})
 	}
 }
@@ -128,15 +114,9 @@ func TestListingDoesNotSettle(t *testing.T) {
 	isolate(t)
 	arm("port the hooks to go", "s")
 
-	if got := decision(t, gate("TaskList", "s")); got != "" {
-		t.Fatalf("TaskList must not be refused, got %q", got)
-	}
-	if got := decision(t, gate("TaskGet", "s")); got != "" {
-		t.Fatalf("TaskGet must not be refused, got %q", got)
-	}
-	if got := decision(t, gate("Bash", "s")); got != "deny" {
-		t.Fatalf("reading the list must not settle the debt, got %q", got)
-	}
+	require.Empty(t, decision(t, gate("TaskList", "s")), "TaskList must not be refused")
+	require.Empty(t, decision(t, gate("TaskGet", "s")), "TaskGet must not be refused")
+	require.Equal(t, "deny", decision(t, gate("Bash", "s")), "reading the list must not settle the debt")
 }
 
 func TestSettlingTools(t *testing.T) {
@@ -145,12 +125,8 @@ func TestSettlingTools(t *testing.T) {
 			isolate(t)
 			arm("port the hooks to go", "s")
 
-			if got := decision(t, gate(tool, "s")); got != "" {
-				t.Fatalf("%s must not be refused, got %q", tool, got)
-			}
-			if got := decision(t, gate("Bash", "s")); got != "" {
-				t.Fatalf("%s must settle the debt, got %q", tool, got)
-			}
+			require.Emptyf(t, decision(t, gate(tool, "s")), "%s must not be refused", tool)
+			require.Emptyf(t, decision(t, gate("Bash", "s")), "%s must settle the debt", tool)
 		})
 	}
 }
@@ -160,12 +136,8 @@ func TestRefusalQuotesTheAssignmentAndTheWayOut(t *testing.T) {
 	arm("add deny support to the enhanced-auto-allow plugin", "s")
 	out := gate("Bash", "s")
 
-	if !strings.Contains(out, "enhanced-auto-allow") {
-		t.Fatalf("the refusal must quote the assignment: %q", out)
-	}
-	if !strings.Contains(out, "TaskCreate") {
-		t.Fatalf("the refusal must name the way out: %q", out)
-	}
+	require.Contains(t, out, "enhanced-auto-allow", "the refusal must quote the assignment")
+	require.Contains(t, out, "TaskCreate", "the refusal must name the way out")
 }
 
 // Repeated refusals escalate, so an ignored block does not read the same as a
@@ -174,12 +146,8 @@ func TestRefusalsAreCounted(t *testing.T) {
 	isolate(t)
 	arm("port the hooks to go", "s")
 
-	if out := gate("Bash", "s"); strings.Contains(out, "This is refusal") {
-		t.Fatalf("the first refusal must not claim to be a repeat: %q", out)
-	}
-	if out := gate("Bash", "s"); !strings.Contains(out, "This is refusal 2") {
-		t.Fatalf("the second refusal must say so: %q", out)
-	}
+	require.NotContains(t, gate("Bash", "s"), "This is refusal", "the first refusal must not claim to be a repeat")
+	require.Contains(t, gate("Bash", "s"), "This is refusal 2", "the second refusal must say so")
 }
 
 func TestFirstAssignmentSurvivesAFollowUp(t *testing.T) {
@@ -187,21 +155,15 @@ func TestFirstAssignmentSurvivesAFollowUp(t *testing.T) {
 	arm("add deny support to the plugin", "s")
 	arm("also wrap it in a bow", "s")
 
-	if out := gate("Bash", "s"); !strings.Contains(out, "deny support") {
-		t.Fatalf("the first unfiled assignment must survive a follow-up: %q", out)
-	}
+	require.Contains(t, gate("Bash", "s"), "deny support", "the first unfiled assignment must survive a follow-up")
 }
 
 func TestDebtIsPerSession(t *testing.T) {
 	isolate(t)
 	arm("port the hooks to go", "session-a")
 
-	if got := decision(t, gate("Bash", "session-b")); got != "" {
-		t.Fatalf("another session must not inherit the debt, got %q", got)
-	}
-	if got := decision(t, gate("Bash", "session-a")); got != "deny" {
-		t.Fatalf("the arming session must still be gated, got %q", got)
-	}
+	require.Empty(t, decision(t, gate("Bash", "session-b")), "another session must not inherit the debt")
+	require.Equal(t, "deny", decision(t, gate("Bash", "session-a")), "the arming session must still be gated")
 }
 
 // A broken guard must never wedge a session: no session id, garbage stdin and
@@ -209,21 +171,13 @@ func TestDebtIsPerSession(t *testing.T) {
 func TestFailsOpen(t *testing.T) {
 	isolate(t)
 
-	if out := arm("do the thing", ""); out != "" {
-		t.Fatalf("no session id must not arm: %q", out)
-	}
-	if out := gate("Bash", ""); out != "" {
-		t.Fatalf("no session id must not gate: %q", out)
-	}
+	require.Empty(t, arm("do the thing", ""), "no session id must not arm")
+	require.Empty(t, gate("Bash", ""), "no session id must not gate")
 
 	for _, raw := range []string{"", "not json", "[]", "null"} {
 		p := parsePayload([]byte(raw))
-		if p.SessionID != "" {
-			t.Fatalf("garbage stdin must yield no session: %q -> %q", raw, p.SessionID)
-		}
-		if out := promptArm(p) + todoGate(p); out != "" {
-			t.Fatalf("garbage stdin must produce no decision: %q -> %q", raw, out)
-		}
+		require.Emptyf(t, p.SessionID, "garbage stdin must yield no session: %q", raw)
+		require.Emptyf(t, promptArm(p)+todoGate(p), "garbage stdin must produce no decision: %q", raw)
 	}
 }
 
@@ -233,17 +187,16 @@ func TestRunDispatchesByEvent(t *testing.T) {
 	isolate(t)
 
 	code, stderr, stdout := run(strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"fix the build"}`))
-	if code != 0 || stderr != "" || !strings.Contains(stdout, "additionalContext") {
-		t.Fatalf("UserPromptSubmit: code=%d stderr=%q stdout=%q", code, stderr, stdout)
-	}
+	require.Equal(t, 0, code)
+	require.Empty(t, stderr)
+	require.Contains(t, stdout, "additionalContext")
 
 	code, stderr, stdout = run(strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash"}`))
-	if code != 0 || stderr != "" || !strings.Contains(stdout, `"deny"`) {
-		t.Fatalf("PreToolUse: code=%d stderr=%q stdout=%q", code, stderr, stdout)
-	}
+	require.Equal(t, 0, code)
+	require.Empty(t, stderr)
+	require.Contains(t, stdout, `"deny"`)
 
-	code, stderr, stdout = run(strings.NewReader(`{"hook_event_name":"SomethingElse","session_id":"s"}`))
-	if code != 0 || stdout != "" {
-		t.Fatalf("an unknown event must not block: code=%d stdout=%q", code, stdout)
-	}
+	code, _, stdout = run(strings.NewReader(`{"hook_event_name":"SomethingElse","session_id":"s"}`))
+	require.Equal(t, 0, code, "an unknown event must not block")
+	require.Empty(t, stdout)
 }
