@@ -18,6 +18,10 @@ consulted, so `denyOnly` suppresses every non-deny verdict on that path.
   matcher `*` for both PermissionRequest and PreToolUse
 - `plugins/enhanced-auto-allow/docs/two-event-registration.md` -- why two events, the cli.js call
   sites that make PermissionRequest conditional, and the per-event output shapes
+- `plugins/enhanced-auto-allow/docs/ccr-approval-card.md` -- the `Claude_Code_Remote` mcpServer entry:
+  the only one that is not read-only, and the only one whose job is to ANSWER a prompt. The CCR proxy
+  replies `-32003 needs_approval` and the client raises a retroactive card that `permissions.allow`
+  cannot reach; a PermissionRequest hook wins the race against it and the retry succeeds
 
 ### The rule node
 

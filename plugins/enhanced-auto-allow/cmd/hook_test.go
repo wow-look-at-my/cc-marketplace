@@ -234,6 +234,73 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 	}
 }
 
+// The CCR approval card is answered on PermissionRequest, which is the only
+// event that can answer it: the -32003 retry hands canUseTool a precomputed
+// "ask", so the call reaches the ask path where this hook races the human
+// dialog. An allow there aborts the dialog and the retry succeeds. On
+// PreToolUse the same tools must stay SILENT -- an allow before the permission
+// engine runs would outrank the user's own deny rules.
+func TestCCRManagementToolsAutoAllowed(t *testing.T) {
+	binaryPath := buildTestBinary(t)
+
+	allowed := []string{
+		"mcp__Claude_Code_Remote__send_later",
+		"mcp__Claude_Code_Remote__add_repo",
+		"mcp__Claude_Code_Remote__register_repo_root",
+		"mcp__Claude_Code_Remote__list_repos",
+		"mcp__Claude_Code_Remote__list_environments",
+		"mcp__Claude_Code_Remote__list_triggers",
+		"mcp__Claude_Code_Remote__subscribe_pr_activity",
+		"mcp__Claude_Code_Remote__unsubscribe_pr_activity",
+	}
+	for _, toolName := range allowed {
+		t.Run("allow/"+toolName, func(t *testing.T) {
+			out := runHookBinary(t, binaryPath, HookInput{HookEventName: eventPermissionRequest, ToolName: toolName})
+			require.NotEmpty(t, out, "%s must be auto-allowed; empty output means the human dialog stands", toolName)
+
+			var resp PermissionResponse
+			require.NoError(t, json.Unmarshal(out, &resp), "output was: %s", out)
+			assert.Equal(t, eventPermissionRequest, resp.HookSpecificOutput.HookEventName)
+			assert.Equal(t, "allow", resp.HookSpecificOutput.Decision.Behavior)
+		})
+
+		t.Run("silent-on-pretooluse/"+toolName, func(t *testing.T) {
+			out := runHookBinary(t, binaryPath, HookInput{HookEventName: eventPreToolUse, ToolName: toolName})
+			assert.Empty(t, out, "PreToolUse must not allow %s -- that would settle the call before the user's deny rules are consulted", toolName)
+		})
+	}
+
+	// Account-wide Routine mutation is NOT in the set and must still prompt:
+	// an empty hook response is what lets the human dialog stand.
+	for _, toolName := range []string{
+		"mcp__Claude_Code_Remote__delete_trigger",
+		"mcp__Claude_Code_Remote__create_trigger",
+		"mcp__Claude_Code_Remote__update_trigger",
+		"mcp__Claude_Code_Remote__fire_trigger",
+	} {
+		t.Run("still-prompts/"+toolName, func(t *testing.T) {
+			out := runHookBinary(t, binaryPath, HookInput{HookEventName: eventPermissionRequest, ToolName: toolName})
+			assert.Empty(t, out, "%s must NOT be auto-allowed -- it edits Routines account-wide", toolName)
+		})
+	}
+}
+
+// The flattened name is split on the LAST "__", so a server name carrying
+// single underscores (Claude_Code_Remote) survives the split intact. Getting
+// this wrong silently matches nothing and every call falls back to the dialog.
+func TestParseMCPToolHandlesUnderscoredServerName(t *testing.T) {
+	for _, tt := range []struct{ full, server, tool string }{
+		{"mcp__Claude_Code_Remote__send_later", "Claude_Code_Remote", "send_later"},
+		{"mcp__Claude_Code_Remote__register_repo_root", "Claude_Code_Remote", "register_repo_root"},
+		{"mcp__Claude_Code_Remote__subscribe_pr_activity", "Claude_Code_Remote", "subscribe_pr_activity"},
+		{"mcp__github__get_me", "github", "get_me"},
+	} {
+		server, tool := parseMCPTool(tt.full)
+		assert.Equal(t, tt.server, server, "server of %q", tt.full)
+		assert.Equal(t, tt.tool, tool, "tool of %q", tt.full)
+	}
+}
+
 // The same command on PermissionRequest keeps the nested decision shape.
 func TestPermissionRequestKeepsItsOwnShape(t *testing.T) {
 	binaryPath := buildTestBinary(t)
@@ -301,6 +368,19 @@ func loadTestRules(t *testing.T) {
 	require.Nil(t, err, "Failed to read rules.xml")
 	rules, err = loadXMLRules(data)
 	require.NoError(t, err, "Failed to parse rules.xml")
+}
+
+// One malformed byte disables EVERY rule, since loadXMLRules failing makes the
+// hook exit 0 and pass everything through. The usual cause is a "--" inside an
+// <!-- --> comment, which XML forbids: it turns thirty unrelated tests red at
+// once and none of them says "the rules file does not parse".
+func TestRulesXMLParses(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))
+	require.NoError(t, err)
+
+	_, err = loadXMLRules(data)
+	require.NoError(t, err, "rules.xml does not parse; a '--' inside an XML comment is the usual cause")
 }
 
 // Indentation is tabs, so every reader picks their own width. Spaces are
