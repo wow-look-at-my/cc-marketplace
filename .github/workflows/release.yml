@@ -332,6 +332,15 @@ jobs:
               try { return JSON.parse(r.stdout); } catch { return null; }
             }
 
+            // `claude plugin install` clones a github-source entry over SSH
+            // (git@github.com:), and a runner holds no key -- "Permission
+            // denied (publickey)" on the first install. The repo is public, so
+            // rewrite to https for this job. A developer with a GitHub SSH key
+            // needs nothing; one without hits the same wall, which is a real
+            // question about the source shape rather than something to paper
+            // over here.
+            await $`git config --global url.https://github.com/.insteadOf git@github.com:`;
+
             // Wait for the marketplace this run published (metadata.version mirrors
             // the run number, see update_marketplace.go) to go live on buildhost.
             let mkt: any = null;
