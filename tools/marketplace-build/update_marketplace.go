@@ -50,7 +50,7 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	// Update plugins array
 	owner, repo, err := GetRepoInfo()
 	if err != nil {
-		return fmt.Errorf("failed to get repo info (set --base-url if not in a git repo): %w", err)
+		return fmt.Errorf("failed to get repo info: %w", err)
 	}
 	// Plugins are cloned from this repo's own orphan tags, so the entries carry
 	// owner/repo rather than a registry URL.
