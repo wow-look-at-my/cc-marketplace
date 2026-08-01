@@ -51,6 +51,14 @@ func todoGate(p hookPayload) string {
 	if p.SessionID == "" {
 		return ""
 	}
+	// A message sent mid-turn is enqueued and folded into the running turn as
+	// an attachment, and that path dispatches no UserPromptSubmit at all -- so
+	// promptArm never saw it. On a web surface every inbound message goes
+	// through that queue whenever the session is busy, which is most of the
+	// time. PreToolUse is the only event that fires regardless of how the
+	// message arrived, so the catch-up happens here.
+	armFromTranscript(p.SessionID, p.TranscriptPath)
+
 	debt := readDebt(p.SessionID)
 	if debt == nil {
 		return ""
