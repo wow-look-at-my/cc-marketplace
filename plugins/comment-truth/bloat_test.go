@@ -57,21 +57,33 @@ func TestTombstoneMarkers(t *testing.T) {
 		assert.NotEmpty(t, c.Tombstones, "%q should read as a changelog", text)
 	}
 
-	// The prose forms are NOT flagged mechanically: they read identically
-	// whether they narrate this code's history or describe a case it handles.
-	// An earlier version reported this tool's own definition of a tombstone.
+	// The past tense counts too: each of these has a subject that is absent
+	// from the file, which is what makes it a changelog rather than an
+	// explanation.
 	for _, text := range []string{
-		"A comment left behind naming a test that was deleted in the same change.",
-		"what something used to be -- git already stores the past",
-		"the branch no longer exists, so the commit is unreachable",
+		"The former WEBHOOK_RUNNER_GSM_URL knob was removed.",
+		"this used to re-apply the caller deadline",
+		"the retry loop is no longer here",
+		"formerly a per-actor gate",
+		"the fallback has been deleted",
 	} {
 		c := Analyze(Block{Text: text})
-		assert.Empty(t, c.Tombstones, "%q needs a reader, not a pattern", text)
+		assert.NotEmpty(t, c.Tombstones, "%q narrates the change", text)
 	}
 
-	// A date inside a quoted example or a URL is not narration.
-	c := Analyze(Block{Text: `matches a date like "2026-07-15" in prose`})
-	assert.Empty(t, c.Tombstones)
+	// Naming one of these phrases as an EXAMPLE is not using it. Without this
+	// the rule reports any comment that documents the rule -- including this
+	// tool's own source, which is the one file whose subject matter IS these
+	// phrases. That is a property of writing about tombstones, not a reason to
+	// stop detecting them.
+	for _, text := range []string{
+		`the past tense ("used to", "no longer", "was removed")`,
+		`flags a comment saying "formerly" or "previously"`,
+		`matches a date like "2026-07-15" in prose`,
+	} {
+		c := Analyze(Block{Text: text})
+		assert.Empty(t, c.Tombstones, "%q shows the phrase, it does not use it", text)
+	}
 }
 
 // Naming the SHAPE of a thing is not a claim that a thing with that literal

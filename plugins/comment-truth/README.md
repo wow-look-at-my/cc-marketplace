@@ -26,7 +26,7 @@ claim they make, and two kinds are settled by looking:
 | **quantity** — a figure with a unit | the document the comment itself cites has no figure in that unit which rounds to it |
 | **hedge** — "probably", "presumably", "I believe" | always: a hedge is an unverified claim with an escape hatch |
 | **bloat** — length against what it annotates | a long comment sits on a one-line declaration |
-| **tombstone** — a date or a PR number | always: git already stores when it changed |
+| **tombstone** — a date, a PR number, the past tense | always: git already stores when it changed and who asked |
 
 **3. Judgment — one bounded model call.** What is left needs reading
 comprehension: is a causal claim supported, is a measurement scoped to what was
@@ -67,11 +67,13 @@ So each rule is written to survive real prose, and the tests are the real cases.
   `const X = "..."` is a document that has not been written yet. So a long
   comment is reported only when the thing it annotates is a one-line
   declaration.
-- **Only dates and PR numbers count as tombstones.** The prose forms — "used
-  to", "no longer", "was deleted" — read identically whether they narrate this
-  code's history or describe a case the code handles, and no pattern separates
-  them: an earlier version flagged this tool's own *definition* of a tombstone
-  as one. That judgement needs a reader, so it is left to the model pass.
+- **Tombstones include the past tense**, not just dates and PR numbers: "used
+  to", "no longer", "formerly", "was removed". Naming one of those phrases as
+  an *example* does not count as using it — quoted spans are stripped first, so
+  a comment documenting the rule is not reported by it. (This tool's own source
+  is the pathological case, being the one file whose subject matter is these
+  phrases; that is a property of writing about tombstones, not a reason to stop
+  detecting them.)
 - **A placeholder is not a name.** `vX.Y.Z`, a glob, an `<angle-bracket>` slot —
   naming the shape of a thing is not a claim that a thing with that literal name
   exists.

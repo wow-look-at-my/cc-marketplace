@@ -83,8 +83,8 @@ func Encode() {}
 
 }
 
-// The other real defect: a comment left behind naming a test that was deleted
-// in the same change.
+// The other real defect: a comment left behind naming a test the same change
+// removes.
 func TestCatchesNameThatNoLongerExists(t *testing.T) {
 	dir := repoFixture(t)
 	write(t, dir, "wire.go", `package p

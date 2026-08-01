@@ -37,9 +37,9 @@ const (
 	// something that needs it is correct. Nineteen lines on a string constant
 	// is not.
 	ClaimBloat ClaimKind = "bloat"
-	// A changelog bolted onto code that still exists: dates, PR numbers, what
-	// something USED to be. Git already stores the past, and a comment carries
-	// current truth only.
+	// A changelog bolted onto code that still exists: dates, PR numbers, and
+	// the past tense ("used to", "no longer", "was removed"). Git already
+	// stores the past; a comment carries current truth only.
 	ClaimTombstone ClaimKind = "tombstone"
 )
 
@@ -91,10 +91,15 @@ var (
 	universalRe = regexp.MustCompile(`(?i)\b(always|never|every|all of|none of|only|cannot|can't|must not|must|guaranteed|impossible|no way to)\b`)
 	causalRe    = regexp.MustCompile(`(?i)\b(because|which is (?:how|why)|so that|the reason|this is why|used to|caused by|due to|otherwise)\b`)
 
-	// Dates and PR numbers only. The prose forms ("used to", "no longer") read
-	// the same whether they narrate this code's history or describe a case it
-	// handles, so they belong to the model pass -- see README, Accuracy.
-	tombstoneRe = regexp.MustCompile(`(\b20\d\d-\d\d(?:-\d\d)?\b|\B#\d+\b|\b[\w.-]+#\d+\b)`)
+	// A changelog bolted onto code that still exists: a date, a PR number, or
+	// the past tense. Each has a subject that is absent from the file, and git
+	// already stores all of it. Quoted spans are stripped before matching, so
+	// naming one of these phrases as an example does not count as using it.
+	tombstoneRe = regexp.MustCompile(`(?i)(\b20\d\d-\d\d(?:-\d\d)?\b|\B#\d+\b|\b[\w.-]+#\d+\b|` +
+		`\bused to\b|\bformerly\b|\bpreviously\b|\bno longer\b|\bnowadays\b|` +
+		`\bwas (?:removed|deleted|renamed|added|introduced|reverted)\b|` +
+		`\b(?:has|have) been (?:removed|deleted|renamed|reverted)\b|` +
+		`\bnever requested\b|\bas of (?:v?\d|20\d\d)\b|\bthis (?:used to|was) \b)`)
 
 	// Epistemic hedges only. "should" alone is excluded: "callers should drain"
 	// is a normative statement about the contract, not an unsure one.
