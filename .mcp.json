@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"grep": {
+			"alwaysLoad": true,
+			"command": "${CLAUDE_PLUGIN_ROOT}/build/grep"
+		}
+	}
+}
