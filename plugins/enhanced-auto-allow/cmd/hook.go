@@ -64,7 +64,20 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// Permission response
+// The two events this binary answers. They are not interchangeable:
+// PermissionRequest runs ONLY when the permission engine lands on "ask", so a
+// deny rule registered there alone is silent under any mode that resolves the
+// call earlier -- `defaultMode: "auto"` allows Bash before the ask path is
+// reached, and python ran unblocked for as long as that was the only
+// registration. PreToolUse runs on every tool call regardless of the outcome,
+// so the deny half rides it.
+// see docs/two-event-registration.md
+const (
+	eventPermissionRequest = "PermissionRequest"
+	eventPreToolUse        = "PreToolUse"
+)
+
+// Permission response (PermissionRequest event).
 type PermissionResponse struct {
 	HookSpecificOutput struct {
 		HookEventName string `json:"hookEventName"`
@@ -72,6 +85,18 @@ type PermissionResponse struct {
 			Behavior string `json:"behavior"`
 			Message  string `json:"message,omitempty"`
 		} `json:"decision"`
+	} `json:"hookSpecificOutput"`
+}
+
+// PreToolUse response. A flat permissionDecision rather than the nested
+// decision object, and the CLI rejects a payload whose hookEventName is not
+// the event it dispatched -- so the shape must follow the event, not the
+// verdict.
+type PreToolUseResponse struct {
+	HookSpecificOutput struct {
+		HookEventName            string `json:"hookEventName"`
+		PermissionDecision       string `json:"permissionDecision"`
+		PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
 	} `json:"hookSpecificOutput"`
 }
 
@@ -84,13 +109,21 @@ func main() {
 		os.Exit(0)
 	}
 
-	if hi.HookEventName != "PermissionRequest" {
+	if hi.HookEventName != eventPermissionRequest && hi.HookEventName != eventPreToolUse {
 		os.Exit(0)
 	}
 
+	// PreToolUse denies and nothing else. An allow there is not a convenience,
+	// it is an override: it settles the call before the permission engine runs,
+	// so the user's own deny rules never get a vote. Auto-approval stays on
+	// PermissionRequest, which is downstream of them.
+	denyOnly := hi.HookEventName == eventPreToolUse
+
 	// Allow all read-only tools
 	if hi.ToolName == "Read" || hi.ToolName == "Glob" || hi.ToolName == "Grep" {
-		outputDecision("allow", "")
+		if !denyOnly {
+			outputDecision(hi.HookEventName, "allow", "")
+		}
 		return
 	}
 
@@ -108,8 +141,8 @@ func main() {
 
 	// Allow read-only MCP tools by server + tool pattern matching
 	if server, tool := parseMCPTool(hi.ToolName); tool != "" {
-		if matchMCPServer(rules.MCPServers, server, tool) {
-			outputDecision("allow", "")
+		if !denyOnly && matchMCPServer(rules.MCPServers, server, tool) {
+			outputDecision(hi.HookEventName, "allow", "")
 			return
 		}
 		os.Exit(0)
@@ -120,9 +153,10 @@ func main() {
 	}
 
 	decision, message := evaluateCommand(hi.ToolInput.Command)
-	if decision != "" {
-		outputDecision(decision, message)
+	if decision == "" || (denyOnly && decision != "deny") {
+		return
 	}
+	outputDecision(hi.HookEventName, decision, message)
 }
 
 func evaluateCommand(command string) (string, string) {
@@ -665,9 +699,18 @@ func allArgsMatchPrefix(args []string, prefixes []string) bool {
 	return true
 }
 
-func outputDecision(behavior, message string) {
+func outputDecision(event, behavior, message string) {
+	if event == eventPreToolUse {
+		resp := PreToolUseResponse{}
+		resp.HookSpecificOutput.HookEventName = eventPreToolUse
+		resp.HookSpecificOutput.PermissionDecision = behavior
+		resp.HookSpecificOutput.PermissionDecisionReason = message
+		json.NewEncoder(os.Stdout).Encode(resp)
+		return
+	}
+
 	resp := PermissionResponse{}
-	resp.HookSpecificOutput.HookEventName = "PermissionRequest"
+	resp.HookSpecificOutput.HookEventName = eventPermissionRequest
 	resp.HookSpecificOutput.Decision.Behavior = behavior
 	if message != "" {
 		resp.HookSpecificOutput.Decision.Message = message

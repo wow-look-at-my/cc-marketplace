@@ -17,6 +17,16 @@ upstream documentation, and loads before touching the relevant file type.
 The skills are model-invoked: their descriptions are written so Claude pulls them in on
 its own when it is about to edit one of these files. Invoking them by name also works.
 
+## Agent
+
+| Agent | Use for |
+|-------|---------|
+| `claude-code-source` | Any question about how Claude Code itself behaves. Reads the shipped `cli.js` for the running version so the 27 MB bundle never enters your context. |
+
+Delegate with the `Agent` tool, `subagent_type: "claude-code-source"`. It pins an Opus
+model and preloads the `/docs:claude-code-source` skill, so the brief is just your
+question.
+
 ## Adding a skill
 
 Add `skills/<topic>/SKILL.md` with a `description` in the front matter. Write the

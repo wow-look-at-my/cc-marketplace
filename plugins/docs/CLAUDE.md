@@ -1,14 +1,93 @@
 ## Docs Plugin
 
-The docs plugin lives at `plugins/docs/`. It ships no code and no hooks -- only model-invoked skills whose sole job is to correct the places where Claude's training data about a technology is reliably stale or wrong, so the corrective notes load *before* the bad output gets written rather than after review catches it. Each skill is written as notes to self, not documentation for a human: it names the specific wrong instinct, states what the upstream docs actually say, and cites behavior rather than vibes. The plugin name plus the skill *directory* name form the slash command, so `skills/dockerfile/SKILL.md` is `/docs:dockerfile`. **Skills here deliberately omit the front-matter `name` field.** Setting it does not change the namespace -- the directory already determines that -- it only replaces the last segment *and registers the bare, unnamespaced form as an alias* (`aliases: [name]` when the value contains no `:`, resolved by the same name-or-alias matcher every other command uses). That would put `/dockerfile` and `/docker-compose` in the root slash namespace alongside the built-ins, for no benefit. Omitting `name` leaves the canonical `docs:`-prefixed name and no alias. Descriptions are written as triggers ("Read before ..."), because the description is the only thing the model sees when deciding whether to pull the skill in.
+The docs plugin lives at `plugins/docs/`. It ships no code and no hooks -- model-invoked skills (plus one agent, below)
+whose sole job is to correct the places where Claude's training data about a technology is reliably stale or wrong, so
+the corrective notes load *before* the bad output gets written rather than after review catches it. Each skill is
+written as notes to self, not documentation for a human: it names the specific wrong instinct, states what the upstream
+docs actually say, and cites behavior rather than vibes. The plugin name plus the skill *directory* name form the slash
+command, so `skills/dockerfile/SKILL.md` is `/docs:dockerfile`. **Skills here deliberately omit the front-matter `name`
+field.** Setting it does not change the namespace -- the directory already determines that -- it only replaces the last
+segment *and registers the bare, unnamespaced form as an alias* (`aliases: [name]` when the value contains no `:`,
+resolved by the same name-or-alias matcher every other command uses). That would put `/dockerfile` and
+`/docker-compose` in the root slash namespace alongside the built-ins, for no benefit. Omitting `name` leaves the
+canonical `docs:`-prefixed name and no alias. Descriptions are written as triggers ("Read before ..."), because the
+description is the only thing the model sees when deciding whether to pull the skill in.
 
-- **`skills/dockerfile/SKILL.md`** -- verified against the vendored Dockerfile reference (`moby/buildkit`) and docs.docker.com building best practices. Covers the recurring failure of hand-rolling `curl` + `tar` + `rm` instead of `ADD`, and the specific asymmetry behind the confusion (a **local** tar is extracted by default, detected by content not filename; a **remote** tar is not, and needs `--unpack=true`, Dockerfile v1.17+). Plus `--checksum`, Git sources, `COPY --link`/`--parents`/`--exclude`/symbolic `--chmod`, `RUN --mount` (bind/cache/tmpfs/secret/ssh) with the apt cache-mount recipe that *replaces* `rm -rf /var/lib/apt/lists/*`, exec-form `ENTRYPOINT`/`CMD` and the full interaction table, `ARG`/`ENV` scoping and the `key=value` requirement, the `# syntax=` and `# check=` parser directives, and cache-invalidation rules.
-- **`skills/docker-compose/SKILL.md`** -- verified against the Compose Specification pages and Compose manuals. Leads with the three reflexes to unlearn (never write the obsolete top-level `version`; the file is `compose.yaml`; the command is `docker compose`, with v5 released 2025 as v2-plus-a-Go-SDK), then the `docker compose restart` trap -- the vendored `docker/compose` CLI reference states plainly that changes to the Compose file "are not reflected after running this command", because `restart` bounces existing containers and container config is fixed at creation, so the fix is `up -d` (which recreates only what changed) -- the same failure the **cleanup-bash-cmds** hook rewrites away at execution time; keep the two in sync if either changes. Then `depends_on` conditions, why `links`/`expose` are usually noise, port quoting and `0.0.0.0` exposure, `develop.watch`, `pre_start`/`post_start`/`pre_stop`, the merge/`extends`/`include`/`!reset`/`!override` distinctions, interpolation, volumes, and build.
+- **`skills/dockerfile/SKILL.md`** -- verified against the vendored Dockerfile reference (`moby/buildkit`) and
+  docs.docker.com building best practices. Covers the recurring failure of hand-rolling `curl` + `tar` + `rm` instead of
+  `ADD`, and the specific asymmetry behind the confusion (a **local** tar is extracted by default, detected by content
+  not filename; a **remote** tar is not, and needs `--unpack=true`, Dockerfile v1.17+). Plus `--checksum`, Git sources,
+  `COPY --link`/`--parents`/`--exclude`/symbolic `--chmod`, `RUN --mount` (bind/cache/tmpfs/secret/ssh) with the apt
+  cache-mount recipe that *replaces* `rm -rf /var/lib/apt/lists/*`, exec-form `ENTRYPOINT`/`CMD` and the full
+  interaction table, `ARG`/`ENV` scoping and the `key=value` requirement, the `# syntax=` and `# check=` parser
+  directives, and cache-invalidation rules.
+- **`skills/docker-compose/SKILL.md`** -- verified against the Compose Specification pages and Compose manuals. Leads
+  with the three reflexes to unlearn (never write the obsolete top-level `version`; the file is `compose.yaml`; the
+  command is `docker compose`, with v5 released 2025 as v2-plus-a-Go-SDK), then the `docker compose restart` trap -- the
+  vendored `docker/compose` CLI reference states plainly that changes to the Compose file "are not reflected after
+  running this command", because `restart` bounces existing containers and container config is fixed at creation, so the
+  fix is `up -d` (which recreates only what changed) -- the same failure the **cleanup-bash-cmds** hook rewrites away at
+  execution time; keep the two in sync if either changes. Then `depends_on` conditions, why `links`/`expose` are usually
+  noise, port quoting and `0.0.0.0` exposure, `develop.watch`, `pre_start`/`post_start`/`pre_stop`, the
+  merge/`extends`/`include`/`!reset`/`!override` distinctions, interpolation, volumes, and build.
 
-- **`skills/node-typescript/SKILL.md`** -- verified against `nodejs.org/api/typescript.html` and executed on Node v22.22.2. Corrects the belief that Node cannot run TypeScript: type stripping is default-on since v22.18/v23.6 and stable since v24.12/v25.2, so a hand-written `.d.ts` beside a compiled `.js` (the concrete failure that prompted this) is a build step bought for nothing. The load-bearing detail is that extensions are **mandatory** -- `require('./file.ts')`, never `require('./file')` -- which is a fact about resolution I keep turning into the false conclusion that the file must be JavaScript; when a host fixes the compiler options and rejects a `.ts` specifier (`TS5097`), `require("./mod.ts") as typeof import("./mod")` types it from the real source, since the cast is a type position with no extension rule (verified under node10 and nodenext, with a negative control). Plus erasable-syntax-only rejections (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` for enum/namespace/parameter properties/decorators), mandatory `import type`, the `node_modules` refusal, `.js`-specifier and `.cts`-syntax gotchas, and the tsconfig Node itself recommends.
+- **`skills/node-typescript/SKILL.md`** -- verified against `nodejs.org/api/typescript.html` and executed on Node
+  v22.22.2. Corrects the belief that Node cannot run TypeScript: type stripping is default-on since v22.18/v23.6 and
+  stable since v24.12/v25.2, so a hand-written `.d.ts` beside a compiled `.js` (the concrete failure that prompted this)
+  is a build step bought for nothing. The load-bearing detail is that extensions are **mandatory** --
+  `require('./file.ts')`, never `require('./file')` -- which is a fact about resolution I keep turning into the false
+  conclusion that the file must be JavaScript; when a host fixes the compiler options and rejects a `.ts` specifier
+  (`TS5097`), `require("./mod.ts") as typeof import("./mod")` types it from the real source, since the cast is a type
+  position with no extension rule (verified under node10 and nodenext, with a negative control). Plus
+  erasable-syntax-only rejections (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` for enum/namespace/parameter
+  properties/decorators), mandatory `import type`, the `node_modules` refusal, `.js`-specifier and `.cts`-syntax
+  gotchas, and the tsconfig Node itself recommends.
 
-- **`skills/css-cascade/SKILL.md`** -- verified against MDN's `CSS_cascade/Specificity`, `CSS_cascade/Inheritance` and `@layer` pages. Unlike the other three this corrects a *design* reflex rather than stale API knowledge: reaching for "which selector do I add a rule for?" instead of "what should this ELEMENT look like, and what is genuinely an exception?", which produces one complete rule per instance and the same declaration block written five times. The worked failure is real (webhook-runner's `dashboard.css`: no `a` rule at all, `color: var(--accent); text-decoration: none;` + the hover under five selectors, and a session that read the file wrote a sixth). Load-bearing facts it pins: a class rule (0-1-1) always beats a bare type rule (0-0-1), so **adding a base rule cannot break an element that already has a class rule** -- what it changes is the elements that had no rule; `:is()`/`:not()`/`:has()` add no weight themselves but take their most specific argument's (`p:not(#fakeId)` is 1-0-1, so `:not(.btn)` silently costs a class column); `:where()` is always 0-0-0, the tool for an intentionally overridable default; `color: inherit` works on non-inherited properties too and is the correct opt-out from a base rule; and unlayered styles beat ALL layered ones for normal declarations, so a quick unlayered rule in a `@layer` codebase outranks the whole system. It ends on the overcorrection (a base rule everything must override is worse than the duplication) and the duplication that is legitimate (`@media` contexts, `@keyframes` from/to, vendor pairs). The mechanical half is the **css-duplication** plugin's language server, which flags identical declaration blocks as diagnostics while the stylesheet is edited; keep the two in sync if either changes.
+- **`skills/css-cascade/SKILL.md`** -- verified against MDN's `CSS_cascade/Specificity`, `CSS_cascade/Inheritance` and
+  `@layer` pages. Unlike the other three this corrects a *design* reflex rather than stale API knowledge: reaching for
+  "which selector do I add a rule for?" instead of "what should this ELEMENT look like, and what is genuinely an
+  exception?", which produces one complete rule per instance and the same declaration block written five times. The
+  worked failure is real (webhook-runner's `dashboard.css`: no `a` rule at all, `color: var(--accent); text-decoration:
+  none;` + the hover under five selectors, and a session that read the file wrote a sixth). Load-bearing facts it pins:
+  a class rule (0-1-1) always beats a bare type rule (0-0-1), so **adding a base rule cannot break an element that
+  already has a class rule** -- what it changes is the elements that had no rule; `:is()`/`:not()`/`:has()` add no
+  weight themselves but take their most specific argument's (`p:not(#fakeId)` is 1-0-1, so `:not(.btn)` silently costs a
+  class column); `:where()` is always 0-0-0, the tool for an intentionally overridable default; `color: inherit` works
+  on non-inherited properties too and is the correct opt-out from a base rule; and unlayered styles beat ALL layered
+  ones for normal declarations, so a quick unlayered rule in a `@layer` codebase outranks the whole system. It ends on
+  the overcorrection (a base rule everything must override is worse than the duplication) and the duplication that is
+  legitimate (`@media` contexts, `@keyframes` from/to, vendor pairs). The mechanical half is the **css-duplication**
+  plugin's language server, which flags identical declaration blocks as diagnostics while the stylesheet is edited; keep
+  the two in sync if either changes.
 
-- **`skills/claude-code-source/SKILL.md`** -- the odd one out: not a corrective note about a file type but the PROCEDURE for getting ground truth about Claude Code itself, from the prettified `cli.js` that `PazerOP/claude-docs-gaps` keeps on one branch per released version. Two rules. (1) The branch name is exactly `claude --version`; `master` holds extraction tooling and almost never what you want, and a missing branch means read the highest one below it and SAY so. Download with `gh api -H "Accept: application/vnd.github.raw" "repos/PazerOP/claude-docs-gaps/contents/cli.js?ref=$V" > /tmp/cli-$V.js` (measured on 2.1.220: 26,975,385 bytes, 720,910 lines, ~1.2s). (2) **Search it ONLY from a Sonnet or Opus subagent** -- a 27 MB bundle read inline burns the main context permanently, and a weaker model confabulates rather than finding the needle; the agent reads the file, you read its report. The searching guidance is what makes the delegation pay: match STRING literals and `.describe()` text rather than the mangled identifiers (which change between builds), watch for the 41 lines over 5,000 characters that `rg -n` will happily print in full (they are single string/regex literals -- embedded skill documents, a `\uXXXX` binary table, the emoji regex -- not broken prettifying; the longest is 71,865 chars), and confirm a claim in the consumer as well as the schema -- 2.1.220 accepts `transport: "socket"` for LSP servers and spawns stdio regardless. This skill is how the css-duplication plugin's LSP contract was established.
+- **`skills/claude-code-source/SKILL.md`** -- the odd one out: not a corrective note about a file type but the PROCEDURE
+  for getting ground truth about Claude Code itself, from the prettified `cli.js` that `PazerOP/claude-docs-gaps` keeps
+  on one branch per released version. Two rules. (1) The branch name is exactly `claude --version`; `master` holds
+  extraction tooling and almost never what you want, and a missing branch means read the highest one below it and SAY
+  so. Download with `gh api -H "Accept: application/vnd.github.raw"
+  "repos/PazerOP/claude-docs-gaps/contents/cli.js?ref=$V" > /tmp/cli-$V.js` (measured on 2.1.220: 26,975,385 bytes,
+  720,910 lines, ~1.2s). (2) **Search it ONLY from a Sonnet or Opus subagent** -- a 27 MB bundle read inline burns the
+  main context permanently, and a weaker model confabulates rather than finding the needle; the agent reads the file,
+  you read its report. The searching guidance is what makes the delegation pay: match STRING literals and `.describe()`
+  text rather than the mangled identifiers (which change between builds), watch for the 41 lines over 5,000 characters
+  that `rg -n` will happily print in full (they are single string/regex literals -- embedded skill documents, a
+  `\uXXXX` binary table, the emoji regex -- not broken prettifying; the longest is 71,865 chars), and confirm a claim in
+  the consumer as well as the schema -- 2.1.220 accepts `transport: "socket"` for LSP servers and spawns stdio
+  regardless. This skill is how the css-duplication plugin's LSP contract was established. The `agents/` entry below is
+  its executable half.
 
-Adding a skill means adding `plugins/docs/skills/<topic>/SKILL.md` with a `description` and no `name` -- no `plugin.json` change is needed, since skills are discovered from `skills/`. Verify every claim against upstream docs before writing it down; a confidently wrong note in this plugin is worse than no note, because it loads automatically. Keep `: ` out of unquoted front-matter descriptions (YAML plain scalars disallow it, and parsers vary in how leniently they cope).
+- **`agents/claude-code-source.md`** -- the executable half of the skill above. The skill says "delegate to a Sonnet or
+  Opus subagent"; every caller was then hand-rolling that brief, and getting it wrong in the one way that matters most
+  here -- a session with `CLAUDE_CODE_SUBAGENT_MODEL: "haiku"` in its env silently gets Haiku unless the spawn passes an
+  explicit override, which is exactly the "confabulates rather than finding the needle" failure the skill warns about.
+  The agent pins `model: opus`, preloads the skill via front-matter `skills:`, and carries the report contract (line
+  number plus verbatim quote per claim, inferences labelled, "the source does not show this" when true). `tools` is
+  `Bash, Read, Grep, Glob` -- Bash is load-bearing, since step one is a `gh api` download, which is why the built-in
+  `claude-code-guide` agent cannot do this job.
+
+Adding a skill means adding `plugins/docs/skills/<topic>/SKILL.md` with a `description` and no `name` -- no
+`plugin.json` change is needed, since skills are discovered from `skills/`. **An agent is different: it must be
+registered**, as a relative `./`-prefixed path in the plugin.json `agents` array, or it is never loaded. Verify every
+claim against upstream docs before writing it down; a confidently wrong note in this plugin is worse than no note,
+because it loads automatically. Keep `: ` out of unquoted front-matter descriptions (YAML plain scalars disallow it,
+and parsers vary in how leniently they cope).

@@ -17,6 +17,17 @@
 					}
 				]
 			}
+		],
+		"PreToolUse": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/enhanced-auto-allow"
+					}
+				]
+			}
 		]
 	},
 	"mh": {

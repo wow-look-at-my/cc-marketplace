@@ -969,6 +969,34 @@
 		<tool>browser_find</tool>
 	</mcpServer>
 
+	<!-- Claude Code Remote: the ONLY entry here that is not a read-only surface,
+	     and the only one whose job is to ANSWER a prompt rather than skip one.
+	     The CCR MCP proxy replies to a call with JSON-RPC -32003 needs_approval;
+	     the client then raises a retroactive approval card built with
+	     suppressAlwaysAllowRule hardcoded, so it offers "Allow once" and nothing
+	     else, and permissions.allow provably cannot reach that code path. A
+	     PermissionRequest hook CAN: the retry hands canUseTool a precomputed
+	     "ask", which falls through to the ask path where this hook races the
+	     human dialog and an allow aborts it. Without this, every one of these
+	     calls waits on a human, which is fatal for send_later, whose whole job
+	     is to fire in a session nobody is watching.
+	     These are the session-scoped management tools: they read state or adjust
+	     what this disposable VM can see, and mutate nothing in the user's
+	     repositories. The tools that edit or delete Routines account-wide
+	     (create_trigger, update_trigger, delete_trigger, fire_trigger) are
+	     deliberately absent and still prompt.
+	     see docs/ccr-approval-card.md -->
+	<mcpServer name="Claude_Code_Remote">
+		<tool>send_later</tool>
+		<tool>add_repo</tool>
+		<tool>register_repo_root</tool>
+		<tool>list_repos</tool>
+		<tool>list_environments</tool>
+		<tool>list_triggers</tool>
+		<tool>subscribe_pr_activity</tool>
+		<tool>unsubscribe_pr_activity</tool>
+	</mcpServer>
+
 	<!-- This marketplace's own grep/glob servers: the same builtin read-only
 	     tools the hook already allows by bare name. -->
 	<mcpServer name="plugin_grep_*">
