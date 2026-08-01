@@ -1,6 +1,19 @@
 name: Setup marketplace-build
 description: Build or restore cached marketplace-build CLI
 
+# CALLER PERMISSIONS -- a composite cannot request its own, so every job that
+# uses this action must declare:
+#
+#   permissions:
+#     id-token: write
+#     contents: write   # go-toolchain submits the dependency graph; 403 without it
+#     actions: read     # its no-all-builds guard scans the run's jobs...
+#     checks: read      # ...and the head commit's check runs; both fail closed
+#
+# The go-toolchain step below runs only on a cache MISS, i.e. only when
+# tools/marketplace-build changes -- so an incomplete set stays green for
+# months and then fails the first build that touches the tool.
+
 runs:
   using: composite
   steps:
@@ -35,6 +48,8 @@ runs:
         working-directory: "tools/marketplace-build"
         os: linux
         arch: amd64
+        # An internal CI helper, not a release artifact.
+        autorelease: "false"
 
     - name: Install marketplace-build
       shell: bash

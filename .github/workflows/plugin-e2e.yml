@@ -106,12 +106,15 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build the language server
-        uses: wow-look-at-my/go-toolchain@latest
+        uses: wow-look-at-my/go-toolchain@v1
         with:
           working-directory: plugins/css-duplication
           os: linux
           arch: amd64
           upload-artifacts: 'false'
+          # This binary exists to be driven by the e2e below; publishing it to
+          # buildhost on every branch push is not what the job is for.
+          autorelease: 'false'
 
       - uses: ./.github/actions/setup-claude-code
 

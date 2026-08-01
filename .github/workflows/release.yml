@@ -10,17 +10,21 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # setup-marketplace-build runs go-toolchain on a cache miss, so every job
+    # using it needs go-toolchain's full permission set (see that action's own
+    # notes). A composite cannot request permissions, and the miss only happens
+    # when tools/marketplace-build changes -- which is why an incomplete set
+    # here stayed green until the day someone edited the tool.
     permissions:
-      actions: read
       id-token: write
       contents: write
+      actions: read
       checks: read
     outputs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       has_build: ${{ steps.split.outputs.has_build }}
-      prod_version: ${{ steps.prod-version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
 
@@ -77,16 +81,6 @@ jobs:
             core.setOutput('cached_plugins', JSON.stringify(cachedPlugins));
             core.setOutput('has_build', String(buildPlugins.length > 0));
 
-      - name: Fetch production version for PR preview
-        if: github.event_name == 'pull_request'
-        id: prod-version
-        run: |
-          PROD_VERSION=$(curl -sf \
-            "https://npm.pazer.build/@buildhost/cc-marketplace__html-demo" \
-            | jq -r '.["dist-tags"].latest // empty' 2>/dev/null || echo "")
-          if [ -n "$PROD_VERSION" ]; then
-            echo "version=$PROD_VERSION" >> $GITHUB_OUTPUT
-          fi
 
   build:
     needs: prepare
@@ -96,7 +90,9 @@ jobs:
     permissions:
       id-token: write
       # go-toolchain submits the module graph to GitHub's dependency graph,
-      # which the API gates behind contents: write.
+      # which the API gates behind contents: write. Its no-all-builds guard
+      # scans the run's jobs and the head commit's check runs, and fails closed
+      # without the two read grants.
       contents: write
       actions: read
       checks: read
@@ -114,14 +110,27 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
+      # One fat APE, not the os x arch matrix: a plugin ships exactly one binary
+      # now, and release-plugin FAILS CLOSED on a build/ holding per-platform
+      # binaries instead (ape_package.go) rather than shipping a package that
+      # works on some platforms and silently not others.
+      #
+      # @v1, not @latest: `latest` is a frozen orphan tag from 2026-05 that
+      # predates the `targets` input, and an unknown `with:` key is a WARNING,
+      # not an error -- so `targets: cosmo` was silently dropped and the default
+      # matrix ran. v1 is the ref the org documents and every other repo uses.
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
         uses: wow-look-at-my/go-toolchain@v1
         with:
           working-directory: plugins/${{ matrix.plugin }}
-          os: linux,darwin
-          arch: amd64,arm64
+          targets: cosmo
           upload-artifacts: 'false'
+          # A plugin is distributed as an orphan tag, never a buildhost release, so
+          # nothing here should publish. autorelease defaults TRUE and fires on
+          # every branch push -- and its GitHub Deployment + storage record are
+          # hard failures without deployments/artifact-metadata write.
+          autorelease: 'false'
 
       - name: Build
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
@@ -133,20 +142,32 @@ jobs:
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
-      - name: Align plugin version to production
-        if: needs.prepare.outputs.prod_version != ''
-        run: |
-          jq --arg v "${{ needs.prepare.outputs.prod_version }}" '.version = $v' \
-            "${{ steps.release.outputs.source_dir }}/package.json" > /tmp/pkg-aligned.json && \
-          mv /tmp/pkg-aligned.json "${{ steps.release.outputs.source_dir }}/package.json"
-
       - uses: ./.github/actions/setup-claude-code
 
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - name: Package plugin
-        run: marketplace-build package-plugin --input ${{ steps.release.outputs.source_dir }} --output /tmp/packaged-${{ matrix.plugin }}
+      # The cooked directory IS the artifact now: publishing is an orphan tag
+      # holding exactly this tree, which `claude plugin install` shallow-clones.
+      # The version comes from release-plugin rather than the action's own
+      # auto-increment, because the manifest inside this tree already records
+      # the tag and marketplace.json pins it -- the two must agree.
+      - name: Publish orphan tag
+        if: github.event_name == 'push'
+        uses: wow-look-at-my/actions@orphan-release#latest
+        with:
+          source: ${{ steps.release.outputs.source_dir }}
+          name: ${{ matrix.plugin }}
+          version: ${{ steps.release.outputs.version }}
+          message: ${{ steps.release.outputs.message }}
+
+      # Hand the cooked tree to publish-marketplace under a stable path: it is
+      # what update-marketplace reads manifest.json out of, and the cook dir's
+      # own name is a random mkdtemp suffix.
+      - name: Stage the cooked tree
+        run: |
+          rm -rf "/tmp/packaged-${{ matrix.plugin }}"
+          cp -r "${{ steps.release.outputs.source_dir }}" "/tmp/packaged-${{ matrix.plugin }}"
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
@@ -161,51 +182,6 @@ jobs:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
 
-      # Publish the plugin to buildhost's npm registry using the buildhost
-      # composite actions (OIDC auth -- no static token; project auto-namespaced
-      # under cc-marketplace/). The project is created semver so the explicit
-      # N.0.0 version is preserved; buildhost serves it as the npm package
-      # @buildhost/cc-marketplace__<plugin> (the "/" encoded as "__").
-      - name: Read npm package manifest
-        id: npmpkg
-        if: github.event_name == 'push'
-        run: |
-          MANIFEST=/tmp/packaged-${{ matrix.plugin }}/manifest.json
-          echo "version=$(jq -r '.version' "$MANIFEST")" >> "$GITHUB_OUTPUT"
-          echo "tarball=/tmp/packaged-${{ matrix.plugin }}/$(jq -r '.main.tarball' "$MANIFEST")" >> "$GITHUB_OUTPUT"
-
-      - name: Ensure buildhost project
-        if: github.event_name == 'push'
-        uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-project@master
-        with:
-          name: cc-marketplace/${{ matrix.plugin }}
-          versioning: semver
-
-      - name: Create buildhost release
-        if: github.event_name == 'push'
-        uses: wow-look-at-my/buildhost/.github/actions/buildhost-create-release@master
-        with:
-          project: cc-marketplace/${{ matrix.plugin }}
-          version: ${{ steps.npmpkg.outputs.version }}
-
-      - name: Upload npm package
-        if: github.event_name == 'push'
-        uses: wow-look-at-my/buildhost/.github/actions/buildhost-upload-artifact@master
-        with:
-          project: cc-marketplace/${{ matrix.plugin }}
-          version: ${{ steps.npmpkg.outputs.version }}
-          os: any
-          arch: any
-          kind: npm-package
-          path: ${{ steps.npmpkg.outputs.tarball }}
-
-      - name: Publish buildhost release
-        if: github.event_name == 'push'
-        uses: wow-look-at-my/buildhost/.github/actions/buildhost-publish-release@master
-        with:
-          project: cc-marketplace/${{ matrix.plugin }}
-          version: ${{ steps.npmpkg.outputs.version }}
-
   publish-marketplace:
     needs: [prepare, build]
     if: >-
@@ -215,6 +191,7 @@ jobs:
       (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Same reason as prepare: setup-marketplace-build can run go-toolchain here.
     permissions:
       id-token: write
       contents: write
@@ -232,19 +209,34 @@ jobs:
           path: /tmp/all-plugin-artifacts
 
       - name: Prepare combined input
+        env:
+          ALL_PLUGINS: ${{ needs.prepare.outputs.all_plugins }}
         run: |
+          set -euo pipefail
           mkdir -p /tmp/combined-plugins
           for d in /tmp/all-plugin-artifacts/packaged-*/; do
             plugin=$(basename "$d" | sed 's/^packaged-//')
             cp -r "$d" "/tmp/combined-plugins/$plugin"
           done
 
+          # marketplace.json's plugins array is REPLACED from this input, so a
+          # plugin missing here silently vanishes from the marketplace -- users
+          # can no longer install it and every check stays green. Fail instead.
+          # (prepare's build/cached split looks for a cache key that never
+          # matches the one `Save plugin cache` writes, so every plugin is
+          # rebuilt every run today; this is what catches the day that changes.)
+          missing=""
+          for plugin in $(echo "$ALL_PLUGINS" | jq -r '.[]'); do
+            [ -d "/tmp/combined-plugins/$plugin" ] || missing="$missing $plugin"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::no cooked tree for:$missing -- publishing would drop them from marketplace.json"
+            exit 1
+          fi
+
       - name: Update marketplace.json
         id: marketplace
-        run: |
-          marketplace-build update-marketplace \
-            --input /tmp/combined-plugins \
-            --base-url "https://npm.pazer.build" >> $GITHUB_OUTPUT
+        run: marketplace-build update-marketplace --input /tmp/combined-plugins >> $GITHUB_OUTPUT
 
       - name: Assemble site
         run: |
@@ -302,15 +294,13 @@ jobs:
           echo "Giving up after 4 attempts" >&2
           exit 1
 
-  # End-to-end smoke test: drive real Claude Code against the marketplace we just
-  # published and actually install + update every plugin. This is the only job
-  # that exercises the `claude plugin` npm install/update path (the demo workflow
-  # loads a local --plugin-dir, and the build job only runs `claude plugin
-  # validate` on a cooked dir). Claude installs every npm-source plugin into one
-  # shared npm prefix, so installing all of them rebuilds a single shared
-  # lockfile -- a dead/unreachable tarball for ANY plugin (e.g. a leftover
-  # github.io URL after the buildhost migration) fails the whole run, exactly
-  # like the cross-plugin 404 users hit when updating a single plugin.
+  # End-to-end smoke test: drive real Claude Code against the marketplace we
+  # just published and actually install + update every plugin. This is the only
+  # job that exercises the install path users take (the demo workflow loads a
+  # local --plugin-dir, and the build job only runs `claude plugin validate` on
+  # a cooked dir). Every entry now names a git ref, so this is what proves each
+  # orphan tag was really pushed and really holds an installable plugin -- a tag
+  # the build job failed to push is a 404 here rather than in production.
   smoke-test:
     needs: [publish-marketplace]
     if: ${{ github.event_name == 'push' && needs.publish-marketplace.result == 'success' }}
@@ -326,10 +316,9 @@ jobs:
         with:
           script: |
             // Drive real Claude Code against the marketplace this run published and
-            // install + update every plugin. Claude installs every npm-source plugin
-            // into one shared npm prefix, so installing them all rebuilds a single
-            // shared lockfile -- a dead/unreachable tarball for ANY plugin fails the
-            // run, exactly like the cross-plugin 404 users hit updating one plugin.
+            // install + update every plugin. Each entry points at an orphan tag this
+            // run pushed, so a tag that was never pushed -- or holds the wrong tree --
+            // fails here instead of for the first user who installs it.
             const branch = (env.GITHUB_REF_NAME ?? "").split("/").join("-");
             const runNumber = env.GITHUB_RUN_NUMBER ?? "";
             const mktUrl = `https://sites.pazer.build/cc-marketplace/branch/${branch}/marketplace.json`;
@@ -342,6 +331,15 @@ jobs:
               if (r.exitCode !== 0) return null;
               try { return JSON.parse(r.stdout); } catch { return null; }
             }
+
+            // `claude plugin install` clones a github-source entry over SSH
+            // (git@github.com:), and a runner holds no key -- "Permission
+            // denied (publickey)" on the first install. The repo is public, so
+            // rewrite to https for this job. A developer with a GitHub SSH key
+            // needs nothing; one without hits the same wall, which is a real
+            // question about the source shape rather than something to paper
+            // over here.
+            await $`git config --global url.https://github.com/.insteadOf git@github.com:`;
 
             // Wait for the marketplace this run published (metadata.version mirrors
             // the run number, see update_marketplace.go) to go live on buildhost.
@@ -362,8 +360,7 @@ jobs:
 
             await $`claude plugin marketplace add ${mktUrl}`;
 
-            // Install every plugin into the shared npm prefix; the last installs
-            // rebuild all prior siblings, so one broken tarball fails the run.
+            // Install every plugin: each one shallow-clones its own orphan tag.
             for (const p of plugins) {
               core.startGroup(`install ${p}`);
               await $`claude plugin install ${`${p}@${mktName}`}`;
@@ -379,11 +376,12 @@ jobs:
 
             await $`claude plugin list`;
 
-            // Guard against any plugin resolving to the decommissioned github.io
-            // registry instead of buildhost (the root cause of the cross-plugin 404).
-            const lock = path.join(os.homedir(), ".claude/plugins/npm-cache/package-lock.json");
-            if (fs.existsSync(lock)) {
-              const bad = fs.readFileSync(lock, "utf8").split("\n").filter((l) => l.includes("github.io"));
-              if (bad.length > 0) throw new Error(`a plugin still resolves to a github.io tarball:\n${bad.join("\n")}`);
+            // Every entry must name a git ref this run pushed. An entry that
+            // still carries a registry URL would mean update-marketplace fell
+            // back to the old npm shape, which installs from somewhere this run
+            // never published to.
+            const wrong = (mkt.plugins ?? []).filter((p: any) => p?.source?.source !== "github" || !p?.source?.ref);
+            if (wrong.length > 0) {
+              throw new Error(`not a git source: ${wrong.map((p: any) => p.name).join(" ")}`);
             }
-            core.info("OK: every plugin installed and updated from the buildhost registry");
+            core.info(`OK: every plugin installed and updated from its orphan tag`);
