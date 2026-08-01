@@ -1,7 +1,8 @@
 package main
 
 import (
-	"strings"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -40,12 +41,11 @@ func TestQuantityAgreement(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c := Analyze(Block{Text: "the payload is " + tc.claim + " see docs/x.md"})
-			if len(c.Quantities) == 0 {
-				t.Fatalf("no quantity parsed from %q", tc.claim)
-			}
-			if got := c.Quantities[0].agreesWith(doc); got != tc.agree {
-				t.Errorf("%q: agreesWith = %v, want %v", tc.claim, got, tc.agree)
-			}
+			require.NotEqual(t, 0, len(c.Quantities))
+
+			got := c.Quantities[0].agreesWith(doc)
+			assert.Equal(t, tc.agree, got)
+
 		})
 	}
 }
@@ -60,9 +60,9 @@ func TestBareNumbersAreNotQuantities(t *testing.T) {
 		"RFC 8628",
 		"index 0 is the reserved empty string",
 	} {
-		if c := Analyze(Block{Text: text}); len(c.Quantities) > 0 {
-			t.Errorf("%q: parsed %v as a measurement claim", text, c.Quantities)
-		}
+		c := Analyze(Block{Text: text})
+		assert.LessOrEqual(t, len(c.Quantities), 0)
+
 	}
 }
 
@@ -75,13 +75,11 @@ func TestReferenceExtraction(t *testing.T) {
 		"TestTimelineFrameBudget", "docs/timeline-wire-format.md",
 		"internal/api/timeline.go", "fetchTimelineBytes",
 	} {
-		if !contains(c.References, want) {
-			t.Errorf("missed reference %q in %v", want, c.References)
-		}
+		assert.True(t, contains(c.References, want))
+
 	}
-	if !contains(c.Docs, "docs/timeline-wire-format.md") {
-		t.Errorf("the cited doc was not recorded as evidence: %v", c.Docs)
-	}
+	assert.True(t, contains(c.Docs, "docs/timeline-wire-format.md"))
+
 }
 
 // Prose must not be mined for symbols. An ordinary English sentence naming
@@ -89,9 +87,8 @@ func TestReferenceExtraction(t *testing.T) {
 func TestProseIsNotMinedForSymbols(t *testing.T) {
 	c := Analyze(Block{Text: "Absorb the state a GitHub response contains and " +
 		"rebuild the response from it, dropping every URL field."})
-	if len(c.References) != 0 {
-		t.Errorf("invented references from prose: %v", c.References)
-	}
+	assert.Equal(t, 0, len(c.References))
+
 }
 
 func TestHedgeDetection(t *testing.T) {
@@ -102,9 +99,9 @@ func TestHedgeDetection(t *testing.T) {
 		"seems to be safe under concurrency",
 	}
 	for _, text := range reported {
-		if c := Analyze(Block{Text: text}); len(c.Hedges) == 0 {
-			t.Errorf("%q: hedge not detected", text)
-		}
+		c := Analyze(Block{Text: text})
+		assert.NotEqual(t, 0, len(c.Hedges))
+
 	}
 	// "should" is normative here, not unsure -- flagging it would punish
 	// correct contract documentation.
@@ -113,34 +110,30 @@ func TestHedgeDetection(t *testing.T) {
 		"every response-cache table should be pruned on write",
 	}
 	for _, text := range notReported {
-		if c := Analyze(Block{Text: text}); len(c.Hedges) > 0 {
-			t.Errorf("%q: false hedge %v", text, c.Hedges)
-		}
+		c := Analyze(Block{Text: text})
+		assert.LessOrEqual(t, len(c.Hedges), 0)
+
 	}
 }
 
 func TestJudgmentGate(t *testing.T) {
 	// A figure WITH a cited doc is settled mechanically: no model needed.
 	settled := Analyze(Block{Text: "23.8 B/event, see docs/x.md"})
-	if settled.NeedsJudgment() {
-		t.Error("a figure with a cited doc should not need a model")
-	}
+	assert.False(t, settled.NeedsJudgment())
+
 	// A figure with no source cannot be settled by looking.
 	unsourced := Analyze(Block{Text: "decodes 5x faster in the browser"})
-	if !unsourced.NeedsJudgment() {
-		t.Error("an unsourced measurement needs judgment")
-	}
+	assert.True(t, unsourced.NeedsJudgment())
+
 	// A causal claim always does -- this is the invented-history shape.
 	causal := Analyze(Block{Text: "a producer imports this package rather than " +
 		"reimplementing it, which is how the format used to drift"})
-	if !causal.NeedsJudgment() {
-		t.Error("a causal claim needs judgment")
-	}
+	assert.True(t, causal.NeedsJudgment())
+
 	// Ordinary description costs nothing.
 	plain := Analyze(Block{Text: "bump the counter and return"})
-	if plain.NeedsJudgment() {
-		t.Error("a plain comment must not reach the model")
-	}
+	assert.False(t, plain.NeedsJudgment())
+
 }
 
 func contains(list []string, s string) bool {
@@ -154,9 +147,8 @@ func contains(list []string, s string) bool {
 
 func TestExcerptStaysOneLine(t *testing.T) {
 	got := excerpt("first line\nsecond line\n\nthird")
-	if strings.Contains(got, "\n") {
-		t.Errorf("excerpt kept newlines: %q", got)
-	}
+	assert.NotContains(t, got, "\n")
+
 }
 
 // A filename shown as an EXAMPLE is a specimen, not a claim that the file is
@@ -165,28 +157,24 @@ func TestExcerptStaysOneLine(t *testing.T) {
 func TestQuotedExamplesAreNotCitations(t *testing.T) {
 	c := Analyze(Block{Text: `A partial path ("assets/timeline.js") is relative to the citing file. ` +
 		"The real citation is `internal/api/timeline.go`."})
-	if contains(c.References, "assets/timeline.js") {
-		t.Errorf("a quoted example was treated as a citation: %v", c.References)
-	}
-	if !contains(c.References, "internal/api/timeline.go") {
-		t.Errorf("a backticked citation was lost: %v", c.References)
-	}
+	assert.False(t, contains(c.References, "assets/timeline.js"))
+
+	assert.True(t, contains(c.References, "internal/api/timeline.go"))
+
 }
 
 // URLs and absolute paths are full of path-shaped text that is not a file here.
 func TestURLsAndAbsolutePathsAreNotCitations(t *testing.T) {
 	c := Analyze(Block{Text: "imported from https://sites.pazer.build/js-snippets/branch/library/ui/timeline-view.js " +
 		"and dumped to /tmp/timeline-view.js"})
-	if len(c.References) != 0 {
-		t.Errorf("mined a URL or an absolute path for citations: %v", c.References)
-	}
+	assert.Equal(t, 0, len(c.References))
+
 }
 
 // Comment prose wraps, so a quoted example routinely spans lines. Missing that
 // was the last false positive this tool reported against its own source.
 func TestQuotedExampleSpanningLines(t *testing.T) {
 	c := Analyze(Block{Text: "a build output cited by partial path (\"the\nassets/timeline.js the embed names\") resolves."})
-	if contains(c.References, "assets/timeline.js") {
-		t.Errorf("a wrapped quoted example was treated as a citation: %v", c.References)
-	}
+	assert.False(t, contains(c.References, "assets/timeline.js"))
+
 }

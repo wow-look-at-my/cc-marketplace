@@ -29,3 +29,4 @@ Thumbs.db
 coverage.out
 build/
 plugins/comment-truth/comment-truth
+plugins/comment-truth/build/
