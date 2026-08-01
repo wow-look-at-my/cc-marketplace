@@ -75,19 +75,31 @@ func stageBinaries(cookedDir, pluginName string) error {
 		}
 	}
 	if ape == "" {
-		return fmt.Errorf("no %s* binary in %s (found: %s) -- build the plugin with `--targets cosmo --cosmo-slots none` so it ships one fat APE",
+		return fmt.Errorf("no %s* binary in %s (found: %s) -- build the plugin with `--targets cosmo` so it ships one fat APE",
 			pluginName+apeSuffix, buildDir, strings.Join(others, ", "))
 	}
 
-	// Everything else in build/ is a byproduct: per-platform slot copies, the
-	// debug sidecar, checksums, the profile. None of it ships.
-	for _, name := range others {
+	// READ the bytes before deleting anything, and read THROUGH the name rather
+	// than moving it: go-toolchain leaves <name>_cosmo_fat as a SYMLINK to one
+	// of the per-platform slot copies it also writes (buildhost rejects
+	// os=cosmo, so the fat build is published under a platform name). Those
+	// copies are byproducts by every other measure, so renaming the link and
+	// then deleting them would ship a dangling symlink.
+	data, err := os.ReadFile(filepath.Join(buildDir, ape))
+	if err != nil {
+		return fmt.Errorf("read APE %s: %w", ape, err)
+	}
+
+	// Everything else in build/ is a byproduct: slot copies, the debug sidecar,
+	// the aarch64 ELF, checksums, the profile. None of it ships. The APE's own
+	// entry goes with them -- it is rewritten under the staged name below.
+	for _, name := range append(others, ape) {
 		if err := os.Remove(filepath.Join(buildDir, name)); err != nil {
 			return fmt.Errorf("drop build byproduct %s: %w", name, err)
 		}
 	}
 
-	if err := os.Rename(filepath.Join(buildDir, ape), filepath.Join(buildDir, apeName(pluginName))); err != nil {
+	if err := os.WriteFile(filepath.Join(buildDir, apeName(pluginName)), data, 0o755); err != nil {
 		return fmt.Errorf("stage APE: %w", err)
 	}
 	if err := os.Chmod(filepath.Join(buildDir, apeName(pluginName)), 0o755); err != nil {

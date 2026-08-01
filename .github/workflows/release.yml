@@ -110,13 +110,16 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
+      # One fat APE, not the four-way os x arch matrix: a plugin ships exactly
+      # one binary now, and release-plugin FAILS CLOSED on a build/ holding
+      # per-platform binaries instead (ape_package.go) rather than shipping a
+      # package that works on some platforms and silently not others.
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
         uses: wow-look-at-my/go-toolchain@latest
         with:
           working-directory: plugins/${{ matrix.plugin }}
-          os: linux,darwin
-          arch: amd64,arm64
+          targets: cosmo
           upload-artifacts: 'false'
 
       - name: Build

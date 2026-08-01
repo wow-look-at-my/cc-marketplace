@@ -75,6 +75,42 @@ func TestStageBinariesDropsBuildByproducts(t *testing.T) {
 	require.ElementsMatch(t, []string{"glob.ape", "glob"}, buildEntries(t, cooked))
 }
 
+// The REAL layout `go-toolchain matrix --targets cosmo` writes, copied from a
+// live build: the fat APE's own name is a SYMLINK into a per-platform slot copy
+// (buildhost rejects os=cosmo, so the fat build is published under a platform
+// name), and the byproducts include a debug sidecar and an aarch64 ELF. Staging
+// this by renaming the link and deleting the slots ships a dangling symlink --
+// which is what the invented single-regular-file fixture above could never
+// catch.
+func TestStageBinariesFollowsTheSymlinkGoToolchainActuallyWrites(t *testing.T) {
+	cooked := writeBuildDir(t,
+		"glob_linux_amd64",
+		"glob_linux_arm64",
+		"glob_windows_amd64.exe",
+		"glob"+apeSuffix+".aarch64.elf",
+		"glob"+apeSuffix+".dbg",
+		"checksums.txt",
+		"profile.json",
+	)
+	build := filepath.Join(cooked, "build")
+	require.NoError(t, os.WriteFile(filepath.Join(build, "glob_linux_amd64"), []byte("REAL APE BYTES"), 0o755))
+	// go-toolchain links both the bare name and the fat name at the slot copy.
+	require.NoError(t, os.Symlink("glob_linux_amd64", filepath.Join(build, "glob"+apeSuffix)))
+	require.NoError(t, os.Symlink("glob_linux_amd64", filepath.Join(build, "glob_host")))
+
+	require.NoError(t, stageBinaries(cooked, "glob"))
+	require.ElementsMatch(t, []string{"glob.ape", "glob"}, buildEntries(t, cooked))
+
+	shipped, err := os.ReadFile(filepath.Join(build, "glob.ape"))
+	require.NoError(t, err)
+	require.Equal(t, "REAL APE BYTES", string(shipped), "the shipped APE must be bytes, not a link to a file that was deleted")
+
+	info, err := os.Lstat(filepath.Join(build, "glob.ape"))
+	require.NoError(t, err)
+	require.Zero(t, info.Mode()&os.ModeSymlink, "a tag holding a dangling symlink installs as a broken plugin")
+	require.NotZero(t, info.Mode()&0o111)
+}
+
 // The failure this fails closed on: a plugin built with the per-platform matrix
 // instead of `--targets cosmo`. Shipping those binaries would work on some
 // platforms and silently not others, which is worse than a clean failure.
