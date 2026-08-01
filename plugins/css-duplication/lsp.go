@@ -106,7 +106,7 @@ func (s *Server) Serve(in io.Reader) error {
 		}
 		stop, result, rerr := s.dispatch(msg)
 		if len(msg.ID) > 0 { // a request: it must be answered, even with null
-			s.send(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: result, Error: rerr})
+			s.respond(msg.ID, result, rerr)
 		}
 		if stop {
 			return nil
@@ -344,6 +344,27 @@ func (s *Server) notify(method string, params any) {
 		return
 	}
 	s.send(rpcMessage{JSONRPC: "2.0", Method: method, Params: raw})
+}
+
+// respond answers a request. `result` is written even when it is nil, as an
+// explicit JSON null: a success response carrying NEITHER result nor error is
+// malformed, and a real client rejects it -- vscode-jsonrpc fails the request
+// with "The received response has neither a result nor an error property",
+// which is how `shutdown` was breaking after a clean, fully working session.
+// Struct tags cannot express this (`omitempty` drops the null, dropping it is
+// the bug), so the response is assembled by hand.
+func (s *Server) respond(id json.RawMessage, result any, rerr *rpcError) {
+	out := map[string]any{"jsonrpc": "2.0", "id": id}
+	if rerr != nil {
+		out["error"] = rerr
+	} else {
+		out["result"] = result // nil marshals to null, which is what LSP wants
+	}
+	body, err := json.Marshal(out)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(s.out, "Content-Length: %d\r\n\r\n%s", len(body), body)
 }
 
 func (s *Server) send(msg rpcMessage) {
