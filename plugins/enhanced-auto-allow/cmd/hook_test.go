@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,7 +38,10 @@ func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 			walk(cmd.Subcommands)
 		}
 	}
-	walk(xr.Commands)
+	// Tests live wherever their rule lives, in any of the three sections.
+	walk(xr.Allow.Rules)
+	walk(xr.Ask.Rules)
+	walk(xr.Deny.Rules)
 	require.NotEmpty(t, cases, "no embedded tests found in rules.xml")
 	return cases
 }
@@ -57,7 +61,7 @@ func TestDuplicateEntriesMerged(t *testing.T) {
 	defer func() { rules = saved }()
 
 	rules = Rules{
-		Commands: []CommandNode{
+		Allow: []CommandNode{
 			{
 				Name:        "mycmd",
 				Description: "first entry",
@@ -90,7 +94,7 @@ func TestDuplicateEntriesDenyWins(t *testing.T) {
 	defer func() { rules = saved }()
 
 	rules = Rules{
-		Commands: []CommandNode{
+		Allow: []CommandNode{
 			{
 				Name: "mycmd",
 				Subcommands: []CommandNode{
@@ -201,6 +205,18 @@ func loadTestRules(t *testing.T) {
 	require.Nil(t, err, "Failed to read rules.xml")
 	rules, err = loadXMLRules(data)
 	require.NoError(t, err, "Failed to parse rules.xml")
+}
+
+// Indentation is tabs, so every reader picks their own width. Spaces are
+// alignment only -- they follow a tab, never open a line.
+func TestRulesXMLIndentedWithTabs(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))
+	require.NoError(t, err)
+
+	for i, line := range strings.Split(string(data), "\n") {
+		assert.False(t, strings.HasPrefix(line, " "), "rules.xml:%d indents with spaces: %q", i+1, line)
+	}
 }
 
 func captureOutput(f func()) string {
