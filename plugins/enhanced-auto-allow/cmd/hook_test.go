@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -204,6 +205,18 @@ func loadTestRules(t *testing.T) {
 	require.Nil(t, err, "Failed to read rules.xml")
 	rules, err = loadXMLRules(data)
 	require.NoError(t, err, "Failed to parse rules.xml")
+}
+
+// Indentation is tabs, so every reader picks their own width. Spaces are
+// alignment only -- they follow a tab, never open a line.
+func TestRulesXMLIndentedWithTabs(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))
+	require.NoError(t, err)
+
+	for i, line := range strings.Split(string(data), "\n") {
+		assert.False(t, strings.HasPrefix(line, " "), "rules.xml:%d indents with spaces: %q", i+1, line)
+	}
 }
 
 func captureOutput(f func()) string {
