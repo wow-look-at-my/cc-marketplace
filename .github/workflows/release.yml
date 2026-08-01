@@ -110,13 +110,18 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      # One fat APE, not the four-way os x arch matrix: a plugin ships exactly
-      # one binary now, and release-plugin FAILS CLOSED on a build/ holding
-      # per-platform binaries instead (ape_package.go) rather than shipping a
-      # package that works on some platforms and silently not others.
+      # One fat APE, not the os x arch matrix: a plugin ships exactly one binary
+      # now, and release-plugin FAILS CLOSED on a build/ holding per-platform
+      # binaries instead (ape_package.go) rather than shipping a package that
+      # works on some platforms and silently not others.
+      #
+      # @v1, not @latest: `latest` is a frozen orphan tag from 2026-05 that
+      # predates the `targets` input, and an unknown `with:` key is a WARNING,
+      # not an error -- so `targets: cosmo` was silently dropped and the default
+      # matrix ran. v1 is the ref the org documents and every other repo uses.
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
-        uses: wow-look-at-my/go-toolchain@latest
+        uses: wow-look-at-my/go-toolchain@v1
         with:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
