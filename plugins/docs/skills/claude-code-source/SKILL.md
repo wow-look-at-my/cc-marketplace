@@ -76,10 +76,18 @@ Ask for what a source answer has to carry, or it is not worth the round trip:
   are what the product actually keys on: user-visible messages, telemetry event
   names (`tengu_*`), settings keys, `.describe("...")` text on schema fields,
   env var names, error text the user reported.
-- **Beware the long lines.** 2.1.220 has a 71,865-character line. `rg -n
-  pattern` prints the whole matched line; pipe it (`| cut -c1-200`), prefer
-  `rg -o` with a tight pattern, and use small `-C` values. Then read the
-  interesting region with Read's `offset`/`limit` around the reported line.
+- **Beware the long lines** -- and do not mistake them for broken formatting.
+  The file IS prettified; a formatter simply cannot break a single token. In
+  2.1.220, 41 of the 720,910 lines exceed 5,000 characters and every one of
+  them is one string or regex literal: embedded skill/prompt documents shipped
+  as `\n`-escaped strings (the longest, line 658136, is 71,865 characters of
+  markdown), a `\uXXXX`-escaped binary table, and the emoji regex. `rg -n
+  pattern` prints the whole matched line, so pipe it (`| cut -c1-200`), prefer
+  `rg -o` with a tight pattern, and keep `-C` small. Then read the interesting
+  region with Read's `offset`/`limit` around the reported line.
+  Corollary: when the answer you want IS one of those embedded documents,
+  extract it rather than printing the line -- `awk 'NR==658136' file | cut
+  -c1-4000`, or slice it with Read once you know where it starts.
 - Zod-shaped schemas read as `v.object({...})` / `v.strictObject({...})` with
   `.describe(...)` on each field — that is where config contracts live, and the
   `describe` text is often better than the published docs.
