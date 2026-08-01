@@ -183,6 +183,102 @@ func TestEndToEndGhRepoView(t *testing.T) {
 	}
 }
 
+// PermissionRequest is answered only once the permission engine has landed on
+// "ask", so a deny that rides it alone is silent under defaultMode "auto" --
+// which is how python stayed runnable. These cases pin the deny half to
+// PreToolUse, which is unconditional, and pin the allow half OUT of it: an
+// allow from PreToolUse settles the call before the user's own deny rules are
+// consulted.
+func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
+	binaryPath := buildTestBinary(t)
+
+	for _, command := range []string{
+		"python3 script.py",
+		"python --version",
+		"env python3 script.py",
+		"uv run python script.py",
+		"git status && python3 script.py",
+		"echo $(python3 -c 'print(1)')",
+		"node -e 'console.log(1)'",
+	} {
+		t.Run("deny/"+command, func(t *testing.T) {
+			out := runHookBinary(t, binaryPath, HookInput{
+				HookEventName: eventPreToolUse,
+				ToolName:      "Bash",
+				ToolInput:     ToolInput{Command: command},
+			})
+			require.NotEmpty(t, out, "PreToolUse produced no output for %q -- a passthrough means the deny never fires", command)
+
+			var resp PreToolUseResponse
+			require.NoError(t, json.Unmarshal(out, &resp), "output was: %s", out)
+			// The CLI rejects a payload whose hookEventName is not the event it
+			// dispatched, so the shape must follow the event.
+			assert.Equal(t, eventPreToolUse, resp.HookSpecificOutput.HookEventName)
+			assert.Equal(t, "deny", resp.HookSpecificOutput.PermissionDecision, "%q must be denied", command)
+			assert.NotEmpty(t, resp.HookSpecificOutput.PermissionDecisionReason, "a deny must say why -- the reason reaches the model verbatim")
+		})
+	}
+
+	for _, tt := range []struct {
+		name  string
+		input HookInput
+	}{
+		{"allowed bash command", HookInput{HookEventName: eventPreToolUse, ToolName: "Bash", ToolInput: ToolInput{Command: "gh repo view wow-look-at-my/go-toolchain"}}},
+		{"read-only tool", HookInput{HookEventName: eventPreToolUse, ToolName: "Read"}},
+		{"unmatched command", HookInput{HookEventName: eventPreToolUse, ToolName: "Bash", ToolInput: ToolInput{Command: "make build"}}},
+	} {
+		t.Run("silent/"+tt.name, func(t *testing.T) {
+			out := runHookBinary(t, binaryPath, tt.input)
+			assert.Empty(t, out, "PreToolUse must stay silent unless it denies; an allow here outranks the user's own deny rules")
+		})
+	}
+}
+
+// The same command on PermissionRequest keeps the nested decision shape.
+func TestPermissionRequestKeepsItsOwnShape(t *testing.T) {
+	binaryPath := buildTestBinary(t)
+
+	out := runHookBinary(t, binaryPath, HookInput{
+		HookEventName: eventPermissionRequest,
+		ToolName:      "Bash",
+		ToolInput:     ToolInput{Command: "python3 script.py"},
+	})
+	require.NotEmpty(t, out)
+
+	var resp PermissionResponse
+	require.NoError(t, json.Unmarshal(out, &resp), "output was: %s", out)
+	assert.Equal(t, eventPermissionRequest, resp.HookSpecificOutput.HookEventName)
+	assert.Equal(t, "deny", resp.HookSpecificOutput.Decision.Behavior)
+}
+
+func buildTestBinary(t *testing.T) string {
+	t.Helper()
+	pluginDir := filepath.Join(getRepoRoot(t), "plugins/enhanced-auto-allow")
+
+	buildDir := filepath.Join(pluginDir, "build")
+	require.NoError(t, os.MkdirAll(buildDir, 0o755))
+	binaryPath := filepath.Join(buildDir, "enhanced-auto-allow-test")
+	t.Cleanup(func() { os.Remove(binaryPath) })
+
+	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/")
+	cmd.Dir = pluginDir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "build failed: %s", out)
+	return binaryPath
+}
+
+func runHookBinary(t *testing.T, binaryPath string, input HookInput) []byte {
+	t.Helper()
+	inputBytes, err := json.Marshal(input)
+	require.NoError(t, err)
+
+	cmd := exec.Command(binaryPath)
+	cmd.Stdin = bytes.NewReader(inputBytes)
+	out, err := cmd.Output()
+	require.NoError(t, err, "binary exited with error: %v, output: %s", err, out)
+	return out
+}
+
 func getRepoRoot(t *testing.T) string {
 	t.Helper()
 	repoRoot := os.Getenv("REPO_ROOT")

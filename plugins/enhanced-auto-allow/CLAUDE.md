@@ -1,15 +1,23 @@
 ## Enhanced Auto-Allow Plugin
 
 The enhanced-auto-allow plugin lives at `plugins/enhanced-auto-allow/`. It decides Bash and MCP tool
-permissions via a PermissionRequest hook: auto-approving read-only work, and refusing programs this
-environment does not allow to run.
+permissions from two hooks: auto-approving read-only work, and refusing programs this environment
+does not allow to run.
+
+**Deny rides PreToolUse, allow rides PermissionRequest, and the split is load-bearing.**
+PermissionRequest runs only once the permission engine has landed on "ask", so under
+`defaultMode: "auto"` a deny registered there alone never fires at all. PreToolUse runs on every tool
+call. Conversely an allow from PreToolUse would settle the call before the user's own deny rules are
+consulted, so `denyOnly` suppresses every non-deny verdict on that path.
 
 - **Rules**: `plugins/enhanced-auto-allow/rules.xml` -- three sections (`<allow>`, `<ask>`, `<deny>`)
   of `<rule>` nodes, plus top-level `<test>` cases and the `<mcpServer>` blocks
 - **Hook code**: `plugins/enhanced-auto-allow/cmd/hook.go` (evaluation), `cmd/rules_xml.go` (schema),
   `cmd/deny_process.go` (process resolution)
-- **Plugin config**: `plugins/enhanced-auto-allow/.claude-plugin/plugin.json` -- one PermissionRequest
-  hook on matcher `*`
+- **Plugin config**: `plugins/enhanced-auto-allow/.claude-plugin/plugin.json` -- the same binary on
+  matcher `*` for both PermissionRequest and PreToolUse
+- `plugins/enhanced-auto-allow/docs/two-event-registration.md` -- why two events, the cli.js call
+  sites that make PermissionRequest conditional, and the per-event output shapes
 
 ### The rule node
 
