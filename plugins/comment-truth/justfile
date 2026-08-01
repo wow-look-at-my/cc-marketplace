@@ -1,8 +1,0 @@
-[private]
-help:
-	@just --list
-
-# The behaviour matrix: unit cases for each claim kind, plus end-to-end runs
-# against real git repositories (scope, extraction, findings, hook contract).
-prebuild:
-	go test ./...
