@@ -17,10 +17,18 @@ func writeBuildDir(t *testing.T, names ...string) string {
 	build := filepath.Join(cooked, "build")
 	require.NoError(t, os.MkdirAll(build, 0o755))
 	for _, n := range names {
-		require.NoError(t, os.WriteFile(filepath.Join(build, n), []byte("binary:"+n), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(build, n), apeBytes(n), 0o755))
 	}
 	return cooked
 }
+
+// apeBytes is a stand-in fat APE: the real prologue plus a per-name payload, so
+// a test can tell which file's bytes were shipped. The magic is what
+// stageBinaries identifies -- fixtures that skip it are not APEs.
+func apeBytes(name string) []byte { return []byte(apeMagic + "payload:" + name) }
+
+// elfBytes is what a plain per-platform (non-cosmo) build leaves behind.
+func elfBytes(name string) []byte { return append([]byte("\x7fELF"), []byte(name)...) }
 
 func buildEntries(t *testing.T, cooked string) []string {
 	t.Helper()
@@ -93,7 +101,10 @@ func TestStageBinariesFollowsTheSymlinkGoToolchainActuallyWrites(t *testing.T) {
 		"profile.json",
 	)
 	build := filepath.Join(cooked, "build")
-	require.NoError(t, os.WriteFile(filepath.Join(build, "glob_linux_amd64"), []byte("REAL APE BYTES"), 0o755))
+	for _, sidecar := range []string{"glob" + apeSuffix + ".aarch64.elf", "glob" + apeSuffix + ".dbg"} {
+		require.NoError(t, os.WriteFile(filepath.Join(build, sidecar), elfBytes(sidecar), 0o644))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(build, "glob_linux_amd64"), apeBytes("REAL"), 0o755))
 	// go-toolchain links both the bare name and the fat name at the slot copy.
 	require.NoError(t, os.Symlink("glob_linux_amd64", filepath.Join(build, "glob"+apeSuffix)))
 	require.NoError(t, os.Symlink("glob_linux_amd64", filepath.Join(build, "glob_host")))
@@ -103,7 +114,7 @@ func TestStageBinariesFollowsTheSymlinkGoToolchainActuallyWrites(t *testing.T) {
 
 	shipped, err := os.ReadFile(filepath.Join(build, "glob.ape"))
 	require.NoError(t, err)
-	require.Equal(t, "REAL APE BYTES", string(shipped), "the shipped APE must be bytes, not a link to a file that was deleted")
+	require.Equal(t, string(apeBytes("REAL")), string(shipped), "the shipped APE must be bytes, not a link to a file that was deleted")
 
 	info, err := os.Lstat(filepath.Join(build, "glob.ape"))
 	require.NoError(t, err)
@@ -115,12 +126,52 @@ func TestStageBinariesFollowsTheSymlinkGoToolchainActuallyWrites(t *testing.T) {
 // instead of `--targets cosmo`. Shipping those binaries would work on some
 // platforms and silently not others, which is worse than a clean failure.
 func TestStageBinariesFailsClosedWithoutAnApe(t *testing.T) {
-	cooked := writeBuildDir(t, "glob_linux_amd64", "glob_darwin_arm64")
+	cooked := writeBuildDir(t)
+	build := filepath.Join(cooked, "build")
+	for _, n := range []string{"glob_linux_amd64", "glob_darwin_arm64"} {
+		require.NoError(t, os.WriteFile(filepath.Join(build, n), elfBytes(n), 0o755))
+	}
+
 	err := stageBinaries(cooked, "glob")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "glob"+apeSuffix, "the message must name what was expected")
-	require.Contains(t, err.Error(), "glob_linux_amd64", "and what was found instead")
+	require.Contains(t, err.Error(), "glob_linux_amd64", "the message must name what was found")
 	require.Contains(t, err.Error(), "--targets cosmo", "and the fix")
+}
+
+// What CI actually produces, which neither earlier fixture did: go-toolchain
+// DROPS the _cosmo_fat name there ("buildhost rejects os=cosmo uploads; the
+// slot copies carry the APE"), so the only copies of the fat binary left are
+// under per-platform names -- byte-identical to it. Keying on the filename
+// mistook this for a per-platform matrix build and failed every plugin.
+func TestStageBinariesShipsTheApeWhenOnlySlotCopiesRemain(t *testing.T) {
+	cooked := writeBuildDir(t)
+	build := filepath.Join(cooked, "build")
+	for _, n := range []string{"glob_linux_amd64", "glob_linux_arm64", "glob_windows_amd64.exe"} {
+		require.NoError(t, os.WriteFile(filepath.Join(build, n), apeBytes("fat"), 0o755))
+	}
+	for _, n := range []string{"glob" + apeSuffix + ".dbg", "checksums.txt"} {
+		require.NoError(t, os.WriteFile(filepath.Join(build, n), elfBytes(n), 0o644))
+	}
+
+	require.NoError(t, stageBinaries(cooked, "glob"))
+	require.ElementsMatch(t, []string{"glob.ape", "glob"}, buildEntries(t, cooked))
+
+	shipped, err := os.ReadFile(filepath.Join(build, "glob.ape"))
+	require.NoError(t, err)
+	require.Equal(t, string(apeBytes("fat")), string(shipped))
+}
+
+// A .dbg sidecar sits next to the APE and is an ELF, so content detection must
+// not mistake it for the binary to ship.
+func TestStageBinariesNeverShipsTheDebugSidecar(t *testing.T) {
+	cooked := writeBuildDir(t, "glob"+apeSuffix)
+	build := filepath.Join(cooked, "build")
+	require.NoError(t, os.WriteFile(filepath.Join(build, "glob"+apeSuffix+".dbg"), elfBytes("dbg"), 0o644))
+
+	require.NoError(t, stageBinaries(cooked, "glob"))
+	shipped, err := os.ReadFile(filepath.Join(build, "glob.ape"))
+	require.NoError(t, err)
+	require.Equal(t, string(apeBytes("glob"+apeSuffix)), string(shipped))
 }
 
 // A skills- or hooks-script-only plugin has no build/ at all and must pass

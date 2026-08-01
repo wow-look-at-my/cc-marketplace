@@ -80,8 +80,8 @@ func TestRunReleasePluginProducesAnInstallableTree(t *testing.T) {
 		"README.md":                  "# glob",
 		"README.template.md":         "# {{ template }}",
 		"main.go":                    "package main",
-		"build/glob" + apeSuffix:     "APE",
-		"build/glob_linux_amd64":     "native",
+		"build/glob" + apeSuffix:     apeMagic + "fat",
+		"build/glob_linux_amd64":     apeMagic + "fat",
 	})
 
 	out, err := releaseOutput(t, "glob")
@@ -140,7 +140,8 @@ func TestRunReleasePluginFailsOnANonApeBuild(t *testing.T) {
 	mockGitDefaults(t)
 	fakeRepo(t, "glob", map[string]string{
 		".claude-plugin/plugin.json": `{"name":"glob","version":"0.0.0"}`,
-		"build/glob_linux_amd64":     "native",
+		// An ELF, not an APE: the per-platform matrix build this fails closed on.
+		"build/glob_linux_amd64": "\x7fELFnative",
 	})
 
 	_, err := releaseOutput(t, "glob")

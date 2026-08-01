@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,7 +22,27 @@ import (
 // which also self-assimilates the file into a native binary on first run -- so
 // what ships at the manifest's path is this launcher, with the APE beside it.
 
-// apeSuffix is what go-toolchain names a cosmo build.
+// apeMagic is the first eight bytes of a Cosmopolitan APE: the `MZqFpD='`
+// prologue that is simultaneously a DOS header and a shell script.
+//
+// The APE is identified by these bytes, NEVER by filename, because the name is
+// not stable and every guess about it has been wrong. `--targets cosmo` builds
+// build/<name>_cosmo_fat and then copies it to per-platform slot names; locally
+// it leaves the fat name behind as a symlink, and in CI it DROPS that name
+// outright ("buildhost rejects os=cosmo uploads; the slot copies carry the
+// APE"). So build/ may hold the APE under a _cosmo_fat name, under a symlink of
+// that name, or only under <name>_linux_amd64 -- all byte-identical. What does
+// not vary is the prologue.
+//
+// This is also what keeps the fail-closed check honest: a plugin built with the
+// real per-platform matrix has ELF/PE binaries in those same slot names, and no
+// APE magic anywhere, so it still fails rather than shipping a package that
+// runs on some platforms and silently not others.
+const apeMagic = "MZqFpD='"
+
+// apeSuffix is the name go-toolchain gives the fat build before it copies it
+// into the slots. Only used to prefer it when several files carry the magic,
+// and to name it in the failure message.
 const apeSuffix = "_cosmo_fat"
 
 // launcherScript is written at build/<name>, the path every plugin manifest
@@ -62,38 +83,35 @@ func stageBinaries(cookedDir, pluginName string) error {
 	}
 
 	ape := ""
-	var others []string
+	var names []string
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
-		switch {
-		case strings.HasSuffix(e.Name(), apeSuffix):
+		names = append(names, e.Name())
+		// Prefer the fat name when it survived, but any file carrying the
+		// prologue is the same bytes.
+		if isAPE(filepath.Join(buildDir, e.Name())) &&
+			(ape == "" || strings.HasSuffix(e.Name(), apeSuffix)) {
 			ape = e.Name()
-		default:
-			others = append(others, e.Name())
 		}
 	}
 	if ape == "" {
-		return fmt.Errorf("no %s* binary in %s (found: %s) -- build the plugin with `--targets cosmo` so it ships one fat APE",
-			pluginName+apeSuffix, buildDir, strings.Join(others, ", "))
+		return fmt.Errorf("no fat APE in %s: none of [%s] starts with the %q prologue -- build the plugin with `--targets cosmo`",
+			buildDir, strings.Join(names, ", "), apeMagic)
 	}
 
-	// READ the bytes before deleting anything, and read THROUGH the name rather
-	// than moving it: go-toolchain leaves <name>_cosmo_fat as a SYMLINK to one
-	// of the per-platform slot copies it also writes (buildhost rejects
-	// os=cosmo, so the fat build is published under a platform name). Those
-	// copies are byproducts by every other measure, so renaming the link and
-	// then deleting them would ship a dangling symlink.
+	// Read the bytes BEFORE deleting anything, and read through the name: the
+	// chosen entry may be a symlink into a slot copy that is about to go.
 	data, err := os.ReadFile(filepath.Join(buildDir, ape))
 	if err != nil {
 		return fmt.Errorf("read APE %s: %w", ape, err)
 	}
 
-	// Everything else in build/ is a byproduct: slot copies, the debug sidecar,
-	// the aarch64 ELF, checksums, the profile. None of it ships. The APE's own
-	// entry goes with them -- it is rewritten under the staged name below.
-	for _, name := range append(others, ape) {
+	// Everything in build/ is a byproduct: the slot copies (identical to the
+	// APE), the debug sidecar, the aarch64 ELF, checksums, the profile. The
+	// chosen entry goes too -- it is rewritten under the staged name below.
+	for _, name := range names {
 		if err := os.Remove(filepath.Join(buildDir, name)); err != nil {
 			return fmt.Errorf("drop build byproduct %s: %w", name, err)
 		}
@@ -112,6 +130,22 @@ func stageBinaries(cookedDir, pluginName string) error {
 		return fmt.Errorf("write launcher: %w", err)
 	}
 	return nil
+}
+
+// isAPE reports whether the file at path begins with the APE prologue. A
+// read failure is not an APE -- the caller's fail-closed path covers it.
+func isAPE(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	head := make([]byte, len(apeMagic))
+	if _, err := io.ReadFull(f, head); err != nil {
+		return false
+	}
+	return string(head) == apeMagic
 }
 
 // hasBinary reports whether a cooked plugin ships a binary at all, so callers
