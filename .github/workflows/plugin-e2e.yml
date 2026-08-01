@@ -1,0 +1,200 @@
+name: plugin e2e
+
+on:
+  push:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # Each job here drives REAL Claude Code against one plugin and asserts the
+  # plugin actually did its job. `claude plugin validate` (release.yml) only
+  # checks a manifest -- it never starts a hook or a language server, which is
+  # how a broken LSP shutdown reached master while every check was green.
+  cleanup-bash-cmds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # The hook is a bash + jq + shfmt script (hook.sh) checked into the
+      # plugin, so there is no binary to build or stage. It does need shfmt
+      # (--to-json/--from-json) on the machine running Claude.
+      - name: Install shfmt
+        run: sudo apt-get update -q && sudo apt-get install -y -q shfmt
+
+      - uses: ./.github/actions/setup-claude-code
+
+      - name: Run Claude with the cleanup-bash-cmds plugin loaded
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_WOW }}
+          CLEANUP_BASH_CMDS_LOG: ${{ runner.temp }}/hook.log
+        run: |
+          : > "$CLEANUP_BASH_CMDS_LOG"
+          # --model sonnet is deliberate: this job asserts that a HOOK rewrote a
+          # command, which no model tier affects, and it runs on every push.
+          # Without the flag it inherits the account default and bills Opus for
+          # a one-line smoke test.
+          claude -p "Run exactly this Bash command and report the output: seq 1 10 | head -3" \
+            --model sonnet \
+            --plugin-dir ./plugins/cleanup-bash-cmds \
+            --allowedTools "Bash" \
+            --permission-mode bypassPermissions \
+            > "${{ runner.temp }}/claude.stdout" \
+            2> "${{ runner.temp }}/claude.stderr" || true
+
+      - name: Claude stdout
+        run: |
+          echo "::group::Claude stdout"
+          cat "${{ runner.temp }}/claude.stdout" || true
+          echo "::endgroup::"
+
+      - name: Claude stderr
+        run: |
+          echo "::group::Claude stderr"
+          cat "${{ runner.temp }}/claude.stderr" || true
+          echo "::endgroup::"
+
+      - name: Hook rewrite log
+        run: |
+          echo "::group::cleanup-bash-cmds hook log"
+          cat "${{ runner.temp }}/hook.log" || echo "(empty)"
+          echo "::endgroup::"
+
+      - name: Assert the hook rewrote the trailing | head
+        run: |
+          set -euo pipefail
+          log="${{ runner.temp }}/hook.log"
+          if ! [ -s "$log" ]; then
+            echo "::error::hook log file is empty -- the hook never fired"
+            exit 1
+          fi
+          if ! grep -q 'REWRITE' "$log"; then
+            echo "::error::hook log has no REWRITE entries"
+            exit 1
+          fi
+          # The rewrite strips the trailing | head and injects set -o pipefail.
+          if ! grep -qF 'cleaned="set -o pipefail\nseq 1 10"' "$log"; then
+            echo "::error::expected | head stripped and pipefail injected"
+            exit 1
+          fi
+          echo "OK: hook stripped the trailing | head and injected pipefail"
+
+  # The css-duplication plugin ships a language server, and nothing else in CI
+  # ever starts one: `claude plugin validate` reads the manifest, and the
+  # smoke-test job installs plugins without exercising them. This job runs the
+  # whole chain the way a user does -- Claude Code loads .lsp.json, spawns the
+  # binary, edits a stylesheet into a duplicate, and the server's diagnostics
+  # come back as an attachment -- then asserts the LSP session also SHUT DOWN
+  # cleanly, which is the specific failure a green test suite hid: a malformed
+  # JSON-RPC response is only rejected by a real client.
+  css-duplication-lsp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the language server
+        uses: wow-look-at-my/go-toolchain@latest
+        with:
+          working-directory: plugins/css-duplication
+          os: linux
+          arch: amd64
+          upload-artifacts: 'false'
+
+      - uses: ./.github/actions/setup-claude-code
+
+      - name: Run Claude Code with the plugin loaded
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_WOW }}
+          LSP_DEBUG_LOG: ${{ runner.temp }}/lsp-debug.log
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const pluginDir = path.join(process.env.GITHUB_WORKSPACE!, "plugins", "css-duplication");
+            const buildDir = path.join(pluginDir, "build");
+
+            // .lsp.json launches ${CLAUDE_PLUGIN_ROOT}/build/css-duplication.
+            // go-toolchain writes per-platform names when os/arch are given, and
+            // the published npm package puts a launcher at that path -- so stage
+            // whichever artifact exists rather than assuming one layout.
+            const wanted = path.join(buildDir, "css-duplication");
+            if (!fs.existsSync(wanted)) {
+              const candidate = fs.readdirSync(buildDir)
+                .find((f) => f.startsWith("css-duplication_") && !f.endsWith("_host"));
+              if (!candidate) throw new Error(`no built binary in ${buildDir}: ${fs.readdirSync(buildDir).join(", ")}`);
+              fs.copyFileSync(path.join(buildDir, candidate), wanted);
+              fs.chmodSync(wanted, 0o755);
+              core.info(`staged ${candidate} as build/css-duplication`);
+            }
+
+            // A stylesheet that is already duplicated, plus an edit that adds one
+            // more copy: the edit is what makes the client push didChange/didSave
+            // to the server, which is what produces the diagnostics.
+            const work = path.join(process.env.RUNNER_TEMP!, "lsp-e2e");
+            fs.mkdirSync(work, { recursive: true });
+            fs.writeFileSync(path.join(work, "style.css"),
+              ".crumbs a { color: #2f81f7; text-decoration: none; }\n" +
+              ".footer a { color: #2f81f7; text-decoration: none; }\n" +
+              ".badge { border-radius: 999px; }\n");
+
+            // --model sonnet: this asserts a SERVER's behavior, which no model
+            // tier affects, and it runs on every push.
+            const res = await exec.getExecOutput("claude", [
+              // The read-back is load-bearing, not padding: diagnostics are
+              // drained into an attachment when the NEXT turn is assembled, so a
+              // prompt that ends at the edit can finish before delivery and make
+              // the attachment assertion flaky. Measured both ways.
+              "-p", "Add a rule to style.css for selector .nav a with color #2f81f7 and no text-decoration. After making the edit, read style.css back and tell me how many lines it now has.",
+              "--model", "sonnet",
+              "--plugin-dir", pluginDir,
+              "--allowedTools", "Read,Edit,Write",
+              "--permission-mode", "bypassPermissions",
+              "--debug", "lsp",
+              "--debug-file", process.env.LSP_DEBUG_LOG!,
+            ], { cwd: work, ignoreReturnCode: true });
+            core.info(`claude exited ${res.exitCode}`);
+            core.info(res.stdout.slice(0, 2000));
+
+      - name: Assert the server started, delivered diagnostics, and shut down clean
+        env:
+          LSP_DEBUG_LOG: ${{ runner.temp }}/lsp-debug.log
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const log = fs.readFileSync(process.env.LSP_DEBUG_LOG!, "utf-8");
+            core.startGroup("LSP debug lines");
+            core.info(log.split("\n").filter((l) => /lsp|diagnostic/i.test(l)).join("\n").slice(0, 8000));
+            core.endGroup();
+
+            const failures: string[] = [];
+            const must: Array<[string, RegExp]> = [
+              ["the plugin's .lsp.json was loaded", /Loaded 1 LSP server\(s\) from plugin: css-duplication/],
+              ["the server process started", /Starting LSP server instance: plugin:css-duplication/],
+              ["the initialize handshake completed", /LSP server plugin:css-duplication.* initialized/],
+              ["the server published diagnostics", /Received diagnostics from plugin:css-duplication[^\n]*: [1-9]\d* diagnostic\(s\)/],
+              ["the diagnostics were registered for delivery", /Registered [1-9]\d* diagnostic file\(s\) from plugin:css-duplication/],
+              ["the diagnostics reached the model", /Returning [1-9]\d* diagnostic attachment\(s\)/],
+            ];
+            for (const [what, re] of must) {
+              if (!re.test(log)) failures.push(`MISSING: ${what} (/${re.source}/)`);
+            }
+
+            // The bug this job exists for: everything above passed while shutdown
+            // failed, because a response with neither `result` nor `error` is
+            // malformed JSON-RPC and only a real client rejects it.
+            const mustNot: Array<[string, RegExp]> = [
+              ["the LSP session failed to stop", /Failed to stop LSP server|stop failed/],
+              ["the server crashed", /LSP server .*css-duplication.* (crashed|exited unexpectedly)/],
+            ];
+            for (const [what, re] of mustNot) {
+              const m = log.match(re);
+              if (m) failures.push(`UNEXPECTED: ${what} -- ${m[0]}`);
+            }
+
+            if (failures.length > 0) {
+              core.setFailed(`css-duplication LSP e2e failed:\n${failures.join("\n")}`);
+            } else {
+              core.info("OK: server started, published diagnostics, delivered them, and shut down cleanly");
+            }
