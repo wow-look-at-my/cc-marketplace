@@ -332,14 +332,20 @@ jobs:
               try { return JSON.parse(r.stdout); } catch { return null; }
             }
 
-            // `claude plugin install` clones a github-source entry over SSH
-            // (git@github.com:), and a runner holds no key -- "Permission
-            // denied (publickey)" on the first install. The repo is public, so
-            // rewrite to https for this job. A developer with a GitHub SSH key
-            // needs nothing; one without hits the same wall, which is a real
-            // question about the source shape rather than something to paper
-            // over here.
-            await $`git config --global url.https://github.com/.insteadOf git@github.com:`;
+            // NOTHING is done here to make cloning work, deliberately. A
+            // published plugin has to install for someone with no GitHub
+            // account -- no key, no token, no sign-in -- so this job installs
+            // exactly as that person would, and the marketplace has to hand out
+            // anonymously-cloneable https sources for it to succeed.
+            //
+            // This used to rewrite git@github.com: -> https:// because the
+            // `github` source type clones over SSH and a runner holds no key.
+            // That made the job green while every real consumer's CI died on
+            // "Permission denied (publickey)" -- the check passed precisely
+            // where it should have failed. The rewrite is gone; SSH is forced
+            // to fail outright so a future runner that happens to carry a key
+            // cannot quietly restore the illusion.
+            await $`git config --global core.sshCommand ${'false'}`;
 
             // Wait for the marketplace this run published (metadata.version mirrors
             // the run number, see update_marketplace.go) to go live on buildhost.
@@ -352,6 +358,22 @@ jobs:
               await new Promise<void>((res) => setTimeout(() => res(), 5000));
             }
             if (!mkt) throw new Error(`marketplace did not reach v${runNumber} at ${mktUrl}`);
+
+            // Every published source must be anonymously cloneable. The install
+            // below would catch a regression too, but only as a confusing clone
+            // failure; this names it, and it holds even on a machine that does
+            // have a key.
+            const bad = (mkt.plugins ?? [])
+              .map((pl: any) => [pl.name, pl.source] as const)
+              .filter(([, s]: any) => !s || s.source !== 'url' || typeof s.url !== 'string' || !s.url.startsWith('https://'));
+            if (bad.length > 0) {
+              throw new Error(
+                `these plugins are not installable without a GitHub account: ` +
+                  bad.map(([n, s]: any) => `${n} -> ${JSON.stringify(s)}`).join(', ') +
+                  ` (a 'github' source clones over ssh; publish 'url' with an https:// URL)`,
+              );
+            }
+            core.info(`OK: all ${mkt.plugins.length} sources are anonymous https clones`);
 
             const mktName: string = mkt.name;
             const plugins: string[] = (mkt.plugins ?? []).map((p: any) => String(p.name));

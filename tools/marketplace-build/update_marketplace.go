@@ -138,12 +138,23 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 		// The ref is the IMMUTABLE per-release tag rather than `#latest`, so a
 		// given marketplace.json always resolves to the same tree; the moving
 		// `#latest` pointer exists for humans.
+		//
+		// `url` with an https:// URL, NOT `github` with owner/repo. They differ
+		// in exactly one way that matters here: the `github` source clones over
+		// SSH, so installing needs a key on the machine. This repo is PUBLIC,
+		// and a public plugin has to be installable by someone with no GitHub
+		// account at all -- which https anonymously is and ssh can never be.
+		// Every consumer's CI died on `git@github.com: Permission denied
+		// (publickey)` the moment plugins moved to git sources, because an
+		// Actions runner has no key; so does any user who never set one up.
+		// Verified with no git config, no credential helper and no prompt:
+		// `git ls-remote https://github.com/<repo>` lists the plugin tags.
 		entry := map[string]interface{}{
 			"name":    p.name,
 			"version": displayVersion,
 			"source": map[string]interface{}{
-				"source": "github",
-				"repo":   pluginRepo,
+				"source": "url",
+				"url":    fmt.Sprintf("https://github.com/%s.git", pluginRepo),
 				"ref":    p.manifest.Tag,
 			},
 		}
