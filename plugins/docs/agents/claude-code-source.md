@@ -2,7 +2,7 @@
 name: claude-code-source
 description: Answers questions about how Claude Code ITSELF behaves -- hooks and their payloads, permission and settings keys, plugin/agent manifest schemas, tool gating, slash commands, MCP wiring, LSP, telemetry names, what a specific error message means -- by reading the shipped cli.js for the running version rather than from memory. Delegate to this agent whenever the answer has to be true of the build actually running, and whenever the docs are silent, vague, or contradicted by observed behavior. It exists so the 27 MB bundle is searched in ITS context, never in yours.
 tools: Bash, Read, Grep, Glob
-model: opus
+model: sonnet
 permissionMode: default
 skills:
   - claude-code-source

@@ -1,5 +1,5 @@
 ---
-description: Read before answering any question about how Claude Code itself behaves -- hooks, plugins, LSP servers, settings keys, slash commands, tool schemas, env vars, permission rules, telemetry. Explains how to fetch the prettified cli.js for the RIGHT version from claude-docs-gaps and, non-negotiably, how to search it from a Sonnet or Opus subagent instead of burning main context on a 27 MB file.
+description: Read before answering any question about how Claude Code itself behaves -- hooks, plugins, LSP servers, settings keys, slash commands, tool schemas, env vars, permission rules, telemetry. Explains how to fetch the prettified cli.js for the RIGHT version from claude-docs-gaps and, non-negotiably, how to search it from a Sonnet subagent instead of burning main context on a 27 MB file.
 ---
 
 # Reading Claude Code's own source for ground truth
@@ -43,19 +43,28 @@ Measured on 2.1.220: 26,975,385 bytes, 720,910 lines, ~1.2 s to download.
   of re-deriving it — then confirm the specific claim you care about in the
   source.
 
-## 2. Search it ONLY from a Sonnet or Opus subagent -- never in main context
+## 2. Search it ONLY from a Sonnet subagent -- never in main context
 
 **This is not a preference. A 27 MB, 720k-line bundle must never be read,
 `cat`ted, `head`ed, or grepped with wide context from the main conversation.**
 One careless command pastes tens of thousands of tokens of minified JavaScript
 into the context you need for the actual task, and it never comes back out.
 
-- **Delegate to a subagent** (`Agent` tool) with **`model: "sonnet"` or
-  `"opus"`**. Nothing smaller: the work is needle-hunting through mangled
-  identifiers across hundreds of thousands of lines, and a weaker model
-  reliably answers with something that sounds right and is not there.
-- The subagent reads the file; **you read its report**. That is the entire
-  arrangement — its context absorbs the searching, yours receives the findings.
+- **Prefer `subagent_type: "claude-code-source"`** (the `Agent` tool's
+  `subagent_type` param) when it is offered. That registered agent already
+  pins `model: sonnet` and preloads this skill, so there is nothing left to
+  get wrong -- just ask it your question.
+- **Only if that agent type is not available this session** (the plugin
+  installed after the `claude` process's hook/agent registry was already
+  resolved, so it sits on disk but is not registered this session), hand-roll
+  instead: spawn a plain `Agent` call with **`model: "sonnet"`** -- not opus,
+  not haiku, exactly `"sonnet"`. The work is needle-hunting through mangled
+  identifiers across hundreds of thousands of lines: a weaker model reliably
+  answers with something that sounds right and is not there, and opus is
+  unnecessary spend for search-and-quote work sonnet already handles.
+- Either way, the subagent reads the file; **you read its report**. That is
+  the entire arrangement — its context absorbs the searching, yours receives
+  the findings.
 - If you catch yourself about to Read `/tmp/cli-*.js` directly, or to run
   `rg` on it inline "just to check one thing", stop and spawn the agent. The
   one-line exception is a bare match COUNT (`rg -c pattern file`), which
