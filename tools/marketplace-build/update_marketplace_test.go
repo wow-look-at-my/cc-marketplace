@@ -152,10 +152,13 @@ func TestBuildPluginsArray(t *testing.T) {
 
 	// A git source, not npm: installing a plugin is a shallow clone of its
 	// orphan tag, so nothing on the far side needs node. The ref is the
-	// immutable per-release tag, never the moving "#latest" pointer.
+	// immutable per-release tag, never the moving "#latest" pointer. "url"
+	// with an explicit https:// URL, not "github": a github-source entry
+	// resolves to an SSH clone unless the caller's env opts into https, so a
+	// plain CI runner or script with no SSH key fails to install it.
 	src := p["source"].(map[string]interface{})
-	require.Equal(t, "github", src["source"])
-	require.Equal(t, "test-owner/test-repo", src["repo"])
+	require.Equal(t, "url", src["source"])
+	require.Equal(t, "https://github.com/test-owner/test-repo.git", src["url"])
 	require.Equal(t, "alpha#3.0.0", src["ref"])
 	require.NotContains(t, src, "package", "no npm package name survives")
 	require.NotContains(t, src, "registry", "no npm registry survives")

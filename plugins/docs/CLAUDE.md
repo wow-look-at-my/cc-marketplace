@@ -66,7 +66,7 @@ description is the only thing the model sees when deciding whether to pull the s
   extraction tooling and almost never what you want, and a missing branch means read the highest one below it and SAY
   so. Download with `gh api -H "Accept: application/vnd.github.raw"
   "repos/PazerOP/claude-docs-gaps/contents/cli.js?ref=$V" > /tmp/cli-$V.js` (measured on 2.1.220: 26,975,385 bytes,
-  720,910 lines, ~1.2s). (2) **Search it ONLY from a Sonnet or Opus subagent** -- a 27 MB bundle read inline burns the
+  720,910 lines, ~1.2s). (2) **Search it ONLY from a Sonnet subagent** -- a 27 MB bundle read inline burns the
   main context permanently, and a weaker model confabulates rather than finding the needle; the agent reads the file,
   you read its report. The searching guidance is what makes the delegation pay: match STRING literals and `.describe()`
   text rather than the mangled identifiers (which change between builds), watch for the 41 lines over 5,000 characters
@@ -76,11 +76,13 @@ description is the only thing the model sees when deciding whether to pull the s
   regardless. This skill is how the css-duplication plugin's LSP contract was established. The `agents/` entry below is
   its executable half.
 
-- **`agents/claude-code-source.md`** -- the executable half of the skill above. The skill says "delegate to a Sonnet or
-  Opus subagent"; every caller was then hand-rolling that brief, and getting it wrong in the one way that matters most
+- **`agents/claude-code-source.md`** -- the executable half of the skill above. The skill says "delegate to a Sonnet
+  subagent"; every caller was then hand-rolling that brief, and getting it wrong in the one way that matters most
   here -- a session with `CLAUDE_CODE_SUBAGENT_MODEL: "haiku"` in its env silently gets Haiku unless the spawn passes an
   explicit override, which is exactly the "confabulates rather than finding the needle" failure the skill warns about.
-  The agent pins `model: opus`, preloads the skill via front-matter `skills:`, and carries the report contract (line
+  The agent pins `model: sonnet`, matching the skill's own guidance, so the registered agent forecloses the
+  haiku-downgrade failure without needing a caller to remember an override. Preloads the skill via front-matter
+  `skills:`, and carries the report contract (line
   number plus verbatim quote per claim, inferences labelled, "the source does not show this" when true). `tools` is
   `Bash, Read, Grep, Glob` -- Bash is load-bearing, since step one is a `gh api` download, which is why the built-in
   `claude-code-guide` agent cannot do this job.
