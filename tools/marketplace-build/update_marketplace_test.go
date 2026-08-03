@@ -152,12 +152,14 @@ func TestBuildPluginsArray(t *testing.T) {
 
 	// A git source, not npm: installing a plugin is a shallow clone of its
 	// orphan tag, so nothing on the far side needs node. The ref is the
-	// immutable per-release tag, never the moving "#latest" pointer.
-	//
-	// And an https URL, because a PUBLIC plugin must install with no GitHub
-	// account: the "github" source type clones over SSH, which needs a key
-	// the installing machine may not have (no Actions runner does). This is
-	// the assertion that keeps anonymous installs working.
+	// immutable per-release tag, never the moving "#latest" pointer. "url"
+	// with an explicit https:// URL, not "github": a github-source entry
+	// resolves to an SSH clone unless the caller's env opts into https, so a
+	// plain CI runner or script with no SSH key fails to install it. A public
+	// plugin must install with no GitHub account -- the "github" source type
+	// clones over SSH, which needs a key the installing machine may not have
+	// (no Actions runner does). This is the assertion that keeps anonymous
+	// installs working.
 	src := p["source"].(map[string]interface{})
 	require.Equal(t, "url", src["source"])
 	require.Equal(t, "https://github.com/test-owner/test-repo.git", src["url"])

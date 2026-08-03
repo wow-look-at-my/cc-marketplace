@@ -346,7 +346,6 @@ jobs:
             // to fail outright so a future runner that happens to carry a key
             // cannot quietly restore the illusion.
             await $`git config --global core.sshCommand ${'false'}`;
-
             // Wait for the marketplace this run published (metadata.version mirrors
             // the run number, see update_marketplace.go) to go live on buildhost.
             let mkt: any = null;
@@ -401,9 +400,12 @@ jobs:
             // Every entry must name a git ref this run pushed. An entry that
             // still carries a registry URL would mean update-marketplace fell
             // back to the old npm shape, which installs from somewhere this run
-            // never published to.
-            const wrong = (mkt.plugins ?? []).filter((p: any) => p?.source?.source !== "github" || !p?.source?.ref);
+            // never published to. "url" (an explicit https:// URL, no SSH
+            // branch) is the source shape update-marketplace emits; "github"
+            // would mean it regressed to the SSH-cloning shape that fails on
+            // every runner with no key.
+            const wrong = (mkt.plugins ?? []).filter((p: any) => p?.source?.source !== "url" || !p?.source?.ref);
             if (wrong.length > 0) {
-              throw new Error(`not a git source: ${wrong.map((p: any) => p.name).join(" ")}`);
+              throw new Error(`not a url git source: ${wrong.map((p: any) => p.name).join(" ")}`);
             }
             core.info(`OK: every plugin installed and updated from its orphan tag`);
