@@ -138,12 +138,20 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 		// The ref is the IMMUTABLE per-release tag rather than `#latest`, so a
 		// given marketplace.json always resolves to the same tree; the moving
 		// `#latest` pointer exists for humans.
+		//
+		// "url" with an explicit https:// URL, not "source": "github": the CLI
+		// resolves a github-source entry to `git@github.com:<repo>.git` (SSH)
+		// unconditionally unless CLAUDE_CODE_REMOTE or
+		// CLAUDE_CODE_PLUGIN_PREFER_HTTPS is set in the caller's env, so any
+		// plain CI runner or script with no SSH key fails to install every
+		// plugin published this way. A "url" entry clones the given URL
+		// verbatim with no SSH branch at all -- correct for a public repo.
 		entry := map[string]interface{}{
 			"name":    p.name,
 			"version": displayVersion,
 			"source": map[string]interface{}{
-				"source": "github",
-				"repo":   pluginRepo,
+				"source": "url",
+				"url":    fmt.Sprintf("https://github.com/%s.git", pluginRepo),
 				"ref":    p.manifest.Tag,
 			},
 		}
