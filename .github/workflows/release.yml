@@ -176,11 +176,8 @@ jobs:
           path: /tmp/packaged-${{ matrix.plugin }}
           retention-days: 1
 
-      # Concurrent runs on different branches compute the same content hash, so
-      # the loser of the race gets a 409 for an entry that already exists.
       - name: Save plugin cache
         uses: actions/cache/save@v6
-        continue-on-error: true
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
           key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
