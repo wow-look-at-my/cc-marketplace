@@ -23,7 +23,7 @@ its own when it is about to edit one of these files. Invoking them by name also 
 |-------|---------|
 | `claude-code-source` | Any question about how Claude Code itself behaves. Reads the shipped `cli.js` for the running version so the 27 MB bundle never enters your context. |
 
-Delegate with the `Agent` tool, `subagent_type: "claude-code-source"`. It pins an Opus
+Delegate with the `Agent` tool, `subagent_type: "claude-code-source"`. It pins a Sonnet
 model and preloads the `/docs:claude-code-source` skill, so the brief is just your
 question.
 
