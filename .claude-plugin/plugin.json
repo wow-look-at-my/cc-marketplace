@@ -1,0 +1,53 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Enforces the task list at both ends: a PreToolUse gate refuses every non-task tool until work the user just assigned is filed, and a Stop hook refuses to end the turn while any task is still pending or in progress. Reminders about the task list are demonstrably ignored; these are refusals",
+	"hooks": {
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos",
+						"timeout": 10,
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos",
+						"type": "command"
+					}
+				]
+			}
+		],
+		"UserPromptSubmit": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos",
+						"timeout": 10,
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"stop",
+		"todo",
+		"todowrite",
+		"tasks",
+		"taskcreate",
+		"autonomy",
+		"hook",
+		"enforcement"
+	],
+	"name": "finish-your-todos",
+	"version": "1024"
+}
