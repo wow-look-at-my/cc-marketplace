@@ -139,13 +139,21 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 		// given marketplace.json always resolves to the same tree; the moving
 		// `#latest` pointer exists for humans.
 		//
-		// "url" with an explicit https:// URL, not "source": "github": the CLI
-		// resolves a github-source entry to `git@github.com:<repo>.git` (SSH)
-		// unconditionally unless CLAUDE_CODE_REMOTE or
-		// CLAUDE_CODE_PLUGIN_PREFER_HTTPS is set in the caller's env, so any
+		// `url` with an explicit https:// URL, NOT `github` with owner/repo.
+		// They differ in exactly one way that matters here: the `github` source
+		// clones over SSH -- the CLI resolves a github-source entry to
+		// `git@github.com:<repo>.git` unconditionally unless CLAUDE_CODE_REMOTE
+		// or CLAUDE_CODE_PLUGIN_PREFER_HTTPS is set in the caller's env, so any
 		// plain CI runner or script with no SSH key fails to install every
-		// plugin published this way. A "url" entry clones the given URL
-		// verbatim with no SSH branch at all -- correct for a public repo.
+		// plugin published this way. This repo is PUBLIC, and a public plugin
+		// has to be installable by someone with no GitHub account at all --
+		// which https anonymously is and ssh can never be. Every consumer's CI
+		// died on `git@github.com: Permission denied (publickey)` the moment
+		// plugins moved to git sources, because an Actions runner has no key;
+		// so does any user who never set one up. A "url" entry clones the given
+		// URL verbatim with no SSH branch at all -- correct for a public repo.
+		// Verified with no git config, no credential helper and no prompt:
+		// `git ls-remote https://github.com/<repo>` lists the plugin tags.
 		entry := map[string]interface{}{
 			"name":    p.name,
 			"version": displayVersion,

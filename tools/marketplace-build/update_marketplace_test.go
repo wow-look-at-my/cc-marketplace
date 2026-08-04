@@ -155,13 +155,19 @@ func TestBuildPluginsArray(t *testing.T) {
 	// immutable per-release tag, never the moving "#latest" pointer. "url"
 	// with an explicit https:// URL, not "github": a github-source entry
 	// resolves to an SSH clone unless the caller's env opts into https, so a
-	// plain CI runner or script with no SSH key fails to install it.
+	// plain CI runner or script with no SSH key fails to install it. A public
+	// plugin must install with no GitHub account -- the "github" source type
+	// clones over SSH, which needs a key the installing machine may not have
+	// (no Actions runner does). This is the assertion that keeps anonymous
+	// installs working.
 	src := p["source"].(map[string]interface{})
 	require.Equal(t, "url", src["source"])
 	require.Equal(t, "https://github.com/test-owner/test-repo.git", src["url"])
 	require.Equal(t, "alpha#3.0.0", src["ref"])
+	require.NotContains(t, src, "repo", "the owner/repo shorthand is what resolved to ssh")
 	require.NotContains(t, src, "package", "no npm package name survives")
 	require.NotContains(t, src, "registry", "no npm registry survives")
+	require.NotContains(t, fmt.Sprint(src), "git@", "no ssh URL may ever reach a published source")
 }
 
 func TestBuildPluginsArray_WithMCP(t *testing.T) {
