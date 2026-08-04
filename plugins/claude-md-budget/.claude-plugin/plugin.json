@@ -1,0 +1,53 @@
+{
+  "$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+  "name": "claude-md-budget",
+  "description": "Keeps CLAUDE.md and @-imported snippets inside the character budget every request pays for. Reports oversized files at session start, names a file the moment a session writes one -- through any tool, Bash included -- and refuses to end a turn that left one broken",
+  "author": {
+    "name": "mhaynie"
+  },
+  "keywords": [
+    "claude-md",
+    "context",
+    "budget",
+    "instructions",
+    "hook",
+    "enforcement",
+    "stop"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/build/claude-md-budget"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/build/claude-md-budget"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/build/claude-md-budget"
+          }
+        ]
+      }
+    ]
+  },
+  "mh": {
+    "include_in_marketplace": true
+  }
+}
