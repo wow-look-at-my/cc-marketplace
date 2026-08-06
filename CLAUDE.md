@@ -41,3 +41,4 @@ Each plugin documents itself in its own directory. Add a new plugin's notes at
 @plugins/focus-please/CLAUDE.md
 @plugins/glob/CLAUDE.md
 @plugins/grep/CLAUDE.md
+@plugins/misc-skills/CLAUDE.md
