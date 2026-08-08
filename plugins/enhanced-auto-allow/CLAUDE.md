@@ -18,10 +18,10 @@ consulted, so `denyOnly` suppresses every non-deny verdict on that path.
   matcher `*` for both PermissionRequest and PreToolUse
 - `plugins/enhanced-auto-allow/docs/two-event-registration.md` -- why two events, the cli.js call
   sites that make PermissionRequest conditional, and the per-event output shapes
-- `plugins/enhanced-auto-allow/docs/ccr-approval-card.md` -- the `Claude_Code_Remote` mcpServer entry:
-  the only one that is not read-only, and the only one whose job is to ANSWER a prompt. The CCR proxy
-  replies `-32003 needs_approval` and the client raises a retroactive card that `permissions.allow`
-  cannot reach; a PermissionRequest hook wins the race against it and the retry succeeds
+- `plugins/enhanced-auto-allow/docs/ccr-approval-card.md` -- why `rules.xml` has NO `Claude_Code_Remote`
+  block, and must not get one. Answering that card cancels the bridge request displaying it and
+  re-issues the call byte-identically with no grant, so the server rejects it again and the single
+  retry is spent -- the card flashes, vanishes, and the call hard-fails. Silence lets the human click
 
 ### The rule node
 
