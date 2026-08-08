@@ -166,6 +166,9 @@ func TestPostToolUseFlagsUnwrappedLines(t *testing.T) {
 	}))
 	require.Contains(t, ctx, "over 150 columns")
 	require.Contains(t, ctx, "within budget", "a small unwrapped file is not also a size violation")
+	require.NotContains(t, ctx, "budget wall",
+		"a file at a fraction of the budget must not be told it is at the wall -- a guard "+
+			"that cries wolf is skimmed on the run where the number is real")
 }
 
 func TestFencedAndIndentedBlocksAreNotWidthViolations(t *testing.T) {

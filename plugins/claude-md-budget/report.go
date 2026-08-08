@@ -139,9 +139,16 @@ func sessionReport(offenders []offender, limit int) string {
 // editReportText is what a session hears immediately after writing an
 // instruction file that is over budget, at the wall, or unwrapped.
 func editReportText(o offender, limit int, growth int, hasGrowth bool) string {
-	state := "at the " + comma(limit) + "-character budget wall"
-	if o.Chars > limit {
+	// Three states, not two. A file qualifies on EITHER size or width, so a
+	// small file flagged only for long lines must not be told it is at a wall
+	// it is nowhere near -- a guard that cries wolf gets skimmed on the run
+	// where the number is real.
+	state := "over 150 columns on some lines"
+	switch {
+	case o.Chars > limit:
 		state = "OVER the " + comma(limit) + "-character budget"
+	case float64(o.Chars) >= nearFraction*float64(limit):
+		state = "at the " + comma(limit) + "-character budget wall"
 	}
 	lines := []string{
 		"INSTRUCTION-FILE BUDGET: the file you just wrote is " + state + ".",
@@ -151,11 +158,16 @@ func editReportText(o offender, limit int, growth int, hasGrowth bool) string {
 	if hasGrowth && growth > 0 {
 		lines = append(lines, "", "  ...of which this session's uncommitted edits added "+comma(growth)+" characters.")
 	}
-	lines = append(lines, "",
-		"Do not finish the change here. Every character above is re-sent on EVERY "+
-			"request of every future session, and a file with no room left hands the next "+
-			"agent a file that breaks on its next edit.",
-		"")
+	why := "Do not finish the change here. Every character above is re-sent on EVERY " +
+		"request of every future session, and a file with no room left hands the next " +
+		"agent a file that breaks on its next edit."
+	if o.Chars < limit && float64(o.Chars) < nearFraction*float64(limit) {
+		// Size is fine; only the wrapping is not. Saying otherwise here is what
+		// makes the next real budget warning easy to ignore.
+		why = "Do not finish the change here. The size is fine -- what is wrong is that an " +
+			"unwrapped file turns every edit into a one-line diff no reviewer can read."
+	}
+	lines = append(lines, "", why, "")
 	lines = append(lines, remedy()...)
 	return strings.Join(lines, "\n")
 }
