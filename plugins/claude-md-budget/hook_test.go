@@ -166,6 +166,24 @@ func TestPostToolUseFlagsUnwrappedLines(t *testing.T) {
 	}))
 	require.Contains(t, ctx, "over 150 columns")
 	require.Contains(t, ctx, "within budget", "a small unwrapped file is not also a size violation")
+
+	// The hole that let the false headline ship: the two assertions above are
+	// both about the DETAIL line, which was always right. Nothing checked what
+	// the report LEADS with, so every width-only notice opened by claiming the
+	// budget wall on a file with thousands of characters to spare -- and a guard
+	// that cries wolf gets skimmed on the run where the number is real.
+	require.NotContains(t, ctx, "budget wall",
+		"a file under budget must not be reported as being at the wall")
+	require.NotContains(t, ctx, "OVER the",
+		"a file under budget must not be reported as over it")
+	require.Contains(t, ctx, "INSTRUCTION-FILE WIDTH",
+		"the headline must name the offense that actually fired")
+
+	// And the remedy has to be actionable: extraction advice is noise for a file
+	// with nothing to extract.
+	require.NotContains(t, ctx, "docs/<topic>.md",
+		"do not prescribe extraction for a file that is under budget")
+	require.Contains(t, ctx, "Hard-wrap at 150 columns")
 }
 
 func TestFencedAndIndentedBlocksAreNotWidthViolations(t *testing.T) {
