@@ -34,6 +34,18 @@ const nearFraction = 0.975
 // SHAPE of an item that should have been a pointer to docs/.
 const widthLimit = 150
 
+// The width check is OFF unless CC_CLAUDE_MD_WIDTH is set to something truthy.
+// The character budget is the gate that matters; wrapping rode along with it
+// and mostly fired on files nowhere near the budget, which trains the reader to
+// skim the size number sitting next to it.
+func widthEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CC_CLAUDE_MD_WIDTH"))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
 // Sibling-checkout scan bound: /home/user is the repo in a single-repo session
 // and the parent of every repo in a multi-repo one.
 const maxSiblings = 32
@@ -114,7 +126,9 @@ func wideLines(text string) []int {
 
 // measure reads a file once and returns both measurements. Characters, the way
 // the CLI counts them -- not bytes, so a file with non-ASCII text measures
-// smaller than wc -c reports.
+// smaller than wc -c reports. wide is always empty while the width check is
+// off: one choke point, so no caller and no report can bring wrapping back on
+// its own.
 func measure(path string) (chars int, wide []int, ok bool) {
 	st, err := os.Stat(path)
 	if err != nil || !st.Mode().IsRegular() {
@@ -125,6 +139,9 @@ func measure(path string) (chars int, wide []int, ok bool) {
 		return 0, nil, false
 	}
 	text := string(data)
+	if !widthEnabled() {
+		return utf8.RuneCountInString(text), nil, true
+	}
 	return utf8.RuneCountInString(text), wideLines(text), true
 }
 

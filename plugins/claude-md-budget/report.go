@@ -14,7 +14,7 @@ import (
 // the anti-gaming ones and lead deliberately: every other bullet is advice about
 // how to fix the file, and these two are about not faking the fix.
 func remedy() []string {
-	return []string{
+	out := []string{
 		"What to do about it:",
 		"- The room under the budget is a quota, and spending it is fine. What is " +
 			"reported here is spending the LAST of it. Compressing prose -- your own or " +
@@ -29,12 +29,16 @@ func remedy() []string {
 			"summarization; the detail has to survive somewhere it can grow.",
 		"- NEVER add to an already-oversized item. Appending to the biggest bullet in " +
 			"the file is how these files got this way.",
-		"- Hard-wrap at " + strconv.Itoa(widthLimit) + " columns. An unwrapped file turns every edit into a " +
-			"one-line diff nobody can review, and a paragraph that runs for thousands of " +
-			"columns is the SHAPE of an item that should have been a pointer to docs/.",
-		"- CLAUDE.md is an index, not a manual: what exists, the invariants one line " +
-			"each, and where the depth lives.",
 	}
+	if widthEnabled() {
+		out = append(out,
+			"- Hard-wrap at "+strconv.Itoa(widthLimit)+" columns. An unwrapped file turns every edit into a "+
+				"one-line diff nobody can review, and a paragraph that runs for thousands of "+
+				"columns is the SHAPE of an item that should have been a pointer to docs/.")
+	}
+	return append(out,
+		"- CLAUDE.md is an index, not a manual: what exists, the invariants one line "+
+			"each, and where the depth lives.")
 }
 
 func widthNote(o offender) string {

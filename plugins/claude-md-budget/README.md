@@ -22,10 +22,10 @@ the web surface, and never to the model.
   limit is not a fix: the next edit of any size breaks it, and whoever makes that
   edit inherits the reorganization that got skipped.
 - **Unwrapped** — a line past 150 columns that could have been wrapped. Code
-  fences, tables, indented blocks, headings and unbreakable URLs are exempt. An
-  unwrapped file makes every edit a one-line diff nobody can review, and a
-  paragraph running for thousands of columns is the *shape* of an item that
-  should have been a pointer to `docs/`.
+  fences, tables, indented blocks, headings and unbreakable URLs are exempt.
+  **Off unless `CC_CLAUDE_MD_WIDTH` is set** to `1`/`true`/`yes`/`on`: it mostly
+  fired on files nowhere near the budget, and a wrapping complaint sitting next
+  to a size number teaches the reader to skim both.
 
 Characters, not bytes — so `wc -c` overstates any file with non-ASCII text.
 
@@ -64,3 +64,4 @@ original guard ignorable: one nag bought silence for everything after it.
 ```
 
 Set `CC_CLAUDE_MD_BUDGET` to override the budget, or `0` to disable entirely.
+Set `CC_CLAUDE_MD_WIDTH=1` to switch the line-width check back on.
