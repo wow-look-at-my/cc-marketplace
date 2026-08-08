@@ -128,10 +128,7 @@ jobs:
             const pluginDir = path.join(process.env.GITHUB_WORKSPACE!, "plugins", "css-duplication");
             const buildDir = path.join(pluginDir, "build");
 
-            // .lsp.json launches ${CLAUDE_PLUGIN_ROOT}/build/css-duplication.
-            // go-toolchain writes per-platform names when os/arch are given, and
-            // the published npm package puts a launcher at that path -- so stage
-            // whichever artifact exists rather than assuming one layout.
+            // .lsp.json launches ${CLAUDE_PLUGIN_ROOT}/build/css-duplication, but go-toolchain writes per-platform names when os/arch are given and the published npm package puts a launcher at that path -- so stage whichever artifact exists rather than assuming one layout.
             const wanted = path.join(buildDir, "css-duplication");
             if (!fs.existsSync(wanted)) {
               const candidate = fs.readdirSync(buildDir)
@@ -142,9 +139,7 @@ jobs:
               core.info(`staged ${candidate} as build/css-duplication`);
             }
 
-            // A stylesheet that is already duplicated, plus an edit that adds one
-            // more copy: the edit is what makes the client push didChange/didSave
-            // to the server, which is what produces the diagnostics.
+            // A stylesheet that is already duplicated, plus an edit adding one more copy: the edit is what makes the client push didChange/didSave to the server, which is what produces the diagnostics.
             const work = path.join(process.env.RUNNER_TEMP!, "lsp-e2e");
             fs.mkdirSync(work, { recursive: true });
             fs.writeFileSync(path.join(work, "style.css"),
@@ -152,13 +147,9 @@ jobs:
               ".footer a { color: #2f81f7; text-decoration: none; }\n" +
               ".badge { border-radius: 999px; }\n");
 
-            // --model sonnet: this asserts a SERVER's behavior, which no model
-            // tier affects, and it runs on every push.
+            // --model sonnet: this asserts a SERVER's behavior, which no model tier affects, and it runs on every push.
             const res = await exec.getExecOutput("claude", [
-              // The read-back is load-bearing, not padding: diagnostics are
-              // drained into an attachment when the NEXT turn is assembled, so a
-              // prompt that ends at the edit can finish before delivery and make
-              // the attachment assertion flaky. Measured both ways.
+              // The read-back is load-bearing, not padding: diagnostics drain into an attachment when the NEXT turn is assembled, so a prompt ending at the edit can finish before delivery and make the attachment assertion flaky. Measured both ways.
               "-p", "Add a rule to style.css for selector .nav a with color #2f81f7 and no text-decoration. After making the edit, read style.css back and tell me how many lines it now has.",
               "--model", "sonnet",
               "--plugin-dir", pluginDir,
@@ -194,9 +185,7 @@ jobs:
               if (!re.test(log)) failures.push(`MISSING: ${what} (/${re.source}/)`);
             }
 
-            // The bug this job exists for: everything above passed while shutdown
-            // failed, because a response with neither `result` nor `error` is
-            // malformed JSON-RPC and only a real client rejects it.
+            // The bug this job exists for: everything above passed while shutdown failed, because a response with neither `result` nor `error` is malformed JSON-RPC and only a real client rejects it.
             const mustNot: Array<[string, RegExp]> = [
               ["the LSP session failed to stop", /Failed to stop LSP server|stop failed/],
               ["the server crashed", /LSP server .*css-duplication.* (crashed|exited unexpectedly)/],
