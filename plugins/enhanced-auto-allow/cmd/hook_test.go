@@ -234,16 +234,24 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 	}
 }
 
-// The CCR approval card is answered on PermissionRequest, which is the only
-// event that can answer it: the -32003 retry hands canUseTool a precomputed
-// "ask", so the call reaches the ask path where this hook races the human
-// dialog. An allow there aborts the dialog and the retry succeeds. On
-// PreToolUse the same tools must stay SILENT -- an allow before the permission
-// engine runs would outrank the user's own deny rules.
-func TestCCRManagementToolsAutoAllowed(t *testing.T) {
+// This hook must stay SILENT for every Claude_Code_Remote tool, on both
+// events. Answering that server's approval card does not authorise anything:
+// on a hook decision the client calls cancelRequest on the bridge request that
+// is displaying the card, then re-issues the call byte-identically with no
+// grant attached, so the server -- which is waiting on a human -- rejects it
+// again and the single permitted retry is spent. An allow here therefore
+// destroys the user's only working option (clicking) and converts a one-click
+// call into a guaranteed -32003 failure.
+//
+// Silence is not a missing feature here, it IS the fix, which is exactly why
+// this test asserts it: the previous version of this file required an allow
+// and pinned the broken behavior in place.
+func TestCCRToolsAreNeverAnsweredByThisHook(t *testing.T) {
 	binaryPath := buildTestBinary(t)
 
-	allowed := []string{
+	// The set that used to be auto-allowed, plus the account-wide Routine
+	// mutators that never were. All are treated identically now.
+	for _, toolName := range []string{
 		"mcp__Claude_Code_Remote__send_later",
 		"mcp__Claude_Code_Remote__add_repo",
 		"mcp__Claude_Code_Remote__register_repo_root",
@@ -252,35 +260,19 @@ func TestCCRManagementToolsAutoAllowed(t *testing.T) {
 		"mcp__Claude_Code_Remote__list_triggers",
 		"mcp__Claude_Code_Remote__subscribe_pr_activity",
 		"mcp__Claude_Code_Remote__unsubscribe_pr_activity",
-	}
-	for _, toolName := range allowed {
-		t.Run("allow/"+toolName, func(t *testing.T) {
-			out := runHookBinary(t, binaryPath, HookInput{HookEventName: eventPermissionRequest, ToolName: toolName})
-			require.NotEmpty(t, out, "%s must be auto-allowed; empty output means the human dialog stands", toolName)
-
-			var resp PermissionResponse
-			require.NoError(t, json.Unmarshal(out, &resp), "output was: %s", out)
-			assert.Equal(t, eventPermissionRequest, resp.HookSpecificOutput.HookEventName)
-			assert.Equal(t, "allow", resp.HookSpecificOutput.Decision.Behavior)
-		})
-
-		t.Run("silent-on-pretooluse/"+toolName, func(t *testing.T) {
-			out := runHookBinary(t, binaryPath, HookInput{HookEventName: eventPreToolUse, ToolName: toolName})
-			assert.Empty(t, out, "PreToolUse must not allow %s -- that would settle the call before the user's deny rules are consulted", toolName)
-		})
-	}
-
-	// Account-wide Routine mutation is NOT in the set and must still prompt:
-	// an empty hook response is what lets the human dialog stand.
-	for _, toolName := range []string{
 		"mcp__Claude_Code_Remote__delete_trigger",
 		"mcp__Claude_Code_Remote__create_trigger",
 		"mcp__Claude_Code_Remote__update_trigger",
 		"mcp__Claude_Code_Remote__fire_trigger",
 	} {
-		t.Run("still-prompts/"+toolName, func(t *testing.T) {
+		t.Run("permissionrequest-silent/"+toolName, func(t *testing.T) {
 			out := runHookBinary(t, binaryPath, HookInput{HookEventName: eventPermissionRequest, ToolName: toolName})
-			assert.Empty(t, out, "%s must NOT be auto-allowed -- it edits Routines account-wide", toolName)
+			assert.Empty(t, out, "%s must get NO decision from this hook -- answering cancels the displayed card and the identical retry still fails", toolName)
+		})
+
+		t.Run("pretooluse-silent/"+toolName, func(t *testing.T) {
+			out := runHookBinary(t, binaryPath, HookInput{HookEventName: eventPreToolUse, ToolName: toolName})
+			assert.Empty(t, out, "PreToolUse must not answer %s either", toolName)
 		})
 	}
 }
