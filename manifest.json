@@ -1,0 +1,31 @@
+{
+  "name": "grep",
+  "version": "1053",
+  "tag": "grep#1053",
+  "pluginJson": {
+    "author": {
+      "name": "wow-look-at-my-code"
+    },
+    "description": "Restores the builtin Grep tool that Claude Code removed in 2.1.117: ripgrep-backed content search mirroring 2.1.116 behavior, with a clearer output-mode set",
+    "keywords": [
+      "grep",
+      "search",
+      "content",
+      "regex",
+      "ripgrep",
+      "mcp",
+      "builtin"
+    ],
+    "mcpServers": "./.mcp.json",
+    "name": "grep",
+    "version": "1053"
+  },
+  "mcpJson": {
+    "mcpServers": {
+      "grep": {
+        "alwaysLoad": true,
+        "command": "${CLAUDE_PLUGIN_ROOT}/build/grep"
+      }
+    }
+  }
+}
