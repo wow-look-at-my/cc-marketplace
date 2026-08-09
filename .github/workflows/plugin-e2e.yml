@@ -128,7 +128,7 @@ jobs:
             const pluginDir = path.join(process.env.GITHUB_WORKSPACE!, "plugins", "css-duplication");
             const buildDir = path.join(pluginDir, "build");
 
-            // Stage whichever artifact exists: go-toolchain writes per-platform names, the npm package writes a launcher, and .lsp.json launches one path.
+            // .lsp.json launches build/css-duplication, but go-toolchain and the npm package name the binary differently -- stage whichever artifact exists
             const wanted = path.join(buildDir, "css-duplication");
             if (!fs.existsSync(wanted)) {
               const candidate = fs.readdirSync(buildDir)
@@ -139,7 +139,7 @@ jobs:
               core.info(`staged ${candidate} as build/css-duplication`);
             }
 
-            // The EDIT is what pushes didChange/didSave to the server, which is what produces the diagnostics.
+            // the fixture starts already duplicated; the edit below adds one more copy, triggering didChange/didSave and the server's diagnostics
             const work = path.join(process.env.RUNNER_TEMP!, "lsp-e2e");
             fs.mkdirSync(work, { recursive: true });
             fs.writeFileSync(path.join(work, "style.css"),
@@ -147,9 +147,9 @@ jobs:
               ".footer a { color: #2f81f7; text-decoration: none; }\n" +
               ".badge { border-radius: 999px; }\n");
 
-            // --model sonnet: this asserts a SERVER's behavior, which no model tier affects, and it runs on every push.
+            // --model sonnet: this asserts a SERVER's behavior, unaffected by model tier, and runs on every push
             const res = await exec.getExecOutput("claude", [
-              // Load-bearing: diagnostics drain into an attachment on the NEXT turn, so ending at the edit makes the assertion flaky. Measured both ways.
+              // the read-back is load-bearing: diagnostics drain into an attachment on the NEXT turn, so a prompt ending at the edit can finish before delivery -- measured flaky without it
               "-p", "Add a rule to style.css for selector .nav a with color #2f81f7 and no text-decoration. After making the edit, read style.css back and tell me how many lines it now has.",
               "--model", "sonnet",
               "--plugin-dir", pluginDir,
@@ -185,7 +185,7 @@ jobs:
               if (!re.test(log)) failures.push(`MISSING: ${what} (/${re.source}/)`);
             }
 
-            // The bug this job exists for: everything above passed while shutdown failed, and only a real client rejects the malformed reply.
+            // the bug this job guards: a response with neither `result` nor `error` is malformed JSON-RPC, and only a real client rejects it
             const mustNot: Array<[string, RegExp]> = [
               ["the LSP session failed to stop", /Failed to stop LSP server|stop failed/],
               ["the server crashed", /LSP server .*css-duplication.* (crashed|exited unexpectedly)/],
