@@ -10,11 +10,41 @@ import (
 	"strings"
 )
 
-// remedy is identical wherever it is reported from. The first two bullets are
-// the anti-gaming ones and lead deliberately: every other bullet is advice about
-// how to fix the file, and these two are about not faking the fix.
+// widthOnly is a file whose ONLY offense is unwrapped lines: comfortably under
+// budget, nothing to extract. Reporting it in budget language is a false alarm,
+// and a guard that cries wolf gets skimmed on the run where the number is real.
+func widthOnly(o offender, limit int) bool {
+	return len(o.Wide) > 0 && o.Chars < nearLimit(limit)
+}
+
+func allWidthOnly(os []offender, limit int) bool {
+	for _, o := range os {
+		if !widthOnly(o, limit) {
+			return false
+		}
+	}
+	return len(os) > 0
+}
+
+// remedy is identical wherever it is reported from, EXCEPT that a width-only
+// finding gets only the bullets that apply to it: telling a session to extract
+// prose from a file that is 7% under budget is advice it cannot act on, and
+// wading through it is what teaches the reader to skim the whole block.
 func remedy() []string {
-	out := []string{
+	return remedyFor(false)
+}
+
+func remedyFor(widthOnly bool) []string {
+	if widthOnly {
+		return []string{
+			"What to do about it:",
+			"- Hard-wrap at " + strconv.Itoa(widthLimit) + " columns. Nothing needs to be extracted -- the file " +
+				"is under budget; the lines are just unreadable in a diff.",
+			"- Continuation lines of a list item indent to the marker. Code fences, tables and " +
+				"headings are exempt, and a single unbreakable token (a URL) may run long.",
+		}
+	}
+	return []string{
 		"What to do about it:",
 		"- The room under the budget is a quota, and spending it is fine. What is " +
 			"reported here is spending the LAST of it. Compressing prose -- your own or " +
@@ -29,16 +59,12 @@ func remedy() []string {
 			"summarization; the detail has to survive somewhere it can grow.",
 		"- NEVER add to an already-oversized item. Appending to the biggest bullet in " +
 			"the file is how these files got this way.",
+		"- Hard-wrap at " + strconv.Itoa(widthLimit) + " columns. An unwrapped file turns every edit into a " +
+			"one-line diff nobody can review, and a paragraph that runs for thousands of " +
+			"columns is the SHAPE of an item that should have been a pointer to docs/.",
+		"- CLAUDE.md is an index, not a manual: what exists, the invariants one line " +
+			"each, and where the depth lives.",
 	}
-	if widthEnabled() {
-		out = append(out,
-			"- Hard-wrap at "+strconv.Itoa(widthLimit)+" columns. An unwrapped file turns every edit into a "+
-				"one-line diff nobody can review, and a paragraph that runs for thousands of "+
-				"columns is the SHAPE of an item that should have been a pointer to docs/.")
-	}
-	return append(out,
-		"- CLAUDE.md is an index, not a manual: what exists, the invariants one line "+
-			"each, and where the depth lives.")
 }
 
 func widthNote(o offender) string {
@@ -143,36 +169,39 @@ func sessionReport(offenders []offender, limit int) string {
 // editReportText is what a session hears immediately after writing an
 // instruction file that is over budget, at the wall, or unwrapped.
 func editReportText(o offender, limit int, growth int, hasGrowth bool) string {
-	// Three states, not two. A file qualifies on EITHER size or width, so a
-	// small file flagged only for long lines must not be told it is at a wall
-	// it is nowhere near -- a guard that cries wolf gets skimmed on the run
-	// where the number is real.
-	state := "over 150 columns on some lines"
+	narrow := widthOnly(o, limit)
+
+	headline := "INSTRUCTION-FILE BUDGET: the file you just wrote is at the " +
+		comma(limit) + "-character budget wall."
 	switch {
 	case o.Chars > limit:
-		state = "OVER the " + comma(limit) + "-character budget"
-	case float64(o.Chars) >= nearFraction*float64(limit):
-		state = "at the " + comma(limit) + "-character budget wall"
+		headline = "INSTRUCTION-FILE BUDGET: the file you just wrote is OVER the " +
+			comma(limit) + "-character budget."
+	case narrow:
+		// Say the true offense. The old headline claimed the budget wall for
+		// every width-only report, on files with thousands of characters spare.
+		headline = "INSTRUCTION-FILE WIDTH: the file you just wrote has lines past " +
+			strconv.Itoa(widthLimit) + " columns. It is within budget."
 	}
-	lines := []string{
-		"INSTRUCTION-FILE BUDGET: the file you just wrote is " + state + ".",
-		"",
-		entry(o, limit),
-	}
+
+	lines := []string{headline, "", entry(o, limit)}
 	if hasGrowth && growth > 0 {
 		lines = append(lines, "", "  ...of which this session's uncommitted edits added "+comma(growth)+" characters.")
 	}
-	why := "Do not finish the change here. Every character above is re-sent on EVERY " +
-		"request of every future session, and a file with no room left hands the next " +
-		"agent a file that breaks on its next edit."
-	if o.Chars < limit && float64(o.Chars) < nearFraction*float64(limit) {
-		// Size is fine; only the wrapping is not. Saying otherwise here is what
-		// makes the next real budget warning easy to ignore.
-		why = "Do not finish the change here. The size is fine -- what is wrong is that an " +
-			"unwrapped file turns every edit into a one-line diff no reviewer can read."
+	if narrow {
+		lines = append(lines, "",
+			"Wrap them before you finish. An unwrapped file turns every later edit into a "+
+				"one-line diff nobody can review, so a two-word change and a rewritten "+
+				"paragraph look identical.",
+			"")
+	} else {
+		lines = append(lines, "",
+			"Do not finish the change here. Every character above is re-sent on EVERY "+
+				"request of every future session, and a file with no room left hands the next "+
+				"agent a file that breaks on its next edit.",
+			"")
 	}
-	lines = append(lines, "", why, "")
-	lines = append(lines, remedy()...)
+	lines = append(lines, remedyFor(narrow)...)
 	return strings.Join(lines, "\n")
 }
 
@@ -184,13 +213,26 @@ func stopReason(still []offender, limit int) string {
 	if len(still) != 1 {
 		what = strconv.Itoa(len(still)) + " instruction files"
 	}
-	lines := []string{
-		"You are ending the turn having left " + what + " you wrote this session with no " +
-			"room under the " + comma(limit) + "-character budget:",
-		"",
+	narrow := allWidthOnly(still, limit)
+
+	opener := "You are ending the turn having left " + what + " you wrote this session with no " +
+		"room under the " + comma(limit) + "-character budget:"
+	if narrow {
+		opener = "You are ending the turn having left " + what + " you wrote this session with " +
+			"lines past " + strconv.Itoa(widthLimit) + " columns. They are within budget:"
 	}
+	lines := []string{opener, ""}
 	for _, o := range still {
 		lines = append(lines, entry(o, limit))
+	}
+	if narrow {
+		lines = append(lines, "",
+			"Wrap them and finish. Nothing needs extracting -- this is reflow, and it is what "+
+				"keeps the next edit to these files reviewable.",
+			"")
+		lines = append(lines, "If a line genuinely cannot be wrapped (a table row, a fenced block, one long "+
+			"URL), say so to the user and name it.")
+		return strings.Join(lines, "\n")
 	}
 	lines = append(lines, "",
 		"Finish the job: move a section into docs/<topic>.md VERBATIM and leave a "+
