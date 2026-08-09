@@ -1,8 +1,8 @@
-# Why this plugin must NOT answer the Claude Code Remote approval card
+# Answering the Claude Code Remote approval card
 
-`rules.xml` deliberately has no `<mcpServer name="Claude_Code_Remote">` block.
-It used to, and that entry was the reason every `mcp__Claude_Code_Remote__*`
-call failed. This file exists so nobody adds it back.
+The `Claude_Code_Remote` entry in `rules.xml` is the only `<mcpServer>` block
+that is not a read-only allowlist, and the only one whose purpose is to **answer**
+a permission prompt rather than to avoid raising one. This is why.
 
 ## The card
 
@@ -13,167 +13,101 @@ Calling any `mcp__Claude_Code_Remote__*` tool raises:
 > `[Deny]  [Allow once]`
 
 Every call. No "Allow always". Adding the tool to `permissions.allow` changes
-nothing — that path is genuinely unreachable by local rules, and everything the
-old version of this document said about *why* remains true:
+nothing.
+
+## Why the allowlist cannot help
+
+The dialog is not raised by the local permission system. It is **retroactive** —
+raised after the local rules already allowed the call and the request went out:
 
 1. Local rules evaluate normally, allow, and `tools/call` is dispatched.
 2. The CCR MCP proxy answers with JSON-RPC `-32003` plus an `args_sha256` in
    `error.data` — "needs_approval".
-3. The client raises a retroactive approval card whose precomputed decision
-   (`behavior: "ask"`, `suppressAlwaysAllowRule: true`) is handed straight to
-   `canUseTool`, so the whole deny/ask/allow-rule and classifier pipeline is
-   never invoked and no approval can ever be persisted.
+3. The client raises an approval card and, on allow, re-issues the *identical*
+   call. An edited input aborts instead.
 
-What was wrong was the conclusion drawn from step 3.
-
-## The mistake: "a hook can answer it"
-
-Because the precomputed decision is `ask` and not `allow`/`deny`, it falls
-through to the ask path, where `PermissionRequest` hooks run concurrently with
-the dialog. A local binary answers in milliseconds and beats a human every
-time. That much is real — and it is precisely the problem.
-
-The concurrency is not a race the hook can usefully win. In `L5p`, when
-`awaitAutomatedChecksBeforeDialog` is falsy — the default for any top-level
-tool call; it is only set true for sub-agent contexts — the dialog is **sent
-first** and the hooks run alongside it:
+The retry calls `canUseTool` with a precomputed decision as its sixth argument:
 
 ```js
-f.sendRequest(g, t.tool.name, o, t.toolUseID, x, ...);   // the card appears
+{
+  behavior: "ask",
+  suppressAlwaysAllowRule: true,
+  message: `The ${fullyQualifiedName} connector requires approval for this call.`,
+  decisionReason: { type: "other", reason: "This connector call requires your approval to proceed." }
+}
+```
+
+`createCanUseTool` opens `let a = s ?? (await cM(...))`. With that argument
+present, `cM` — the whole deny/ask/allow-rule and auto-mode-classifier pipeline —
+is **never invoked**. The allow rule is not outranked; it is never read. And
+`suppressAlwaysAllowRule` is hardcoded, with returned permissions filtered to
+rules that already exist, so no approval on this path can ever persist one.
+
+## Why a PermissionRequest hook CAN
+
+The precomputed decision is `behavior: "ask"`, not `allow` or `deny` — so it does
+**not** short-circuit. It falls through to the ask path, and that path races the
+hook against the human:
+
+```js
+let y = QdE(t, i, l, n, c).then((H) => ({ source: "hook", decision: H }));
 ...
-if (!s)
-  (async () => {
-    let x = await t.runHooks(...);
-    ...
-    if (f && g) f.cancelRequest(g);                       // the card is killed
-    (y?.(), S?.(), d(x));
-  })()
+let R = await Promise.race([y, I]);
+if (R.source === "hook") {
+	if (R.decision) return (u.abort(), R.decision);
 ```
 
-`cancelRequest(g)` cancels the very bridge request that is displaying the card,
-and `y?.()` tears down the listener that a human click would have resolved
-through. That listener is the **only** code path in the bundle that produces a
-decision with `source: { type: "user" }` for this flow.
+`QdE` runs the `PermissionRequest` hooks. When one returns allow, the dialog is
+aborted and the retry proceeds — `if (D.behavior === "allow") { ... continue; }`.
+The call succeeds with no human involved.
 
-Then the retry goes out:
+A local binary answers in milliseconds, so it wins the race against a dialog that
+needs a person.
 
-```js
-{ name: o, arguments: i, _meta: s }
-```
+## Why it is PermissionRequest and not PreToolUse
 
-Same `name`, same `arguments`, and a `_meta` carrying only
-`claudecode/toolUseId`. **No approval token, no grant, no `args_sha256`
-acknowledgement.** A hook-approved retry is byte-identical to the call the
-server just rejected, so the server — which is waiting on a human interaction
-it never received — rejects it again. The one permitted retry is already spent
-(the `!S` guard), so the second `-32003` is rethrown to the model.
+This plugin registers on both events, and the split matters here:
 
-Telemetry names this exactly: the second failure emits
-`fe("mcp_ccr_needs_approval", "retry_failed")`, never `"arm_not_fired"`.
+- `PreToolUse` fires *before* dispatch. Nothing has asked for approval yet, so
+  there is no card to answer. An allow there would also settle the call before
+  the permission engine runs, overriding the user's own deny rules — which is why
+  `denyOnly` suppresses every non-deny verdict on that path.
+- `PermissionRequest` fires only once the decision is "ask", which is exactly the
+  state the `-32003` retry puts the call into. It is the only event that can
+  answer the card.
 
-## What the user sees
+So the deny half of this plugin rides `PreToolUse` and the allow half rides
+`PermissionRequest` — and this entry is the clearest illustration of why.
 
-A card that appears and vanishes before it can be clicked, then
-`MCP error -32003: MCP tool call requires approval`. That string is the
-server's own JSON-RPC `message` echoed through `McpError` — not client text.
+## What is in the set, and what is not
 
-The instinct on seeing an instant error is "the card was never raised, so the
-hook never got the chance". The opposite is true: the card was raised, the hook
-got there first, and the hook is what removed it.
+Included: `send_later`, `add_repo`, `register_repo_root`, `list_repos`,
+`list_environments`, `list_triggers`, `subscribe_pr_activity`,
+`unsubscribe_pr_activity`. These read state or adjust what a disposable session
+can see. None of them mutates a repository.
 
-## The rule
+Excluded and still prompting: `create_trigger`, `update_trigger`,
+`delete_trigger`, `fire_trigger`. Those edit or delete Routines account-wide,
+which is a different blast radius from "this session can now see one more repo".
 
-**A `PermissionRequest` hook cannot make these calls succeed, and can only make
-them fail.** The one working outcome is to leave the ask unanswered so the
-dialog stands and a human clicks it. That is what an absent `<mcpServer>` block
-achieves — the hook returns nothing for this server, `L5p`'s `if (!s)` branch
-resolves to nothing, and the bridge listener stays alive until the real click
-arrives.
+`send_later` is the one that makes this non-optional rather than a convenience.
+Its entire purpose is to schedule a message into a session nobody is watching; a
+per-call dialog means the one tool built for unattended operation cannot be used
+unattended.
 
-This is not a limitation to work around. There is nothing to convey a
-hook-sourced approval to the server; the source shows no field, header, or
-side-channel that could.
+## The failure mode this introduces
 
-## `send_later`, and why "but it needs to be unattended" is not a counterargument
-
-`send_later` exists to schedule a message into a session nobody is watching, so
-a per-call dialog does defeat its purpose. That was the original motivation for
-the entry, and it is why the temptation to re-add it is strong.
-
-It does not survive contact with the mechanism above: with the entry present
-`send_later` does not work unattended, it does not work at all. A tool that
-needs one click beats a tool that always fails. If unattended scheduling
-matters, it needs a mechanism that does not route through this card — not an
-allowlist entry that deletes the click.
-
-## Nothing else automates it either — four dead ends, checked in the bundle
-
-Removing the block restores the click. The obvious next question is whether the
-click can be automated some other way. It cannot, and these are the four
-attempts worth not repeating:
-
-- **A local rule of any kind.** The retry hands `canUseTool` a pre-built
-  decision as its sixth argument, and the wrapper opens
-  `let u = c ?? (await p9t(...))`. With that argument present the rule engine is
-  never called, so `permissions.allow`, `permissions.deny`, the auto-mode
-  classifier, `dontAsk` and even `bypassPermissions` are not consulted. The
-  decision is hardcoded `behavior: "ask"`, so it always reaches the dialog.
-- **A `PermissionRequest` hook or an SDK `canUseTool` callback.** These are the
-  same function in the same argument position, so they behave identically: the
-  "allow" is local, it CANCELS the outstanding bridge request instead of
-  completing it, and the retry that follows is byte-identical. `args_sha256`
-  appears three times in the bundle and is only ever READ off the server's
-  error — the client has no call that sends a grant back.
-- **`--permission-prompt-tool`.** Setting `permissionPromptToolName` to
-  anything but `"stdio"` fails the `!(Vhe() && Vhe() !== "stdio")` term that
-  arms the retry, so no card appears, no retry happens, and the raw `-32003`
-  is rethrown. It removes the recovery path rather than automating it.
-- **Pre-approving the tools server-side.** `extra_allowed_tools` /
-  `extraAllowedTools` have ZERO occurrences in the bundle; `allowedTools` is a
-  purely local permission layer consumed by the same rule engine the retry
-  skips. No session-ingress or ccr-sessions request body carries a permission
-  or allowlist payload, so the client has no way to arm such a thing even if
-  the server supports it.
-
-The bridge round-trip a human's click completes is the only real network
-exchange in this whole flow, and it is the only path that produces a decision
-with `source: { type: "user" }`.
-
-Worth knowing for the day this gets fixed upstream: a genuine
-auto-resolve-by-polling-the-server mechanism already exists in the client
-(`serverApprovalWatch`), and it resolves an ask WITHOUT transmitting anything
-locally. It is wired to one unrelated feature and is simply not attached to the
-connector decision object. That, not a hook, is the shape a real fix takes.
-
-## What still works unattended, and what genuinely does not
-
-The gate is on the TOOLS, not on the capabilities behind most of them, and the
-difference decides whether a session is actually blocked:
-
-- **Reading another org repo** -- `add_repo` prompts, but the session's git
-  credential path is NOT limited to the declared Repository Scope, so a plain
-  `git clone https://github.com/<org>/<repo>.git` just works with no prompt
-  (verified). What is lost is registration: the clone's CLAUDE.md, skills and
-  plugins are not loaded, because `register_repo_root` is gated too.
-- **Watching a PR** -- use `mcp__github__subscribe_pr_activity`, which is on a
-  different server and not gated.
-- **Listing repos / environments** -- `gh repo list` and the like.
-- **`send_later`** -- no substitute exists. This is the one capability the gate
-  genuinely removes, and it is the one that mattered: a tool whose entire
-  purpose is firing in a session nobody is watching cannot be used at all when
-  every call needs a human. Use the `/loop` skill for a recurring cadence
-  instead, and never arm a wake-up that assumes the call succeeded.
-
-So the honest summary is not "CCR is broken" but "one CCR capability is gone
-and the rest have unprompted equivalents".
+The hook is now load-bearing. If the binary is missing, errors, or returns
+nothing, the race falls back to the human dialog — the same stall as before. That
+is a degradation to the previous behavior, not to something worse, and it is
+visible immediately (the prompt appears). The alternative considered was
+`permissions.deny`, which unlists the tool entirely and is absolutely
+stall-proof, but costs the capability outright.
 
 ## Upstream
 
-`anthropics/claude-code#81362` (open) documents the `suppressAlwaysAllowRule`
+`anthropics/claude-code#81362` (open) documents the same `suppressAlwaysAllowRule`
 literal and states that `permissions.allow` cannot affect this path. Related:
-`#79711`, `#79983` open; `#61015`, `#61027`, `#61044`, `#61097`, `#61143`
-closed while the behavior persists.
-
-If it is ever fixed so the retry conveys the approval — or so local rules are
-consulted — this becomes safe to revisit. Until then, re-adding the block
-reintroduces the failure.
+`#79711`, `#79983` open; `#61015`, `#61027`, `#61044`, `#61097`, `#61143` closed
+while the behavior persists. If it is ever fixed so the path consults local
+rules, this entry becomes redundant rather than wrong.

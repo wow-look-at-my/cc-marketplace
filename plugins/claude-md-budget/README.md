@@ -29,12 +29,6 @@ the web surface, and never to the model.
 
 Characters, not bytes — so `wc -c` overstates any file with non-ASCII text.
 
-The three are independent, and each report says which one fired. A file that is
-only unwrapped is reported as a width problem and told to wrap; it is never
-described as being at the budget wall, and it is never handed the extraction
-advice, because it has nothing to extract. A guard that overstates the finding
-gets skimmed on the run where the number is real.
-
 ## Why it watches files, not tool calls
 
 `tool_input.file_path` exists only for `Write`, `Edit` and `MultiEdit`. A
