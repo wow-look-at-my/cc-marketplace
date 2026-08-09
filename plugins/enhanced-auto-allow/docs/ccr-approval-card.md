@@ -106,6 +106,45 @@ needs one click beats a tool that always fails. If unattended scheduling
 matters, it needs a mechanism that does not route through this card — not an
 allowlist entry that deletes the click.
 
+## Nothing else automates it either — four dead ends, checked in the bundle
+
+Removing the block restores the click. The obvious next question is whether the
+click can be automated some other way. It cannot, and these are the four
+attempts worth not repeating:
+
+- **A local rule of any kind.** The retry hands `canUseTool` a pre-built
+  decision as its sixth argument, and the wrapper opens
+  `let u = c ?? (await p9t(...))`. With that argument present the rule engine is
+  never called, so `permissions.allow`, `permissions.deny`, the auto-mode
+  classifier, `dontAsk` and even `bypassPermissions` are not consulted. The
+  decision is hardcoded `behavior: "ask"`, so it always reaches the dialog.
+- **A `PermissionRequest` hook or an SDK `canUseTool` callback.** These are the
+  same function in the same argument position, so they behave identically: the
+  "allow" is local, it CANCELS the outstanding bridge request instead of
+  completing it, and the retry that follows is byte-identical. `args_sha256`
+  appears three times in the bundle and is only ever READ off the server's
+  error — the client has no call that sends a grant back.
+- **`--permission-prompt-tool`.** Setting `permissionPromptToolName` to
+  anything but `"stdio"` fails the `!(Vhe() && Vhe() !== "stdio")` term that
+  arms the retry, so no card appears, no retry happens, and the raw `-32003`
+  is rethrown. It removes the recovery path rather than automating it.
+- **Pre-approving the tools server-side.** `extra_allowed_tools` /
+  `extraAllowedTools` have ZERO occurrences in the bundle; `allowedTools` is a
+  purely local permission layer consumed by the same rule engine the retry
+  skips. No session-ingress or ccr-sessions request body carries a permission
+  or allowlist payload, so the client has no way to arm such a thing even if
+  the server supports it.
+
+The bridge round-trip a human's click completes is the only real network
+exchange in this whole flow, and it is the only path that produces a decision
+with `source: { type: "user" }`.
+
+Worth knowing for the day this gets fixed upstream: a genuine
+auto-resolve-by-polling-the-server mechanism already exists in the client
+(`serverApprovalWatch`), and it resolves an ask WITHOUT transmitting anything
+locally. It is wired to one unrelated feature and is simply not attached to the
+connector decision object. That, not a hook, is the shape a real fix takes.
+
 ## Upstream
 
 `anthropics/claude-code#81362` (open) documents the `suppressAlwaysAllowRule`
