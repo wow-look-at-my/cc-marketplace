@@ -152,9 +152,27 @@ func TestPostToolUseCatchesANamedEdit(t *testing.T) {
 	require.Contains(t, ctx, "OVER the 40,000-character budget")
 }
 
+// Off by default: an unwrapped file that is nowhere near the budget is not a
+// finding at all unless the width check is switched on.
+func TestWidthIsOffByDefault(t *testing.T) {
+	repo := isolate(t)
+	claude := filepath.Join(repo, "CLAUDE.md")
+	fire(t, map[string]any{"hook_event_name": "SessionStart", "session_id": "s", "cwd": repo})
+	writeFile(t, claude, "# ok\n\n"+strings.Repeat("word ", 200)+"\n")
+
+	require.Empty(t, fire(t, map[string]any{
+		"hook_event_name": "PostToolUse", "session_id": "s", "cwd": repo,
+		"tool_name": "Write", "tool_input": map[string]any{"file_path": claude},
+	}), "a small unwrapped file must report nothing while the width check is off")
+	require.Empty(t, fire(t, map[string]any{
+		"hook_event_name": "Stop", "session_id": "s", "cwd": repo,
+	}), "and must not block the end of the turn either")
+}
+
 // Width is an offense in its own right: a file can be well under budget and
-// still be unreviewable.
+// still be unreviewable. Opt-in via CC_CLAUDE_MD_WIDTH.
 func TestPostToolUseFlagsUnwrappedLines(t *testing.T) {
+	t.Setenv("CC_CLAUDE_MD_WIDTH", "1")
 	repo := isolate(t)
 	claude := filepath.Join(repo, "CLAUDE.md")
 	fire(t, map[string]any{"hook_event_name": "SessionStart", "session_id": "s", "cwd": repo})
