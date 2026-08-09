@@ -355,39 +355,21 @@ jobs:
         uses: wow-look-at-my/actions@typescript#latest
         with:
           script: |
-            // Drive real Claude Code against the marketplace this run published and
-            // install + update every plugin. Each entry points at an orphan tag this
-            // run pushed, so a tag that was never pushed -- or holds the wrong tree --
-            // fails here instead of for the first user who installs it.
+            // installs every plugin from the marketplace this run published; each entry points at an orphan tag this run pushed, so a tag that was never pushed -- or holds the wrong tree -- fails here instead of for the first user who installs it
             const branch = (env.GITHUB_REF_NAME ?? "").split("/").join("-");
             const runNumber = env.GITHUB_RUN_NUMBER ?? "";
             const mktUrl = `https://sites.pazer.build/cc-marketplace/branch/${branch}/marketplace.json`;
 
-            // -L is load-bearing: buildhost redirects /branch/<b>/ to the
-            // canonical /@<b>/, and without it curl returns the redirect body,
-            // which parses as no version at all and never converges.
+            // -L is load-bearing: buildhost redirects /branch/<b>/ to /@<b>/; without it curl returns the redirect body, which parses as no version and never converges
             async function fetchJson(url: string): Promise<any> {
               const r = await exec.getExecOutput("curl", ["-fsSL", "-m", "25", url], { silent: true, ignoreReturnCode: true });
               if (r.exitCode !== 0) return null;
               try { return JSON.parse(r.stdout); } catch { return null; }
             }
 
-            // NOTHING is done here to make cloning work, deliberately. A
-            // published plugin has to install for someone with no GitHub
-            // account -- no key, no token, no sign-in -- so this job installs
-            // exactly as that person would, and the marketplace has to hand out
-            // anonymously-cloneable https sources for it to succeed.
-            //
-            // This used to rewrite git@github.com: -> https:// because the
-            // `github` source type clones over SSH and a runner holds no key.
-            // That made the job green while every real consumer's CI died on
-            // "Permission denied (publickey)" -- the check passed precisely
-            // where it should have failed. The rewrite is gone; SSH is forced
-            // to fail outright so a future runner that happens to carry a key
-            // cannot quietly restore the illusion.
+            // nothing here makes cloning work over SSH, deliberately -- a published plugin must install for someone with no GitHub account, so SSH is forced to fail rather than let a runner with a key silently mask a source that requires one
             await $`git config --global core.sshCommand ${'false'}`;
-            // Wait for the marketplace this run published (metadata.version mirrors
-            // the run number, see update_marketplace.go) to go live on buildhost.
+            // waits for the marketplace this run published (metadata.version mirrors the run number, see update_marketplace.go) to go live on buildhost
             let mkt: any = null;
             for (let attempt = 1; attempt <= 30; attempt++) {
               const j = await fetchJson(mktUrl);
@@ -398,10 +380,7 @@ jobs:
             }
             if (!mkt) throw new Error(`marketplace did not reach v${runNumber} at ${mktUrl}`);
 
-            // Every published source must be anonymously cloneable. The install
-            // below would catch a regression too, but only as a confusing clone
-            // failure; this names it, and it holds even on a machine that does
-            // have a key.
+            // every published source must be anonymously cloneable; the install below would also catch a regression, but only as a confusing clone failure -- this names it explicitly
             const bad = (mkt.plugins ?? [])
               .map((pl: any) => [pl.name, pl.source] as const)
               .filter(([, s]: any) => !s || s.source !== 'url' || typeof s.url !== 'string' || !s.url.startsWith('https://'));
@@ -437,13 +416,7 @@ jobs:
 
             await $`claude plugin list`;
 
-            // Every entry must name a git ref this run pushed. An entry that
-            // still carries a registry URL would mean update-marketplace fell
-            // back to the old npm shape, which installs from somewhere this run
-            // never published to. "url" (an explicit https:// URL, no SSH
-            // branch) is the source shape update-marketplace emits; "github"
-            // would mean it regressed to the SSH-cloning shape that fails on
-            // every runner with no key.
+            // every entry must name a git ref this run pushed: "url" (an explicit https:// URL, no SSH) is what update-marketplace emits; "github" would mean it regressed to the SSH-cloning shape that fails on a runner with no key
             const wrong = (mkt.plugins ?? []).filter((p: any) => p?.source?.source !== "url" || !p?.source?.ref);
             if (wrong.length > 0) {
               throw new Error(`not a url git source: ${wrong.map((p: any) => p.name).join(" ")}`);
