@@ -145,6 +145,28 @@ auto-resolve-by-polling-the-server mechanism already exists in the client
 locally. It is wired to one unrelated feature and is simply not attached to the
 connector decision object. That, not a hook, is the shape a real fix takes.
 
+## What still works unattended, and what genuinely does not
+
+The gate is on the TOOLS, not on the capabilities behind most of them, and the
+difference decides whether a session is actually blocked:
+
+- **Reading another org repo** -- `add_repo` prompts, but the session's git
+  credential path is NOT limited to the declared Repository Scope, so a plain
+  `git clone https://github.com/<org>/<repo>.git` just works with no prompt
+  (verified). What is lost is registration: the clone's CLAUDE.md, skills and
+  plugins are not loaded, because `register_repo_root` is gated too.
+- **Watching a PR** -- use `mcp__github__subscribe_pr_activity`, which is on a
+  different server and not gated.
+- **Listing repos / environments** -- `gh repo list` and the like.
+- **`send_later`** -- no substitute exists. This is the one capability the gate
+  genuinely removes, and it is the one that mattered: a tool whose entire
+  purpose is firing in a session nobody is watching cannot be used at all when
+  every call needs a human. Use the `/loop` skill for a recurring cadence
+  instead, and never arm a wake-up that assumes the call succeeded.
+
+So the honest summary is not "CCR is broken" but "one CCR capability is gone
+and the rest have unprompted equivalents".
+
 ## Upstream
 
 `anthropics/claude-code#81362` (open) documents the `suppressAlwaysAllowRule`
