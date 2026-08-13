@@ -17,11 +17,18 @@ import (
 // hookInput is the payload Claude Code delivers on stdin. Every field is
 // optional: absent cwd falls back to the process's, and an absent event means
 // the session-start census, so the hook still works driven by hand.
+//
+// FullScan is never sent by Claude Code -- no real hook_event_name collides
+// with it, and it needs none of the three real events' session-scoped state
+// (a marker, a size+mtime snapshot). It exists for exactly one caller: a CI
+// job that wants a real pass/fail signal for a whole tree, not advisory JSON
+// for whatever files a live session happened to load or touch.
 type hookInput struct {
 	CWD            string `json:"cwd"`
 	HookEventName  string `json:"hook_event_name"`
 	SessionID      string `json:"session_id"`
 	StopHookActive bool   `json:"stop_hook_active"`
+	FullScan       bool   `json:"full_scan"`
 	ToolInput      struct {
 		FilePath string `json:"file_path"`
 	} `json:"tool_input"`
@@ -49,15 +56,16 @@ func cwdOrDot() string {
 	return "."
 }
 
-// findOffenders is the session-start census: size only. Width is judged on what
-// a session WRITES (see editReport) -- listing every pre-existing unwrapped file
-// at session start buries the one file that matters under forty that do not,
-// which is how a guard teaches the model to skim past it.
+// findOffenders is the session-start census: the same recursive walk
+// full_scan uses (allCandidatePaths), reported size only. Width is judged on
+// what a session WRITES (see editReport) -- listing every pre-existing
+// unwrapped file at session start buries the one file that matters under
+// forty that do not, which is how a guard teaches the model to skim past it.
 func findOffenders(cwd string, limit int) []offender {
 	floor := nearLimit(limit)
 	seen := map[string]bool{}
 	var offenders []offender
-	for _, path := range candidates(cwd) {
+	for _, path := range allCandidatePaths(cwd) {
 		key, err := filepath.Abs(path)
 		if err != nil || seen[key] {
 			continue
@@ -152,31 +160,52 @@ func stopBlock(in hookInput, limit int) string {
 	return stopReason(still, limit)
 }
 
-// run returns the stdout payload for a given event.
-func run(r io.Reader) string {
+// run returns the stdout payload and process exit code for a given input.
+// Every real Claude Code event always exits 0 -- a size check must never
+// break a session or a turn, so nothing here can fail a caller that reads
+// only the JSON. full_scan is the one path that means anything by its exit
+// code: it is not a session hook, it is CI, and CI needs a real signal.
+func run(r io.Reader) (string, int) {
 	limit := budget()
 	if limit == 0 {
-		return "" // explicitly disabled
+		return "", 0 // explicitly disabled
 	}
 	raw, _ := io.ReadAll(r)
 	in := parseInput(raw)
+
+	if in.FullScan {
+		offenders := fullScanOffenders(in.CWD, limit)
+		if len(offenders) == 0 {
+			return "", 0
+		}
+		exit := 0
+		for _, o := range offenders {
+			if o.Chars > limit {
+				exit = 1
+				break
+			}
+		}
+		// Plain text, not the hookSpecificOutput envelope: the reader here is
+		// a CI log, not Claude Code's hook protocol.
+		return sessionReport(offenders, limit) + "\n", exit
+	}
 
 	switch in.HookEventName {
 	case "Stop":
 		reason := stopBlock(in, limit)
 		if reason == "" {
-			return ""
+			return "", 0
 		}
-		return encode(map[string]any{"decision": "block", "reason": reason})
+		return encode(map[string]any{"decision": "block", "reason": reason}), 0
 	case "PostToolUse":
-		return context(in.HookEventName, editReport(in, limit))
+		return context(in.HookEventName, editReport(in, limit)), 0
 	default:
 		seedSnapshot(in.SessionID, in.CWD)
 		offenders := findOffenders(in.CWD, limit)
 		if len(offenders) == 0 {
-			return ""
+			return "", 0
 		}
-		return context(in.HookEventName, sessionReport(offenders, limit))
+		return context(in.HookEventName, sessionReport(offenders, limit)), 0
 	}
 }
 
@@ -210,7 +239,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "claude-md-budget: reporting nothing: %v\n", r)
 		}
 	}()
-	if out := run(os.Stdin); out != "" {
+	out, code := run(os.Stdin)
+	if out != "" {
 		fmt.Print(out)
 	}
+	os.Exit(code)
 }
