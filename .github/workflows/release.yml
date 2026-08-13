@@ -165,9 +165,13 @@ jobs:
       # taking the (uncontested, uniquely-numbered) version tag down with it.
       # A retry re-runs the handshake against current remote state, so it
       # only fails again if it loses the SAME race a second (or third) time.
+      #
+      # `{plugin}#latest` is one shared, mutable ref every session in the org
+      # fetches -- not a per-branch target -- so only master may move it; a
+      # feature-branch push still builds and tests, it just never publishes.
       - name: Publish orphan tag
         id: publish
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         continue-on-error: true
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
@@ -178,7 +182,9 @@ jobs:
 
       - name: Publish orphan tag (retry 1)
         id: publish_retry1
-        if: github.event_name == 'push' && steps.publish.outcome == 'failure'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          steps.publish.outcome == 'failure'
         continue-on-error: true
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
@@ -191,7 +197,7 @@ jobs:
       # failure, not more races -- fail loud rather than retry forever.
       - name: Publish orphan tag (retry 2)
         if: >-
-          github.event_name == 'push' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
           steps.publish.outcome == 'failure' &&
           steps.publish_retry1.outcome == 'failure'
         uses: wow-look-at-my/actions@orphan-release#latest
