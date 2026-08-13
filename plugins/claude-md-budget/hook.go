@@ -56,15 +56,16 @@ func cwdOrDot() string {
 	return "."
 }
 
-// findOffenders is the session-start census: size only. Width is judged on what
-// a session WRITES (see editReport) -- listing every pre-existing unwrapped file
-// at session start buries the one file that matters under forty that do not,
-// which is how a guard teaches the model to skim past it.
+// findOffenders is the session-start census: the same recursive walk
+// full_scan uses (allCandidatePaths), reported size only. Width is judged on
+// what a session WRITES (see editReport) -- listing every pre-existing
+// unwrapped file at session start buries the one file that matters under
+// forty that do not, which is how a guard teaches the model to skim past it.
 func findOffenders(cwd string, limit int) []offender {
 	floor := nearLimit(limit)
 	seen := map[string]bool{}
 	var offenders []offender
-	for _, path := range candidates(cwd) {
+	for _, path := range allCandidatePaths(cwd) {
 		key, err := filepath.Abs(path)
 		if err != nil || seen[key] {
 			continue

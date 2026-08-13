@@ -408,13 +408,28 @@ func TestNoSessionIDDoesNotWedge(t *testing.T) {
 	require.Empty(t, fire(t, map[string]any{"hook_event_name": "Stop", "cwd": repo}))
 }
 
+// TestSessionStartFindsNestedOffender is the case that once let a real
+// violation through unseen: the census used to guess one level of siblings
+// from cwd, so a file two directories down never entered it, and only a CI
+// job's separate hand-rolled walk ever caught it. SessionStart now shares
+// full_scan's recursive walk (allCandidatePaths -> claudeMdFiles), so there
+// is no shallower mode left for a live session to fall back to.
+func TestSessionStartFindsNestedOffender(t *testing.T) {
+	repo := isolate(t)
+	nested := filepath.Join(repo, "src", "hooks", "pr-resolve", "CLAUDE.md")
+	writeFile(t, nested, wrapped(45000))
+
+	ctx := additionalContext(t, fire(t, map[string]any{
+		"hook_event_name": "SessionStart", "session_id": "s", "cwd": repo,
+	}))
+	require.Contains(t, ctx, "BUDGET EXCEEDED")
+	require.Contains(t, ctx, nested)
+}
+
 // ---- full_scan: the CI-oriented sweep, never sent by Claude Code ----
 
-// TestFullScanFindsNestedOffender is the case that let a real violation
-// through unseen: candidates() only guesses one level of siblings from cwd,
-// so a file two directories down never entered the census. A CI job walking
-// the whole tree by hand caught it; full_scan is that walk, sharing the same
-// measure()/budget().
+// TestFullScanFindsNestedOffender proves full_scan and SessionStart
+// (TestSessionStartFindsNestedOffender above) see the same tree.
 func TestFullScanFindsNestedOffender(t *testing.T) {
 	repo := isolate(t)
 	nested := filepath.Join(repo, "src", "hooks", "pr-resolve", "CLAUDE.md")

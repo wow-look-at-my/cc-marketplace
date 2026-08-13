@@ -76,12 +76,12 @@ Set `CC_CLAUDE_MD_WIDTH=1` to switch the line-width check back on.
 
 The three hooks above cover a live Claude Code session. A push from anything
 else -- a bot, a merge-train branch, a plain `git push` -- never runs a
-session, so nothing above ever sees it. `full_scan` is for that case: it
-walks the whole tree (skipping `.git`/`node_modules`) instead of the one
-level of siblings `SessionStart` guesses at, and it means its exit code --
-0 clean, 1 a file is genuinely over budget, never on a file merely near the
-wall -- because this input is never sent by Claude Code and answers to a
-different caller.
+session, so nothing above ever sees it. `full_scan` is for that case: same
+walk (skipping `.git`/`node_modules`) as every other event -- there is no
+shallower mode to fall back to -- but it means its exit code -- 0 clean, 1 a
+file is genuinely over budget, never on a file merely near the wall --
+because this input is never sent by Claude Code and answers to a different
+caller.
 
 ```bash
 printf '{"full_scan": true, "cwd": "%s"}' "$PWD" | claude-md-budget
