@@ -47,3 +47,4 @@ rather than the vibe. Verify every claim against upstream docs before writing it
 /plugin marketplace add wow-look-at-my/cc-marketplace
 /plugin install docs
 ```
+
