@@ -1,0 +1,34 @@
+{
+  "name": "comment-truth",
+  "version": "1076",
+  "tag": "comment-truth#1076",
+  "pluginJson": {
+    "author": {
+      "name": "wow-look-at-my-code"
+    },
+    "description": "Stop hook that checks whether the comments this session WROTE are true. Scoped to the session's diff, then three passes: names a comment cites must resolve, figures must agree with the doc the comment itself cites (rounding-aware), and epistemic hedges are unverified claims. What needs reading comprehension goes to an external model with the evidence already resolved -- one bounded call, no repo exploration. No API key = the mechanical passes still block.",
+    "hooks": {
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/comment-truth",
+              "timeout": 120,
+              "type": "command"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": [
+      "stop",
+      "comments",
+      "accuracy",
+      "verification",
+      "hook",
+      "review"
+    ],
+    "name": "comment-truth",
+    "version": "1076"
+  }
+}
