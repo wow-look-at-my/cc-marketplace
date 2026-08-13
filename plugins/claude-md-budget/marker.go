@@ -104,7 +104,7 @@ func seedSnapshot(sessionID, cwd string) {
 
 func snapshot(cwd string) map[string]string {
 	seen := map[string]string{}
-	for _, path := range candidates(cwd) {
+	for _, path := range allCandidatePaths(cwd) {
 		key, err := filepath.Abs(path)
 		if err != nil {
 			continue
