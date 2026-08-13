@@ -181,6 +181,44 @@ func candidates(cwd string) []string {
 	return out
 }
 
+// fullScanOffenders walks root recursively for every CLAUDE.md, the sweep a
+// CI job needs and no interactive hook does: candidates() above guesses one
+// level of siblings from cwd -- the files a fresh session would plausibly
+// load first -- never a file two directories down (src/hooks/x/CLAUDE.md),
+// which is exactly the shape that let a real violation through the plugin
+// unseen and only the CI job's own duplicate walk ever caught.
+func fullScanOffenders(root string, limit int) []offender {
+	floor := nearLimit(limit)
+	var offenders []offender
+	var walk func(dir string)
+	walk = func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				if e.Name() == ".git" || e.Name() == "node_modules" {
+					continue
+				}
+				walk(filepath.Join(dir, e.Name()))
+				continue
+			}
+			if e.Name() != "CLAUDE.md" {
+				continue
+			}
+			path := filepath.Join(dir, e.Name())
+			chars, wide, ok := measure(path)
+			if ok && chars >= floor {
+				offenders = append(offenders, offender{Path: path, Chars: chars, Wide: wide})
+			}
+		}
+	}
+	walk(root)
+	worstFirst(offenders)
+	return offenders
+}
+
 // nearLimit is the "no room left" floor.
 func nearLimit(limit int) int {
 	n := int(float64(limit) * nearFraction)

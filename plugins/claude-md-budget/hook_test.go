@@ -39,6 +39,14 @@ func wrapped(n int) string {
 
 func fire(t *testing.T, payload map[string]any) string {
 	t.Helper()
+	out, _ := fireCode(t, payload)
+	return out
+}
+
+// fireCode is fire plus the exit code, for full_scan: the only path where the
+// code carries a real signal instead of always being 0.
+func fireCode(t *testing.T, payload map[string]any) (string, int) {
+	t.Helper()
 	data, err := json.Marshal(payload)
 	require.NoError(t, err)
 	return run(strings.NewReader(string(data)))
@@ -398,4 +406,70 @@ func TestNoSessionIDDoesNotWedge(t *testing.T) {
 	// The census still reports; the Stop gate has nothing to consult.
 	require.NotEmpty(t, fire(t, map[string]any{"hook_event_name": "SessionStart", "cwd": repo}))
 	require.Empty(t, fire(t, map[string]any{"hook_event_name": "Stop", "cwd": repo}))
+}
+
+// ---- full_scan: the CI-oriented sweep, never sent by Claude Code ----
+
+// TestFullScanFindsNestedOffender is the case that let a real violation
+// through unseen: candidates() only guesses one level of siblings from cwd,
+// so a file two directories down never entered the census. A CI job walking
+// the whole tree by hand caught it; full_scan is that walk, sharing the same
+// measure()/budget().
+func TestFullScanFindsNestedOffender(t *testing.T) {
+	repo := isolate(t)
+	nested := filepath.Join(repo, "src", "hooks", "pr-resolve", "CLAUDE.md")
+	writeFile(t, nested, wrapped(45000))
+
+	out, code := fireCode(t, map[string]any{"full_scan": true, "cwd": repo})
+	require.Equal(t, 1, code, "a genuinely over-budget file must exit non-zero")
+	require.Contains(t, out, "BUDGET EXCEEDED")
+	require.Contains(t, out, nested)
+}
+
+func TestFullScanCleanTreeExitsZeroSilently(t *testing.T) {
+	repo := isolate(t)
+	writeFile(t, filepath.Join(repo, "src", "hooks", "x", "CLAUDE.md"), "short")
+
+	out, code := fireCode(t, map[string]any{"full_scan": true, "cwd": repo})
+	require.Equal(t, 0, code)
+	require.Empty(t, out)
+}
+
+// TestFullScanNearWallDoesNotFailTheBuild: a file AT the wall but not over is
+// worth naming in the log, exactly like the SessionStart census -- but it
+// must not flip CI red, because that would be a behavior CI does not have
+// today failing builds that currently pass.
+func TestFullScanNearWallDoesNotFailTheBuild(t *testing.T) {
+	repo := isolate(t)
+	writeFile(t, filepath.Join(repo, "CLAUDE.md"), wrapped(39500)) // 98.75% of 40,000
+
+	out, code := fireCode(t, map[string]any{"full_scan": true, "cwd": repo})
+	require.Equal(t, 0, code, "near the wall is a warning, not a violation")
+	require.Contains(t, out, "BUDGET WALL")
+}
+
+// TestFullScanSkipsGitAndNodeModules: a vendored or object-database CLAUDE.md
+// (a fixture, a dependency's docs) must not fail someone else's build.
+func TestFullScanSkipsGitAndNodeModules(t *testing.T) {
+	repo := isolate(t)
+	writeFile(t, filepath.Join(repo, ".git", "CLAUDE.md"), wrapped(50000))
+	writeFile(t, filepath.Join(repo, "node_modules", "dep", "CLAUDE.md"), wrapped(50000))
+	writeFile(t, filepath.Join(repo, "CLAUDE.md"), "short")
+
+	out, code := fireCode(t, map[string]any{"full_scan": true, "cwd": repo})
+	require.Equal(t, 0, code)
+	require.Empty(t, out)
+}
+
+// TestFullScanRespectsBudgetOverride: full_scan shares budget() with every
+// other path, so CC_CLAUDE_MD_BUDGET=0 disables it too, exactly like a real
+// session.
+func TestFullScanRespectsBudgetOverride(t *testing.T) {
+	repo := isolate(t)
+	t.Setenv("CC_CLAUDE_MD_BUDGET", "0")
+	writeFile(t, filepath.Join(repo, "CLAUDE.md"), wrapped(90000))
+
+	out, code := fireCode(t, map[string]any{"full_scan": true, "cwd": repo})
+	require.Equal(t, 0, code)
+	require.Empty(t, out)
 }
