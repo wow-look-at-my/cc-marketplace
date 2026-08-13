@@ -167,15 +167,18 @@ jobs:
       # only fails again if it loses the SAME race a second (or third) time.
       #
       # `{plugin}#latest` is one shared, mutable ref every session in the org
-      # fetches, so it must never resolve to an unreviewed branch's content --
-      # but that is enforced inside orphan-release.sh itself (it only ever
-      # moves #latest from master/main), not by gating this step. Every push
-      # still runs this step: on a feature branch it publishes only the
-      # immutable numbered tag, which is what lets smoke-test below install
-      # and verify a real release on every branch, not just master.
+      # fetches, so it must never resolve to an unreviewed branch's content.
+      # orphan-release.sh itself now enforces that -- it only ever moves
+      # #latest from master/main -- but the fix (wow-look-at-my/actions#145)
+      # has not reached the orphan-release#latest tag this step resolves yet.
+      # TEMPORARY: keep this step master-only until #145 merges and
+      # republishes; then drop this ref check again, since every push can
+      # safely publish just the immutable numbered tag once the action
+      # itself is safe (that's what lets smoke-test below install and verify
+      # a real release on every branch, not just master).
       - name: Publish orphan tag
         id: publish
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         continue-on-error: true
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
@@ -186,7 +189,9 @@ jobs:
 
       - name: Publish orphan tag (retry 1)
         id: publish_retry1
-        if: github.event_name == 'push' && steps.publish.outcome == 'failure'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          steps.publish.outcome == 'failure'
         continue-on-error: true
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
@@ -199,7 +204,7 @@ jobs:
       # failure, not more races -- fail loud rather than retry forever.
       - name: Publish orphan tag (retry 2)
         if: >-
-          github.event_name == 'push' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
           steps.publish.outcome == 'failure' &&
           steps.publish_retry1.outcome == 'failure'
         uses: wow-look-at-my/actions@orphan-release#latest
