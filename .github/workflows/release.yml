@@ -152,48 +152,8 @@ jobs:
       # The version comes from release-plugin rather than the action's own
       # auto-increment, because the manifest inside this tree already records
       # the tag and marketplace.json pins it -- the two must agree.
-      #
-      # This step is retried up to 3 times. Version numbers come from
-      # GITHUB_RUN_NUMBER, which GitHub guarantees unique per run -- so two
-      # concurrent runs never compute the same version, and there is never a
-      # real content conflict to resolve. What DOES happen under concurrency:
-      # orphan-release.sh force-pushes `#latest` and the version tag together
-      # in one atomic push, and even a forced push carries the old-SHA the
-      # client observed at handshake time -- if another run moves `#latest`
-      # in the narrow window between our handshake and our push, GitHub's
-      # atomic ref-transaction rejects the WHOLE push ("cannot lock ref"),
-      # taking the (uncontested, uniquely-numbered) version tag down with it.
-      # A retry re-runs the handshake against current remote state, so it
-      # only fails again if it loses the SAME race a second (or third) time.
       - name: Publish orphan tag
-        id: publish
         if: github.event_name == 'push'
-        continue-on-error: true
-        uses: wow-look-at-my/actions@orphan-release#latest
-        with:
-          source: ${{ steps.release.outputs.source_dir }}
-          name: ${{ matrix.plugin }}
-          version: ${{ steps.release.outputs.version }}
-          message: ${{ steps.release.outputs.message }}
-
-      - name: Publish orphan tag (retry 1)
-        id: publish_retry1
-        if: github.event_name == 'push' && steps.publish.outcome == 'failure'
-        continue-on-error: true
-        uses: wow-look-at-my/actions@orphan-release#latest
-        with:
-          source: ${{ steps.release.outputs.source_dir }}
-          name: ${{ matrix.plugin }}
-          version: ${{ steps.release.outputs.version }}
-          message: ${{ steps.release.outputs.message }}
-
-      # No continue-on-error: a third loss in a row is treated as a real
-      # failure, not more races -- fail loud rather than retry forever.
-      - name: Publish orphan tag (retry 2)
-        if: >-
-          github.event_name == 'push' &&
-          steps.publish.outcome == 'failure' &&
-          steps.publish_retry1.outcome == 'failure'
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
           source: ${{ steps.release.outputs.source_dir }}
