@@ -34,11 +34,12 @@ func TestDeniesThroughMoreWrappers(t *testing.T) {
 		"nohup git reset --hard",
 		"setsid git reset --hard",
 		"nice git reset --hard",
-		"nice -n 10 git reset --hard",     // the value must not be read as the program
-		"ionice -c 3 git reset --hard",    //
-		"env -u FOO git reset --hard",     //
-		"sudo -u root git reset --hard",   //
-		"echo x | xargs -n 1 git checkout", //
+		// The flag values below must not be mistaken for the program.
+		"nice -n 10 git reset --hard",
+		"ionice -c 3 git reset --hard",
+		"env -u FOO git reset --hard",
+		"sudo -u root git reset --hard",
+		"echo x | xargs -n 1 git checkout",
 	} {
 		require.NotEmpty(t, ask(t, dir, c), "expected DENY for %q", c)
 	}
