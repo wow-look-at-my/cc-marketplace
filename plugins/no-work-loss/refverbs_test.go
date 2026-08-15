@@ -105,7 +105,7 @@ func TestAllowsForcePushWhenTheOldTipSurvivesOnAnotherBranch(t *testing.T) {
 	git(t, dir, "commit", "-qm", "second")
 	git(t, dir, "push", "-q", "origin", "HEAD:master")
 
-	git(t, dir, "branch", "-q", "rescue")  // keeps the commit reachable
+	git(t, dir, "branch", "-q", "rescue") // keeps the commit reachable
 	git(t, dir, "reset", "-q", "--hard", "HEAD~1")
 
 	allowed(t, dir, "git push --force origin master")
