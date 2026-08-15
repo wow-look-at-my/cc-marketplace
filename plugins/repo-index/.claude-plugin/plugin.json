@@ -1,0 +1,24 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "repo-index",
+	"description": "Suggests the repository that already solves the job. Matches each prompt against an index built from the GitHub API -- names, topics, and each repository's own description -- and injects the link and description of each relevant one, at most once per session.",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["repo", "index", "discovery", "suggest", "hook", "userpromptsubmit", "context"],
+	"hooks": {
+		"UserPromptSubmit": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/repo-index"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
