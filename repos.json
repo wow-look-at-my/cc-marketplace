@@ -1,0 +1,116 @@
+{
+	"repos": [
+		{
+			"description": "Universal package registry. Upload a release artifact once, then download it as a raw binary, tar.gz/xz/zst, zip, deb, Homebrew formula, npm package, or OCI image. Also serves per-branch static sites. Live instance: pazer.build.",
+			"match": [
+				"buildhost",
+				"pazer.build",
+				"package registry",
+				"artifact registry",
+				"release artifact",
+				"publish a binary",
+				"publish binaries",
+				"prebuilt binary",
+				"apt repository",
+				"homebrew tap"
+			],
+			"name": "wow-look-at-my/buildhost",
+			"url": "https://github.com/wow-look-at-my/buildhost"
+		},
+		{
+			"description": "The org's single entry point for building, testing, and tidying Go. Replaces every bare go command, downloads its own toolchain, auto-formats, and ships a GitHub Action that runs the same code CI runs.",
+			"match": [
+				"go-toolchain",
+				"go build",
+				"go test",
+				"go mod tidy",
+				"gofmt",
+				"goimports",
+				"go.mod",
+				"golang ci"
+			],
+			"name": "wow-look-at-my/go-toolchain",
+			"url": "https://github.com/wow-look-at-my/go-toolchain"
+		},
+		{
+			"description": "Reusable GitHub Actions, one per directory, each published to its own orphan tag such as @typescript#latest. Covers typed inline TypeScript steps, caching, GHCR, secret fetching, and release downloads.",
+			"match": [
+				"wow-look-at-my/actions",
+				"github action",
+				"github actions",
+				"composite action",
+				"reusable workflow",
+				"workflow step",
+				"actions/upload-artifact",
+				"actions/download-artifact"
+			],
+			"name": "wow-look-at-my/actions",
+			"url": "https://github.com/wow-look-at-my/actions"
+		},
+		{
+			"description": "Browser ES modules served straight from GitHub Pages: vector and matrix math, noise and sampling, WebGPU and WebGL2 helpers, and custom elements such as code-editor, perf-graph, and timeline-view. Import by URL, no bundler.",
+			"match": [
+				"js-snippets",
+				"webgpu",
+				"webgl",
+				"wgsl",
+				"custom element",
+				"web component",
+				"shader helper"
+			],
+			"name": "wow-look-at-my/js-snippets",
+			"url": "https://github.com/wow-look-at-my/js-snippets"
+		},
+		{
+			"description": "Read-only secret vending for CI. Authenticates a caller by GitHub Actions OIDC token and exports every secret that caller is entitled to. There is no matching GitHub Actions secret to configure.",
+			"match": [
+				"secret-server",
+				"secrets.pazer.io",
+				"PRIVATE_ORG_REPO_READ",
+				"oidc token",
+				"fetch a secret",
+				"private module access"
+			],
+			"name": "wow-look-at-my/secret-server",
+			"url": "https://github.com/wow-look-at-my/secret-server"
+		},
+		{
+			"description": "Pure-Go XML 1.1 parser and XSD validator, strict by construction, with a GitHub Action that validates using the same binary. Chosen over libxml2 because libxml2 is not an XML 1.1 processor.",
+			"match": [
+				"xml-validator",
+				"xsd",
+				"xml schema",
+				"validate xml",
+				"xmllint",
+				"libxml2"
+			],
+			"name": "wow-look-at-my/xml-validator",
+			"url": "https://github.com/wow-look-at-my/xml-validator"
+		},
+		{
+			"description": "The org's Claude Code plugin marketplace. Each plugin is a directory with a plugin.json; CI builds it, publishes it to the npm registry on buildhost, and smoke-tests the published marketplace.",
+			"match": [
+				"cc-marketplace",
+				"claude code plugin",
+				"claude plugin",
+				"plugin marketplace",
+				"UserPromptSubmit",
+				"PreToolUse hook"
+			],
+			"name": "wow-look-at-my/cc-marketplace",
+			"url": "https://github.com/wow-look-at-my/cc-marketplace"
+		},
+		{
+			"description": "GitHub Action that deploys a pull request preview to GitHub Pages, comments the URL and a QR code on the pull request, and removes the preview when the pull request closes.",
+			"match": [
+				"pr-preview-action",
+				"pr preview",
+				"preview deployment",
+				"github pages",
+				"deploy preview"
+			],
+			"name": "PazerOP/pr-preview-action",
+			"url": "https://github.com/PazerOP/pr-preview-action"
+		}
+	]
+}

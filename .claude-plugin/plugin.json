@@ -1,0 +1,29 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Suggests the org repository that already solves the job. Matches each prompt against an index of repos and injects the link and one description for each relevant one, at most once per session.",
+	"hooks": {
+		"UserPromptSubmit": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/repo-index",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"repo",
+		"index",
+		"discovery",
+		"suggest",
+		"hook",
+		"userpromptsubmit",
+		"context"
+	],
+	"name": "repo-index",
+	"version": "1089"
+}
