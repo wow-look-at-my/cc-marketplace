@@ -1,0 +1,40 @@
+{
+  "name": "no-work-loss",
+  "version": "1098",
+  "tag": "no-work-loss#1098",
+  "pluginJson": {
+    "author": {
+      "name": "mhaynie"
+    },
+    "description": "Refuses any Bash command that would destroy content existing only in the working tree - reset --hard, checkout/switch onto a dirty tree, clean, restore, stash drop/clear, force push, and rm/mv/tee/truncate/\u003e aimed at a modified or untracked file - after reading the repository's real state rather than trusting the command's shape",
+    "hooks": {
+      "PreToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/no-work-loss",
+              "type": "command"
+            }
+          ],
+          "matcher": "Bash"
+        }
+      ]
+    },
+    "keywords": [
+      "git",
+      "guard",
+      "hook",
+      "pretooluse",
+      "uncommitted",
+      "worktree",
+      "reset",
+      "checkout",
+      "clean",
+      "stash",
+      "force-push",
+      "data-loss"
+    ],
+    "name": "no-work-loss",
+    "version": "1098"
+  }
+}
