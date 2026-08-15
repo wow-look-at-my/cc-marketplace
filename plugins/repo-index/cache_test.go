@@ -25,6 +25,44 @@ func TestCacheRoundTrip(t *testing.T) {
 	assert.True(t, want.FetchedAt.Equal(got.FetchedAt))
 }
 
+// The index carries the names and descriptions of every repository the user
+// can see, private ones included. It is theirs, and it stays on their disk
+// readable by them alone. These modes are the whole protection, so they are
+// asserted rather than assumed.
+func TestTheIndexIsReadableOnlyByItsOwner(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "")
+	home := t.TempDir()
+	require.NoError(t, writeCache(home, cache{FetchedAt: epoch, Repos: []Repo{{Name: "private/thing"}}}))
+	require.True(t, claimRefresh(home, epoch))
+
+	dir, err := os.Stat(cacheDir(home))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), dir.Mode().Perm(), "the cache directory must not be listable by others")
+
+	for _, path := range []string{cachePath(home), lockPath(home)} {
+		info, err := os.Stat(path)
+		require.NoError(t, err, path)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "%s must not be readable by others", path)
+	}
+}
+
+// A temporary file is a real file for as long as it exists. It must not be the
+// one moment the index is world readable.
+func TestTheIndexIsNeverBrieflyWorldReadable(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "")
+	home := t.TempDir()
+	require.NoError(t, os.MkdirAll(cacheDir(home), 0o700))
+
+	tmp, err := os.CreateTemp(cacheDir(home), "index-*.json")
+	require.NoError(t, err)
+	defer os.Remove(tmp.Name())
+	require.NoError(t, tmp.Close())
+
+	info, err := os.Stat(tmp.Name())
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
 func TestCacheHonoursXDGCacheHome(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", xdg)

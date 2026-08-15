@@ -105,4 +105,26 @@ func TestSpawnRefreshStartsThisBinaryAndReturns(t *testing.T) {
 
 	require.NoError(t, spawnRefresh(home, t.TempDir()))
 	assert.Equal(t, filepath.Join(cacheDir(home), "refresh.log"), refreshLog(home))
+
+	// The report names every repository the refresh saw, so the log it lands
+	// in is as private as the index itself.
+	info, err := os.Stat(refreshLog(home))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
+// The refresh writes only under the cache directory. A cache that landed in
+// the plugin's own directory would be packaged into the published plugin.
+func TestRefreshWritesNothingIntoTheWorkingDirectory(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "")
+	apiFor(t, []repo{repoFixture("widget-press", "Stamps widgets.", "widgets")})
+
+	e, _, _ := testEnv(t)
+	writeConfig(t, e.home, `{"owners":["acme"]}`)
+	cwd := t.TempDir()
+	require.NoError(t, refresh(e, cwd, epoch))
+
+	left, err := os.ReadDir(cwd)
+	require.NoError(t, err)
+	assert.Empty(t, left, "the refresh must leave nothing behind where it ran")
 }
