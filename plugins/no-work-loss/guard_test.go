@@ -146,12 +146,15 @@ func TestDeniesCheckoutDashDashDot(t *testing.T) {
 	denied(t, dir, "git checkout -- .")
 }
 
-// A force push destroys history that lives in nobody else's reflog, so it is
-// refused on state the hook cannot see -- hence a clean tree here.
-func TestDeniesForcePushEvenOnCleanTree(t *testing.T) {
+// A force push is judged on whether the remote's commits survive elsewhere,
+// not on the working tree. With no remote-tracking ref there is nothing local
+// saying what the remote holds, so it cannot be verified and is refused.
+// The recoverable/unrecoverable split is covered in refverbs_test.go against a
+// real remote.
+func TestDeniesForcePushThatCannotBeVerified(t *testing.T) {
 	dir := newRepo(t)
 	r := denied(t, dir, "git push --force origin master")
-	assert.Contains(t, r, "--force-with-lease")
+	assert.Contains(t, r, "git fetch")
 }
 
 func TestDeniesAliasHidingResetHard(t *testing.T) {

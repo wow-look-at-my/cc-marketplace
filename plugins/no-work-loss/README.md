@@ -24,9 +24,20 @@ Refused when the repository actually has something to lose:
 | `git rebase` / `merge` / `cherry-pick` / `revert` | the tree is dirty |
 | `rm`, `mv`, `tee`, `truncate -s 0`, `> file` | the target is modified or untracked |
 
-Refused unconditionally, since no local state makes them recoverable: `push --force` / `--delete` / `--mirror` /
-`+refspec`, `branch -D` / `-M`, `reflog expire` / `delete`, `update-ref -d`, `filter-branch`,
-`worktree remove --force`.
+Ref-destroying commands are judged on whether the commits survive somewhere else, not on the verb:
+
+| Command | Refused when |
+|---|---|
+| `branch -D` / `-M`, `update-ref -d` | no other ref contains the tip |
+| `push --force` / `+refspec` | the remote tip is neither an ancestor of what you push nor held by another ref |
+| `push --delete` | no other ref contains the remote tip |
+| `filter-branch` | HEAD is not fully pushed |
+| `reflog expire` / `delete` | a commit is reachable only through the reflog |
+| `worktree remove --force` | that worktree has uncommitted changes |
+
+So deleting a merged branch, force-pushing when the old tip is still on another branch, and dropping a remote branch
+already merged to master are all allowed. `push --mirror` is the one exception refused outright: it rewrites every ref
+at once, so there is no bounded set of commits to check.
 
 Every denial names the counts, the files, and the command to run instead:
 

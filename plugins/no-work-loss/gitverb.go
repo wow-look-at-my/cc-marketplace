@@ -33,6 +33,9 @@ type finding struct {
 	always  bool
 	reason  string // complete message, always-deny only
 	rewrite string
+	// reach turns a ref-destroying command into a question about whether the
+	// commits survive elsewhere, rather than a blanket refusal.
+	reach *reachCheck
 }
 
 type gitCall struct {
@@ -240,44 +243,65 @@ func classifyGit(seg segment) *finding {
 		if g.has("--force-with-lease", "--force-if-includes") {
 			return nil
 		}
-		if g.has("-f", "--force", "--mirror") {
+		if g.has("--mirror") {
+			// --mirror rewrites every ref at once, so there is no bounded set
+			// of commits to check for survival.
 			return &finding{
-				label: "git push --force", always: true, dir: g.dir,
-				reason: "blocked: --force overwrites remote history that is in nobody's reflog but the author's.",
-				rewrite: shellJoin(replaceFlag(seg.argv, []string{"-f", "--force"}, "--force-with-lease")) +
-					"   # refuses if the remote moved since you last fetched",
+				label: "git push --mirror", always: true, dir: g.dir,
+				reason:  "blocked: --mirror overwrites every remote ref at once, so what it would discard cannot be enumerated.",
+				rewrite: "git push --force-with-lease <remote> <branch>   # one ref at a time",
 			}
 		}
-		if g.has("--delete", "-d") {
-			return &finding{
-				label: "git push --delete", always: true, dir: g.dir,
-				reason:  "blocked: deleting a remote ref discards the only copy anyone else can fetch.",
-				rewrite: "git push origin --delete <ref>   # after confirming it is merged, or tag it first",
-			}
-		}
+		forced := g.has("-f", "--force")
 		for _, o := range g.operands {
 			if strings.HasPrefix(o.text, "+") && strings.Contains(o.text, ":") {
-				return &finding{
-					label: "git push +<refspec>", always: true, dir: g.dir,
-					reason:  "blocked: a leading + on a refspec is a force push.",
-					rewrite: "git push --force-with-lease " + shellJoin(g.operands),
-				}
+				forced = true
 			}
 		}
-		return nil
+		deleting := g.has("--delete", "-d")
+		if !forced && !deleting {
+			return nil
+		}
+		remote, dst, src := parsePushSpec(g.operands)
+		label, rewrite := "git push --force", shellJoin(replaceFlag(seg.argv, []string{"-f", "--force"}, "--force-with-lease"))+
+			"   # refuses if the remote moved since you last fetched"
+		if deleting {
+			// A deletion pushes nothing, so there is no source that could make
+			// the old tip a fast-forward.
+			src = ""
+			if len(g.operands) > 1 {
+				remote, dst = g.operands[0].text, g.operands[len(g.operands)-1].text
+			}
+			label = "git push --delete"
+			rewrite = "git tag archive/" + dst + " " + remote + "/" + dst + " && " + orig + "   # keep a pointer, then delete"
+		}
+		return &finding{
+			label: label, dir: g.dir, rewrite: rewrite,
+			reach: &reachCheck{kind: reachRef, remote: remote, dst: dst, src: src},
+		}
 
 	case "branch":
 		if g.has("-D") || (g.has("-d", "--delete") && g.has("-f", "--force")) {
+			name := lastOperand(g.operands)
+			if name == "" {
+				return nil
+			}
+			ref := "refs/heads/" + name
 			return &finding{
-				label: "git branch -D", always: true, dir: g.dir,
-				reason:  "blocked: -D deletes an unmerged branch and its reflog together.",
-				rewrite: shellJoin(replaceFlag(seg.argv, []string{"-D", "-d", "--delete", "-f", "--force"}, "-d")) + "   # refuses unless merged",
+				label: "git branch -D " + name, dir: g.dir,
+				reach:   &reachCheck{kind: reachRef, ref: ref, ignore: []string{ref}},
+				rewrite: shellJoin(replaceFlag(seg.argv, []string{"-D", "-d", "--delete", "-f", "--force"}, "-d")) + "   # merged-only delete, or tag it first",
 			}
 		}
 		if g.has("-M") {
+			name := lastOperand(g.operands)
+			if name == "" {
+				return nil
+			}
+			ref := "refs/heads/" + name
 			return &finding{
-				label: "git branch -M", always: true, dir: g.dir,
-				reason:  "blocked: -M overwrites an existing branch of the target name.",
+				label: "git branch -M " + name, dir: g.dir,
+				reach:   &reachCheck{kind: reachRef, ref: ref, ignore: []string{ref}},
 				rewrite: shellJoin(replaceFlag(seg.argv, []string{"-M"}, "-m")) + "   # refuses if the name is taken",
 			}
 		}
@@ -318,35 +342,43 @@ func classifyGit(seg segment) *finding {
 			return nil
 		}
 		return &finding{
-			label: "git reflog " + g.sub, always: true, dir: g.dir,
-			reason:  "blocked: the reflog is the only thing making committed history recoverable.",
-			rewrite: "git reflog   # read it; expiring it forfeits every undo this plugin relies on",
+			label: "git reflog " + g.sub, dir: g.dir,
+			reach:   &reachCheck{kind: reachOrphans},
+			rewrite: "git fsck --unreachable --no-reflogs   # see what only the reflog is holding, and tag it first",
 		}
 
 	case "update-ref":
 		if !g.has("-d") {
 			return nil
 		}
+		ref := lastOperand(g.operands)
+		if ref == "" {
+			return nil
+		}
 		return &finding{
-			label: "git update-ref -d", always: true, dir: g.dir,
-			reason:  "blocked: deleting a ref by plumbing leaves no reflog entry behind it.",
-			rewrite: "git tag archive/<name> <ref>   # then delete",
+			label: "git update-ref -d " + ref, dir: g.dir,
+			reach:   &reachCheck{kind: reachRef, ref: ref, ignore: []string{ref}},
+			rewrite: "git tag archive/<name> " + ref + " && " + orig + "   # keep a pointer, then delete",
 		}
 
 	case "filter-branch":
 		return &finding{
-			label: "git filter-branch", always: true, dir: g.dir,
-			reason:  "blocked: filter-branch rewrites every commit in place.",
-			rewrite: "git checkout -b rewrite-attempt   # rewrite on a branch you can throw away",
+			label: "git filter-branch", dir: g.dir,
+			reach:   &reachCheck{kind: reachPushed},
+			rewrite: "git push origin HEAD   # get the current history onto a remote first",
 		}
 
 	case "worktree":
 		if g.sub != "remove" || !g.has("-f", "--force") {
 			return nil // without --force git already refuses a dirty worktree
 		}
+		path := ""
+		if len(g.operands) > 1 {
+			path = joinDir(g.dir, g.operands[len(g.operands)-1])
+		}
 		return &finding{
-			label: "git worktree remove --force", always: true, dir: g.dir,
-			reason:  "blocked: --force is exactly the flag that discards a dirty worktree.",
+			label: "git worktree remove --force", dir: g.dir,
+			reach:   &reachCheck{kind: reachWorktree, path: path},
 			rewrite: "git worktree remove <path>   # refuses while the worktree is dirty",
 		}
 
@@ -366,6 +398,17 @@ func classifyGit(seg segment) *finding {
 		return nil
 	}
 	return nil
+}
+
+// lastOperand returns the final statically-known operand, which for the
+// ref-taking verbs is the ref being acted on.
+func lastOperand(operands []word) string {
+	for i := len(operands) - 1; i >= 0; i-- {
+		if operands[i].static && operands[i].text != "" {
+			return operands[i].text
+		}
+	}
+	return ""
 }
 
 // replaceFlag swaps the first destructive flag it finds for a safe one and

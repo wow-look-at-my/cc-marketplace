@@ -11,8 +11,24 @@ nothing at all, leaving the normal permission flow untouched.
 is wrong, because `reset --hard` destroys tracked modifications and spares untracked files while `clean -fd` does exactly the reverse, and
 `stash drop` destroys neither. A boolean makes each verb refuse over the half it will not touch, which is how a guard earns the reputation
 that gets it uninstalled. Each verb is therefore checked only against the classes it can reach (`hazTracked` / `hazUntracked` / `hazIgnored`
-/ `hazStash`), and `TestResetHardSparesUntrackedFiles` + `TestCleanSparesTrackedModifications` pin both halves. A fifth class for refs was
-written, went unused because every ref-destroying command is an unconditional deny, and was deleted rather than left as decoration.
+/ `hazStash`), and `TestResetHardSparesUntrackedFiles` + `TestCleanSparesTrackedModifications` pin both halves.
+
+**Ref-destroying verbs ask a different question: does this content exist anywhere else?** (`reach.go`) Deleting a merged branch,
+force-pushing when the old tip is still on another branch, and dropping a remote branch already on master all lose nothing, so they are
+ALLOWED -- recoverable content is not protected content. `branch -D`/`-M`, `push --force`/`+refspec`/`--delete` and `update-ref -d` resolve
+the tip and ask whether another ref contains it (a push additionally allows a fast-forward, where nothing is rewritten); `filter-branch`
+requires HEAD fully pushed; `reflog expire`/`delete` requires `fsck --unreachable --no-reflogs` to find no commit; `worktree remove --force`
+probes that worktree's own status. Only `push --mirror` stays an unconditional deny -- it rewrites every ref at once, so no bounded set of
+commits can be checked. This does NOT extend to the working tree: a modified or untracked file's bytes are in no commit by definition, so
+"already pushed" is never true of them, and `git stash drop` sits with them because stashing is the act of parking content off every branch.
+
+Two facts here were established by RUNNING git, and each had already produced a wrong verdict in a draft. **`--exclude` does not take a full
+refname** -- for `--branches`/`--remotes` it matches the name without the `refs/heads/`/`refs/remotes/` prefix, so
+`--exclude=refs/heads/feature --branches` excludes nothing and a branch holding the only copy of a commit reported "0 lost", a silent false
+negative. **`refs/remotes/<remote>/HEAD` is a symbolic alias** for the branch being overwritten, and counting it made every force push look
+safe. Hence containment via `for-each-ref --contains` with remote-HEAD filtered out, rather than hand-built exclusion lists. A missing
+remote-tracking ref denies (`errNoRemoteRef`, "git fetch first"): absence of a local mirror is not evidence the remote is empty. A missing
+LOCAL ref allows, since git will error on its own -- conflating those two was itself a caught bug.
 
 **Detection parses; it does not match substrings.** `mvdan.cc/sh/v3/syntax` (the same parser `enhanced-auto-allow` uses) flattens the command
 into every unit that executes -- `&&`/`||`/`;`/pipes/newlines, subshells, brace blocks, `if`/`while`/`for`/`case`/function bodies, and
@@ -59,6 +75,7 @@ entry and reads as safe.
 - **Repository state**: `plugins/no-work-loss/repo.go` -- probing with timeouts and caching, `-z` status parsing, path containment
 - **Decision**: `plugins/no-work-loss/decide.go` -- orchestration, the judge, and the denial text
 - **Aliases**: `plugins/no-work-loss/alias.go` -- alias table, `!shell` expansion, the builtin-verb skip list
+- **Reachability**: `plugins/no-work-loss/reach.go` -- containment, fast-forward, pushed-ness, reflog orphans, worktree probing
 - **Tests**: `guard_test.go` (the deny/allow matrix against real repos), `refverbs_test.go` (unconditional denies + their safe spellings),
   `shell_test.go` (compound forms, wrappers, cd scoping), `hookio_test.go` (the raw JSON keys of the deny payload)
 - **Depth**: `plugins/no-work-loss/docs/decision-model.md`

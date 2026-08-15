@@ -14,7 +14,10 @@ import (
 // it the answer is unknown, and unknown denies.
 const gitTimeout = 3 * time.Second
 
-var errUnknownDir = errors.New("target directory is not statically known")
+var (
+	errUnknownDir  = errors.New("target directory is not statically known")
+	errNoRemoteRef = errors.New("no remote-tracking ref locally, so what the remote holds is unknown -- git fetch first")
+)
 
 type repoState struct {
 	root      string

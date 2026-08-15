@@ -35,22 +35,51 @@ file it will not touch. Both are false positives on the safe half of a legitimat
 So each verb is checked only against the classes it can actually reach. `TestResetHardSparesUntrackedFiles` and
 `TestCleanSparesTrackedModifications` pin the two halves.
 
-## Commands refused without consulting state
+## Commands that destroy refs: reachability, not refusal
 
-A separate family destroys refs, commits or the reflog rather than working-tree content: `push --force`, `push --delete`, `push --mirror`,
-a `+refspec`, `branch -D`, `branch -M`, `reflog expire`, `reflog delete`, `update-ref -d`, `filter-branch`, `worktree remove --force`.
+A separate family destroys refs, commits or the reflog rather than working-tree content: `push --force`, `push --delete`, a `+refspec`,
+`branch -D`, `branch -M`, `reflog expire`, `reflog delete`, `update-ref -d`, `filter-branch`, `worktree remove --force`.
 
-These are refused unconditionally, because no local state could make them safe -- the remote history a force push overwrites is in nobody's
-reflog but the author's. Each denial names the safe spelling instead (`--force-with-lease`, `branch -d`, `branch -m`), which is the whole
-reason the deny is tolerable: the user's own command comes back with one flag swapped.
+None of these is destructive on its own. Deleting a merged branch, force-pushing after a rebase whose old tip is still on another branch,
+dropping a remote branch whose commits are already on master -- all of these lose nothing, and a guard that refuses them is a guard that gets
+switched off. So the question asked is not "is this verb dangerous" but **does this content exist anywhere else**:
 
-There is deliberately no `hazRefs` bit. It was written, went unused because every member of this family is an unconditional deny, and was
-removed rather than left as decoration.
+| Verb | What must survive elsewhere | How it is answered |
+|---|---|---|
+| `branch -D` / `-M` | the branch tip | another ref contains it |
+| `push --force` / `+refspec` | the remote-tracking tip | it is an ancestor of what is being pushed, or another ref contains it |
+| `push --delete` | the remote-tracking tip | another ref contains it |
+| `update-ref -d` | the ref's tip | another ref contains it |
+| `filter-branch` | all of HEAD | `rev-list --count HEAD --not --remotes` is 0 |
+| `reflog expire` / `delete` | nothing reflog-only | `fsck --unreachable --no-reflogs` finds no commit |
+| `worktree remove --force` | that worktree's edits | its `status --porcelain` is empty |
+
+Two facts here were established by running git, and both had already produced a wrong answer in a draft:
+
+- **`--exclude` does not take a full refname.** For `--branches` and `--remotes` the pattern matches the name *without* the `refs/heads/` or
+  `refs/remotes/` prefix. `--exclude=refs/heads/feature --branches` silently excludes nothing, so a branch holding the only copy of a commit
+  reported "0 would be lost". A silent false negative is the worst outcome available here, which is why containment via `for-each-ref
+  --contains` is used instead of hand-built exclusion lists.
+- **`refs/remotes/<remote>/HEAD` is a symbolic alias** for the branch being overwritten. Counting it as "somewhere else" made every force
+  push look safe. It is filtered out explicitly.
+
+`push --mirror` remains an unconditional refusal: it rewrites every ref at once, so there is no bounded set of commits whose survival could
+be checked. It is the only member of the family without a reachability answer.
+
+When a push cannot be verified -- no remote-tracking ref exists locally -- the answer is deny, not allow. Absence of a local mirror is not
+evidence the remote is empty; the fix named in the denial is `git fetch`.
+
+A force push judged safe is still judged against possibly-stale local knowledge of the remote, which is exactly what `--force-with-lease`
+exists to close. The denial path recommends it; the allow path cannot, since by then there is nothing to warn about.
 
 ## What is deliberately NOT blocked
 
 - **Unpushed commits.** `git reset --hard origin/master` on a clean tree is allowed even when HEAD is ahead of upstream. Those commits are
   in the reflog. Blocking here would refuse a routine, reversible operation and buy nothing.
+- **Anything already pushed, merged, or living on another branch.** This is the whole point of the reachability section above: recoverable
+  content is not protected content. Note that it cannot apply to the working tree -- a modified or untracked file's current bytes are in no
+  commit by definition, so "already pushed" is never true of them. That is why the dirty-tree verbs stay state-based and the ref verbs are
+  reachability-based. `git stash drop` sits with the former: stashing is precisely the act of putting content somewhere no branch points at.
 - **`git checkout -b` / `git switch -c`.** Creating a branch carries changes across; it cannot drop them. Dirty or not, allowed.
 - **`git stash push`, `git commit`, `git add`.** These create recovery. `stash push` is also the suggested fix in most denials, so blocking
   it would make the guard unescapable.

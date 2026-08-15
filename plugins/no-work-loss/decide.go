@@ -59,6 +59,31 @@ func judge(f *finding, cache *repoCache) string {
 		}
 	}
 
+	// A ref-destroying command asks a different question than a dirty tree
+	// does: not "is there uncommitted work" but "does this content exist
+	// anywhere else". Already pushed, already merged, or sitting on another
+	// branch all mean nothing is lost.
+	if f.reach != nil {
+		st := cache.probe(f.dir)
+		if st.err != nil {
+			return fmt.Sprintf("blocked: cannot tell whether %s would discard commits that exist nowhere else (%v)."+
+				"\nrun: git status   # this hook denies destructive commands it cannot verify", f.label, st.err)
+		}
+		if !st.inRepo {
+			return ""
+		}
+		safe, where, err := cache.evaluate(st, f.reach)
+		if err != nil {
+			return fmt.Sprintf("blocked: cannot tell whether %s would discard commits that exist nowhere else (%v)."+
+				"\nrun: git status   # this hook denies destructive commands it cannot verify", f.label, err)
+		}
+		if safe {
+			return "" // recoverable elsewhere, so this is ordinary work
+		}
+		return fmt.Sprintf("blocked: %s would discard commits that exist nowhere else -- not pushed, not merged, on no other branch.%s"+
+			"\nrun: %s", f.label, where, f.rewrite)
+	}
+
 	st := cache.probe(f.dir)
 	if st.err == nil && st.inRepo {
 		if f.haz&hazIgnored != 0 {
