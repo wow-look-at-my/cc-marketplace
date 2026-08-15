@@ -1,0 +1,25 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "no-work-loss",
+	"description": "Refuses any Bash command that would destroy content existing only in the working tree - reset --hard, checkout/switch onto a dirty tree, clean, restore, stash drop/clear, force push, and rm/mv/tee/truncate/> aimed at a modified or untracked file - after reading the repository's real state rather than trusting the command's shape",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["git", "guard", "hook", "pretooluse", "uncommitted", "worktree", "reset", "checkout", "clean", "stash", "force-push", "data-loss"],
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "Bash",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-work-loss"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
