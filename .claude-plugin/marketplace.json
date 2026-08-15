@@ -116,7 +116,7 @@
     {
       "name": "repo-index",
       "source": "./plugins/repo-index",
-      "description": "Suggests the org repository that already solves the job: matches each prompt against an index of repos and injects the link and one description, at most once per session",
+      "description": "Suggests the repository that already solves the job: matches each prompt against an index generated from the GitHub API and injects the link and description, at most once per session",
       "category": "development",
       "keywords": [
         "repo",

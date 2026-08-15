@@ -1,5 +1,6 @@
-// repo-index suggests org repositories that look relevant to a prompt. It
-// injects the link and one description per repo, once per session.
+// repo-index suggests repositories that look relevant to a prompt. It injects
+// the link and the repository's own description, once per session, from an
+// index built out of the GitHub API.
 package main
 
 import (
@@ -8,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 type hookInput struct {
@@ -26,13 +28,14 @@ type hookSpecificOutput struct {
 	AdditionalContext string `json:"additionalContext"`
 }
 
-// env carries the parts of the machine the hook reads, so a test can supply
-// its own temp directory and home.
+// env carries the parts of the machine this program reads, so a test can
+// supply its own home and temp directory.
 type env struct {
 	home    string
 	stateIn string
 	stdout  io.Writer
 	stderr  io.Writer
+	now     time.Time
 }
 
 func main() {
@@ -41,13 +44,22 @@ func main() {
 		stateIn: os.TempDir(),
 		stdout:  os.Stdout,
 		stderr:  os.Stderr,
+		now:     time.Now(),
+	}
+	if len(os.Args) > 1 && os.Args[1] == "--refresh" {
+		cwd, _ := os.Getwd()
+		if err := refresh(e, cwd, e.now); err != nil {
+			fmt.Fprintf(e.stderr, "repo-index: refresh failed: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 	os.Exit(run(os.Stdin, e))
 }
 
-// run returns the process exit code. Code 1 reports a real fault to the user
-// and leaves the prompt untouched. It never returns 2, which would block the
-// prompt: a suggestion is worth nothing at that price.
+// run returns the process exit code. Code 1 reports a real fault and leaves
+// the prompt untouched. It never returns 2, which would block the prompt: a
+// suggestion is worth nothing at that price.
 func run(r io.Reader, e env) int {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -64,10 +76,10 @@ func run(r io.Reader, e env) int {
 		return 0
 	}
 
-	repos, err := loadIndex(e.home, in.Cwd)
-	if err != nil {
-		fmt.Fprintf(e.stderr, "repo-index: %v\n", err)
-		return 1
+	repos := e.serveIndex(in.Cwd)
+	if len(repos) == 0 {
+		fmt.Fprint(e.stdout, "{}\n")
+		return 0
 	}
 
 	hits := match(in.Prompt, repos)
@@ -126,4 +138,34 @@ func run(r io.Reader, e env) int {
 	}
 	fmt.Fprintf(e.stdout, "%s\n", encoded)
 	return 0
+}
+
+// serveIndex returns the cached index and starts a refresh when one is due. A
+// stale index still suggests: a description from last week beats silence. An
+// absent one suggests nothing, and says so.
+func (e env) serveIndex(cwd string) []Repo {
+	cached := readCache(e.home)
+	// A nil client keeps this path off the network entirely: the owner comes
+	// from config or the checkout's own remote, and the refresh resolves the
+	// rest in its own process.
+	owners, err := discoverOwners(e.home, cwd, nil)
+	if err != nil {
+		fmt.Fprintf(e.stderr, "repo-index: %v\n", err)
+		return nil
+	}
+
+	fresh, sameOwners := cached.covers(owners, e.now)
+	if !fresh && claimRefresh(e.home, e.now) {
+		if err := spawnRefresh(e.home, cwd); err != nil {
+			fmt.Fprintf(e.stderr, "repo-index: %v\n", err)
+		}
+	}
+	if cached == nil {
+		fmt.Fprintf(e.stderr, "repo-index: no index yet, so this prompt gets no suggestions. A refresh runs in the background; its report lands in %s\n", refreshLog(e.home))
+		return nil
+	}
+	if !sameOwners {
+		fmt.Fprintf(e.stderr, "repo-index: the index covers %v and this checkout needs %v, so it is being rebuilt; this prompt uses the old one\n", cached.Owners, owners)
+	}
+	return cached.Repos
 }

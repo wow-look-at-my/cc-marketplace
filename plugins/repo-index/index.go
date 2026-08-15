@@ -1,118 +1,276 @@
 package main
 
 import (
-	_ "embed"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
+	"regexp"
+	"strings"
 )
 
-//go:embed repos.json
-var defaultIndex []byte
-
-// Repo is one entry in the index. Match holds the phrases that make this repo
-// relevant to a prompt. A phrase matches on whole words only.
+// Repo is one entry in the built index. Every field comes from GitHub: the
+// description is the repository's own, and the match phrases are its name and
+// its topics. Nothing here is written by hand, so nothing here can disagree
+// with the repository it describes.
 type Repo struct {
-	Name        string   `json:"name"`
-	URL         string   `json:"url"`
-	Description string   `json:"description"`
-	Match       []string `json:"match"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	Description string `json:"description"`
+	// Match holds identifiers: the repository's name, the parts of it, and
+	// the topics its owner set. A prompt that says one of these means this
+	// repository.
+	Match []string `json:"match"`
+	// Terms holds words taken from the description. A prompt that says one of
+	// these may mean this repository, or may just be English, so a term is
+	// worth less than an identifier. See match().
+	Terms []string `json:"terms"`
 }
 
-type Index struct {
-	Repos []Repo `json:"repos"`
+// maxDescription keeps one entry to about three lines of prompt.
+const maxDescription = 240
+
+// genericTerms are words that would match most prompts, so a repository named
+// after one earns nothing by matching. This list is about English and software
+// in general. It says nothing about any particular repository.
+var genericTerms = map[string]bool{
+	"api": true, "app": true, "apps": true, "code": true, "common": true,
+	"config": true, "core": true, "data": true, "demo": true, "dev": true,
+	"docs": true, "example": true, "examples": true, "helper": true,
+	"helpers": true, "lib": true, "libs": true, "main": true, "misc": true,
+	"new": true, "old": true, "project": true, "repo": true, "sample": true,
+	"scripts": true, "server": true, "service": true, "shared": true,
+	"simple": true, "site": true, "test": true, "tests": true, "tool": true,
+	"tools": true, "util": true, "utils": true, "web": true, "www": true,
 }
 
-// overlayPaths returns the user index files, in the order they apply. A later
-// file wins over an earlier one for the same repo name.
-func overlayPaths(home, cwd string) []string {
-	var paths []string
-	if home != "" {
-		paths = append(paths, filepath.Join(home, ".claude", "repo-index.json"))
-	}
-	if cwd != "" {
-		paths = append(paths, filepath.Join(cwd, ".claude", "repo-index.json"))
-	}
-	return paths
+var (
+	splitName    = regexp.MustCompile(`[-_.]+`)
+	badgeLine    = regexp.MustCompile(`^\s*[!\[]`)
+	htmlComment  = regexp.MustCompile(`(?s)<!--.*?-->`)
+	inlineLink   = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	inlineMarkup = regexp.MustCompile("[`*_]+")
+	spaces       = regexp.MustCompile(`\s+`)
+)
+
+// buildIndex turns raw repositories into index entries. A repository is
+// dropped when it is archived, a fork, has nothing to say about itself, or
+// has no phrase specific enough to match on. The counts travel back to the
+// caller so a refresh can report what it left out.
+type buildStats struct {
+	Archived    int
+	Forks       int
+	NoText      int
+	NoPhrase    int
+	ReadmeUsed  int
+	ReadmeCalls int
 }
 
-// loadIndex merges the built-in index with each overlay that exists. A
-// malformed overlay is an error, not a skip: the user wrote it and must hear
-// that it does nothing.
-func loadIndex(home, cwd string) ([]Repo, error) {
-	var base Index
-	if err := json.Unmarshal(defaultIndex, &base); err != nil {
-		return nil, fmt.Errorf("built-in index is corrupt: %w", err)
-	}
+// describer supplies a README for a repository that has no description.
+type describer func(fullName string) string
 
-	merged := make(map[string]Repo, len(base.Repos))
-	order := make([]string, 0, len(base.Repos))
-	add := func(r Repo) {
-		if _, seen := merged[r.Name]; !seen {
-			order = append(order, r.Name)
-		}
-		merged[r.Name] = r
-	}
-	for _, r := range base.Repos {
-		add(r)
-	}
-
-	for _, path := range overlayPaths(home, cwd) {
-		data, err := os.ReadFile(path)
-		if os.IsNotExist(err) {
+func buildIndex(raw []repo, readme describer, readmeBudget int) ([]Repo, buildStats) {
+	var stats buildStats
+	var out []Repo
+	for _, r := range raw {
+		if r.Archived {
+			stats.Archived++
 			continue
 		}
-		if err != nil {
-			return nil, fmt.Errorf("cannot read %s: %w", path, err)
+		if r.Fork {
+			stats.Forks++
+			continue
 		}
-		var overlay Index
-		if err := json.Unmarshal(data, &overlay); err != nil {
-			return nil, fmt.Errorf("%s is not valid JSON: %w", path, err)
-		}
-		for i, r := range overlay.Repos {
-			if err := validate(r, path, i); err != nil {
-				return nil, err
+
+		description := strings.TrimSpace(r.Description)
+		if description == "" && readme != nil && stats.ReadmeCalls < readmeBudget {
+			stats.ReadmeCalls++
+			if summary := summarize(readme(r.FullName)); summary != "" {
+				description = summary
+				stats.ReadmeUsed++
 			}
-			add(r)
 		}
-	}
+		if description == "" {
+			stats.NoText++
+			continue
+		}
 
-	repos := make([]Repo, 0, len(order))
-	for _, name := range order {
-		repos = append(repos, merged[name])
+		phrases, parts := phrasesFor(r)
+		if len(phrases) == 0 {
+			stats.NoPhrase++
+			continue
+		}
+
+		out = append(out, Repo{
+			Name:        r.FullName,
+			URL:         r.HTMLURL,
+			Description: truncate(description, maxDescription),
+			Match:       phrases,
+			Terms:       parts,
+		})
 	}
-	return repos, nil
+	addDistinctiveTerms(out)
+	return out, stats
 }
 
-// validate rejects an entry that cannot produce a useful suggestion. A repo
-// with no match phrases can never fire, so it is a mistake and not a choice.
-func validate(r Repo, path string, i int) error {
-	switch {
-	case r.Name == "":
-		return fmt.Errorf("%s: repos[%d] has no name", path, i)
-	case r.URL == "":
-		return fmt.Errorf("%s: repo %q has no url", path, r.Name)
-	case r.Description == "":
-		return fmt.Errorf("%s: repo %q has no description", path, r.Name)
-	case len(r.Match) == 0:
-		return fmt.Errorf("%s: repo %q has no match phrases, so it can never be suggested", path, r.Name)
-	}
-	for _, phrase := range r.Match {
-		if phrase == "" {
-			return fmt.Errorf("%s: repo %q has an empty match phrase", path, r.Name)
+// maxDerived caps how many words a description contributes, so one wordy
+// README cannot crowd out every other repository.
+const maxDerived = 8
+
+// rarityCut is the share of the index a word may appear in and still count as
+// distinctive. A word in one repository's description identifies it; a word in
+// a tenth of them identifies nothing.
+const rarityCut = 0.02
+
+// addDistinctiveTerms lets a repository match on the words that only it uses.
+// Rarity decides which those are, measured across this index, so no list of
+// interesting words has to be written or maintained. Without this a repository
+// matches its own name and nothing else, and a prompt says "xsd" where the
+// repository is called xml-validator.
+func addDistinctiveTerms(repos []Repo) {
+	docFreq := map[string]int{}
+	words := make([][]string, len(repos))
+	for i, r := range repos {
+		words[i] = tokens(r.Description)
+		for _, w := range unique(words[i]) {
+			docFreq[w]++
 		}
 	}
-	return nil
+
+	limit := int(float64(len(repos)) * rarityCut)
+	if limit < 1 {
+		limit = 1
+	}
+	for i := range repos {
+		have := map[string]bool{}
+		for _, phrase := range append(repos[i].Match, repos[i].Terms...) {
+			have[phrase] = true
+		}
+		derived := 0
+		for _, w := range unique(words[i]) {
+			if derived == maxDerived {
+				break
+			}
+			if docFreq[w] <= limit && !have[w] {
+				repos[i].Terms = append(repos[i].Terms, w)
+				have[w] = true
+				derived++
+			}
+		}
+	}
 }
 
-// sortByName keeps the output stable when two repos score the same.
-func sortByName(hits []Hit) {
-	sort.SliceStable(hits, func(a, b int) bool {
-		if hits[a].Score != hits[b].Score {
-			return hits[a].Score > hits[b].Score
+var word = regexp.MustCompile(`[a-z][a-z0-9]{2,}`)
+
+// tokens lowercases the text and keeps every word of three characters or
+// more. There is no length rule beyond that on purpose: rarity already
+// removes the common words, and a short word can be the whole point -- "xsd"
+// is three characters and names exactly one repository.
+func tokens(text string) []string {
+	var out []string
+	for _, w := range word.FindAllString(strings.ToLower(text), -1) {
+		if !genericTerms[w] {
+			out = append(out, w)
 		}
-		return hits[a].Repo.Name < hits[b].Repo.Name
-	})
+	}
+	return out
+}
+
+func unique(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// phrasesFor derives what a prompt must say for this repository to be
+// relevant. It returns two tiers.
+//
+// The identifiers are the whole name, the same name spaced, and the topics the
+// owner set. Each of those names this repository and nothing else.
+//
+// The parts are the single words inside the name, and they are weak on
+// purpose: half of them are ordinary English. A prompt about how to "write a
+// haiku" must not pull in a repository called quick-write-this-code.
+func phrasesFor(r repo) (identifiers, parts []string) {
+	seen := map[string]bool{}
+	keep := func(phrase string, into *[]string) {
+		phrase = strings.ToLower(strings.TrimSpace(phrase))
+		if phrase == "" || seen[phrase] || genericTerms[phrase] || len(phrase) < 3 {
+			return
+		}
+		seen[phrase] = true
+		*into = append(*into, phrase)
+	}
+
+	keep(r.Name, &identifiers)
+	words := splitName.Split(r.Name, -1)
+	if len(words) > 1 {
+		keep(strings.Join(words, " "), &identifiers)
+	}
+	// Any run of two adjacent words in the name is still the name, and people
+	// shorten names: someone asking about "pr preview" means pr-preview-action.
+	for i := 0; i+1 < len(words); i++ {
+		keep(words[i]+" "+words[i+1], &identifiers)
+	}
+	for _, topic := range r.Topics {
+		keep(topic, &identifiers)
+		keep(strings.ReplaceAll(topic, "-", " "), &identifiers)
+	}
+	if len(words) > 1 {
+		for _, w := range words {
+			if len(w) >= 4 {
+				keep(w, &parts)
+			}
+		}
+	}
+	return identifiers, parts
+}
+
+// summarize takes the first real sentence of a README: no heading, no badge,
+// no HTML comment, and no markdown link syntax.
+func summarize(readme string) string {
+	if readme == "" {
+		return ""
+	}
+	var para []string
+	var inFence bool
+	for _, line := range strings.Split(htmlComment.ReplaceAllString(readme, ""), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			// A fence holds code, never prose. Skip to the far side of it.
+			inFence = !inFence
+			if !inFence && len(para) > 0 {
+				break
+			}
+			continue
+		}
+		if inFence {
+			continue
+		}
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ">") ||
+			badgeLine.MatchString(trimmed) {
+			if len(para) > 0 {
+				break
+			}
+			continue
+		}
+		para = append(para, trimmed)
+	}
+	text := inlineLink.ReplaceAllString(strings.Join(para, " "), "$1")
+	text = inlineMarkup.ReplaceAllString(text, "")
+	return strings.TrimSpace(spaces.ReplaceAllString(text, " "))
+}
+
+// truncate cuts at a word boundary so an entry never ends mid-word.
+func truncate(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	cut := text[:limit]
+	if i := strings.LastIndex(cut, " "); i > limit/2 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,.;:-") + "..."
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -37,24 +38,51 @@ func phrasePattern(phrase string) *regexp.Regexp {
 	return re
 }
 
-// match scores every repo against the prompt. The score is the number of
-// distinct phrases that hit, so a prompt about several parts of one repo ranks
-// that repo above an incidental single hit.
+// identifierWeight is what one name or topic hit is worth. It is the whole
+// threshold on its own: naming a repository is enough to mean it.
+const identifierWeight = 2
+
+// threshold is the score a repository needs before it costs an injection. One
+// description word never reaches it, so a prompt about writing a haiku does
+// not pull in every repository whose README happens to say "write".
+const threshold = 2
+
+// match scores every repo against the prompt. An identifier hit counts double
+// a description word, and several hits beat one, so the repository a prompt
+// actually names ranks above one that shares a word with it.
 func match(prompt string, repos []Repo) []Hit {
 	var hits []Hit
 	for _, r := range repos {
 		var phrases []string
+		score := 0
 		for _, phrase := range r.Match {
 			if phrasePattern(phrase).MatchString(prompt) {
 				phrases = append(phrases, phrase)
+				score += identifierWeight
 			}
 		}
-		if len(phrases) > 0 {
-			hits = append(hits, Hit{Repo: r, Score: len(phrases), Phrases: phrases})
+		for _, term := range r.Terms {
+			if phrasePattern(term).MatchString(prompt) {
+				phrases = append(phrases, term)
+				score++
+			}
+		}
+		if score >= threshold {
+			hits = append(hits, Hit{Repo: r, Score: score, Phrases: phrases})
 		}
 	}
 	sortByName(hits)
 	return hits
+}
+
+// sortByName keeps the output stable when two repos score the same.
+func sortByName(hits []Hit) {
+	sort.SliceStable(hits, func(a, b int) bool {
+		if hits[a].Score != hits[b].Score {
+			return hits[a].Score > hits[b].Score
+		}
+		return hits[a].Repo.Name < hits[b].Repo.Name
+	})
 }
 
 // render writes the block that goes into the prompt. It states the repo, the
