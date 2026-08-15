@@ -1,0 +1,17 @@
+{
+	"author": {
+		"name": "wow-look-at-my-code"
+	},
+	"description": "Language server that flags identical CSS declaration blocks as diagnostics while you edit, so a rule copied under a new selector gets hoisted into the cascade instead of shipped",
+	"keywords": [
+		"css",
+		"cascade",
+		"duplication",
+		"stylesheet",
+		"refactor",
+		"lsp",
+		"diagnostics"
+	],
+	"name": "css-duplication",
+	"version": "1087"
+}
