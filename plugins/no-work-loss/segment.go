@@ -301,9 +301,21 @@ func stripWrappers(argv []word) []word {
 			for len(argv) > 0 && strings.Contains(argv[0].text, "=") && !strings.HasPrefix(argv[0].text, "-") {
 				argv = argv[1:]
 			}
-		case "command", "builtin", "exec", "nohup", "nice", "setsid", "stdbuf", "ionice", "time":
+		case "command", "builtin", "exec", "nohup", "setsid", "stdbuf", "time":
 			argv = argv[1:]
 			for len(argv) > 0 && strings.HasPrefix(argv[0].text, "-") {
+				argv = argv[1:]
+			}
+		case "nice", "ionice":
+			// These take a separate numeric value, so skipping flags alone
+			// would leave the number sitting where the program should be and
+			// the git behind it would never be seen.
+			argv = argv[1:]
+			for len(argv) > 0 && strings.HasPrefix(argv[0].text, "-") {
+				if niceValueFlags[argv[0].text] {
+					argv = dropN(argv, 2)
+					continue
+				}
 				argv = argv[1:]
 			}
 		case "timeout":
@@ -331,6 +343,11 @@ func stripWrappers(argv []word) []word {
 		}
 	}
 	return argv
+}
+
+var niceValueFlags = map[string]bool{
+	"-n": true, "-c": true, "-p": true, "-P": true, "-u": true,
+	"--adjustment": true, "--class": true, "--classdata": true, "--pid": true,
 }
 
 // xargs' value-taking flags, so the utility word is located rather than

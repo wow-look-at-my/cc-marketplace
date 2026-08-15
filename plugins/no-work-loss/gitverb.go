@@ -12,12 +12,15 @@ import (
 // gets switched off.
 type hazard uint8
 
+// There is deliberately no class for refs and commits. A command that
+// destroys those is refused outright rather than weighed against state: the
+// remote history a force push overwrites is in nobody's reflog but the
+// author's, so there is no local state that could make it safe.
 const (
 	hazTracked hazard = 1 << iota
 	hazUntracked
 	hazIgnored
 	hazStash
-	hazRefs
 )
 
 // A reason to look at repository state, or -- when always is set -- to refuse
