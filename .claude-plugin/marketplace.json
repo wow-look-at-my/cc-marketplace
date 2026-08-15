@@ -112,6 +112,19 @@
         "docker-compose",
         "skills"
       ]
+    },
+    {
+      "name": "repo-index",
+      "source": "./plugins/repo-index",
+      "description": "Suggests the org repository that already solves the job: matches each prompt against an index of repos and injects the link and one description, at most once per session",
+      "category": "development",
+      "keywords": [
+        "repo",
+        "index",
+        "discovery",
+        "suggest",
+        "hook"
+      ]
     }
   ]
 }
