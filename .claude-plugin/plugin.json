@@ -1,0 +1,38 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Auto-approve readonly git and gh commands using JSON-driven rules",
+	"hooks": {
+		"PermissionRequest": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/enhanced-auto-allow",
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			}
+		],
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/enhanced-auto-allow",
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			}
+		]
+	},
+	"keywords": [
+		"git",
+		"github",
+		"auto-allow",
+		"permissions"
+	],
+	"name": "enhanced-auto-allow",
+	"version": "1102"
+}
