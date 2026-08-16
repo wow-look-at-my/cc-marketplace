@@ -75,6 +75,21 @@
       ]
     },
     {
+      "name": "link-all-refs",
+      "source": "./link-all-refs",
+      "description": "Blocks the Stop event while the closing message names a pull request, a commit, a branch, or a GitHub URL without a markdown link to it",
+      "category": "development",
+      "keywords": [
+        "link",
+        "markdown",
+        "pull-request",
+        "commit",
+        "branch",
+        "stop",
+        "hook"
+      ]
+    },
+    {
       "name": "grep",
       "source": "./plugins/grep",
       "description": "MCP server restoring the builtin Grep tool removed from Claude Code 2.1.117, with a grouped filenames_with_matches default mode",
