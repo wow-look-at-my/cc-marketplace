@@ -470,8 +470,8 @@
 			<test cmd="gh run view 123" expect="deny"/>
 			<test cmd="gh run watch 123" expect="deny"/>
 			<rule name="list" allowedFlags="*"/>
-			<rule name="view" denyWithMessage="Use 'gh wait-ci' instead for checking CI status"/>
-			<rule name="watch" denyWithMessage="Use 'gh wait-ci' instead for checking CI status"/>
+			<rule name="view" denyWithMessage="Use 'gh run list' or 'gh pr checks' to read CI status"/>
+			<rule name="watch" denyWithMessage="A blocking CI wait kills the session. Poll with 'gh run list' or 'gh pr checks'"/>
 		</rule>
 		<rule name="search">
 			<rule name="repos" allowedFlags="*"/>
