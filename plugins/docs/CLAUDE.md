@@ -21,6 +21,18 @@ description is the only thing the model sees when deciding whether to pull the s
   cache-mount recipe that *replaces* `rm -rf /var/lib/apt/lists/*`, exec-form `ENTRYPOINT`/`CMD` and the full
   interaction table, `ARG`/`ENV` scoping and the `key=value` requirement, the `# syntax=` and `# check=` parser
   directives, and cache-invalidation rules.
+- **`skills/docker-images/SKILL.md`** -- the only skill here written from a correction rather than from stale training data,
+  and the sibling of `dockerfile`: that one is how to WRITE the file, this is how to decide what the images should BE. The
+  worked failure is real (claude-host): six agent images that were never run as containers, existing only so a `docker run`
+  could `cp -a /agent` into a named volume that a container running a DIFFERENT image then mounted -- distribution,
+  versioning and identity re-implemented by hand, with a marker file standing in for a tag. The defence offered at the time
+  was that layering would save no bytes, which was arithmetically TRUE and beside the point; the skill says so in those
+  words, because the wrong instinct here is comparing byte counts instead of asking who owns distribution. Pins the rule
+  (layer program files, mount only mutable state), what `FROM` inherits and how each inherited thing bites when a carrier
+  image becomes a runnable one (`ENTRYPOINT` needing `--entrypoint`, a build-time `ENV HOME` redirecting home lookups,
+  labels as checkable evidence of the real base), why a base and its children cannot build in one CI matrix, and that the
+  child's builder pulls the base from the REGISTRY so it needs credentials the push path may never have required. Layer
+  sharing is quoted from docs.docker.com's storage-driver page rather than asserted.
 - **`skills/docker-compose/SKILL.md`** -- verified against the Compose Specification pages and Compose manuals. Leads
   with the three reflexes to unlearn (never write the obsolete top-level `version`; the file is `compose.yaml`; the
   command is `docker compose`, with v5 released 2025 as v2-plus-a-Go-SDK), then the `docker compose restart` trap -- the

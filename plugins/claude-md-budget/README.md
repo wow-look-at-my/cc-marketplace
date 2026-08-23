@@ -22,12 +22,18 @@ the web surface, and never to the model.
   limit is not a fix: the next edit of any size breaks it, and whoever makes that
   edit inherits the reorganization that got skipped.
 - **Unwrapped** — a line past 150 columns that could have been wrapped. Code
-  fences, tables, indented blocks, headings and unbreakable URLs are exempt. An
-  unwrapped file makes every edit a one-line diff nobody can review, and a
-  paragraph running for thousands of columns is the *shape* of an item that
-  should have been a pointer to `docs/`.
+  fences, tables, indented blocks, headings and unbreakable URLs are exempt.
+  **Off unless `CC_CLAUDE_MD_WIDTH` is set** to `1`/`true`/`yes`/`on`: it mostly
+  fired on files nowhere near the budget, and a wrapping complaint sitting next
+  to a size number teaches the reader to skim both.
 
 Characters, not bytes — so `wc -c` overstates any file with non-ASCII text.
+
+The three are independent, and each report says which one fired. A file that is
+only unwrapped is reported as a width problem and told to wrap; it is never
+described as being at the budget wall, and it is never handed the extraction
+advice, because it has nothing to extract. A guard that overstates the finding
+gets skimmed on the run where the number is real.
 
 ## Why it watches files, not tool calls
 
@@ -64,3 +70,24 @@ original guard ignorable: one nag bought silence for everything after it.
 ```
 
 Set `CC_CLAUDE_MD_BUDGET` to override the budget, or `0` to disable entirely.
+Set `CC_CLAUDE_MD_WIDTH=1` to switch the line-width check back on.
+
+## CI usage
+
+The three hooks above cover a live Claude Code session. A push from anything
+else -- a bot, a merge-train branch, a plain `git push` -- never runs a
+session, so nothing above ever sees it. `full_scan` is for that case: same
+walk (skipping `.git`/`node_modules`) as every other event -- there is no
+shallower mode to fall back to -- but it means its exit code -- 0 clean, 1 a
+file is genuinely over budget, never on a file merely near the wall --
+because this input is never sent by Claude Code and answers to a different
+caller.
+
+```bash
+printf '{"full_scan": true, "cwd": "%s"}' "$PWD" | claude-md-budget
+```
+
+CI needs the same binary this plugin ships, fetched the same way it publishes
+(the `claude-md-budget#latest` orphan tag), not a hand-rolled reimplementation
+of the walk or the threshold -- a duplicate is exactly what drifts, and a
+drifted copy either misses a real violation or fails a build for no reason.

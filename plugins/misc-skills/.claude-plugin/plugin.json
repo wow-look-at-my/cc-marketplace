@@ -1,0 +1,12 @@
+{
+  "$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+  "name": "misc-skills",
+  "description": "Assorted standalone skills with no theme in common, kept here instead of each getting its own plugin",
+  "author": {
+    "name": "wow-look-at-my-code"
+  },
+  "keywords": ["skills", "misc", "review", "refactor", "audit"],
+  "mh": {
+    "include_in_marketplace": true
+  }
+}

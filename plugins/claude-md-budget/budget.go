@@ -34,9 +34,17 @@ const nearFraction = 0.975
 // SHAPE of an item that should have been a pointer to docs/.
 const widthLimit = 150
 
-// Sibling-checkout scan bound: /home/user is the repo in a single-repo session
-// and the parent of every repo in a multi-repo one.
-const maxSiblings = 32
+// The width check is OFF unless CC_CLAUDE_MD_WIDTH is set to something truthy.
+// The character budget is the gate that matters; wrapping rode along with it
+// and mostly fired on files nowhere near the budget, which trains the reader to
+// skim the size number sitting next to it.
+func widthEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CC_CLAUDE_MD_WIDTH"))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
 
 // offender is one instruction file that is over budget, at the wall, or
 // unwrapped. Wide is 1-based line numbers; a file can be well under budget and
@@ -114,7 +122,9 @@ func wideLines(text string) []int {
 
 // measure reads a file once and returns both measurements. Characters, the way
 // the CLI counts them -- not bytes, so a file with non-ASCII text measures
-// smaller than wc -c reports.
+// smaller than wc -c reports. wide is always empty while the width check is
+// off: one choke point, so no caller and no report can bring wrapping back on
+// its own.
 func measure(path string) (chars int, wide []int, ok bool) {
 	st, err := os.Stat(path)
 	if err != nil || !st.Mode().IsRegular() {
@@ -125,43 +135,89 @@ func measure(path string) (chars int, wide []int, ok bool) {
 		return 0, nil, false
 	}
 	text := string(data)
+	if !widthEnabled() {
+		return utf8.RuneCountInString(text), nil, true
+	}
 	return utf8.RuneCountInString(text), wideLines(text), true
 }
 
-// candidates lists every file the session plausibly loaded as memory, in the
-// order a reader would care about. Duplicates are removed by the caller.
-func candidates(cwd string) []string {
+// homeCandidates lists the always-loaded files a tree walk from cwd cannot
+// find on its own: ~/.claude/CLAUDE.md and its @-imported snippets. Snippets
+// are measured too -- the CLI counts each import as its own entry, so an
+// oversized snippet is just as much a problem as an oversized CLAUDE.md.
+func homeCandidates() []string {
 	var out []string
-	if home := os.Getenv("HOME"); home != "" {
-		out = append(out, filepath.Join(home, ".claude", "CLAUDE.md"))
-		// Snippets are @-imported and the CLI measures each import as its own
-		// entry, so an oversized snippet is just as much a problem as an
-		// oversized CLAUDE.md -- and just as fixable.
-		snippets := filepath.Join(home, ".claude", "claude_snippets")
-		if entries, err := os.ReadDir(snippets); err == nil {
-			for _, e := range entries {
-				if strings.HasSuffix(e.Name(), ".md") {
-					out = append(out, filepath.Join(snippets, e.Name()))
-				}
-			}
-		}
+	home := os.Getenv("HOME")
+	if home == "" {
+		return out
 	}
-
-	out = append(out, filepath.Join(cwd, "CLAUDE.md"))
-	if entries, err := os.ReadDir(cwd); err == nil {
-		n := 0
+	out = append(out, filepath.Join(home, ".claude", "CLAUDE.md"))
+	snippets := filepath.Join(home, ".claude", "claude_snippets")
+	if entries, err := os.ReadDir(snippets); err == nil {
 		for _, e := range entries {
-			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-				continue
+			if strings.HasSuffix(e.Name(), ".md") {
+				out = append(out, filepath.Join(snippets, e.Name()))
 			}
-			if n >= maxSiblings {
-				break
-			}
-			n++
-			out = append(out, filepath.Join(cwd, e.Name(), "CLAUDE.md"))
 		}
 	}
 	return out
+}
+
+// claudeMdFiles walks root recursively for every CLAUDE.md, skipping .git and
+// node_modules. This is the ONE scan every caller uses -- SessionStart's
+// census, PostToolUse/Stop's change tracking, and CI's full_scan alike -- so
+// there is no shallower "guess one level of siblings" mode for any caller to
+// fall back to. That guess is exactly the shape that once let a real
+// violation two directories down (src/hooks/x/CLAUDE.md) through the plugin
+// unseen, caught only by a CI job's own separate, hand-rolled walk.
+func claudeMdFiles(root string) []string {
+	var out []string
+	var walk func(dir string)
+	walk = func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				if e.Name() == ".git" || e.Name() == "node_modules" {
+					continue
+				}
+				walk(filepath.Join(dir, e.Name()))
+				continue
+			}
+			if e.Name() == "CLAUDE.md" {
+				out = append(out, filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+	walk(root)
+	return out
+}
+
+// allCandidatePaths is every instruction file a session could plausibly have
+// loaded or touched: ~/.claude's CLAUDE.md and snippets, plus every CLAUDE.md
+// anywhere under cwd. Duplicates are removed by the caller.
+func allCandidatePaths(cwd string) []string {
+	out := homeCandidates()
+	return append(out, claudeMdFiles(cwd)...)
+}
+
+// fullScanOffenders is claudeMdFiles measured against the budget -- the sweep
+// full_scan uses. SessionStart's census (findOffenders, in hook.go) walks the
+// exact same tree via allCandidatePaths; the two differ only in which fields
+// they report (width included here, dropped there), never in coverage.
+func fullScanOffenders(root string, limit int) []offender {
+	floor := nearLimit(limit)
+	var offenders []offender
+	for _, path := range claudeMdFiles(root) {
+		chars, wide, ok := measure(path)
+		if ok && chars >= floor {
+			offenders = append(offenders, offender{Path: path, Chars: chars, Wide: wide})
+		}
+	}
+	worstFirst(offenders)
+	return offenders
 }
 
 // nearLimit is the "no room left" floor.
