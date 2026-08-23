@@ -1,0 +1,24 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "no-blame-language",
+	"description": "Refuses to end a turn whose closing message deflects a defect instead of fixing it -- 'pre-existing', 'not my problem', 'out of scope', 'flagging this for you', and their kin. Fix it, or say precisely why you are not the one to fix it",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["blame", "deflection", "ownership", "pre-existing", "stop", "hook", "enforcement"],
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-blame-language"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
