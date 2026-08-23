@@ -1,0 +1,684 @@
+# cleanup-bash-cmds
+
+A PreToolUse hook that rewrites Bash tool commands before they run. The command is
+**parsed, not pattern-matched**: shfmt turns it into a syntax tree, a jq program
+rewrites the tree, and shfmt turns the tree back into a command. No compiled
+binary -- bash + jq + shfmt work the same on every platform.
+
+It does ten jobs:
+
+1. **Destroys heredocs, denies perl, and denies file reads.** Any command
+   containing a heredoc, invoking `perl` (in any position the parser recognizes
+   as a command), or reading a file with `cat`/`head`/`tail` (a static file
+   operand that is not a `/proc`, `/sys`, or `/dev` pseudo-file -- use the Read
+   tool) is DENIED outright -- not rewritten, denied. See "Heredocs: banned",
+   "perl: banned", and "File reads via cat/head/tail: banned" below.
+2. **Makes deletion non-destructive.** Every `rm` (and `xargs rm`) becomes
+   `recycler trash`, which moves the target to the platform's native recycle
+   bin instead of destroying it. Forms that cannot be rewritten that way --
+   `shred`/`srm`, `find ... -delete`, `git rm`, `truncate -s 0` -- are denied
+   with the alternative that can. See "rm becomes recycler trash" below.
+3. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed,
+   wherever it appears -- including inside command substitutions. You cannot
+   responsibly use that, so it has to be taken away: silencing stderr hides the
+   very errors you need to see.
+4. **Kills trailing `| head` / `| tail` stages** -- on the FINAL statement only.
+   Any flags or arguments (`| head`, `|head -50`, `| head -n 100`, `| head -c 4k`,
+   `| tail -n +2`, `| tail -f`, ...), unwound until stable, so `cmd | head -5 |
+   tail -2` collapses all the way to `cmd`. Truncating output hides the rest of
+   it. A limiting pipe on an EARLIER statement of a multi-statement script is a
+   deliberate part of that script and is preserved.
+5. **Turns a trailing `> file` into `| tee file`** -- same final-statement scope.
+   The output lands in the file AND stays visible (`cmd >> f` becomes
+   `cmd | tee -a f`). Mid-script redirects are preserved. See "Stdout redirects
+   become tee" below.
+6. **Ensures `set -o pipefail`.** Every command runs with pipefail enabled --
+   silently prepended unless the command already turns it on. This also keeps the
+   producer's exit status observable through the injected `| tee`.
+7. **Recreates Docker Compose services instead of restarting them.**
+   `docker compose restart` becomes
+   `docker compose up -d --force-recreate`, preserving service arguments and
+   surrounding command structure.
+8. **Caps every `sleep` at 3 seconds.** Anywhere in the tree, including loops,
+   functions, and `$( )`. Literal durations summing to <= 3 are kept; everything
+   else (`sleep 30`, `sleep 1m`, `sleep $DELAY`, `sleep infinity`, junk, no args)
+   becomes `sleep 3`. See "Sleep capped at 3 seconds" below.
+9. **Removes constant narration echoes/printfs.** A terminal-bound `echo` with
+   all-constant arguments, or a `printf` that just prints a single constant
+   string with no `%` directive, is removed entirely -- its whole command is
+   rewritten to the no-op `:` (no output, exit status 0, surrounding structure
+   intact). A `printf` that actually formats (a `%` directive, extra args, or an
+   expansion) is kept. The matcher sees through `command` / `builtin` / a leading
+   `\` / quoting wrappers. See "Constant narration echoes and printfs are
+   removed" below.
+10. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing
+    `| grep ...` (all anchored at the end of the command, like head/tail).
+    Strictness settings the user wrote (`set -e` and friends) are NEVER removed --
+    this hook only ever adds strictness.
+
+## Fully silent by design
+
+The hook never announces a rewrite -- no `systemMessage`, no
+`additionalContext`, ever, for any rule combination. Every rewrite emits only
+the replacement input plus `suppressOutput: true`, so nothing about the hook
+appears in the transcript. Reason: any visible hook message just gives the
+model something to blame for its own command mistakes.
+
+The only observable trace of a rewrite is the executed command itself; for
+debugging, set `CLEANUP_BASH_CMDS_LOG` (see Logging) -- the log records every
+rewrite with the rules that fired. The single exception is the bans (heredoc,
+perl, file reads), which must return a `permissionDecisionReason` (without one
+the model would retry forever); they carry no `systemMessage` either.
+
+## Before / After
+
+Before (what the model asked for):
+
+```bash
+ls /nope 2>/dev/null
+```
+
+The command runs, the error is swallowed, and the model concludes the directory is
+merely empty.
+
+After (what actually executes):
+
+```bash
+ls /nope
+```
+
+stderr stays visible: `ls: cannot access '/nope': No such file or directory`.
+
+## How it works
+
+```
+hook stdin JSON -> jq (extract .tool_input.command)
+                -> shfmt --to-json          (parse to a typed syntax tree)
+                -> jq -f transform.jq       (inspect + rewrite the tree)
+                -> banned?                  (heredoc / perl / file read: emit
+                                             permissionDecision deny; stop)
+                -> shfmt --from-json        (regenerate the command)
+                -> statement-count guard    (fewer top-level statements than
+                                             the original? fail open: no rewrite)
+                -> emit hookSpecificOutput.updatedInput
+```
+
+Because the rewrite operates on real `Redirect` and pipeline nodes, string
+literals and comments that merely *contain* `2>/dev/null` or `| head` are never
+touched. A rewrite is emitted only when the tree semantically changed (positions
+are ignored in the comparison); untouched commands pass through byte-for-byte.
+
+The statement-count guard is belt and braces: no rule can splice the statement
+list (they map over it, edit within a statement, or prepend pipefail), but if a
+future rule bug or a shfmt regeneration regression ever ate a statement, the
+hook would drop the whole rewrite (and log a `GUARD` line) rather than execute
+a truncated command.
+
+## Heredocs: banned
+
+You cannot be trusted with heredocs, so they are gone. Any command whose syntax
+tree contains a heredoc redirect -- `<<` or `<<-`, quoted or unquoted delimiter,
+anywhere in the command including inside `$(...)`, process substitutions, and
+function bodies -- is **denied**, not rewritten:
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+ "permissionDecisionReason": "Heredocs are banned in this environment. Write file
+ content with the Write/Edit tools; for command stdin use printf '%s' ... | cmd
+ or a temp file."}}
+```
+
+- **Deny beats rewrite**: a command with a heredoc AND scrubbable noise is denied
+  immediately; nothing is rewritten.
+- **Herestrings (`<<<`) are allowed** -- they are not heredocs -- and still get the
+  other cleanups (`grep x <<<"data" 2>/dev/null` becomes `grep x <<<"data"`).
+- Detection is AST-based: `echo "here is <<EOF in a string"` and the arithmetic
+  bit shift `$((x << 2))` (which shares shfmt's `<<` token number) are untouched.
+- What to use instead: the Write/Edit tools for file content; `printf '%s' ... |
+  cmd` or a temp file for stdin.
+- Denies are logged to `CLEANUP_BASH_CMDS_LOG` as `DENY` lines.
+- Fail-open still applies: if the command does not parse (or shfmt/jq are
+  missing), the hook cannot see a heredoc and passes the command through.
+
+Two implementation notes:
+
+- shfmt's typed JSON encodes operators as version-dependent numbers (`|` is 12 in
+  v3.8.0 but 13 in v3.13.1), so the hook probes the numbers at runtime by parsing
+  a tiny fixed script with the same shfmt binary it will use.
+- A rewritten command comes back in shfmt's canonical formatting (normalized
+  spacing; `a; b` becomes two lines). Formatting-only differences never trigger a
+  rewrite on their own.
+
+## perl: banned
+
+`perl` is banned in this environment. Any command whose **effective command** is
+`perl` -- matched against the anchored pattern `^perl[0-9.]*$`, so `perl5.36`
+counts too -- is **denied**, not rewritten:
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+ "permissionDecisionReason": "perl is banned in this environment."}}
+```
+
+- The **effective-command resolver** applies, so wrappers do not get you past it:
+  `command perl -e 1`, `\perl -e 1`, and `builtin perl` all resolve to `perl` and
+  are denied. Deny beats rewrite, and the deny is logged as a `DENY` line with
+  `reason="perl"`.
+- `perl` as an **argument** or a **different command** is not denied -- the walk
+  never enters word-internal contexts, so `grep perl file` and `perlcritic file`
+  run, and `command -v perl` is a lookup, not an invocation.
+- `perl` inside a **command/process substitution** (`echo $(perl -e 1)`) is a
+  deliberate non-goal (see Non-goals) -- the same word-scoping that keeps
+  `grep perl` safe.
+- Fail-open still applies: an unparseable command passes through.
+
+## Exactly which forms are scrubbed
+
+Stderr redirections to /dev/null, anywhere in the command, in any of these
+spellings:
+
+| Form | Example |
+|------|---------|
+| `2>/dev/null` | `grep x f 2>/dev/null && echo hit` |
+| `2> /dev/null` | `cmd 2> /dev/null` |
+| `2>>/dev/null` | `cmd 2>>/dev/null` |
+| `2>> /dev/null` | `cmd 2>> /dev/null` |
+| `2>'/dev/null'` | `cmd 2>'/dev/null'` |
+| `2>"/dev/null"` | `cmd 2>"/dev/null"` |
+
+Because the match is a parsed `Redirect` node (fd 2, `>` or `>>`, target exactly
+`/dev/null`), the old regex hazards are structurally impossible: `12>/dev/null`
+redirects fd 12 and stays; `2>/dev/null2` and `2>/dev/null.log` name different
+files and stay; `echo "try 2>/dev/null"` is a string and stays.
+
+## Trailing `| head` / `| tail` removal
+
+A trailing `| head ...` or `| tail ...` stage is dropped from the end of the
+command, repeatedly, with whatever flags and arguments it carries:
+
+```bash
+git log | head -5 | tail -2   ->   git log
+cat f | grep x | head -3      ->   cat f      # grep becomes trailing next pass
+a | head -2 && b | tail -3    ->   a | head -2 && b
+```
+
+Scope and guards:
+
+- **Final statement only.** The rule anchors at the textual end of the command:
+  the last top-level statement, and within it the rightmost `&&` / `||` member.
+  A limiting pipe on an earlier statement of a multi-line / `;`-joined script
+  (`ls | tail -12` followed by more commands) is a deliberate part of that
+  script and is preserved.
+- **Never inside `$(...)` or `<(...)`.** `VAR=$(ls | head -1)` is functional
+  capture, not output truncation, and is preserved.
+- **Word boundaries are real.** `| headache`, `| tailscale status`, `| head5` are
+  different commands and stay untouched (the stage's command word must be exactly
+  `head` or `tail`).
+- **Mid-pipeline stages stay.** `cmd | head -5 | wc` keeps its `head`. If a later
+  trailing stage is stripped and `head`/`tail` becomes trailing, the next pass
+  strips it too; that is the point.
+- Strings are safe: `grep "foo | head" f` contains no pipeline.
+
+## File reads via cat/head/tail: banned
+
+Reading a file with `cat`, `head`, or `tail` is what the Read tool is for.
+Any invocation of one of the three, in any statement position the parser
+recognizes (the same walk as the perl deny: both sides of pipes and `&&` /
+`||`, compound bodies, function bodies), that names at least one **static,
+non-magic file operand** is **denied**, not rewritten:
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+ "permissionDecisionReason": "Reading files with cat/head/tail is banned in this
+ environment. Use the Read tool instead. Only /proc, /sys, and /dev pseudo-files
+ are exempt."}}
+```
+
+```bash
+cd repo && head -60 src/usage.test.ts    # DENIED (the incident shape)
+cat notes.md                             # DENIED
+cat config.json | jq .x                  # DENIED (jq can read the file itself)
+tail -f /var/log/syslog                  # DENIED (a regular file)
+cat a.txt b.txt > merged.txt             # DENIED (use Read + Write)
+f() { cat secret.txt; }                  # DENIED (runs when f is called)
+```
+
+**Magic pseudo-files are exempt.** An operand under `/proc`, `/sys`, or
+`/dev` is not something the Read tool can meaningfully read, and truncating
+an unbounded stream there is legitimate:
+
+```bash
+cat /proc/meminfo            # allowed
+cat /sys/class/net/eth0/address   # allowed
+head -c 100 /dev/urandom     # allowed -- and NOT rewritten (bounded read of
+                             # an unbounded stream)
+```
+
+Also not a banned file read:
+
+- **No operands / stdin.** `cmd | head -5`, `x | cat`, `cat -` are pipeline
+  plumbing, not file reads. The trailing `| head` stage-strip rule still
+  applies as usual.
+- **Process substitutions.** `cat <(cmd)` reads a stream, not a file.
+- **Expansion operands.** `cat "$F"` is not statically resolvable; like the
+  rest of the hook, unknown means hands off (a deliberate non-goal, same as
+  `$x` command words elsewhere).
+- **Word-internal contexts.** `x=$(cat f)` and `echo $(cat f)` are capture --
+  the walk never enters Word parts (the same scoping that keeps `grep perl`
+  out of the perl deny). Deliberate non-goal.
+- **Lookalike names.** `catalog`, `headache`, `head5` are different commands,
+  and `command -v cat` is a lookup.
+
+Flags are understood when finding operands, so a flag value is never mistaken
+for a file: the separated value of `-n` / `-c` / `-s` (`head -n 20
+/proc/meminfo` is exempt -- `20` is a value), bundled clusters ending in a
+value-taking letter (`-qn 3`), value-taking GNU long forms (`--lines 20`),
+and old-style limits (`head -60`, `tail +5`) are all skipped. The
+**effective-command resolver** applies, so `command cat f` and `\head -5 f`
+are denied too.
+
+## rm becomes recycler trash
+
+Deletion is made **non-destructive by construction** -- not detected, not
+warned about, not gated on whether the file happens to be recoverable. Every
+`rm` is rewritten to [`recycler`](https://github.com/wow-look-at-my/recycler)
+`trash`, which moves each target to the platform's native recycle bin (the
+FreeDesktop trash can on Linux and the BSDs, `~/.Trash` on macOS, the Recycle
+Bin via the shell on Windows):
+
+```bash
+rm -rf build/ old.js     ->   recycler trash build/ old.js
+rm file.txt              ->   recycler trash file.txt
+xargs rm                 ->   xargs recycler trash
+```
+
+Getting it back:
+
+```bash
+recycler list              # what is in there, newest first (--json for scripts)
+recycler restore notes.txt # put it back where it came from
+```
+
+### Why a rewrite and not a warning
+
+There is already a control on the adjacent case: the `no-overwrites` plugin
+blocks `Write` on a path that exists and tells you to use `Edit`.
+**Delete-then-Write is the loophole around that hook** -- once the path is
+gone, `Write` is legal again. And in the window between the delete and the
+Write, the only copy of that file's content is in the model's context: a
+compaction, an interruption, a rejected tool call, or a turn that simply ends
+there destroys it permanently, with nothing on disk to recover from.
+
+A control that acts on the `Write` is already a full step too late, and a
+ledger entry naming the destroyed path does not bring the bytes back. Nor can
+this lean on version control: the incident that motivated the rule happened in
+a scratchpad with no git at all. The only thing that helps is for `rm` to stop
+being able to destroy anything.
+
+### The rewrite is unconditional and tree-wide
+
+Unlike the trailing-noise rules, this one is **not** anchored to the last
+statement -- an `rm` mid-script, inside a pipe, a loop body, a function, or a
+command substitution destroys just as much as a trailing one:
+
+```bash
+rm -f a.js && node b.ts        ->  recycler trash a.js && node b.ts
+ls | while read f; do rm "$f"; done
+                               ->  ls | while read f; do recycler trash "$f"; done
+clean() { rm -rf build; }      ->  clean() { recycler trash build; }
+```
+
+Because the edit happens per-`CallExpr` on the syntax tree, "only the `rm`
+segment is rewritten" falls out for free, and a string literal that merely
+*contains* an `rm` is never touched:
+
+```bash
+echo "rm -rf /"           # untouched -- a string, not a command
+grep "rm -rf" script.sh   # untouched
+rmdir empty/              # a different command
+```
+
+`recycler` is emitted as a bare word so `PATH` resolves it, and a call that is
+already `recycler` is never rewritten again (the transform runs to a fixpoint,
+so an unguarded rule would recurse). The rule only ever emits `recycler trash`
+-- never `purge` or `empty`, which are themselves permanent deletes.
+
+### Flag translation
+
+`recycler trash` takes paths, so `rm`'s flags are dropped:
+
+| `rm` flag | handling |
+|---|---|
+| `-r`, `-R`, `--recursive` | dropped -- `recycler trash` takes directories natively |
+| `-f`, `--force` | dropped |
+| `-v`, `--verbose` | dropped |
+| `-i`, `-I`, `--interactive` | dropped -- prompts are meaningless here |
+| `--` | dropped, targets pass positionally (re-emitted if a target is dash-leading, so `rm -- -weirdname` stays correct) |
+| anything else | **DENIED** -- blocked with an explanation rather than guessing a translation |
+
+Bundled clusters count when every letter is droppable (`-rf`, `-rfv`), so an
+unknown letter anywhere in a cluster (`-rd`) takes the deny path, as do
+`--no-preserve-root`, `--one-file-system`, and `-d`.
+
+`xargs rm` gets its own case rather than falling out of the walk: there `rm`
+is an *argument* of `xargs`, not a command word, so the effective-command
+resolver never sees it. `xargs`'s own value-taking flags (`-n N`, `-I R`,
+`-P N`, ...) are understood, so the utility word is found correctly.
+
+### One code path
+
+`recycler` is a **hard dependency** of this rule, exactly as `jq` and `shfmt`
+are hard dependencies of the hook. It is simply the command the transform
+emits: there is no probe, no `command -v`, no conditional, and **no fallback
+to `rm`**. If `recycler trash` fails at runtime -- permissions, an unreachable
+recycle bin -- the file is still there and the command reports the error,
+which is the correct outcome. The failure is never caught and never retried as
+`rm`.
+
+One consequence worth knowing: `rm -f nonexistent` is silent success for real
+`rm`, but `recycler trash nonexistent` is a visible error. That is the same
+fail-loud posture as the rest of the hook.
+
+### Destructive forms that cannot be rewritten are denied
+
+There is no source file to move in these, so they are **denied** with the
+alternative that works:
+
+| form | reason names |
+|---|---|
+| `shred`, `srm` | unrecoverable by design; no safe equivalent |
+| `find ... -delete` | `find ... -exec recycler trash {} +` |
+| `git rm <path>` | `recycler trash <path> && git add -A` |
+| `truncate -s 0 file` | `recycler trash file` |
+
+`git rm --cached` does not touch the working tree and passes through
+untouched.
+
+**A plain `> file` redirect is deliberately NOT denied.** It truncates, but
+stdout redirection is overwhelmingly ordinary output routing -- and the
+`tee` rule above already owns that shape. Denying it would fight the plugin's
+own behavior and fire constantly on non-deletions. So `: > file` still
+truncates: a known, accepted gap, and the right trade.
+
+## Stdout redirects become tee
+
+A trailing stdout file redirect on the FINAL top-level statement (rightmost
+`&&` / `||` member -- the same anchoring as head/tail) is rewritten into a pipe
+through tee, so the file is still written but the output is no longer hidden
+from the transcript:
+
+```bash
+cmd > build.log         ->   cmd | tee build.log
+cmd >> build.log        ->   cmd | tee -a build.log
+a | b > out             ->   a | b | tee out
+make > "$OUT" 2>err     ->   make 2>err | tee "$OUT"
+```
+
+The redirect's target word is reused verbatim (quoting and expansions like
+`"$OUT"` survive), every other redirect stays on the producer, and the injected
+`set -o pipefail` keeps the producer's exit status from being masked by tee.
+
+Exclusions (left exactly as written, deliberately):
+
+- anything before the final statement -- `make > build.log` followed by more
+  commands keeps its redirect (mid-script output routing is intentional)
+- targets under `/dev/` -- `cmd > /dev/null` is a deliberate stdout discard and
+  stays a discard
+- process-substitution targets (`cmd > >(gzip)`)
+- statements with more than one stdout file redirect (`cmd > a > b`)
+- anything inside `$(...)` or `<(...)` -- `VAR=$(cmd > f)` is untouched
+- non-stdout redirects (`cmd 2> err.log`, `cmd < in`)
+
+## Docker Compose restarts become forced recreations
+
+Every real command whose first three static words are
+`docker compose restart` is rewritten to use a detached forced recreation:
+
+```bash
+docker compose restart             -> docker compose up -d --force-recreate
+docker compose restart api worker  -> docker compose up -d --force-recreate api worker
+```
+
+The rewrite applies anywhere commands execute, including loops, functions,
+subshells, and command substitutions. Trailing service names and flags,
+assignments, redirects, and surrounding `&&` / `||` / pipeline structure are
+preserved, and the rule composes with the other cleanup passes. It does not
+touch the separate `docker-compose` executable, text passed as arguments to
+another command, or opaque `sh -c` / `bash -c` strings.
+
+## Sleep capped at 3 seconds
+
+Every `sleep` in real command position -- top level, loop bodies, function
+bodies, subshells, `$( )` captures, either side of `&&` / `||` / `;` -- is
+capped. If every argument is a literal word that parses as a GNU sleep duration
+(decimal with optional `s`/`m`/`h`/`d` suffix) and the durations sum to <= 3
+seconds, the command is untouched. EVERYTHING else has its whole argument list
+replaced with the single literal `3`:
+
+```bash
+sleep 2                  ->   sleep 2          # literal, under the cap
+sleep 0.5s               ->   sleep 0.5s       # suffixes understood
+sleep 30                 ->   sleep 3
+sleep 1m                 ->   sleep 3          # 60s > 3s
+sleep 1m 30              ->   sleep 3          # durations SUM
+sleep $DELAY             ->   sleep 3          # non-literal: cannot be trusted
+sleep "$(get_delay)"     ->   sleep 3
+sleep infinity           ->   sleep 3
+sleep                    ->   sleep 3          # zero args (an error anyway)
+FOO=1 sleep 30 2>>e.log  ->   FOO=1 sleep 3 2>>e.log   # assigns/redirs kept
+```
+
+Notes:
+
+- The cap is **per command**, not per script: `sleep 2 && sleep 2` is fine.
+- `timeout 5 sleep 30` and `"sleep 30"` inside a string are word arguments, not
+  command position, and are untouched by construction.
+- The duration grammar is deliberately strict; anything it does not recognize
+  (including scientific notation like `sleep 1e-3`) takes the junk path and
+  becomes `sleep 3`.
+
+## Constant narration echoes and printfs are removed
+
+`echo <constants>` (or `printf <constant>`) is the model narrating into the
+transcript -- `echo "=== step 2 ==="` separators and friends. A matched
+narration command is **removed**: its whole command is rewritten to the no-op
+`:`, so it produces no output, exits 0, and leaves every surrounding statement,
+redirect, and pipe stage intact. `:` is used instead of deleting the statement
+so the top-level statement count never drops and exit-0 is preserved.
+
+```bash
+echo "=== files present ==="   ->   :
+echo done && rm -f x           ->   : && rm -f x
+echo warn 2>>err.log           ->   : 2>>err.log     # the redirect stays
+```
+
+The two commands differ in what counts as narration:
+
+- **`echo`** is removed when every argument after the command word is constant
+  (flags count; plain literals with glob characters `* ? [ {` or a leading `~`
+  do NOT count -- their output is runtime data). Bare `echo` is removed too.
+- **`printf`** is removed only for the literal-print form: exactly ONE argument
+  after the command word, a static string with NO `%` in it. A `%` directive, a
+  `%%`, extra args beyond the format, or an expansion mean it is really
+  formatting and it is kept:
+
+  ```bash
+  printf 'done\n'    ->   :                 # a constant string, no %
+  printf '%s\n' x    ->   printf '%s\n' x   # formats: kept
+  printf '%d' 5      ->   printf '%d' 5     # kept
+  printf 'a%%b'      ->   printf 'a%%b'     # kept (has %)
+  printf x y z       ->   printf x y z      # kept (more than one arg)
+  ```
+
+The matcher **sees through wrappers and quoting** via an effective-command
+resolver, so a wrapped narration command is still removed:
+
+```bash
+command echo hi        ->   :
+builtin printf 'hi'    ->   :
+\echo hi               ->   :
+"printf" hi            ->   :
+command command echo x ->   :
+```
+
+`command -v NAME` / `command -V NAME` are lookups, not invocations, so they are
+left alone (`command -v printf` stays), and `command printf '%s\n' x` is kept
+because the underlying `printf` is formatting.
+
+"Reaches the terminal" is computed structurally, walking down from the file
+root. An echo or printf is NOT removed when its output is data:
+
+- feeding a pipe (`echo foo | cat`, `echo '{"x":1}' | jq .x`) -- but a FINAL
+  pipe stage (`x | echo foo`) prints to the terminal and IS removed
+- captured (`X=$(echo abc)`, backticks, `<( )`, `>( )`)
+- redirected (`echo foo > file`, `echo foo >&2`); pure stderr redirects
+  (`echo warn 2>>err.log`) do not disqualify, and any redirect on an enclosing
+  compound (`{ echo a; } > f`, `for ...; done > log`) makes the whole body data
+- inside a function body (visibility is decided at the call site: `x=$(f)`
+  would capture) or a coproc
+- carrying any expansion (`echo "$VAR"`, `echo $(date)`, `echo $((1+2))`) or
+  glob/tilde (`echo *.txt`, `echo ~`) -- that output is information, not
+  narration
+
+Compound bodies stay in scope: if/elif/else branches, while/until/for bodies
+and conditions, case items, subshells, `time`, `!`, and both sides of `&&` /
+`||` all count as terminal-bound statement positions.
+
+## Non-goals (deliberately NOT touched)
+
+- `&>/dev/null` (redirects both stdout and stderr)
+- `>/dev/null` (a stdout discard stays a discard)
+- `>/dev/null 2>&1` -- the trailing `2>&1` is silently removed, leaving
+  `cmd >/dev/null`
+- `2>&1` anywhere except the very end of the command (e.g. `cmd 2>&1 | wc`, or
+  on a non-final statement of a longer script)
+- `2 >/dev/null` (that is an argument `2` plus a stdout redirect)
+- `head`/`tail` as operand-less pipeline stages (`cmd | head -5 | wc`) or on a
+  non-final statement, and cat/head/tail inside command/process substitutions
+  (`x=$(cat f)`) -- but a cat/head/tail that NAMES a non-magic file, anywhere
+  in statement position, is denied (see "File reads via cat/head/tail:
+  banned")
+- `> file` on a non-final statement (only the final statement's redirect
+  becomes tee)
+- `| grep`, `|| true`, `| head`, `| tail`, `> file`: all anchored at the very
+  end of the command (last statement, rightmost `&&`/`||` member) -- one shared
+  anchoring for every trailing-noise rule
+- `command sleep` / `\sleep` -- the sleep, stage-strip head/tail, grep, and
+  `|| true` rules still match the plain literal command word only. Only
+  **narration removal**, the **perl deny**, and the **file-read deny** see
+  through `command` / `builtin` / a leading `\` / quoting; the other
+  name-keyed rules do not.
+- `perl` inside a command substitution or process substitution
+  (`echo $(perl -e 1)`, `<(perl ...)`) is NOT denied -- the resolver never
+  descends into word-internal contexts (the same scoping that keeps
+  `grep perl` / `perlcritic` safe). Flag it if you want it closed.
+- `sh -c '...'` / `bash -c '...'` payloads are opaque strings -- the hook parses
+  the outer command, not the quoted script, so narration, perl, and every other
+  rule inside a `-c` payload are not seen (would need recursive sub-parsing)
+- `env echo ...`, aliases, and other non-`command`/`builtin` wrappers are not
+  resolved through
+- `set -e`, `set -u`, `set -euo pipefail`, ... -- strictness settings are never
+  removed (and `set -euo pipefail` is recognized, so no duplicate injection)
+
+## Requirements
+
+The hook needs three tools on PATH at runtime; if any is missing it **fails
+open** (the command runs unmodified):
+
+| Tool | Why | Notes |
+|------|-----|-------|
+| bash | orchestration | |
+| jq | JSON handling + AST transform | 1.6+ |
+| shfmt | parse/print bash | needs `--to-json` / `--from-json` (v3.7.0+; verified with 3.8.0 and 3.13.1) |
+| recycler | the target of the `rm` rewrite | must be on `PATH` when a rewritten `rm` RUNS; the hook itself never invokes or probes it |
+
+`bash`, `jq`, and `shfmt` are needed by the hook itself -- if `jq` or `shfmt`
+is missing the hook fails open and emits no rewrite. `recycler` is different:
+it is needed by the *rewritten command*, not by the hook, so a missing
+`recycler` does not disable the rewrite. It surfaces as a visible
+"command not found" with the file still on disk, which is the correct failure
+mode (see "One code path" above).
+
+Installing shfmt:
+
+```bash
+# Debian/Ubuntu                # macOS                    # Windows
+sudo apt-get install shfmt     brew install shfmt         scoop install shfmt
+
+# Anywhere with Go                             # Static binaries
+go install mvdan.cc/sh/v3/cmd/shfmt@latest     https://github.com/mvdan/sh/releases
+```
+
+Installing recycler:
+
+```bash
+go install github.com/wow-look-at-my/recycler@latest
+```
+
+## Caveats
+
+- **Rewritten commands come back shfmt-formatted.** Spacing is normalized and
+  `a; b` prints as two lines. Only commands that had a real change are reformatted.
+- **The command must parse as bash.** Anything shfmt cannot parse passes through
+  untouched (fail-open), as does anything when shfmt/jq are absent.
+- **The permission prompt still applies to rewrites.** For rewrites the hook emits
+  `hookSpecificOutput.updatedInput` *without* a `permissionDecision`, so the normal
+  permission flow evaluates the rewritten command (verified against
+  `@anthropic-ai/claude-code` 2.1.201). This is a change from the original Go
+  implementation of this plugin, which returned `permissionDecision: "allow"` and
+  made every rewritten command skip the permission prompt. Only the bans use a
+  `permissionDecision` (`"deny"`): heredoc, perl, file reads, `shred`/`srm`,
+  `find -delete`, `git rm`, `truncate -s 0`, and an untranslatable `rm` flag.
+- **A rewritten `rm` needs `recycler` on PATH at execution time.** The rewrite
+  itself never checks; a missing `recycler` is a visible failure with the file
+  intact, not a silent fallback to `rm`.
+## Logging
+
+The log file is the hook's debug channel (the transcript shows nothing). Set
+`CLEANUP_BASH_CMDS_LOG=/path/to/file` to append a record of every rewrite --
+tagged with the rules that fired -- every deny, and every statement-count
+fail-open:
+
+```
+REWRITE	original="ls | grep foo"	cleaned="set -o pipefail\nls"	rules="grep,pipefail"
+REWRITE	original="sleep 30; echo hi"	cleaned="set -o pipefail\nsleep 3\n:"	rules="sleep_cap,narration_remove,pipefail"
+REWRITE	original="rm -rf build"	cleaned="set -o pipefail\nrecycler trash build"	rules="rm_recycle,pipefail"
+DENY	original="cat <<EOF\nhi\nEOF"	reason="heredoc"
+DENY	original="perl -e 1"	reason="perl"
+DENY	original="cat notes.txt"	reason="file_read"
+DENY	original="rm --nonsense a"	reason="rm_flag"
+DENY	original="shred /tmp/x"	reason="shred"
+DENY	original="find . -name '*.tmp' -delete"	reason="find_delete"
+DENY	original="git rm foo"	reason="git_rm"
+DENY	original="truncate -s 0 f"	reason="truncate_zero"
+GUARD	original="..."	cleaned="..."	reason="stmt-count"
+```
+
+Log failures never break the hook.
+
+## Installation
+
+This plugin is part of the cc-marketplace marketplace.
+
+```bash
+# Add the marketplace (if not already added)
+claude plugin marketplace add https://sites.pazer.build/cc-marketplace/branch/master/marketplace.json
+
+# Install this plugin
+claude plugin install cleanup-bash-cmds
+```
+
+## Development
+
+The orchestration lives in `hook.sh`, the AST rewrite in `transform.jq`, and the
+tests in `tests/run-tests.sh` (synthetic hook payloads in, JSON assertions out):
+
+```bash
+bash tests/run-tests.sh
+```
+
+If the machine has no usable shfmt, the test runner bootstraps a pinned release
+binary into a temp directory for the run (this is how bare CI runners pass). CI
+runs the same tests through the `prebuild` recipe in the `justfile`.
+
+And no, `hook.sh` does not use `2>/dev/null` anywhere itself. We checked.
