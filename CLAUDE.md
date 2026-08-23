@@ -44,4 +44,7 @@ Each plugin documents itself in its own directory. Add a new plugin's notes at
 @plugins/grep/CLAUDE.md
 @plugins/link-all-refs/CLAUDE.md
 @plugins/misc-skills/CLAUDE.md
+@plugins/no-blame-language/CLAUDE.md
+@plugins/no-busy-poll/CLAUDE.md
 @plugins/repo-index/CLAUDE.md
+
