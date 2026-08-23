@@ -8,19 +8,14 @@ permissions:
   contents: read
 
 jobs:
-  # Each job here drives REAL Claude Code against one plugin and asserts the
-  # plugin actually did its job. `claude plugin validate` (release.yml) only
-  # checks a manifest -- it never starts a hook or a language server, which is
-  # how a broken LSP shutdown reached master while every check was green.
+  # see docs/ci-yaml-notes.md#plugin-e2e-workflow-rationale
   cleanup-bash-cmds:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
-      # The hook is a bash + jq + shfmt script (hook.sh) checked into the
-      # plugin, so there is no binary to build or stage. It does need shfmt
-      # (--to-json/--from-json) on the machine running Claude.
+      # hook.sh is checked-in bash+jq+shfmt, nothing to build, but shfmt (--to-json/--from-json) must be on the runner.
       - name: Install shfmt
         run: sudo apt-get update -q && sudo apt-get install -y -q shfmt
 
@@ -32,10 +27,7 @@ jobs:
           CLEANUP_BASH_CMDS_LOG: ${{ runner.temp }}/hook.log
         run: |
           : > "$CLEANUP_BASH_CMDS_LOG"
-          # --model sonnet is deliberate: this job asserts that a HOOK rewrote a
-          # command, which no model tier affects, and it runs on every push.
-          # Without the flag it inherits the account default and bills Opus for
-          # a one-line smoke test.
+          # --model sonnet, deliberate: this checks a HOOK rewrite (model-tier-independent); omitting the flag bills the account's default model per push.
           claude -p "Run exactly this Bash command and report the output: seq 1 10 | head -3" \
             --model sonnet \
             --plugin-dir ./plugins/cleanup-bash-cmds \
@@ -81,22 +73,11 @@ jobs:
           fi
           echo "OK: hook stripped the trailing | head and injected pipefail"
 
-  # The css-duplication plugin ships a language server, and nothing else in CI
-  # ever starts one: `claude plugin validate` reads the manifest, and the
-  # smoke-test job installs plugins without exercising them. This job runs the
-  # whole chain the way a user does -- Claude Code loads .lsp.json, spawns the
-  # binary, edits a stylesheet into a duplicate, and the server's diagnostics
-  # come back as an attachment -- then asserts the LSP session also SHUT DOWN
-  # cleanly, which is the specific failure a green test suite hid: a malformed
-  # JSON-RPC response is only rejected by a real client.
+  # see docs/ci-yaml-notes.md#css-duplication-lsp-job
   css-duplication-lsp:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # A job-level block REPLACES the workflow-level one, so every permission
-    # this job needs is listed here. go-toolchain submits a dependency-graph
-    # snapshot and FAILS the build on a 403, so `contents: write` is required
-    # even though the binaries themselves built fine; actions/checks read feed
-    # its no-all-builds guard.
+    # see docs/ci-yaml-notes.md#go-toolchain-permission-grants
     permissions:
       id-token: write
       contents: write
@@ -112,8 +93,7 @@ jobs:
           os: linux
           arch: amd64
           upload-artifacts: 'false'
-          # This binary exists to be driven by the e2e below; publishing it to
-          # buildhost on every branch push is not what the job is for.
+          # Exists to be driven by the e2e below; autorelease off since a branch push should not publish it to buildhost.
           autorelease: 'false'
 
       - uses: ./.github/actions/setup-claude-code
