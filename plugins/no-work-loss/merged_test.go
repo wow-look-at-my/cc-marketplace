@@ -40,5 +40,9 @@ func TestTheDestructionMessageWinsWhenBothHalvesObject(t *testing.T) {
 	modify(t, dir)
 	reason := denied(t, dir, "echo x > tracked.go")
 	assert.Contains(t, reason, "would lose")
-	assert.Contains(t, reason, "git stash push")
+
+	// And the alternative it names must itself survive the other half: `>> file`
+	// spares the content but is still a write outside the edit tools.
+	assert.NotContains(t, reason, ">> tracked.go")
+	assert.Contains(t, reason, "Edit")
 }
