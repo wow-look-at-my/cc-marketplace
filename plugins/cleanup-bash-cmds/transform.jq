@@ -684,9 +684,8 @@ def narration_remove:
                  (($ec.name == "echo")
                   and ((.Args[$ec.index + 1:]) | all(word_is_constant)))
                  or (($ec.name == "printf")
-                     and (((.Args[$ec.index + 1:]) | length) == 1)
-                     and (((.Args[$ec.index + 1] | word_literal)) as $s
-                          | ($s != null) and (($s | test("%")) | not))))
+                     and (((.Args[$ec.index + 1:]) | length) > 0)
+                     and ((.Args[$ec.index + 1:]) | all(word_is_constant))))
             then colon_cmd
             else . end
         elif .Type? == "BinaryCmd" then
@@ -775,6 +774,48 @@ def read_operands($args; $valued):
 
 def is_magic_path: test("^/(proc|sys|dev)(/|$)");
 
+# A sed that suppresses automatic printing is selecting lines to print: a file
+# read when it names a file, and the same truncation as `| head` when it does
+# not. `-n`, a short cluster containing n (`-ne`), `--quiet` and `--silent` are
+# all that spelling. A sed WITHOUT it transforms its input and is left alone.
+def sed_suppresses_output($args):
+  $args | any((word_literal) as $l
+    | ($l != null)
+      and (($l | test("^-[A-Za-z]*n[A-Za-z]*$"))
+           or ($l == "--quiet") or ($l == "--silent")));
+
+# The file operands of a sed call. Flags are dropped, and so is the leading
+# script word -- unless -e/-f already supplied the script, in which case the
+# first non-flag word is already a file.
+def sed_file_operands($args):
+  ($args | any((word_literal) as $l
+     | ($l != null)
+       and (($l | test("^-[A-Za-z]*[ef][A-Za-z]*$"))
+            or ($l | startswith("--expression"))
+            or ($l | startswith("--file"))))) as $scripted
+  | [$args[] | select((word_literal) as $l
+       | ($l == null) or (($l | startswith("-")) | not))]
+  | if $scripted then . else .[1:] end;
+
+def call_is_sed_suppressing:
+  (effective_command) as $ec
+  | ($ec != null) and ($ec.name == "sed")
+    and (sed_suppresses_output(.Args[$ec.index + 1:]));
+
+def call_is_sed_line_read:
+  call_is_sed_suppressing
+  and (sed_file_operands(.Args[(effective_command).index + 1:])
+       | any(.[]; (word_literal) as $l
+             | ($l != null) and (($l | is_magic_path) | not)));
+
+# Mirrors strip_trailing_stages, which cannot see this predicate: it is defined
+# above effective_command and takes plain command names.
+def strip_trailing_sed_n:
+  if (.Cmd.Type? == "BinaryCmd") and (.Cmd.Op == $ops.pipe)
+     and (.Cmd.Y.Cmd | (.Type? == "CallExpr") and call_is_sed_suppressing)
+  then . as $outer | (.Cmd.X | promote($outer)) | strip_trailing_sed_n
+  else . end;
+
 def call_reads_banned_file:
   # . = CallExpr
   (effective_command) as $ec
@@ -785,7 +826,7 @@ def call_reads_banned_file:
                | ($lit != null) and (($lit | is_magic_path) | not)));
 
 def has_banned_file_read:
-  any_call_in_stmts(call_reads_banned_file);
+  any_call_in_stmts(call_reads_banned_file or call_is_sed_line_read);
 
 # ---------------------------------------------------------------------------
 # Rule: destructive forms that CANNOT be rewritten into a move-to-recycle-bin
@@ -874,7 +915,7 @@ def pass_once:
   apply_step("devnull"; scrub_devnull)
   | apply_step("docker_compose_restart"; rewrite_docker_compose_restart)
   | apply_step("rm_recycle"; rewrite_rm)
-  | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]))))
+  | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]) | strip_trailing_sed_n)))
   | apply_step("or_true"; on_last_stmt(strip_or_true))
   | apply_step("grep"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["grep"]))))
   | apply_step("stderr_merge"; on_last_stmt(on_spine_leaf(on_last_stage(strip_trailing_stderr_merge))))
