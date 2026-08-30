@@ -1,9 +1,11 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/wow-look-at-my/go-containers/set"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -26,7 +28,7 @@ type write struct {
 // this hook does not sandbox the programs it starts -- a build, a test run or a
 // generator writes what it writes. What it does close is every route where the
 // command text itself performs or directs the write.
-func classify(seg segment) []write {
+func classify(seg segment, roots []string) []write {
 	out := redirectWrites(seg)
 	if len(seg.argv) == 0 {
 		return out
@@ -43,7 +45,7 @@ func classify(seg segment) []write {
 	if w, ok := remoteWrites(seg, name, rest); ok {
 		return append(out, w...)
 	}
-	if w, ok := interpreterWrites(seg, name, rest); ok {
+	if w, ok := interpreterWrites(seg, name, rest, roots); ok {
 		return append(out, w...)
 	}
 	return append(out, fileWrites(seg, name, rest)...)
@@ -351,23 +353,45 @@ func inPlaceRewrite(seg segment, name string, rest []word) []write {
 			shortFlag = true
 		}
 	}
-	if !longFlag && !(shortFlag && shortInPlaceTools[name]) {
+	if !longFlag && !(shortFlag && shortInPlaceTools.Contains(name)) {
 		return nil
 	}
 	_, operands := scanArgs(rest, nil)
-	if len(operands) == 0 {
+	// An unrecognised tool's operands hold its subcommand as well as its files
+	// (`ffs fmt -w x.ffs`), so only the ones that look like paths are reported --
+	// a denial naming "fmt" tells the reader nothing.
+	var targets []word
+	for _, o := range operands {
+		if looksLikePath(seg.cwd, o) {
+			targets = append(targets, o)
+		}
+	}
+	if len(targets) == 0 {
 		return nil
 	}
-	return []write{{route: name + " (in-place rewrite)", paths: operands, dir: seg.cwd}}
+	return []write{{route: name + " (in-place rewrite)", paths: targets, dir: seg.cwd}}
+}
+
+func looksLikePath(cwd string, o word) bool {
+	if !o.static {
+		return true // unknowable, and unknowable denies
+	}
+	if strings.ContainsAny(o.text, "/.") {
+		return true
+	}
+	if p := abs(cwd, o.text); p != "" {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 // Tools that spell in-place rewriting with a bare short flag. Membership here
 // only decides that the flag is read as in-place; whether the rewrite is allowed
 // is the formatter table's decision.
-var shortInPlaceTools = map[string]bool{
-	"gofmt": true, "goimports": true, "shfmt": true, "ffs": true,
-	"rustfmt": true, "clang-format": true, "buf": true, "yq": true,
-}
+var shortInPlaceTools = set.Of[string]("gofmt", "goimports", "shfmt", "ffs",
+	"rustfmt", "clang-format", "buf", "yq")
 
 // scanArgs splits an argv into its flags and its operands. A flag named in
 // valueFlags consumes the next word, which is what keeps `head -n 20 file` from

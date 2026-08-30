@@ -32,7 +32,7 @@ func remoteRepo(t *testing.T) string {
 	git(t, base, "clone", "-q", bare, dir)
 	git(t, dir, "config", "user.email", "guard@example.com")
 	git(t, dir, "config", "user.name", "Guard")
-	write(t, dir, "app.go", "package a\n")
+	writeAt(t, dir, "app.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "initial")
 	git(t, dir, "push", "-q", "origin", "HEAD:master")
@@ -47,7 +47,7 @@ func remoteRepo(t *testing.T) string {
 func TestAllowsDeletingABranchWhoseCommitsSurviveElsewhere(t *testing.T) {
 	dir := newRepo(t)
 	git(t, dir, "checkout", "-q", "-b", "merged-feature")
-	write(t, dir, "feature.go", "package a\n")
+	writeAt(t, dir, "feature.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "feature")
 	git(t, dir, "checkout", "-q", "master")
@@ -59,7 +59,7 @@ func TestAllowsDeletingABranchWhoseCommitsSurviveElsewhere(t *testing.T) {
 func TestDeniesDeletingABranchWithCommitsOfItsOwn(t *testing.T) {
 	dir := newRepo(t)
 	git(t, dir, "checkout", "-q", "-b", "orphan-feature")
-	write(t, dir, "only-here.go", "package a\n")
+	writeAt(t, dir, "only-here.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "unique work")
 	git(t, dir, "checkout", "-q", "master")
@@ -71,7 +71,7 @@ func TestDeniesDeletingABranchWithCommitsOfItsOwn(t *testing.T) {
 func TestAllowsDeletingABranchHeldOnlyByATag(t *testing.T) {
 	dir := newRepo(t)
 	git(t, dir, "checkout", "-q", "-b", "tagged")
-	write(t, dir, "t.go", "package a\n")
+	writeAt(t, dir, "t.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "tagged work")
 	git(t, dir, "tag", "keepsake")
@@ -91,7 +91,7 @@ func TestAllowsDeletingANonexistentBranch(t *testing.T) {
 
 func TestAllowsForcePushThatIsAFastForward(t *testing.T) {
 	dir := remoteRepo(t)
-	write(t, dir, "next.go", "package a\n")
+	writeAt(t, dir, "next.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "next")
 
@@ -100,7 +100,7 @@ func TestAllowsForcePushThatIsAFastForward(t *testing.T) {
 
 func TestAllowsForcePushWhenTheOldTipSurvivesOnAnotherBranch(t *testing.T) {
 	dir := remoteRepo(t)
-	write(t, dir, "b.go", "package a\n")
+	writeAt(t, dir, "b.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "second")
 	git(t, dir, "push", "-q", "origin", "HEAD:master")
@@ -113,7 +113,7 @@ func TestAllowsForcePushWhenTheOldTipSurvivesOnAnotherBranch(t *testing.T) {
 
 func TestDeniesForcePushThatStrandsTheOnlyCopy(t *testing.T) {
 	dir := remoteRepo(t)
-	write(t, dir, "b.go", "package a\n")
+	writeAt(t, dir, "b.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "second")
 	git(t, dir, "push", "-q", "origin", "HEAD:master")
@@ -146,7 +146,7 @@ func TestMirrorPushIsRefusedOutright(t *testing.T) {
 
 func TestForceRefspecIsTreatedAsAForcePush(t *testing.T) {
 	dir := remoteRepo(t)
-	write(t, dir, "b.go", "package a\n")
+	writeAt(t, dir, "b.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "second")
 	git(t, dir, "push", "-q", "origin", "HEAD:master")
@@ -170,7 +170,7 @@ func TestAllowsDeletingARemoteBranchAlreadyMerged(t *testing.T) {
 func TestDeniesDeletingARemoteBranchHoldingTheOnlyCopy(t *testing.T) {
 	dir := remoteRepo(t)
 	git(t, dir, "checkout", "-q", "-b", "solo")
-	write(t, dir, "solo.go", "package a\n")
+	writeAt(t, dir, "solo.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "solo work")
 	git(t, dir, "push", "-q", "origin", "HEAD:refs/heads/solo")
@@ -192,7 +192,7 @@ func TestAllowsReflogExpireWhenNothingDependsOnIt(t *testing.T) {
 
 func TestDeniesReflogExpireWhenItHoldsTheOnlyCopy(t *testing.T) {
 	dir := newRepo(t)
-	write(t, dir, "app.go", "package a\n// work\n")
+	writeAt(t, dir, "app.go", "package a\n// work\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "committed work")
 	git(t, dir, "reset", "-q", "--hard", "HEAD~1") // reachable only via the reflog
@@ -204,7 +204,7 @@ func TestFilterBranchAllowedOnlyWhenHistoryIsPushed(t *testing.T) {
 	dir := remoteRepo(t)
 	allowed(t, dir, "git filter-branch --tree-filter true HEAD")
 
-	write(t, dir, "unpushed.go", "package a\n")
+	writeAt(t, dir, "unpushed.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "not pushed yet")
 	denied(t, dir, "git filter-branch --tree-filter true HEAD")
@@ -216,7 +216,7 @@ func TestUpdateRefDeleteFollowsReachability(t *testing.T) {
 	allowed(t, dir, "git update-ref -d refs/heads/keeper")
 
 	git(t, dir, "checkout", "-q", "-b", "solo")
-	write(t, dir, "solo.go", "package a\n")
+	writeAt(t, dir, "solo.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "solo")
 	git(t, dir, "checkout", "-q", "master")
@@ -230,7 +230,7 @@ func TestWorktreeRemoveForceChecksThatWorktree(t *testing.T) {
 
 	allowed(t, dir, "git worktree remove --force "+wt)
 
-	write(t, wt, "scratch.txt", "uncommitted\n")
+	writeAt(t, wt, "scratch.txt", "uncommitted\n")
 	denied(t, dir, "git worktree remove --force "+wt)
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,13 +61,11 @@ func repoRoot(dir string) string {
 // a compiled artifact, and requiring Edit for one would deny every build.
 // The allowance is scoped to these directories and never to the commands that
 // write them, so `sed -i` into node_modules passes and `npm` into src does not.
-var buildOutputDirs = map[string]bool{
-	"build": true, "dist": true, "target": true, "out": true,
-	"node_modules": true, "vendor": true, "coverage": true,
-	".cache": true, ".venv": true, "venv": true, "__pycache__": true,
-	".pytest_cache": true, ".gradle": true, ".tox": true, ".next": true,
-	".parcel-cache": true, ".turbo": true, ".terraform": true,
-}
+var buildOutputDirs = set.Of[string]("build", "dist", "target", "out",
+	"node_modules", "vendor", "coverage",
+	".cache", ".venv", "venv", "__pycache__",
+	".pytest_cache", ".gradle", ".tox", ".next",
+	".parcel-cache", ".turbo", ".terraform")
 
 // protectedConfig names the live settings a session must not rewrite. These sit
 // outside every guarded root, so the path rules never reach them: re-granting
@@ -119,7 +118,7 @@ func coversGuarded(roots []string, dir string) (string, bool) {
 
 func isBuildOutput(rel string) bool {
 	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
-		if buildOutputDirs[part] {
+		if buildOutputDirs.Contains(part) {
 			return true
 		}
 	}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,8 +31,8 @@ func newRepo(t *testing.T) string {
 	git(t, dir, "init", "-q")
 	git(t, dir, "config", "user.email", "guard@example.com")
 	git(t, dir, "config", "user.name", "Guard")
-	write(t, dir, "tracked.go", "package a\n")
-	write(t, dir, ".gitignore", "build/\n")
+	writeAt(t, dir, "tracked.go", "package a\n")
+	writeAt(t, dir, ".gitignore", "build/\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "initial")
 	return dir
@@ -47,7 +46,9 @@ func git(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
 }
 
-func write(t *testing.T, dir, name, content string) {
+// writeAt puts a file in a fixture repository. Named for its shape rather than
+// the verb, because `write` is the type the provenance half is built on.
+func writeAt(t *testing.T, dir, name, content string) {
 	t.Helper()
 	p := filepath.Join(dir, name)
 	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
@@ -56,20 +57,12 @@ func write(t *testing.T, dir, name, content string) {
 
 // modify dirties a tracked file; untrack adds a file git has never seen. The
 // two are deliberately separate everywhere in these tests.
-func modify(t *testing.T, dir string) { write(t, dir, "tracked.go", "package a\n// edited\n") }
+func modify(t *testing.T, dir string) { writeAt(t, dir, "tracked.go", "package a\n// edited\n") }
 func untrack(t *testing.T, dir string, name string) {
-	write(t, dir, name, "scratch\n")
+	writeAt(t, dir, name, "scratch\n")
 }
 
-// ask drives the real hook entry point, JSON in and verdict out.
-func ask(t *testing.T, cwd, command string) string {
-	t.Helper()
-	in := hookInput{HookEventName: "PreToolUse", ToolName: "Bash", Cwd: cwd}
-	in.ToolInput.Command = command
-	raw, err := json.Marshal(in)
-	require.NoError(t, err)
-	return decide(raw)
-}
+// ask lives in harness_test.go: one entry-point driver for both halves.
 
 func denied(t *testing.T, cwd, command string) string {
 	t.Helper()
@@ -212,7 +205,7 @@ func TestAllowsCommandsThatCreateRecovery(t *testing.T) {
 
 func TestAllowsRmOfGitignoredArtifact(t *testing.T) {
 	dir := newRepo(t)
-	write(t, dir, "build/go-proxy", "binary\n")
+	writeAt(t, dir, "build/go-proxy", "binary\n")
 	allowed(t, dir, "rm build/go-proxy")
 }
 
@@ -240,7 +233,7 @@ func TestCleanSparesTrackedModifications(t *testing.T) {
 
 func TestCleanWithoutXSparesIgnoredFiles(t *testing.T) {
 	dir := newRepo(t)
-	write(t, dir, "build/go-proxy", "binary\n")
+	writeAt(t, dir, "build/go-proxy", "binary\n")
 	allowed(t, dir, "git clean -fd")
 	denied(t, dir, "git clean -fdx")
 }
@@ -445,24 +438,14 @@ func TestIgnoresNonBashToolsAndOtherEvents(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 
-	in := hookInput{HookEventName: "PreToolUse", ToolName: "Read", Cwd: dir}
-	in.ToolInput.Command = "git reset --hard"
-	raw, err := json.Marshal(in)
-	require.NoError(t, err)
-	assert.Empty(t, decide(raw))
-
-	in.HookEventName = "PostToolUse"
-	in.ToolName = "Bash"
-	raw, err = json.Marshal(in)
-	require.NoError(t, err)
-	assert.Empty(t, decide(raw))
-
+	assert.Empty(t, decideWithEvent(t, "PreToolUse", "Read", dir, "git reset --hard"))
+	assert.Empty(t, decideWithEvent(t, "PostToolUse", "Bash", dir, "git reset --hard"))
 	assert.Empty(t, decide([]byte("not json at all")))
 }
 
 func TestAllowsDestructiveCommandsOutsideAnyRepository(t *testing.T) {
 	plain := t.TempDir()
-	write(t, plain, "notes.txt", "hi\n")
+	writeAt(t, plain, "notes.txt", "hi\n")
 	allowed(t, plain, "rm notes.txt")
 }
 

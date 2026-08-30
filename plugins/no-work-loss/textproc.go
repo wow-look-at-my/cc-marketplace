@@ -37,8 +37,13 @@ func sedWrites(seg segment, rest []word) []write {
 
 	scripts, files := sedScriptAndFiles(flags, operands)
 	var out []write
-	if inPlace && len(files) > 0 {
+	switch {
+	case inPlace && len(files) > 0:
 		out = append(out, write{route: "sed -i", paths: files, dir: seg.cwd})
+	case inPlace:
+		// `ls | xargs sed -i s/a/b/` names no file at all: the paths arrive at
+		// runtime, so which files it rewrites is not in the command text.
+		out = append(out, write{route: "sed -i", opaque: "an in-place sed whose files are supplied at runtime rather than named in the command"})
 	}
 	for _, s := range scripts {
 		targets, unresolvable := sedScriptTargets(s.text)
@@ -221,8 +226,11 @@ func awkWrites(seg segment, rest []word) []write {
 	}
 
 	var out []write
-	if inPlace && len(files) > 0 {
+	switch {
+	case inPlace && len(files) > 0:
 		out = append(out, write{route: "awk -i inplace", paths: files, dir: seg.cwd})
+	case inPlace:
+		out = append(out, write{route: "awk -i inplace", opaque: "an in-place awk whose files are supplied at runtime rather than named in the command"})
 	}
 	if progFromFile || program.text == "" {
 		return out

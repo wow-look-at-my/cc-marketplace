@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,14 +37,12 @@ var evalFlags = map[string][]string{
 
 // Editors exist to rewrite the file they open, so they are writers by default
 // rather than by flag.
-var editors = map[string]bool{
-	"ed": true, "ex": true, "vi": true, "vim": true, "nvim": true,
-	"emacs": true, "emacsclient": true,
-}
+var editors = set.Of[string]("ed", "ex", "vi", "vim", "nvim",
+	"emacs", "emacsclient")
 
-func interpreterWrites(seg segment, name string, rest []word) ([]write, bool) {
+func interpreterWrites(seg segment, name string, rest []word, roots []string) ([]write, bool) {
 	name = stripVersion(name)
-	if editors[name] {
+	if editors.Contains(name) {
 		return editorWrites(seg, name, rest), true
 	}
 	flags, ok := evalFlags[name]
@@ -70,7 +69,7 @@ func interpreterWrites(seg segment, name string, rest []word) ([]write, bool) {
 	if seg.stdinScript {
 		return []write{{route: name + " (stdin)", opaque: "a " + name + " script piped in on stdin, which is not in the command text"}}, true
 	}
-	return scratchScriptWrites(seg, name, rest), true
+	return scratchScriptWrites(seg, name, rest, roots), true
 }
 
 // scratchScriptWrites closes the write-elsewhere-then-run route: the Write tool
@@ -78,13 +77,16 @@ func interpreterWrites(seg segment, name string, rest []word) ([]write, bool) {
 // content into the tree. A script that lives inside the tree is not this -- it
 // got there through Write or Edit and is visible in the diff -- and a system
 // script is the tool it belongs to, so only a scratch script denies.
-func scratchScriptWrites(seg segment, name string, rest []word) []write {
+func scratchScriptWrites(seg segment, name string, rest []word, roots []string) []write {
 	_, operands := scanArgs(rest, nil)
 	for _, o := range operands {
 		if !o.static {
 			return []write{{route: name, opaque: "a " + name + " script path built from an expansion, so what it runs is not in the command text"}}
 		}
 		p := abs(seg.cwd, o.text)
+		if _, guarded := insideGuarded(roots, p); guarded {
+			break // a script in the tree got there through Write or Edit
+		}
 		if p != "" && isScratchPath(p) {
 			return []write{{route: name + " " + o.text, opaque: "a " + name + " script under a temporary directory; write the file with Write or Edit instead of generating it from a scratch script"}}
 		}
@@ -94,12 +96,25 @@ func scratchScriptWrites(seg segment, name string, rest []word) []write {
 }
 
 func editorWrites(seg segment, name string, rest []word) []write {
-	valueFlags := map[string]bool{"-c": true, "--command": true, "-s": true, "--eval": true, "-u": true, "-i": true, "-f": true}
-	_, operands := scanArgs(rest, valueFlags)
+	// -s is silent/script mode for ed, ex and vim and takes no value; reading it
+	// as one swallows the file operand and the write disappears.
+	valueFlags := map[string]bool{"-c": true, "--command": true, "--eval": true, "-u": true, "-i": true, "--load": true}
+	flags, operands := scanArgs(rest, valueFlags)
 	if len(operands) > 0 {
 		return []write{{route: name, paths: operands, dir: seg.cwd}}
 	}
-	return []write{{route: name, opaque: "an " + name + " session whose target file is named in its script rather than on the command line"}}
+	// No file operand and a script to run means the target is named inside the
+	// script. No file and no script means the invocation edits nothing at all --
+	// `emacs --version` is not an editing session.
+	for _, f := range []string{"-c", "--command", "--eval", "--batch", "--script", "-s"} {
+		if _, ok := flags[f]; ok {
+			return []write{{route: name, opaque: "an " + name + " session whose target file is named in its script rather than on the command line"}}
+		}
+	}
+	if seg.stdinScript {
+		return []write{{route: name, opaque: "an " + name + " session driven from stdin, so its target file is not in the command text"}}
+	}
+	return nil
 }
 
 // scratch directories: the places a file can appear without any review.

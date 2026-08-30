@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/wow-look-at-my/go-containers/set"
 	"strings"
 )
 
@@ -36,7 +37,13 @@ func decide(raw []byte) string {
 
 	switch {
 	case in.ToolName == "Bash":
-		return evaluate(ti.Command, in.Cwd)
+		// The provenance question runs first. When a command both rewrites a
+		// tracked file and would lose uncommitted work, "use Edit" is the answer
+		// that tells the reader what to do next.
+		if reason := evaluateWrites(ti.Command, in.Cwd); reason != "" {
+			return reason
+		}
+		return evaluateLoss(ti.Command, in.Cwd)
 	case isEditTool(in.ToolName):
 		return editToolReason(in.ToolName, ti, in.Cwd)
 	case isAgentTool(in.ToolName):
@@ -48,22 +55,23 @@ func decide(raw []byte) string {
 	}
 }
 
-// evaluate runs the shell analysis under a recover. This hook fails CLOSED, so a
-// panic denies rather than waving the command through: a bug here must be loud
-// and visible, not a silent hole in the rule.
-func evaluate(command, cwd string) (reason string) {
+// evaluateWrites runs the provenance analysis under a recover. This half fails
+// CLOSED, so a panic denies rather than waving the command through: a bug here
+// must be loud and visible, not a silent hole in the rule. (The work-loss half
+// keeps its own posture -- see evaluateLoss.)
+func evaluateWrites(command, cwd string) (reason string) {
 	if strings.TrimSpace(command) == "" {
 		return ""
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			reason = "blocked: edits-through-tools could not analyse this command, and an unanalysed command is treated as one that writes. " + useTheTools
+			reason = "blocked: this hook could not analyse the command, and an unanalysed command is treated as one that writes. " + useTheTools
 		}
 	}()
-	return analyse(command, cwd)
+	return analyzeWrites(command, cwd)
 }
 
-func analyse(command, cwd string) string {
+func analyzeWrites(command, cwd string) string {
 	roots := guardedRoots(cwd)
 	segs, blockers, ok := parseSegments(command, cwd)
 	if !ok {
@@ -73,8 +81,8 @@ func analyse(command, cwd string) string {
 		return "blocked: the command runs " + b + ". " + useTheTools
 	}
 	for _, seg := range segs {
-		for _, w := range classify(seg) {
-			if reason := judge(w, roots); reason != "" {
+		for _, w := range classify(seg, roots) {
+			if reason := judgeWrite(w, roots); reason != "" {
 				return reason
 			}
 		}
@@ -82,9 +90,9 @@ func analyse(command, cwd string) string {
 	return ""
 }
 
-// judge turns one write into a verdict. Every branch that cannot resolve a
+// judgeWrite turns one write into a verdict. Every branch that cannot resolve a
 // target denies: a path this hook cannot name is a path it cannot clear.
-func judge(w write, roots []string) string {
+func judgeWrite(w write, roots []string) string {
 	if w.opaque != "" {
 		return "blocked: " + w.route + " runs " + w.opaque + ". " + useTheTools
 	}
@@ -135,8 +143,17 @@ func editToolReason(tool string, ti toolInput, cwd string) string {
 		if p == "" {
 			continue
 		}
-		if a := abs(cwd, p); a != "" && isProtectedConfig(a) {
+		a := abs(cwd, p)
+		if a == "" {
+			continue
+		}
+		if isProtectedConfig(a) {
 			return settingsReason(tool + " targets " + a)
+		}
+		if tool == "Write" {
+			if reason := writeToolReason(a); reason != "" {
+				return reason
+			}
 		}
 	}
 	return ""
@@ -197,16 +214,14 @@ func grantsShell(raw json.RawMessage) bool {
 
 // configSkills rewrite settings.json as their whole purpose, which is the same
 // act as editing the file by hand.
-var configSkills = map[string]bool{
-	"update-config": true, "fewer-permission-prompts": true,
-}
+var configSkills = set.Of[string]("update-config", "fewer-permission-prompts")
 
 func skillReason(skill string) string {
 	name := skill
 	if i := strings.LastIndex(name, ":"); i >= 0 {
 		name = name[i+1:]
 	}
-	if configSkills[name] {
+	if configSkills.Contains(name) {
 		return settingsReason("the " + name + " skill rewrites")
 	}
 	return ""
@@ -215,11 +230,9 @@ func skillReason(skill string) string {
 // githubContentWrites are the MCP tools that commit a file through the API. They
 // are the same server-side write as `gh api PUT .../contents/...`, reached
 // without a shell.
-var githubContentWrites = map[string]bool{
-	"create_or_update_file": true, "push_files": true, "delete_file": true,
-	"create_file": true, "update_file": true, "upload_file": true,
-	"create_commit_on_branch": true, "create_or_update_file_contents": true,
-}
+var githubContentWrites = set.Of[string]("create_or_update_file", "push_files", "delete_file",
+	"create_file", "update_file", "upload_file",
+	"create_commit_on_branch", "create_or_update_file_contents")
 
 func mcpReason(tool string) string {
 	if !strings.HasPrefix(tool, "mcp__") {
@@ -229,7 +242,7 @@ func mcpReason(tool string) string {
 	if len(parts) != 2 {
 		return ""
 	}
-	if !githubContentWrites[parts[1]] {
+	if !githubContentWrites.Contains(parts[1]) {
 		return ""
 	}
 	return "blocked: " + tool + " commits file content through the API, where it never exists as a file and no edit tool ever sees it. " + useTheTools

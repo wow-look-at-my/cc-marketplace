@@ -89,7 +89,7 @@ func newRepoAt(t *testing.T) string {
 	git(t, dir, "init", "-q")
 	git(t, dir, "config", "user.email", "guard@example.com")
 	git(t, dir, "config", "user.name", "Guard")
-	write(t, dir, "tracked.go", "package a\n")
+	writeAt(t, dir, "tracked.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "initial")
 	return dir

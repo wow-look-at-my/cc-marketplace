@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"strings"
 )
@@ -46,10 +47,8 @@ var plumbingVerbs = map[string]string{
 
 // gitValueOptions are the global options that take a separate value, so the verb
 // is found rather than mistaken for one of their arguments.
-var gitValueOptions = map[string]bool{
-	"-C": true, "-c": true, "--git-dir": true, "--work-tree": true,
-	"--namespace": true, "--exec-path": true, "--config-env": true,
-}
+var gitValueOptions = set.Of[string]("-C", "-c", "--git-dir", "--work-tree",
+	"--namespace", "--exec-path", "--config-env")
 
 func gitWrites(seg segment, name string, rest []word) ([]write, bool) {
 	if name != "git" {
@@ -77,7 +76,7 @@ func gitWrites(seg segment, name string, rest []word) ([]write, bool) {
 		if t == "--git-dir" || t == "--work-tree" || strings.HasPrefix(t, "--git-dir=") || strings.HasPrefix(t, "--work-tree=") {
 			relocated = true
 		}
-		if gitValueOptions[t] && i+1 < len(rest) {
+		if gitValueOptions.Contains(t) && i+1 < len(rest) {
 			i++
 		}
 	}

@@ -155,7 +155,7 @@ func joinDir(cwd string, w word) string {
 // known or not, falls through to allow, so read-only work never pays and a new
 // git subcommand does not arrive pre-blocked.
 func classifyGit(seg segment) *finding {
-	g, ok := parseGit(seg.argv, seg.cwd, seg.gitEnv)
+	g, ok := parseGit(seg.argv, seg.cwd, seg.relocated)
 	if !ok {
 		return nil
 	}
