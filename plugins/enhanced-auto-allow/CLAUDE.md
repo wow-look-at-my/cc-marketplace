@@ -13,7 +13,9 @@ consulted, so `denyOnly` suppresses every non-deny verdict on that path.
 - **Rules**: `plugins/enhanced-auto-allow/rules.xml` -- three sections (`<allow>`, `<ask>`, `<deny>`)
   of `<rule>` nodes, plus top-level `<test>` cases and the `<mcpServer>` blocks
 - **Hook code**: `plugins/enhanced-auto-allow/cmd/hook.go` (evaluation), `cmd/rules_xml.go` (schema),
-  `cmd/deny_process.go` (process resolution)
+  `cmd/deny_process.go` (process resolution), `cmd/shell.go` (the allow path's reader -- it gives up
+  on a redirect, an expansion or a substitution, which is the safe answer only because the deny path
+  never does)
 - **Plugin config**: `plugins/enhanced-auto-allow/.claude-plugin/plugin.json` -- the same binary on
   matcher `*` for both PermissionRequest and PreToolUse
 - `plugins/enhanced-auto-allow/docs/two-event-registration.md` -- why two events, the cli.js call

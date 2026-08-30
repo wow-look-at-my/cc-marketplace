@@ -149,7 +149,7 @@ if [ "$deny" = "true" ]; then
 		reason="perl is banned in this environment."
 		;;
 	file_read)
-		reason="Reading files with cat/head/tail is banned in this environment. Use the Read tool instead. Only /proc, /sys, and /dev pseudo-files are exempt."
+		reason="Reading files with cat/head/tail, or with sed -n selecting lines, is banned in this environment. Use the Read tool instead. Only /proc, /sys, and /dev pseudo-files are exempt."
 		;;
 	shred)
 		reason="shred/srm destroy data unrecoverably by design and are banned in this environment. There is no safe equivalent; if the file must go, use recycler trash <path> and it can be restored."
