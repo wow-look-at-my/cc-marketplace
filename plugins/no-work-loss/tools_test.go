@@ -14,10 +14,29 @@ import (
 
 func TestTheEditToolsThemselvesAreLeftAlone(t *testing.T) {
 	root := newTree(t)
-	for _, tool := range []string{"Write", "Edit", "MultiEdit", "NotebookEdit"} {
-		assert.Empty(t, askTool(t, tool, root, map[string]any{"file_path": filepath.Join(root, "src.txt")}),
+	existing := filepath.Join(root, "src.txt")
+	for _, tool := range []string{"Edit", "MultiEdit", "NotebookEdit"} {
+		assert.Empty(t, askTool(t, tool, root, map[string]any{"file_path": existing}),
 			"%s is the sanctioned route and must never be denied for using it", tool)
 	}
+	assert.Empty(t, askTool(t, "Write", root, map[string]any{"file_path": filepath.Join(root, "new.txt")}),
+		"Write is how a new file is created")
+}
+
+// Write authors a whole file, so aiming it at one that already exists replaces
+// content nobody reviewed the loss of.
+func TestWriteOverAnExistingFileIsRefused(t *testing.T) {
+	root := newTree(t)
+	reason := askTool(t, "Write", root, map[string]any{"file_path": filepath.Join(root, "src.txt")})
+	require.NotEmpty(t, reason)
+	assert.Contains(t, reason, "already exists")
+	assert.Contains(t, reason, "Use Edit")
+
+	// A path outside the tree is no different: this rule is about the tool's
+	// semantics, not about which directory the file is in.
+	out := outsideTree(t)
+	assert.NotEmpty(t, askTool(t, "Write", root, map[string]any{"file_path": filepath.Join(out, "src.txt")}))
+	assert.Empty(t, askTool(t, "Write", root, map[string]any{"file_path": filepath.Join(out, "fresh.txt")}))
 }
 
 func TestEditingTheLiveSettingsIsRefused(t *testing.T) {

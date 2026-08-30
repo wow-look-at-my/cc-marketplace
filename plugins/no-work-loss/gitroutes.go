@@ -117,6 +117,13 @@ func gitVerbWrites(verb string, args []word, dir string) bool {
 		}
 		return false
 	}
+	// --abort and --quit put back the state the operation started from, and
+	// --continue/--skip carry on one already under way. The content decision was
+	// made when it started, which is the invocation this rule is aimed at.
+	if has("--abort", "--quit", "--continue", "--skip") {
+		return false
+	}
+
 	switch verb {
 	case "checkout":
 		// A pathspec is the editing form. A bare ref switch replaces the tree
