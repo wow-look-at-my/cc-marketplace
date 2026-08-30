@@ -4,6 +4,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/wow-look-at-my/go-containers/set"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -151,10 +152,10 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 
 	// A statement on the receiving end of a pipe reads its input from it, which
 	// is how `echo 'code' | node` smuggles a script past an argument check.
-	piped := map[*syntax.Stmt]bool{}
+	piped := set.New[*syntax.Stmt]()
 	syntax.Walk(file, func(n syntax.Node) bool {
 		if b, ok := n.(*syntax.BinaryCmd); ok && (b.Op == syntax.Pipe || b.Op == syntax.PipeAll) {
-			piped[b.Y] = true
+			piped.Add(b.Y)
 		}
 		return true
 	})
@@ -180,7 +181,7 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 		if name == "" {
 			return true
 		}
-		fedByStdin := piped[stmt]
+		fedByStdin := piped.Contains(stmt)
 		for _, r := range stmt.Redirs {
 			switch r.Op {
 			case syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc, syntax.RdrIn:
