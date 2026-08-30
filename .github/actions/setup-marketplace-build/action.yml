@@ -28,12 +28,12 @@ runs:
 
     - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # https://github.com/extractions/setup-just/releases/tag/v4
 
-    # go-toolchain writes build/<name>; naming a per-platform slot caches nothing and only breaks once the key misses.
+    # Keyed on this file too: it decides HOW the binary is built, so a recipe change must not reuse the old one.
     - uses: wow-look-at-my/actions@smart-cache#latest
       id: cache
       with:
         path: tools/marketplace-build/build/marketplace-build
-        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
+        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum', '.github/actions/setup-marketplace-build/action.yml') }}
 
     - name: Check binary exists
       id: binary
