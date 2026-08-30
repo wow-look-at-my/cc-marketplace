@@ -1,0 +1,28 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Refuses to end a turn that is the latest in a run of several turns which each made the exact same tool call, closely spaced in time, with nothing else different in between. Catches a manual polling loop (re-checking a PR, a CI run, a status) that burns tokens for zero new signal instead of waiting for a real event or an actually-scheduled wakeup",
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-busy-poll",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"busy-poll",
+		"token-waste",
+		"polling",
+		"stop",
+		"hook",
+		"enforcement"
+	],
+	"name": "no-busy-poll",
+	"version": "1144"
+}
