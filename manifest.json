@@ -1,0 +1,30 @@
+{
+  "name": "glob",
+  "version": "1190",
+  "tag": "glob#1190",
+  "pluginJson": {
+    "author": {
+      "name": "wow-look-at-my-code"
+    },
+    "description": "Restores the builtin Glob tool that Claude Code removed in 2.1.117: ripgrep-backed file pattern matching with byte-for-byte 2.1.116 behavior",
+    "keywords": [
+      "glob",
+      "search",
+      "files",
+      "ripgrep",
+      "mcp",
+      "builtin"
+    ],
+    "mcpServers": "./.mcp.json",
+    "name": "glob",
+    "version": "1190"
+  },
+  "mcpJson": {
+    "mcpServers": {
+      "glob": {
+        "alwaysLoad": true,
+        "command": "${CLAUDE_PLUGIN_ROOT}/build/glob"
+      }
+    }
+  }
+}
