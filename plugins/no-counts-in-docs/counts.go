@@ -35,10 +35,11 @@ const numberWords = `two|three|four|five|six|seven|eight|nine|ten|` +
 	`nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|dozen`
 
 // quantity is a cardinal governing a plural noun, with adjectives allowed
-// between them ("15 published marketplace plugins"). A digit run may not follow
-// a dot or another digit, so the tail of a version (pre-2.1.205) is not read as
-// a quantity.
-const quantity = `(?:(?:^|[^.\d])(\d{1,4})|\b(?:` + numberWords + `))` +
+// between them ("15 published marketplace plugins"). The digit case is guarded
+// in Go rather than here, by looking at the character in front of the match:
+// RE2 has no lookbehind, and spending the frame's own separating space on a
+// negated class would stop the frame from ever meeting the quantity.
+const quantity = `(?:\d{1,4}|\b(?:` + numberWords + `))` +
 	`\s+(?:[a-z][a-z-]*\s+){0,3}?[a-z][a-z-]{2,}s\b`
 
 // possessiveFrame is a determiner claiming the things belong here: "this
@@ -96,9 +97,10 @@ func FindCounts(doc string) []Hit {
 		text := blankInlineCode(line)
 		seen := set.New[string]()
 		for _, frame := range frames {
-			for _, m := range frame.FindAllStringSubmatch(text, -1) {
-				phrase := trimLeadingNoise(m[1])
-				if !isInventory(phrase) || seen.Contains(phrase) {
+			for _, at := range frame.FindAllStringSubmatchIndex(text, -1) {
+				start, end := at[2], at[3]
+				phrase := text[start:end]
+				if continuesANumber(text, start) || !isInventory(phrase) || seen.Contains(phrase) {
 					continue
 				}
 				seen.Add(phrase)
@@ -109,10 +111,15 @@ func FindCounts(doc string) []Hit {
 	return hits
 }
 
-// trimLeadingNoise drops the character the digit guard had to consume to prove
-// the number does not continue a version.
-func trimLeadingNoise(phrase string) string {
-	return strings.TrimLeft(strings.TrimSpace(phrase), " \t,;:(")
+// continuesANumber reports that the character in front of a match makes it the
+// tail of a longer number, so "pre-2.1.205 clients" is not read as a count of
+// 205 things.
+func continuesANumber(text string, start int) bool {
+	if start == 0 {
+		return false
+	}
+	c := text[start-1]
+	return c == '.' || (c >= '0' && c <= '9')
 }
 
 // isInventory rejects a quantity whose noun measures, and one reached through a
