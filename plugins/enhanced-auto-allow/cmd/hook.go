@@ -23,7 +23,7 @@ type ToolInput struct {
 	Command string `json:"command"`
 }
 
-// Three sections, evaluated deny > ask > allow. A rule matches either argv as
+// Sections evaluated deny > ask > allow. A rule matches either argv as
 // written or the resolved process name; see CommandNode.
 type Rules struct {
 	Allow []CommandNode `json:"allow"`
@@ -60,7 +60,7 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// Not interchangeable: PermissionRequest runs only once the engine lands on
+// Not interchangeable: PermissionRequest runs only after the engine lands on
 // "ask", so a deny there alone is silent under any mode that resolves earlier.
 // The deny half rides PreToolUse. See docs/two-event-registration.md.
 const (
@@ -149,8 +149,8 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
-	// Process rules first. They walk the parse tree, so they still see a
-	// command the allow path below refuses to read.
+	// Process rules go ahead of the rest. They walk the parse tree, so they
+	// still see a command the allow path below refuses to read.
 	for _, section := range []struct {
 		rules    []ProcessRule
 		behavior string
@@ -218,7 +218,6 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 	current := args[0]
 	remaining := args[1:]
 
-	// Try all matching nodes and merge results.
 	// Deny wins over allow; allow wins over passthrough.
 	anyAllowed := false
 	for _, node := range nodes {
@@ -247,7 +246,7 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		return "allow", ""
 	}
 
-	// Check deny with message first
+	// A deny carrying a message wins outright.
 	if node.DenyWithMessage != "" {
 		return "deny", node.DenyWithMessage
 	}
@@ -306,9 +305,9 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		if decision != "" {
 			return decision, msg
 		}
-		// If the first remaining arg looks like a subcommand (not a flag)
-		// but didn't match any known subcommand, don't fall through to
-		// allowedFlags - it's an unknown/mutating subcommand.
+		// A leading remaining arg that looks like a subcommand but matched
+		// none of them is unknown or mutating: never fall through to
+		// allowedFlags.
 		if !strings.HasPrefix(subcommandArgs[0], "-") {
 			return "", ""
 		}
@@ -546,7 +545,8 @@ func hasOutputRedirect(node syntax.Node) bool {
 }
 
 // isAllowedRedirect reports whether a redirect operation is safe to auto-allow.
-// Permitted: 2>&1, and stdout/stderr writes to /dev/null or under /tmp/.
+// Permitted: merging stderr into stdout, and stdout/stderr writes to /dev/null
+// or under /tmp/.
 func isAllowedRedirect(r *syntax.Redirect) bool {
 	fd := "1"
 	if r.N != nil {
@@ -554,7 +554,7 @@ func isAllowedRedirect(r *syntax.Redirect) bool {
 	}
 	target := redirectTarget(r)
 
-	// 2>&1
+	// stderr merged into stdout.
 	if r.Op == syntax.DplOut {
 		return fd == "2" && target == "1"
 	}
@@ -573,8 +573,8 @@ func isAllowedRedirect(r *syntax.Redirect) bool {
 	return isSafeRedirectPath(target)
 }
 
-// isSafeRedirectPath reports whether target is /dev/null or a path under /tmp/.
-// path.Clean defeats traversal attempts like /tmp/../etc/passwd.
+// isSafeRedirectPath reports /dev/null or a path under /tmp/. path.Clean
+// defeats traversal.
 func isSafeRedirectPath(target string) bool {
 	if target == "/dev/null" {
 		return true

@@ -38,7 +38,7 @@ func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 			walk(cmd.Subcommands)
 		}
 	}
-	// Tests live wherever their rule lives, in any of the three sections.
+	// Tests live wherever their rule lives, in any section.
 	walk(xr.Allow.Rules)
 	walk(xr.Ask.Rules)
 	walk(xr.Deny.Rules)
@@ -183,7 +183,7 @@ func TestEndToEndGhRepoView(t *testing.T) {
 	}
 }
 
-// PermissionRequest is answered only once the permission engine has landed on
+// PermissionRequest is answered only after the permission engine has landed on
 // "ask", so a deny that rides it alone is silent under defaultMode "auto" --
 // which is how python stayed runnable. These cases pin the deny half to
 // PreToolUse, which is unconditional, and pin the allow half OUT of it: an
@@ -240,8 +240,8 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 // is displaying the card, then re-issues the call byte-identically with no
 // grant attached, so the server -- which is waiting on a human -- rejects it
 // again and the single permitted retry is spent. An allow here therefore
-// destroys the user's only working option (clicking) and converts a one-click
-// call into a guaranteed -32003 failure.
+// destroys the user's only working option (clicking) and converts a clickable
+// call into a guaranteed rejection.
 //
 // Silence is not a missing feature here, it IS the fix, which is exactly why
 // this test asserts it: the previous version of this file required an allow
@@ -362,10 +362,10 @@ func loadTestRules(t *testing.T) {
 	require.NoError(t, err, "Failed to parse rules.xml")
 }
 
-// One malformed byte disables EVERY rule, since loadXMLRules failing makes the
-// hook exit 0 and pass everything through. The usual cause is a "--" inside an
-// <!-- --> comment, which XML forbids: it turns thirty unrelated tests red at
-// once and none of them says "the rules file does not parse".
+// A malformed byte disables EVERY rule, since loadXMLRules failing makes the
+// hook pass everything through. The usual cause is a "--" inside an
+// <!-- --> comment, which XML forbids: it turns the whole suite red without
+// any test saying "the rules file does not parse".
 func TestRulesXMLParses(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))

@@ -10,11 +10,11 @@ import (
 
 // Process-level deny. Unlike the allow path, which bails to passthrough on
 // anything it cannot fully read, this walks the WHOLE tree -- a denied program
-// is otherwise one `$(...)` away from running.
+// is otherwise a `$(...)` away from running.
 //
 // It resolves structurally rather than by pattern: `python3`, `env python3`,
-// `python3.11` and `uv run python` are one process start wearing four
-// spellings, and the next one is always the spelling nobody enumerated.
+// `python3.x` and `uv run python` are the same process start wearing different
+// spellings, and the next spelling is always whichever nobody enumerated.
 type ProcessRule struct {
 	Name string
 	// Behavior is the section this rule came from: allow, ask or deny.
@@ -27,11 +27,11 @@ type ProcessRule struct {
 	// For single-dash flags they also match inside a cluster, so perl's -pe,
 	// -ne and -lane are caught without listing every combination.
 	EvalFlags []string
-	// EvalSubcommands are argv[1] forms meaning the same thing (deno eval).
+	// EvalSubcommands are the subcommand forms meaning the same (deno eval).
 	EvalSubcommands []string
 }
 
-// Wrappers that run their first non-flag, non-assignment argument as a new
+// Wrappers that run their leading non-flag, non-assignment argument as a new
 // process. Stripping them is what makes `env python3` and `sudo -E python3`
 // resolve to python.
 var execWrappers = set.Of(
@@ -74,8 +74,8 @@ func resolveArgs(args []string) (string, []string) {
 }
 
 // matchesDenied reports whether a resolved process name is the denied program.
-// A trailing version counts as the same program, so one `python` entry covers
-// python3, python3.11 and python2.7 without enumerating them.
+// A trailing version counts as the same program, so a bare `python` entry
+// covers every versioned spelling without enumerating them.
 func matchesDenied(name, denied string) bool {
 	if name == denied {
 		return true
@@ -126,7 +126,7 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 
 // deniedProcess walks every statement in the parse tree -- including those inside
 // command substitutions, subshells, loops and conditionals, which the allow path
-// refuses to read -- and returns the first denied process it finds.
+// refuses to read -- and returns the earliest denied process it finds.
 //
 // Known limit: a program named only inside a string handed to another
 // interpreter (`bash -c "python3 x.py"`) is not visible here, because at parse
