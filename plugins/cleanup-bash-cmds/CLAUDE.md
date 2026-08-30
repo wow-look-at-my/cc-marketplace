@@ -9,4 +9,4 @@ The cleanup-bash-cmds plugin lives at `plugins/cleanup-bash-cmds/`. It is a PreT
 
 For rewrites the hook emits `hookSpecificOutput.updatedInput` WITHOUT a `permissionDecision`, so the normal permission flow evaluates the rewritten command (it does not auto-allow); only the bans emit a `permissionDecision` (`"deny"` + reason). The debug channel is `CLEANUP_BASH_CMDS_LOG`: every rewrite is logged with the rules that fired (`REWRITE ... rules="grep,pipefail"`; the narration/sleep/rm rules log as `narration_remove`/`sleep_cap`/`rm_recycle`), denies as `DENY ... reason="heredoc"`, `"perl"`, `"file_read"`, `"rm_flag"`, `"shred"`, `"find_delete"`, `"git_rm"`, or `"truncate_zero"`, and statement-count fail-opens as `GUARD ... reason="stmt-count"`.
 
-The `no-overwrites` plugin is the other half of this -- see `plugins/no-overwrites/CLAUDE.md`.
+The other half of this lives in the `no-work-loss` plugin, which refuses a `Write` over an existing path (and over one sitting in the recycle bin) and refuses the Bash routes that change file content outside the edit tools -- see `plugins/no-work-loss/CLAUDE.md`.

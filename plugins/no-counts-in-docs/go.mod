@@ -1,11 +1,10 @@
-module glob
+module no-counts-in-docs
 
 go 1.26
 
 require (
 	github.com/stretchr/testify v1.11.1
 	github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d41 // go-toolchain:auto-branch
-	golang.org/x/text v0.40.0
 )
 
 require (

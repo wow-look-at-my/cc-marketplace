@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"regexp"
 	"strings"
 )
@@ -138,18 +139,18 @@ func addDistinctiveTerms(repos []Repo) {
 		limit = 1
 	}
 	for i := range repos {
-		have := map[string]bool{}
+		have := set.New[string]()
 		for _, phrase := range append(repos[i].Match, repos[i].Terms...) {
-			have[phrase] = true
+			have.Add(phrase)
 		}
 		derived := 0
 		for _, w := range unique(words[i]) {
 			if derived == maxDerived {
 				break
 			}
-			if docFreq[w] <= limit && !have[w] {
+			if docFreq[w] <= limit && !have.Contains(w) {
 				repos[i].Terms = append(repos[i].Terms, w)
-				have[w] = true
+				have.Add(w)
 				derived++
 			}
 		}
@@ -173,11 +174,11 @@ func tokens(text string) []string {
 }
 
 func unique(in []string) []string {
-	seen := make(map[string]bool, len(in))
+	seen := set.New[string]()
 	out := make([]string, 0, len(in))
 	for _, s := range in {
-		if !seen[s] {
-			seen[s] = true
+		if !seen.Contains(s) {
+			seen.Add(s)
 			out = append(out, s)
 		}
 	}
@@ -194,13 +195,13 @@ func unique(in []string) []string {
 // purpose: half of them are ordinary English. A prompt about how to "write a
 // haiku" must not pull in a repository called quick-write-this-code.
 func phrasesFor(r repo) (identifiers, parts []string) {
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	keep := func(phrase string, into *[]string) {
 		phrase = strings.ToLower(strings.TrimSpace(phrase))
-		if phrase == "" || seen[phrase] || genericTerms[phrase] || len(phrase) < 3 {
+		if phrase == "" || seen.Contains(phrase) || genericTerms[phrase] || len(phrase) < 3 {
 			return
 		}
-		seen[phrase] = true
+		seen.Add(phrase)
 		*into = append(*into, phrase)
 	}
 
