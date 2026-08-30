@@ -90,14 +90,14 @@ jobs:
         uses: wow-look-at-my/go-toolchain@v1
         with:
           working-directory: plugins/css-duplication
-          # Same build release.yml makes, because the cook below only stages a fat APE.
+          # Same build release.yml makes; the cook below stages only that output.
           targets: cosmo
           # Exists to be driven by the e2e below; autorelease off since a branch push should not publish it to buildhost.
           autorelease: 'false'
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      # The cook stages the launcher .lsp.json names beside the APE -- see docs/ci-yaml-notes.md#css-duplication-lsp-job
+      # The cook stages the file .lsp.json names -- see docs/ci-yaml-notes.md#css-duplication-lsp-job
       - name: Cook the plugin the way a release does
         id: cook
         run: marketplace-build release-plugin css-duplication >> "$GITHUB_OUTPUT"
