@@ -1,0 +1,50 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Keeps CLAUDE.md and @-imported snippets inside the character budget every request pays for. Reports oversized files at session start, names a file the moment a session writes one -- through any tool, Bash included -- and refuses to end a turn that left one broken",
+	"hooks": {
+		"PostToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/claude-md-budget",
+						"type": "command"
+					}
+				],
+				"matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit"
+			}
+		],
+		"SessionStart": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/claude-md-budget",
+						"type": "command"
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/claude-md-budget",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"claude-md",
+		"context",
+		"budget",
+		"instructions",
+		"hook",
+		"enforcement",
+		"stop"
+	],
+	"name": "claude-md-budget",
+	"version": "1171"
+}
