@@ -175,7 +175,7 @@ func TestEveryRouteIsDeniedInsideTheTree(t *testing.T) {
 			assert.Contains(t, reason, c.names,
 				"the denial must name what it stopped, or an unrelated rule could satisfy this test")
 			assert.True(t,
-				strings.Contains(reason, "Use Edit") || strings.Contains(reason, "ask the user"),
+				strings.Contains(reason, "Use Edit") || strings.Contains(reason, "ask the user") || strings.Contains(reason, "run: "),
 				"the denial must say what to do instead, or the reader goes hunting for a way around it: %s", reason)
 		})
 	}

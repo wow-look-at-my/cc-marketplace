@@ -75,6 +75,15 @@ func writeFile(t *testing.T, path, content string) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o755))
 }
 
+// lossOnly asks the destruction half by itself. A handful of cases below are
+// about hazard classes -- which content a verb spares -- and the provenance half
+// answers a different question about the same command, so those tests name the
+// half they mean instead of asserting on the merged verdict.
+func lossOnly(t *testing.T, cwd, command string) string {
+	t.Helper()
+	return evaluateLoss(command, cwd)
+}
+
 func decideWithEvent(t *testing.T, event, tool, cwd, command string) string {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{

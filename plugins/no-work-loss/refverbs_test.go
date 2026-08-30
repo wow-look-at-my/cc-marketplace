@@ -246,7 +246,6 @@ func TestAllowsTheSafeSpellingsOfThoseVerbs(t *testing.T) {
 		"git branch feature",
 		"git reflog",
 		"git reflog show HEAD",
-		"git update-ref refs/heads/x HEAD",
 		"git worktree list",
 		"git worktree prune",
 	} {
@@ -263,7 +262,14 @@ func TestSubmoduleAndCheckoutIndexForceForms(t *testing.T) {
 
 	allowed(t, dir, "git submodule update --init")
 	allowed(t, dir, "git submodule status")
-	allowed(t, dir, "git checkout-index -a")
+
+	// `git checkout-index -a` discards nothing, so the destruction half allows
+	// it. It writes the index into the worktree, which is the plumbing route the
+	// provenance half closes -- the same reason `git update-ref` moved off the
+	// allow list above.
+	assert.Empty(t, lossOnly(t, dir, "git checkout-index -a"))
+	denied(t, dir, "git checkout-index -a")
+	denied(t, dir, "git update-ref refs/heads/x HEAD")
 }
 
 func TestAllowsUnknownGitVerbs(t *testing.T) {

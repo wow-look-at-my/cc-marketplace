@@ -48,7 +48,7 @@ func classify(seg segment, roots []string) []write {
 	if w, ok := interpreterWrites(seg, name, rest, roots); ok {
 		return append(out, w...)
 	}
-	return append(out, fileWrites(seg, name, rest)...)
+	return append(out, fileWrites(seg, name, rest, roots)...)
 }
 
 // redirectWrites covers `cmd > path`, `>>`, `>|`, `&>` and `<>`: the shell
@@ -95,7 +95,7 @@ func isDeviceFile(p string) bool {
 // fileWrites is the catalog of programs that mutate a file named on their own
 // argv. Each entry resolves the target rather than matching the program name and
 // stopping there, so the denial can say which path it stopped.
-func fileWrites(seg segment, name string, rest []word) []write {
+func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 	one := func(route string, paths ...word) []write {
 		return []write{{route: route, paths: paths, dir: seg.cwd}}
 	}
@@ -136,10 +136,8 @@ func fileWrites(seg segment, name string, rest []word) []write {
 		}
 		return one("truncate", operands...)
 
-	case "cp", "install", "rsync":
-		return copyWrites(seg, name, rest)
-	case "mv":
-		return copyWrites(seg, "mv", rest)
+	case "cp", "mv", "install", "rsync":
+		return copyWrites(seg, name, rest, roots)
 
 	case "ln":
 		// A symlink replaces the path it is created at, so the link name is the
@@ -237,19 +235,33 @@ func fileWrites(seg segment, name string, rest []word) []write {
 	return inPlaceRewrite(seg, name, rest)
 }
 
-func copyWrites(seg segment, name string, rest []word) []write {
+// copyWrites is where the rule's real shape shows: this is about content
+// ENTERING the tree without a tool call. Bytes already in the tree have been
+// through one, so moving or copying them around it -- `mv old.go new.go` -- is
+// ordinary refactoring. A source from outside is the splice this closes: write a
+// file to /tmp with Write, then move it over the target.
+func copyWrites(seg segment, name string, rest []word, roots []string) []write {
 	flags, operands := scanArgs(rest, map[string]bool{
 		"-t": true, "--target-directory": true, "-S": true, "--suffix": true,
 		"-m": true, "--mode": true, "-o": true, "--owner": true, "-g": true, "--group": true,
 		"-e": true, "--rsh": true, "--exclude": true, "--include": true, "--files-from": true,
 	})
 	if v, ok := flags["-t"]; ok {
+		if fromInsideTree(seg.cwd, operands, roots) {
+			return nil
+		}
 		return []write{{route: name + " -t", dir: abs(seg.cwd, v.text), whole: true}}
 	}
 	if v, ok := flags["--target-directory"]; ok {
+		if fromInsideTree(seg.cwd, operands, roots) {
+			return nil
+		}
 		return []write{{route: name + " --target-directory", dir: abs(seg.cwd, v.text), whole: true}}
 	}
 	if len(operands) < 2 {
+		return nil
+	}
+	if fromInsideTree(seg.cwd, operands[:len(operands)-1], roots) {
 		return nil
 	}
 	dst := operands[len(operands)-1]
@@ -370,6 +382,27 @@ func inPlaceRewrite(seg segment, name string, rest []word) []write {
 		return nil
 	}
 	return []write{{route: name + " (in-place rewrite)", paths: targets, dir: seg.cwd}}
+}
+
+// fromInsideTree reports whether every source is content the tree already holds.
+// An unknowable source is not, which is what keeps `cp $SRC tracked.go` denied.
+func fromInsideTree(cwd string, sources []word, roots []string) bool {
+	if len(sources) == 0 {
+		return false
+	}
+	for _, s := range sources {
+		if !s.static {
+			return false
+		}
+		p := abs(cwd, s.text)
+		if p == "" {
+			return false
+		}
+		if _, inside := insideGuarded(roots, p); !inside {
+			return false
+		}
+	}
+	return true
 }
 
 func looksLikePath(cwd string, o word) bool {

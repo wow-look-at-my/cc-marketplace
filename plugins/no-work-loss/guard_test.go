@@ -171,7 +171,13 @@ func TestDeniesShellAliasHidingResetHard(t *testing.T) {
 
 func TestAllowsResetHardOnCleanTree(t *testing.T) {
 	dir := newRepo(t)
-	allowed(t, dir, "git reset --hard origin/master")
+	assert.Empty(t, lossOnly(t, dir, "git reset --hard origin/master"),
+		"a clean tree has no uncommitted work to lose")
+
+	// The merged hook still refuses it, for the other reason: a hard reset
+	// replaces the files on disk with a commit's version, and that is a content
+	// change no edit tool made.
+	assert.Contains(t, denied(t, dir, "git reset --hard origin/master"), "git reset")
 }
 
 func TestAllowsBranchCreationEvenWhenDirty(t *testing.T) {
@@ -222,7 +228,7 @@ func TestAllowsRmOfCleanTrackedFile(t *testing.T) {
 func TestResetHardSparesUntrackedFiles(t *testing.T) {
 	dir := newRepo(t)
 	untrack(t, dir, "scratch.txt")
-	allowed(t, dir, "git reset --hard") // reset never touches untracked files
+	assert.Empty(t, lossOnly(t, dir, "git reset --hard"), "reset never touches untracked files")
 }
 
 func TestCleanSparesTrackedModifications(t *testing.T) {
@@ -302,9 +308,13 @@ func TestDeniesUnparseableCommandNamingADestructiveVerb(t *testing.T) {
 	assert.Contains(t, r, "could not be parsed")
 }
 
-func TestAllowsUnparseableCommandWithNothingDestructive(t *testing.T) {
+// The destruction half allows a command it cannot parse when nothing in it
+// deletes; the provenance half cannot, because an unparsed command's writes are
+// unknown and unknown fails closed. The merged verdict is the stricter one.
+func TestDeniesUnparseableCommandEvenWithNothingDestructive(t *testing.T) {
 	dir := newRepo(t)
-	allowed(t, dir, "echo `")
+	assert.Empty(t, lossOnly(t, dir, "echo `"))
+	assert.Contains(t, denied(t, dir, "echo `"), "does not parse as shell")
 }
 
 func TestFlagVariantsAllReachTheSameVerdict(t *testing.T) {
@@ -396,12 +406,22 @@ func TestDeniesTruncatingRedirectOntoDirtyFile(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	denied(t, dir, "echo x > tracked.go")
-	allowed(t, dir, "echo x >> tracked.go") // appending loses nothing
+	// An append loses nothing, so the destruction half allows it. The provenance
+	// half still refuses: appended text is authored content, and Edit is how
+	// authored content reaches a tracked file.
+	assert.Empty(t, lossOnly(t, dir, "echo x >> tracked.go"))
+	assert.Contains(t, denied(t, dir, "echo x >> tracked.go"), "tracked.go")
 }
 
-func TestAllowsRedirectOntoNewOrIgnoredFile(t *testing.T) {
+func TestRedirectOntoANewFileIsStillAuthoring(t *testing.T) {
 	dir := newRepo(t)
-	allowed(t, dir, "echo x > brand-new.txt")
+	// Nothing is lost, so the destruction half is content.
+	assert.Empty(t, lossOnly(t, dir, "echo x > brand-new.txt"))
+	// But a new file with content in it is exactly what Write is for.
+	assert.Contains(t, denied(t, dir, "echo x > brand-new.txt"), "brand-new.txt")
+
+	// A build directory is writable by whatever writes it, and a device is not a
+	// file in the tree at all.
 	allowed(t, dir, "echo x > build/out.log")
 	allowed(t, dir, "git status 2>/dev/null")
 	allowed(t, dir, "git status > /dev/null 2>&1")
@@ -426,7 +446,8 @@ func TestDeniesTeeAndTruncateOntoDirtyFile(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	denied(t, dir, "echo x | tee tracked.go")
-	allowed(t, dir, "echo x | tee -a tracked.go")
+	assert.Empty(t, lossOnly(t, dir, "echo x | tee -a tracked.go"), "appending loses nothing")
+	denied(t, dir, "echo x | tee -a tracked.go") // but it is still authoring
 	denied(t, dir, "truncate -s 0 tracked.go")
 }
 
