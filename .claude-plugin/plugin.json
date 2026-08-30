@@ -1,0 +1,38 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Parses Bash commands with shfmt's syntax tree: denies heredocs and any perl invocation, strips 2\u003e/dev/null everywhere plus trailing | head / | tail / | grep / || true / 2\u003e\u00261 from the final statement only, rewrites a final trailing \u003e file into | tee file, caps every sleep at 3 seconds, removes constant narration echo/printf entirely by rewriting it to the no-op : (seeing through command/builtin/backslash/quoting wrappers while keeping real printf formatting), ensures set -o pipefail, and never emits a rewrite that lost a statement",
+	"hooks": {
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hook.sh",
+						"type": "command"
+					}
+				],
+				"matcher": "Bash"
+			}
+		]
+	},
+	"keywords": [
+		"bash",
+		"cleanup",
+		"rewrite",
+		"hook",
+		"stderr",
+		"devnull",
+		"shfmt",
+		"ast",
+		"tee",
+		"pipefail",
+		"sleep",
+		"echo",
+		"printf",
+		"perl",
+		"narration"
+	],
+	"name": "cleanup-bash-cmds",
+	"version": "1151"
+}
