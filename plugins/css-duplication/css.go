@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"sort"
 	"strings"
 )
@@ -303,13 +304,13 @@ func FindDuplicates(rules []Rule) []Group {
 		// Identical selectors are a different bug (a rule written twice), and
 		// one the model rarely commits; dedupe so a repeated selector in two
 		// files' worth of copy-paste does not read as N distinct rules.
-		seen := map[string]bool{}
+		seen := set.New[string]()
 		uniq := rs[:0:0]
 		for _, r := range rs {
-			if seen[r.Selector] {
+			if seen.Contains(r.Selector) {
 				continue
 			}
-			seen[r.Selector] = true
+			seen.Add(r.Selector)
 			uniq = append(uniq, r)
 		}
 		if len(uniq) < 2 {
