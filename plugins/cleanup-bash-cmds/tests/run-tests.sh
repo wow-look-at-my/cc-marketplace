@@ -370,6 +370,12 @@ check_rewrite_raw "set -e on its own line is preserved" \
 # --- Trailing | head / | tail: arbitrary flags, chains, word boundaries ---
 
 check_rewrite "trailing |head without spaces" 'foo file.txt|head -50' 'foo file.txt'
+# `| sed -n '3p'` truncates the output exactly as `| head` does.
+check_rewrite "trailing | sed -n line select stripped" "ls | sed -n '3p'" 'ls'
+check_rewrite "trailing | sed -n range stripped" "ls | sed -n '1,5p'" 'ls'
+check_rewrite "trailing | sed without -n preserved" \
+	"ls | sed 's/a/b/'" "ls | sed 's/a/b/'"
+check_rewrite "head then sed -n chain unwinds fully" "ls | head -3 | sed -n '1p'" 'ls'
 check_rewrite "trailing | head -c 4k" 'foo file.txt | head -c 4k' 'foo file.txt'
 check_rewrite "trailing | tail -f" 'foo /var/log/syslog | tail -f' 'foo /var/log/syslog'
 check_rewrite "trailing | tail -n +2" 'foo file.txt | tail -n +2' 'foo file.txt'
@@ -435,6 +441,18 @@ check_rewrite_raw "multi-line mix of all rules (set -e preserved)" \
 
 check_deny_read "direct head after cd && (the incident)" \
 	'cd /Users/mhaynie/repos/model-benchmark-ue5/model-benchmark && head -60 src/usage.test.ts'
+# `sed -n` selecting lines is the same file read as head/tail, in the spelling
+# that used to walk around the rule. Without -n, sed transforms its input and
+# is left alone.
+check_deny_read "sed -n line select on a file denied" "sed -n '3p' file.txt"
+check_deny_read "sed -n range select on a file denied" "sed -n '1,10p' file.txt"
+check_deny_read "sed --quiet on a file denied" "sed --quiet '3p' file.txt"
+check_deny_read "sed -ne cluster on a file denied" "sed -ne '3p' file.txt"
+check_rewrite "sed without -n transforms, not reads" \
+	"sed 's/a/b/' file.txt" "sed 's/a/b/' file.txt"
+check_rewrite "sed -n on /proc allowed" \
+	"sed -n '1p' /proc/meminfo" "sed -n '1p' /proc/meminfo"
+
 check_deny_read "cat on a file denied" 'cat file.txt'
 check_deny_read "cat on multiple files denied" 'cat notes.md extra.md'
 check_deny_read "cat with flag still names a file" 'cat -n file.txt'
@@ -711,9 +729,11 @@ check_rewrite "docker-compose executable is not rewritten" \
 	'docker-compose restart api' \
 	'docker-compose restart api'
 
+# Not printf: a constant printf is narration now, and `:` would prove nothing
+# about the docker rule. The point is that these words are ARGUMENTS.
 check_rewrite "docker compose text used as arguments is not rewritten" \
-	'printf "%s\n" docker compose restart' \
-	'printf "%s\n" docker compose restart'
+	'grep docker compose restart' \
+	'grep docker compose restart'
 
 # --- Sleep cap: every sleep, everywhere, capped at 3 seconds ---
 
@@ -827,12 +847,16 @@ check_rewrite "printf stderr redirect kept, command removed" 'printf warn 2>>err
 
 # Kept: a real format string (any %), extra args beyond the format, or an
 # expansion -- printf that formats is not narration.
-check_rewrite "printf %s format kept" "printf '%s\\n' hi" "printf '%s\\n' hi"
-check_rewrite "printf %d format kept" "printf '%d' 5" "printf '%d' 5"
-check_rewrite "printf %s with two data args kept" "printf '%s' a b" "printf '%s' a b"
-check_rewrite "printf escaped %% kept" "printf 'a%%b'" "printf 'a%%b'"
-check_rewrite "printf lone %s kept" "printf '%s'" "printf '%s'"
-check_rewrite "printf multi-arg narration kept (not single const)" 'printf starting build now' 'printf starting build now'
+# A format directive is not what makes a printf data -- an EXPANSION is. Every
+# one of these prints a fixed string to the terminal, which is narration in the
+# spelling that used to walk around the echo rule.
+check_rewrite "printf %s format removed" "printf '%s\\n' hi" ":"
+check_rewrite "printf %d format removed" "printf '%d' 5" ":"
+check_rewrite "printf %s with two constant args removed" "printf '%s' a b" ":"
+check_rewrite "printf escaped %% removed" "printf 'a%%b'" ":"
+check_rewrite "printf lone %s removed" "printf '%s'" ":"
+check_rewrite "printf multi-arg narration removed" 'printf starting build now' ":"
+check_rewrite "printf -- separator removed" "printf -- '--- build ---\\n'" ":"
 
 # Not narration: expansions, captures, redirected or pipe-feeding stdout --
 # the identical carve-outs to echo, since printf rides the same rule.
@@ -858,7 +882,7 @@ check_rewrite "quoted printf word removed" '"printf" hi' "$COLON"
 check_rewrite "split-quoted printf word removed" "pri'ntf' hi" "$COLON"
 check_rewrite "command command echo removed" 'command command echo hi' "$COLON"
 # Wrapper that does NOT resolve to narration removal.
-check_rewrite "command printf format kept" "command printf '%s\\n' x" "command printf '%s\\n' x"
+check_rewrite "command printf format removed" "command printf '%s\\n' x" ":"
 check_rewrite "command -v printf is a lookup" 'command -v printf' 'command -v printf'
 check_rewrite "command -V echo is a lookup" 'command -V echo' 'command -V echo'
 
