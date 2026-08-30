@@ -114,8 +114,7 @@ func TestShippedRulesAllowReadOnlyMCPTools(t *testing.T) {
 		{"mcp__Playwright__browser_evaluate", false},
 		{"mcp__plugin_grep_grep__Grep", true},
 		{"mcp__plugin_glob_glob__Glob", true},
-		// No server-name wildcard: an unlisted server is never auto-allowed,
-		// however read-only its tool names look.
+		// No server-name wildcard: an unlisted server is never auto-allowed.
 		{"mcp__CONTENTdm__search_items", false},
 		{"mcp__Robinhood__get_equity_quotes", false},
 		{"mcp__Robinhood__place_equity_order", false},

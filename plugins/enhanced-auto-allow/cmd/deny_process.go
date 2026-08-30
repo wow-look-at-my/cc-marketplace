@@ -4,63 +4,43 @@ import (
 	"path"
 	"strings"
 
+	"github.com/wow-look-at-my/go-containers/set"
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// Process-level deny.
-//
-// The allow path answers "is this command on the whitelist", and it deliberately
-// bails to passthrough on anything it cannot fully read -- an output redirect, a
-// command substitution, a subshell. That is the right posture for GRANTING
-// permission and exactly the wrong one for REFUSING it: a denied program would
-// slip through by being wrapped in any construct the allow path declines to
-// parse. So this walks the whole tree instead and asks one question of every
-// statement: what process would this start, and how is it being fed?
-//
-// It answers structurally rather than by pattern, because a pattern list can
-// never be finished. `python3`, `/usr/bin/python3`, `env python3`, `python3.11`,
-// `sudo -E python`, `uv run python` are one process start wearing six spellings,
-// and the next one is always the spelling nobody enumerated.
+// Process-level deny: a rule matches the process a statement would START, not
+// the argv spelling, because a spelling list can never be finished.
 type ProcessRule struct {
 	Name string
-	// Behavior is the section this rule came from: allow, ask or deny.
+	// The section this rule came from: allow, ask or deny.
 	Behavior string
 	Message  string
-	// InlineOnly denies just the forms that execute a script handed to the
-	// interpreter on the command line or on stdin, leaving `node script.js`
-	// alone. Interpreters that must stay usable (node runs this environment's
-	// own hooks) are denied this way; ones with no business running at all are
-	// denied outright.
+	// Deny a script handed to the interpreter, sparing `node script.js`.
 	InlineOnly bool
-	// EvalFlags are the flags that take a script as their value (-e, --eval).
-	// For single-dash flags they also match inside a cluster, so perl's -pe,
-	// -ne and -lane are caught without listing every combination.
+	// Flags taking a script as their value; a single-dash flag matches inside a cluster too, covering perl's -pe and -lane.
 	EvalFlags []string
-	// EvalSubcommands are argv[1] forms meaning the same thing (deno eval).
+	// Subcommand spellings of the same thing (deno eval).
 	EvalSubcommands []string
 }
 
-// Wrappers that run their first non-flag, non-assignment argument as a new
-// process. Stripping them is what makes `env python3` and `sudo -E python3`
-// resolve to python.
-var execWrappers = map[string]bool{
-	"env": true, "sudo": true, "doas": true, "nohup": true, "command": true,
-	"exec": true, "nice": true, "ionice": true, "stdbuf": true, "setsid": true,
-	"time": true, "timeout": true, "xargs": true, "watch": true, "script": true,
-	"uv": true, "uvx": true, "pipx": true, "poetry": true, "hatch": true,
-	"pdm": true, "conda": true, "rye": true, "micromamba": true, "npx": true, "bunx": true,
-}
+// Commands that run their leading non-flag, non-assignment argument as a new
+// process. Stripping them resolves `env python3` and `sudo -E python3`.
+var execWrappers = set.Of(
+	"env", "sudo", "doas", "nohup", "command",
+	"exec", "nice", "ionice", "stdbuf", "setsid",
+	"time", "timeout", "xargs", "watch", "script",
+	"uv", "uvx", "pipx", "poetry", "hatch",
+	"pdm", "conda", "rye", "micromamba", "npx", "bunx",
+)
 
-// Subcommands of a wrapper that precede the real command: `uv run python`,
-// `poetry run python`, `conda run -n env python`.
-var wrapperSubcommands = map[string]bool{"run": true, "exec": true}
+// Wrapper subcommands preceding the real command: `uv run python`.
+var wrapperSubcommands = set.Of("run", "exec")
 
 // Arguments meaning "the script arrives on stdin".
-var stdinMarkers = map[string]bool{"-": true, "/dev/stdin": true}
+var stdinMarkers = set.Of("-", "/dev/stdin")
 
-// resolveArgs splits a command's words into the process name and the arguments
-// belonging to it, after stripping VAR=VAL assignments, wrapper commands and the
-// flags those wrappers consumed. Returns ("", nil) when nothing is left to run.
+// resolveArgs splits words into the process name and its own arguments, after
+// stripping assignments, wrappers and wrapper flags. Empty name = nothing runs.
 func resolveArgs(args []string) (string, []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -74,7 +54,7 @@ func resolveArgs(args []string) (string, []string) {
 			continue // a wrapper's own flag
 		}
 		base := path.Base(arg)
-		if execWrappers[base] || wrapperSubcommands[base] {
+		if execWrappers.Contains(base) || wrapperSubcommands.Contains(base) {
 			continue
 		}
 		return base, args[i+1:]
@@ -82,9 +62,8 @@ func resolveArgs(args []string) (string, []string) {
 	return "", nil
 }
 
-// matchesDenied reports whether a resolved process name is the denied program.
-// A trailing version counts as the same program, so one `python` entry covers
-// python3, python3.11 and python2.7 without enumerating them.
+// matchesDenied reports whether a resolved name is the denied program. A
+// trailing version is the same program, so `python` covers every suffixed spelling.
 func matchesDenied(name, denied string) bool {
 	if name == denied {
 		return true
@@ -101,15 +80,13 @@ func matchesDenied(name, denied string) bool {
 }
 
 // isInlineScript reports whether an invocation hands the interpreter a script
-// rather than pointing it at a file: an eval flag, an eval subcommand, a stdin
-// marker, or a heredoc/pipe feeding it. fedByStdin carries the cases the
-// argument list alone cannot show.
+// rather than a file. fedByStdin carries what the argument list cannot show.
 func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 	if fedByStdin {
 		return true
 	}
 	for i, arg := range args {
-		if stdinMarkers[arg] {
+		if stdinMarkers.Contains(arg) {
 			return true
 		}
 		for _, f := range d.EvalFlags {
@@ -133,13 +110,10 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 	return false
 }
 
-// deniedProcess walks every statement in the parse tree -- including those inside
-// command substitutions, subshells, loops and conditionals, which the allow path
-// refuses to read -- and returns the first denied process it finds.
-//
-// Known limit: a program named only inside a string handed to another
-// interpreter (`bash -c "python3 x.py"`) is not visible here, because at parse
-// time that is an opaque argument, not a command.
+// matchProcessRule walks EVERY statement, including the substitutions,
+// subshells and conditionals the allow path refuses to read -- a denied program
+// must never be a `$(...)` away from running. Known gap: a program named inside
+// a string handed to another interpreter is an argument here, not a command.
 func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 	if len(denies) == 0 {
 		return "", ""
@@ -149,12 +123,11 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 		return "", ""
 	}
 
-	// A statement on the receiving end of a pipe reads its input from it, which
-	// is how `echo 'code' | node` smuggles a script past an argument check.
-	piped := map[*syntax.Stmt]bool{}
+	// `echo 'code' | node` smuggles a script past an argument check.
+	piped := set.New[*syntax.Stmt]()
 	syntax.Walk(file, func(n syntax.Node) bool {
 		if b, ok := n.(*syntax.BinaryCmd); ok && (b.Op == syntax.Pipe || b.Op == syntax.PipeAll) {
-			piped[b.Y] = true
+			piped.Add(b.Y)
 		}
 		return true
 	})
@@ -180,7 +153,7 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 		if name == "" {
 			return true
 		}
-		fedByStdin := piped[stmt]
+		fedByStdin := piped.Contains(stmt)
 		for _, r := range stmt.Redirs {
 			switch r.Op {
 			case syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc, syntax.RdrIn:
@@ -203,9 +176,8 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 }
 
 // wordLiteral renders a word for name resolution only. Unlike extractWord it
-// never gives up on a word it cannot fully resolve: unresolvable parts are
-// skipped, so `"py"thon3` still yields something to inspect rather than dropping
-// the whole command from consideration.
+// never gives up: an unresolvable part is skipped, so `"py"thon3` still yields
+// something to inspect instead of dropping the command from consideration.
 func wordLiteral(w *syntax.Word) string {
 	var b strings.Builder
 	for _, part := range w.Parts {
