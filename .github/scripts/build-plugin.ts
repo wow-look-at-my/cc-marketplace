@@ -79,12 +79,10 @@ interface PluginJson {
 
 const platformBinaryPattern = /^(.+)_(linux|darwin)_(amd64|arm64)$/;
 
-// The first eight bytes of a Cosmopolitan APE, which is what `--targets cosmo`
-// leaves in build/. `marketplace-build release-plugin` runs after this script
-// and writes the launcher at the manifest's path, so the unsuffixed file does
-// not exist yet -- see tools/marketplace-build/ape_package.go, which identifies
-// the APE by these bytes and NEVER by filename, because the name it carries
-// varies between a local build and CI.
+// The first eight bytes of what `--targets cosmo` leaves in build/. The
+// launcher at the manifest's path is written later, by `marketplace-build
+// release-plugin`, so the unsuffixed file does not exist yet. Match on these
+// bytes and NEVER on filename -- see tools/marketplace-build/ape_package.go.
 const apeMagic = "MZqFpD='";
 
 function isApe(path: string): boolean {
@@ -104,8 +102,8 @@ function hookBinaryExists(rel: string): boolean {
   const abs = join(pluginPath, rel);
   if (existsSync(abs)) return true;
   // Go-toolchain emits per-platform binaries (e.g. hook_linux_amd64) or one fat
-  // APE instead of a single unsuffixed file. Accept the hook path if a sibling
-  // is either.
+  // build instead of a single unsuffixed file. Accept the hook path if a
+  // sibling is either.
   const dir = dirname(abs);
   const base = basename(abs);
   if (!existsSync(dir)) return false;

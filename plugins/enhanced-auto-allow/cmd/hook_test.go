@@ -183,11 +183,12 @@ func TestEndToEndGhRepoView(t *testing.T) {
 	}
 }
 
-// PermissionRequest is answered only after the engine lands on "ask", so a
-// deny riding it alone is silent under defaultMode "auto" -- which is how
-// python stayed runnable. These cases pin the deny half to PreToolUse, which is
-// unconditional, and pin the allow half OUT of it: an allow there settles the
-// call before the user's own deny rules are consulted.
+// PermissionRequest is answered only after the permission engine has landed on
+// "ask", so a deny that rides it alone is silent under defaultMode "auto" --
+// which is how python stayed runnable. These cases pin the deny half to
+// PreToolUse, which is unconditional, and pin the allow half OUT of it: an
+// allow from PreToolUse settles the call before the user's own deny rules are
+// consulted.
 func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 	binaryPath := buildTestBinary(t)
 
@@ -237,9 +238,9 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 // on a hook decision the client calls cancelRequest on the bridge request that
 // is displaying the card, then re-issues the call byte-identically with no
 // grant attached, so the server -- which is waiting on a human -- rejects it
-// again and the only permitted retry is spent. An allow here therefore destroys
-// the user's sole working option, clicking, and turns a call they could have
-// approved into a guaranteed failure.
+// again and the single permitted retry is spent. An allow here therefore
+// destroys the user's only working option (clicking) and converts a clickable
+// call into a guaranteed rejection.
 //
 // Silence is not a missing feature here, it IS the fix, which is exactly why
 // this test asserts it: the previous version of this file required an allow
@@ -360,10 +361,10 @@ func loadTestRules(t *testing.T) {
 	require.NoError(t, err, "Failed to parse rules.xml")
 }
 
-// A malformed byte disables EVERY rule: loadXMLRules failing makes the hook
-// exit clean and pass everything through. The usual cause is a "--" inside an
-// <!-- --> comment, which XML forbids: it turns a pile of unrelated tests red
-// and none of them says "the rules file does not parse".
+// A malformed byte disables EVERY rule, since loadXMLRules failing makes the
+// hook pass everything through. The usual cause is a "--" inside an
+// <!-- --> comment, which XML forbids: it turns the whole suite red without
+// any test saying "the rules file does not parse".
 func TestRulesXMLParses(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))
