@@ -211,8 +211,7 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 
 			var resp PreToolUseResponse
 			require.NoError(t, json.Unmarshal(out, &resp), "output was: %s", out)
-			// The CLI rejects a payload whose hookEventName is not the event it
-			// dispatched, so the shape must follow the event.
+			// The CLI rejects a hookEventName that is not the dispatched event.
 			assert.Equal(t, eventPreToolUse, resp.HookSpecificOutput.HookEventName)
 			assert.Equal(t, "deny", resp.HookSpecificOutput.PermissionDecision, "%q must be denied", command)
 			assert.NotEmpty(t, resp.HookSpecificOutput.PermissionDecisionReason, "a deny must say why -- the reason reaches the model verbatim")

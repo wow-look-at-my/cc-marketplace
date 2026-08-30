@@ -35,8 +35,6 @@ runs:
       if: steps.binary.outputs.exists != 'true'
       with:
         working-directory: "tools/marketplace-build"
-        os: linux
-        arch: amd64
         # An internal CI helper, not a release artifact.
         autorelease: "false"
 

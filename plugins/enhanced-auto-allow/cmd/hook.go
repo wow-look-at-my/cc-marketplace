@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/wow-look-at-my/go-containers/set"
-	"mvdan.cc/sh/v3/syntax"
 )
 
 // Hook input from Claude Code
@@ -23,8 +21,9 @@ type ToolInput struct {
 	Command string `json:"command"`
 }
 
-// Sections evaluated deny > ask > allow. A rule matches either argv as
-// written or the resolved process name; see CommandNode.
+// Sections evaluated deny > ask > allow. A rule matches argv as written
+// (CommandNode) or the resolved process name (ProcessRule). Sharing the node
+// type lets the same rule deny under <deny> and allow under <allow>.
 type Rules struct {
 	Allow []CommandNode `json:"allow"`
 	Ask   []CommandNode `json:"ask"`
@@ -60,9 +59,8 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// Not interchangeable: PermissionRequest runs only after the engine lands on
-// "ask", so a deny there alone is silent under any mode that resolves earlier.
-// The deny half rides PreToolUse. See docs/two-event-registration.md.
+// The events this binary answers. They are NOT interchangeable; the deny half
+// rides PreToolUse. see docs/two-event-registration.md
 const (
 	eventPermissionRequest = "PermissionRequest"
 	eventPreToolUse        = "PreToolUse"
@@ -79,10 +77,9 @@ type PermissionResponse struct {
 	} `json:"hookSpecificOutput"`
 }
 
-// PreToolUse response. A flat permissionDecision rather than the nested
-// decision object, and the CLI rejects a payload whose hookEventName is not
-// the event it dispatched -- so the shape must follow the event, not the
-// verdict.
+// PreToolUse response: a flat permissionDecision, not the nested object. The
+// CLI rejects a hookEventName that is not the event it dispatched, so the shape
+// follows the event rather than the verdict.
 type PreToolUseResponse struct {
 	HookSpecificOutput struct {
 		HookEventName            string `json:"hookEventName"`
@@ -104,8 +101,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	// PreToolUse denies only. An allow there settles the call before the
-	// engine runs, so the user's own deny rules never get a vote.
+	// An allow here would settle the call before the user's deny rules vote.
 	denyOnly := hi.HookEventName == eventPreToolUse
 
 	// Allow all read-only tools
@@ -149,8 +145,9 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
-	// Process rules go ahead of the rest. They walk the parse tree, so they
-	// still see a command the allow path below refuses to read.
+	// Process rules outrank command rules, and are answered by walking the parse
+	// tree, so they still see a command the allow path below refuses to read --
+	// a `$(...)`, a subshell, anything with a redirect.
 	for _, section := range []struct {
 		rules    []ProcessRule
 		behavior string
@@ -171,9 +168,8 @@ func evaluateCommand(command string) (string, string) {
 		return "", ""
 	}
 
-	// Command rules, same precedence. Every command in a compound must clear
-	// the bar: if any is denied, deny; if all are allowed, allow; otherwise
-	// passthrough and let the normal permission flow decide.
+	// Every command in a compound must clear the bar: any denied denies, all
+	// allowed allows, anything else passes through to the permission flow.
 	for _, section := range []struct {
 		nodes    []CommandNode
 		behavior string
@@ -183,8 +179,7 @@ func evaluateCommand(command string) (string, string) {
 	} {
 		for _, args := range commands {
 			if decision, msg := evaluateArgs(args, section.nodes); decision == "allow" || decision == "deny" {
-				// A match in a deny/ask section means that section's behavior,
-				// whatever the rule's internal verdict was.
+				// The section supplies the verdict, not the rule.
 				return section.behavior, msg
 			}
 		}
@@ -218,7 +213,7 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 	current := args[0]
 	remaining := args[1:]
 
-	// Deny wins over allow; allow wins over passthrough.
+	// Merge every matching node: deny beats allow beats passthrough.
 	anyAllowed := false
 	for _, node := range nodes {
 		if !matchesName(node.Name, current) {
@@ -246,13 +241,12 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		return "allow", ""
 	}
 
-	// A deny carrying a message wins outright.
 	if node.DenyWithMessage != "" {
 		return "deny", node.DenyWithMessage
 	}
 
-	// A denied substring in any argument un-matches the node: awk and sed take
-	// a script, and its dangerous features are substrings of that body.
+	// A denied substring unmatches the node: in a script argument (awk, sed)
+	// a dangerous feature appears inside the body, not as its own word.
 	if len(node.DenyArgSubstrings) > 0 {
 		for _, arg := range args {
 			for _, substr := range node.DenyArgSubstrings {
@@ -305,9 +299,8 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		if decision != "" {
 			return decision, msg
 		}
-		// A leading remaining arg that looks like a subcommand but matched
-		// none of them is unknown or mutating: never fall through to
-		// allowedFlags.
+		// A leading non-flag word matching no known subcommand is unknown or
+		// mutating: never fall through to allowedFlags.
 		if !strings.HasPrefix(subcommandArgs[0], "-") {
 			return "", ""
 		}
@@ -392,222 +385,6 @@ func checkAllowedFlags(args []string, allowedFlags interface{}) bool {
 		return true
 	}
 	return false
-}
-
-func parseAllCommands(command string) [][]string {
-	parser := syntax.NewParser()
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil {
-		return nil
-	}
-
-	// Reject any command with output redirections (>, >>, etc.)
-	if hasOutputRedirect(file) {
-		return nil
-	}
-
-	var allCommands [][]string
-	for _, stmt := range file.Stmts {
-		commands := extractCommands(stmt.Cmd)
-		if commands == nil {
-			return nil
-		}
-		allCommands = append(allCommands, commands...)
-	}
-
-	return allCommands
-}
-
-func extractCommands(cmd syntax.Command) [][]string {
-	if cmd == nil {
-		return nil
-	}
-
-	// Check for dangerous constructs
-	if hasDangerousConstruct(cmd) {
-		return nil
-	}
-
-	switch c := cmd.(type) {
-	case *syntax.CallExpr:
-		args := extractCallArgs(c)
-		if args == nil {
-			return nil
-		}
-		return [][]string{args}
-
-	case *syntax.BinaryCmd:
-		// Handle &&, ||, |
-		left := extractCommands(c.X.Cmd)
-		if left == nil {
-			return nil
-		}
-		right := extractCommands(c.Y.Cmd)
-		if right == nil {
-			return nil
-		}
-		return append(left, right...)
-
-	default:
-		return nil
-	}
-}
-
-func extractCallArgs(call *syntax.CallExpr) []string {
-	var args []string
-	for _, word := range call.Args {
-		arg := extractWord(word)
-		if arg == "" {
-			return nil
-		}
-		args = append(args, arg)
-	}
-	return args
-}
-
-func extractWord(word *syntax.Word) string {
-	var parts []string
-	for _, part := range word.Parts {
-		switch p := part.(type) {
-		case *syntax.Lit:
-			parts = append(parts, p.Value)
-		case *syntax.SglQuoted:
-			parts = append(parts, p.Value)
-		case *syntax.DblQuoted:
-			// Double quotes are OK if they only contain literals
-			for _, qpart := range p.Parts {
-				if lit, ok := qpart.(*syntax.Lit); ok {
-					parts = append(parts, lit.Value)
-				} else {
-					return "" // Contains variable expansion or similar
-				}
-			}
-		default:
-			return "" // Unknown part type
-		}
-	}
-	return strings.Join(parts, "")
-}
-
-// extractExecSubCommands extracts sub-commands from exec-style flags.
-// e.g., for args ["-name", "*.h", "-exec", "grep", "-l", "pattern", "{}", ";"]
-// with execFlags ["-exec"], returns [["grep", "-l", "pattern"]].
-func extractExecSubCommands(args []string, execFlags []string) [][]string {
-	flagSet := set.New[string]()
-	for _, f := range execFlags {
-		flagSet.Add(f)
-	}
-
-	var result [][]string
-	for i := 0; i < len(args); i++ {
-		if !flagSet.Contains(args[i]) {
-			continue
-		}
-		// Collect args until ";" or "+"
-		var subCmd []string
-		i++
-		for i < len(args) {
-			a := args[i]
-			if a == ";" || a == "+" {
-				break
-			}
-			if a != "{}" {
-				subCmd = append(subCmd, a)
-			}
-			i++
-		}
-		if len(subCmd) > 0 {
-			result = append(result, subCmd)
-		}
-	}
-	return result
-}
-
-func hasOutputRedirect(node syntax.Node) bool {
-	found := false
-	syntax.Walk(node, func(n syntax.Node) bool {
-		if stmt, ok := n.(*syntax.Stmt); ok {
-			for _, r := range stmt.Redirs {
-				switch r.Op {
-				case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll,
-					syntax.DplOut, syntax.ClbOut, syntax.RdrInOut:
-					if isAllowedRedirect(r) {
-						continue
-					}
-					found = true
-					return false
-				}
-			}
-		}
-		return !found
-	})
-	return found
-}
-
-// isAllowedRedirect reports whether a redirect operation is safe to auto-allow.
-// Permitted: merging stderr into stdout, and stdout/stderr writes to /dev/null
-// or under /tmp/.
-func isAllowedRedirect(r *syntax.Redirect) bool {
-	fd := "1"
-	if r.N != nil {
-		fd = r.N.Value
-	}
-	target := redirectTarget(r)
-
-	// stderr merged into stdout.
-	if r.Op == syntax.DplOut {
-		return fd == "2" && target == "1"
-	}
-
-	switch r.Op {
-	case syntax.RdrOut, syntax.AppOut:
-		if fd != "1" && fd != "2" {
-			return false
-		}
-	case syntax.RdrAll, syntax.AppAll:
-		// &> and &>> redirect both stdout and stderr
-	default:
-		return false
-	}
-
-	return isSafeRedirectPath(target)
-}
-
-// isSafeRedirectPath reports /dev/null or a path under /tmp/. path.Clean
-// defeats traversal.
-func isSafeRedirectPath(target string) bool {
-	if target == "/dev/null" {
-		return true
-	}
-	return strings.HasPrefix(path.Clean(target), "/tmp/")
-}
-
-func redirectTarget(r *syntax.Redirect) string {
-	if r.Word == nil {
-		return ""
-	}
-	var parts []string
-	for _, p := range r.Word.Parts {
-		lit, ok := p.(*syntax.Lit)
-		if !ok {
-			return ""
-		}
-		parts = append(parts, lit.Value)
-	}
-	return strings.Join(parts, "")
-}
-
-func hasDangerousConstruct(node syntax.Node) bool {
-	dangerous := false
-	syntax.Walk(node, func(n syntax.Node) bool {
-		switch n.(type) {
-		case *syntax.CmdSubst, *syntax.ParamExp, *syntax.ArithmExp, *syntax.ProcSubst:
-			dangerous = true
-			return false
-		}
-		return true
-	})
-	return dangerous
 }
 
 func hasAnyFlag(args []string, flags []string) bool {
