@@ -1,0 +1,32 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Refuses to end a turn whose closing message names a pull request number, a commit SHA, a branch, or a GitHub URL without a markdown link to it. Strips the message's markdown links and reports what is left, so a link given earlier earns no credit",
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/link-all-refs",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"link",
+		"markdown",
+		"pull-request",
+		"commit",
+		"sha",
+		"branch",
+		"url",
+		"stop",
+		"hook",
+		"enforcement"
+	],
+	"name": "link-all-refs",
+	"version": "1183"
+}
