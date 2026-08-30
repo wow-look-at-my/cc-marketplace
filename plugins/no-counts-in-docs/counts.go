@@ -1,10 +1,14 @@
-// counts.go finds the one sentence shape this plugin refuses: a cardinal
-// number quantifying a plural noun, in the prose of a markdown document.
+// counts.go finds the one sentence shape this plugin refuses: an inventory
+// count, where a document says how many of something the repository, the
+// project or the document itself currently holds.
 //
-// "This repo's 15 plugins", "the four rules below", "three sections": each
-// states how many of something exists at the moment it was typed, and the edit
-// that adds an item leaves it wrong with nothing to notice. Describing what is
-// there and letting the reader count never goes stale.
+// A count needs two halves to qualify, and the second half is what keeps this
+// plugin usable. The FRAME says the sentence is talking about what is here --
+// a possessive ("this repo's"), a having verb ("it ships", "there are"), or a
+// document deictic ("the rules below"). The QUANTITY is a cardinal governing a
+// plural noun. Both together is an inventory that the next commit falsifies
+// with nothing to notice; the quantity alone is ordinary technical prose, and
+// refusing that would fire on every page and get the plugin uninstalled.
 package main
 
 import (
@@ -23,78 +27,110 @@ type Hit struct {
 // numberWords are the cardinals spelled out. "One" is deliberately absent: in
 // English prose it is overwhelmingly a pronoun ("the wrong one", "one of them")
 // and matching it would refuse far more good writing than bad. A document that
-// says "one plugin" is also the document a single edit makes wrong, so this is
-// a known, deliberate gap rather than an oversight -- the same boundary
+// says "one plugin" is also a document a single edit makes wrong, so this is a
+// known, deliberate gap rather than an oversight -- the same boundary
 // link-all-refs draws around a bare owner/repo.
-var numberWords = strings.Join([]string{
-	"two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-	"eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
-	"seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
-	"sixty", "seventy", "eighty", "ninety", "hundred", "thousand",
-	"dozen", "both",
-}, "|")
+const numberWords = `two|three|four|five|six|seven|eight|nine|ten|` +
+	`eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|` +
+	`nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|dozen`
 
-// countPattern matches a cardinal followed by a plural noun, allowing adjectives
-// and possessives between them ("15 published marketplace plugins"). The noun is
-// captured so measureNouns can excuse it.
-var countPattern = regexp.MustCompile(
-	`(?i)\b(\d{1,4}|` + numberWords + `)\s+((?:[a-z][a-z-]*(?:'s)?\s+){0,3}?)([a-z][a-z-]{2,}s)\b`)
+// quantity is a cardinal governing a plural noun, with adjectives allowed
+// between them ("15 published marketplace plugins"). A digit run may not follow
+// a dot or another digit, so the tail of a version (pre-2.1.205) is not read as
+// a quantity.
+const quantity = `(?:(?:^|[^.\d])(\d{1,4})|\b(?:` + numberWords + `))` +
+	`\s+(?:[a-z][a-z-]*\s+){0,3}?[a-z][a-z-]{2,}s\b`
 
-// measureNouns end a phrase that measures rather than counts. A limit, a size,
-// a duration and a version are all still true after somebody adds a plugin;
-// only a tally of what exists goes stale. Excusing them is what keeps this
-// plugin off ordinary technical prose ("20 seconds", "500 lines", "4 attempts
-// per minute") instead of firing on every page.
+// possessiveFrame is a determiner claiming the things belong here: "this
+// repo's 15 plugins", "the payload's four steps", "our three servers".
+var possessiveFrame = regexp.MustCompile(
+	`(?i)\b(?:this|these|our|the)\s+(?:[a-z][a-z-]*\s+){0,2}?[a-z][a-z-]*'s\s+(` + quantity + `)`)
+
+// havingFrame is a verb asserting possession or extent: "it ships two hooks",
+// "there are three sections", "the plugin registers 15 servers".
+var havingFrame = regexp.MustCompile(
+	`(?i)\b(?:has|have|had|holds?|ships?|carries|carry|contains?|covers?|` +
+		`includes?|lists?|defines?|registers?|installs?|answers?|serves?|` +
+		`provides?|exposes?|declares?|embeds?|bundles?|comprises?|spans?|` +
+		`there\s+(?:are|were))\s+(?:only\s+|just\s+|exactly\s+|all\s+)?(` + quantity + `)`)
+
+// deicticFrame points inside the document: "the four rules below", "the three
+// steps above". The count is of what this page shows, so editing the page
+// breaks it.
+var deicticFrame = regexp.MustCompile(
+	`(?i)\b(?:the|these|those)\s+(` + quantity + `)\s+(?:\S+\s+){0,2}?(?:below|above|here)\b`)
+
+var frames = []*regexp.Regexp{possessiveFrame, havingFrame, deicticFrame}
+
+// measureNouns end a quantity that measures rather than counts. A limit, a size
+// and a duration stay true after somebody adds a plugin, so even inside a frame
+// ("the read has 20 seconds") there is nothing to go stale.
 var measureNouns = set.Of[string](
-	"seconds", "minutes", "hours", "days",
-	"weeks", "months", "years", "ms", "ns",
-	"bytes", "kilobytes", "megabytes", "gigabytes",
-	"kbs", "mbs", "gbs", "kibs", "mibs",
-	"lines", "chars", "characters", "words",
-	"columns", "pixels", "px", "points",
-	"times", "attempts", "retries", "levels",
-	"degrees", "percents", "spaces", "tabs",
-	"digits", "bits", "requests", "tokens",
-	"milliseconds", "nanoseconds", "microseconds",
+	"seconds", "minutes", "hours", "days", "weeks", "months", "years",
+	"milliseconds", "microseconds", "nanoseconds", "ms", "ns",
+	"bytes", "kilobytes", "megabytes", "gigabytes", "kbs", "mbs", "gbs",
+	"lines", "chars", "characters", "words", "columns", "pixels", "px",
+	"times", "attempts", "retries", "levels", "degrees", "percents",
+	"spaces", "tabs", "digits", "bits", "requests", "tokens",
 )
 
 // gapStopWords are the function words that prove the noun after them is not
-// what the number counts. Without this check "Version 2 of the format drops the
-// header" reads as a count of "drops", because a bare adjective run happily
-// swallows "of the format".
+// what the number counts. Without this check "it has 2 of the format drops"
+// reads as a count of "drops", because a bare adjective run happily swallows
+// "of the format".
 var gapStopWords = set.Of[string](
 	"of", "the", "a", "an", "in", "on", "to", "for", "and", "or", "is", "are",
 	"was", "were", "that", "this", "with", "from", "by", "at", "as", "but",
 	"if", "so", "than", "then", "when", "while", "not", "no", "it", "its",
 )
 
-// FindCounts returns every count stated in the prose of a markdown document.
-// Fenced code, indented code, HTML comments and YAML frontmatter are skipped
-// whole, and inline backtick spans are blanked within a line: a number inside
-// verbatim machinery is a literal, not the document's own claim about itself.
+// FindCounts returns every inventory count stated in the prose of a markdown
+// document. Fenced code, indented code, HTML comments and YAML frontmatter are
+// skipped whole, and inline backtick spans are blanked within a line: a number
+// inside verbatim machinery is a literal, not the document's own claim about
+// itself, and it is also how this plugin's own documentation quotes the shape
+// it refuses.
 func FindCounts(doc string) []Hit {
 	var hits []Hit
 	for _, line := range prose(doc) {
 		text := blankInlineCode(line)
-		for _, m := range countPattern.FindAllStringSubmatch(text, -1) {
-			if measureNouns.Contains(strings.ToLower(m[3])) || hasStopWord(m[2]) {
-				continue
+		seen := set.New[string]()
+		for _, frame := range frames {
+			for _, m := range frame.FindAllStringSubmatch(text, -1) {
+				phrase := trimLeadingNoise(m[1])
+				if !isInventory(phrase) || seen.Contains(phrase) {
+					continue
+				}
+				seen.Add(phrase)
+				hits = append(hits, Hit{Phrase: phrase, Line: strings.TrimSpace(line)})
 			}
-			hits = append(hits, Hit{Phrase: strings.TrimSpace(m[0]), Line: strings.TrimSpace(line)})
 		}
 	}
 	return hits
 }
 
-// hasStopWord reports whether the words between the number and the noun contain
-// a function word.
-func hasStopWord(gap string) bool {
-	for _, w := range strings.Fields(gap) {
-		if gapStopWords.Contains(strings.ToLower(w)) {
-			return true
+// trimLeadingNoise drops the character the digit guard had to consume to prove
+// the number does not continue a version.
+func trimLeadingNoise(phrase string) string {
+	return strings.TrimLeft(strings.TrimSpace(phrase), " \t,;:(")
+}
+
+// isInventory rejects a quantity whose noun measures, and one reached through a
+// function word.
+func isInventory(phrase string) bool {
+	words := strings.Fields(strings.ToLower(phrase))
+	if len(words) < 2 {
+		return false
+	}
+	if measureNouns.Contains(words[len(words)-1]) {
+		return false
+	}
+	for _, w := range words[1 : len(words)-1] {
+		if gapStopWords.Contains(w) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 var (
