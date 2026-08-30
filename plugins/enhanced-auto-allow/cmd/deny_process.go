@@ -15,17 +15,15 @@ type ProcessRule struct {
 	// The section this rule came from: allow, ask or deny.
 	Behavior string
 	Message  string
-	// Deny only a script handed to the interpreter, leaving `node script.js`
-	// alone -- node runs this environment's own hooks.
+	// Deny a script handed to the interpreter, sparing `node script.js`.
 	InlineOnly bool
-	// Flags taking a script as their value. A single-dash flag also matches
-	// inside a cluster, so perl's -pe and -lane are covered.
+	// Flags taking a script as their value; a single-dash flag matches inside a cluster too, covering perl's -pe and -lane.
 	EvalFlags []string
-	// argv[1] forms meaning the same thing (deno eval).
+	// Subcommand spellings of the same thing (deno eval).
 	EvalSubcommands []string
 }
 
-// Commands that run their first non-flag, non-assignment argument as a new
+// Commands that run their leading non-flag, non-assignment argument as a new
 // process. Stripping them resolves `env python3` and `sudo -E python3`.
 var execWrappers = set.Of(
 	"env", "sudo", "doas", "nohup", "command",
@@ -65,7 +63,7 @@ func resolveArgs(args []string) (string, []string) {
 }
 
 // matchesDenied reports whether a resolved name is the denied program. A
-// trailing version is the same program, so `python` covers python3.11 too.
+// trailing version is the same program, so `python` covers every suffixed spelling.
 func matchesDenied(name, denied string) bool {
 	if name == denied {
 		return true
@@ -114,7 +112,7 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 
 // matchProcessRule walks EVERY statement, including the substitutions,
 // subshells and conditionals the allow path refuses to read -- a denied program
-// must not be one `$(...)` away from running. Known gap: a program named inside
+// must never be a `$(...)` away from running. Known gap: a program named inside
 // a string handed to another interpreter is an argument here, not a command.
 func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 	if len(denies) == 0 {

@@ -61,11 +61,8 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// The events this binary answers, which are NOT interchangeable:
-// PermissionRequest runs only when the engine lands on "ask", so a deny
-// registered there alone is silent under `defaultMode: "auto"`. PreToolUse runs
-// on every call, so the deny half rides it.
-// see docs/two-event-registration.md
+// The events this binary answers. They are NOT interchangeable; the deny half
+// rides PreToolUse. see docs/two-event-registration.md
 const (
 	eventPermissionRequest = "PermissionRequest"
 	eventPreToolUse        = "PreToolUse"
@@ -106,8 +103,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	// PreToolUse denies and nothing else. An allow here would settle the call
-	// before the engine runs, so the user's own deny rules never get a vote.
+	// An allow here would settle the call before the user's deny rules vote.
 	denyOnly := hi.HookEventName == eventPreToolUse
 
 	// Allow all read-only tools
@@ -185,8 +181,7 @@ func evaluateCommand(command string) (string, string) {
 	} {
 		for _, args := range commands {
 			if decision, msg := evaluateArgs(args, section.nodes); decision == "allow" || decision == "deny" {
-				// A match in a deny/ask section means that section's behavior,
-				// whatever the rule's internal verdict was.
+				// The section supplies the verdict, not the rule.
 				return section.behavior, msg
 			}
 		}
@@ -220,8 +215,7 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 	current := args[0]
 	remaining := args[1:]
 
-	// Try all matching nodes and merge results.
-	// Deny wins over allow; allow wins over passthrough.
+	// Merge every matching node: deny beats allow beats passthrough.
 	anyAllowed := false
 	for _, node := range nodes {
 		if !matchesName(node.Name, current) {
@@ -253,10 +247,8 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		return "deny", node.DenyWithMessage
 	}
 
-	// If any argument contains a denied substring, this node does not match.
-	// Used for tools that accept script arguments (awk, sed, etc.) where
-	// dangerous features (system(), getline, I/O redirection) appear as
-	// substrings of the script body.
+	// A denied substring unmatches the node: in a script argument (awk, sed)
+	// a dangerous feature appears inside the body, not as its own word.
 	if len(node.DenyArgSubstrings) > 0 {
 		for _, arg := range args {
 			for _, substr := range node.DenyArgSubstrings {
@@ -309,9 +301,8 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		if decision != "" {
 			return decision, msg
 		}
-		// A leading word that is not a flag and matched no known subcommand
-		// is an unknown or mutating subcommand: never fall through to
-		// allowedFlags.
+		// A leading non-flag word matching no known subcommand is an unknown
+		// or mutating one: never fall through to allowedFlags.
 		if !strings.HasPrefix(subcommandArgs[0], "-") {
 			return "", ""
 		}
@@ -548,8 +539,8 @@ func hasOutputRedirect(node syntax.Node) bool {
 	return found
 }
 
-// isAllowedRedirect reports whether a redirect operation is safe to auto-allow.
-// Permitted: 2>&1, and stdout/stderr writes to /dev/null or under /tmp/.
+// isAllowedRedirect reports whether a redirect is safe to auto-allow: a merge
+// of stderr into stdout, or a write to /dev/null or under /tmp/.
 func isAllowedRedirect(r *syntax.Redirect) bool {
 	fd := "1"
 	if r.N != nil {
@@ -557,7 +548,7 @@ func isAllowedRedirect(r *syntax.Redirect) bool {
 	}
 	target := redirectTarget(r)
 
-	// 2>&1
+	// stderr merged into stdout
 	if r.Op == syntax.DplOut {
 		return fd == "2" && target == "1"
 	}
@@ -568,7 +559,7 @@ func isAllowedRedirect(r *syntax.Redirect) bool {
 			return false
 		}
 	case syntax.RdrAll, syntax.AppAll:
-		// &> and &>> redirect both stdout and stderr
+		// &> and &>> carry stdout and stderr together
 	default:
 		return false
 	}
@@ -576,8 +567,8 @@ func isAllowedRedirect(r *syntax.Redirect) bool {
 	return isSafeRedirectPath(target)
 }
 
-// isSafeRedirectPath reports whether target is /dev/null or a path under /tmp/.
-// path.Clean defeats traversal attempts like /tmp/../etc/passwd.
+// isSafeRedirectPath reports whether target is /dev/null or under /tmp/.
+// path.Clean defeats a traversal such as /tmp/../etc/passwd.
 func isSafeRedirectPath(target string) bool {
 	if target == "/dev/null" {
 		return true
