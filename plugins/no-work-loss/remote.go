@@ -1,6 +1,10 @@
 package main
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
+)
 
 // A commit can be made without any file ever existing locally: the GitHub
 // contents API takes the bytes in the request body, and the createCommitOnBranch
@@ -21,11 +25,11 @@ func remoteWrites(seg segment, name string, rest []word) ([]write, bool) {
 	return nil, false
 }
 
-var ghAPIValueFlags = map[string]bool{
-	"-X": true, "--method": true, "-H": true, "--header": true,
-	"-f": true, "--raw-field": true, "-F": true, "--field": true,
-	"-q": true, "--jq": true, "-t": true, "--template": true, "--input": true,
-}
+var ghAPIValueFlags = set.Of[string](
+	"-X", "--method", "-H", "--header",
+	"-f", "--raw-field", "-F", "--field",
+	"-q", "--jq", "-t", "--template", "--input",
+)
 
 func ghAPIWrites(rest []word) ([]write, bool) {
 	flags, operands := scanArgs(rest, ghAPIValueFlags)
@@ -55,11 +59,11 @@ func httpAPIWrites(name string, rest []word) ([]write, bool) {
 	if strings.Contains(text, "createCommitOnBranch") {
 		return []write{{route: name + " graphql createCommitOnBranch", opaque: serverSideReason}}, true
 	}
-	flags, operands := scanArgs(rest, map[string]bool{
-		"-X": true, "--request": true, "-H": true, "--header": true,
-		"-d": true, "--data": true, "-u": true, "--user": true, "-o": true, "--output": true,
-		"--method": true,
-	})
+	flags, operands := scanArgs(rest, set.Of[string](
+		"-X", "--request", "-H", "--header",
+		"-d", "--data", "-u", "--user", "-o", "--output",
+		"--method",
+	))
 	method := ""
 	for _, f := range []string{"-X", "--request", "--method"} {
 		if v, ok := flags[f]; ok {

@@ -102,7 +102,7 @@ func gitWrites(seg segment, name string, rest []word) ([]write, bool) {
 // the branch every session is required to create, and allowing `git checkout
 // master -- src/` hands over a whole directory of content with no tool call.
 func gitVerbWrites(verb string, args []word, dir string) bool {
-	flags, operands := scanArgs(args, map[string]bool{"-m": true, "--message": true, "-b": true, "-B": true, "-c": true, "-C": true, "--onto": true, "--strategy": true, "-s": true, "-X": true})
+	flags, operands := scanArgs(args, set.Of[string]("-m", "--message", "-b", "-B", "-c", "-C", "--onto", "--strategy", "-s", "-X"))
 	dashDash := false
 	for _, a := range args {
 		if a.text == "--" {

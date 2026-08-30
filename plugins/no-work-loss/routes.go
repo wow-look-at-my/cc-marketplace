@@ -9,6 +9,9 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
+// noFlags is scanArgs' "this command has no value-taking flags" argument.
+var noFlags = set.Of[string]()
+
 // A write is one file mutation a segment would perform. Three shapes cover every
 // route: a named target, a directory the write lands somewhere under, and a
 // target that cannot be resolved at all.
@@ -110,14 +113,14 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 		return awkWrites(seg, rest)
 
 	case "tee":
-		_, operands := scanArgs(rest, nil)
+		_, operands := scanArgs(rest, noFlags)
 		if len(operands) == 0 {
 			return nil
 		}
 		return one("tee", operands...)
 
 	case "sponge":
-		_, operands := scanArgs(rest, nil)
+		_, operands := scanArgs(rest, noFlags)
 		return one("sponge", operands...)
 
 	case "dd":
@@ -128,7 +131,7 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 		}
 
 	case "truncate":
-		flags, operands := scanArgs(rest, map[string]bool{"-s": true, "--size": true, "-r": true, "--reference": true})
+		flags, operands := scanArgs(rest, set.Of[string]("-s", "--size", "-r", "--reference"))
 		if _, ok := flags["-s"]; !ok {
 			if _, ok := flags["--size"]; !ok {
 				return nil
@@ -143,7 +146,7 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 		// A symlink replaces the path it is created at, so the link name is the
 		// write -- pointing a tracked path at writable storage changes what the
 		// tree holds without any tool seeing it.
-		flags, operands := scanArgs(rest, map[string]bool{"-t": true, "--target-directory": true})
+		flags, operands := scanArgs(rest, set.Of[string]("-t", "--target-directory"))
 		if v, ok := flags["-t"]; ok {
 			return under("ln -t", abs(seg.cwd, v.text))
 		}
@@ -164,7 +167,7 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 	case "patch":
 		// The files a patch touches are named inside the patch, not on the argv,
 		// so the write lands somewhere under the directory patch runs in.
-		flags, _ := scanArgs(rest, map[string]bool{"-o": true, "--output": true, "-d": true, "--directory": true, "-i": true, "--input": true, "-p": true, "--strip": true, "-B": true, "-D": true, "-r": true, "-z": true})
+		flags, _ := scanArgs(rest, set.Of[string]("-o", "--output", "-d", "--directory", "-i", "--input", "-p", "--strip", "-B", "-D", "-r", "-z"))
 		if v, ok := flags["-o"]; ok {
 			return one("patch -o", v)
 		}
@@ -183,7 +186,7 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 		return tarWrites(seg, rest)
 
 	case "unzip":
-		flags, _ := scanArgs(rest, map[string]bool{"-d": true, "-x": true})
+		flags, _ := scanArgs(rest, set.Of[string]("-d", "-x"))
 		dir := seg.cwd
 		if v, ok := flags["-d"]; ok {
 			dir = abs(seg.cwd, v.text)
@@ -191,7 +194,7 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 		return under("unzip", dir)
 
 	case "xxd":
-		flags, operands := scanArgs(rest, map[string]bool{"-c": true, "-g": true, "-l": true, "-o": true, "-s": true})
+		flags, operands := scanArgs(rest, set.Of[string]("-c", "-g", "-l", "-o", "-s"))
 		if _, ok := flags["-r"]; !ok {
 			if _, ok := flags["--revert"]; !ok {
 				return nil
@@ -202,7 +205,7 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 		}
 
 	case "base64", "openssl":
-		flags, _ := scanArgs(rest, map[string]bool{"-o": true, "--output": true, "-out": true})
+		flags, _ := scanArgs(rest, set.Of[string]("-o", "--output", "-out"))
 		for _, f := range []string{"-o", "--output", "-out"} {
 			if v, ok := flags[f]; ok && v.text != "" {
 				return one(name+" "+f, v)
@@ -213,7 +216,7 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 		return curlWrites(seg, rest)
 
 	case "wget":
-		flags, _ := scanArgs(rest, map[string]bool{"-O": true, "--output-document": true, "-P": true, "--directory-prefix": true})
+		flags, _ := scanArgs(rest, set.Of[string]("-O", "--output-document", "-P", "--directory-prefix"))
 		if v, ok := flags["-O"]; ok {
 			return one("wget -O", v)
 		}
@@ -241,11 +244,11 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 // ordinary refactoring. A source from outside is the splice this closes: write a
 // file to /tmp with Write, then move it over the target.
 func copyWrites(seg segment, name string, rest []word, roots []string) []write {
-	flags, operands := scanArgs(rest, map[string]bool{
-		"-t": true, "--target-directory": true, "-S": true, "--suffix": true,
-		"-m": true, "--mode": true, "-o": true, "--owner": true, "-g": true, "--group": true,
-		"-e": true, "--rsh": true, "--exclude": true, "--include": true, "--files-from": true,
-	})
+	flags, operands := scanArgs(rest, set.Of[string](
+		"-t", "--target-directory", "-S", "--suffix",
+		"-m", "--mode", "-o", "--owner", "-g", "--group",
+		"-e", "--rsh", "--exclude", "--include", "--files-from",
+	))
 	if v, ok := flags["-t"]; ok {
 		if fromInsideTree(seg.cwd, operands, roots) {
 			return nil
@@ -274,7 +277,7 @@ func copyWrites(seg segment, name string, rest []word, roots []string) []write {
 }
 
 func tarWrites(seg segment, rest []word) []write {
-	flags, _ := scanArgs(rest, map[string]bool{"-f": true, "--file": true, "-C": true, "--directory": true})
+	flags, _ := scanArgs(rest, set.Of[string]("-f", "--file", "-C", "--directory"))
 	has := func(names ...string) bool {
 		for _, n := range names {
 			if _, ok := flags[n]; ok {
@@ -304,12 +307,12 @@ func tarWrites(seg segment, rest []word) []write {
 }
 
 func curlWrites(seg segment, rest []word) []write {
-	flags, _ := scanArgs(rest, map[string]bool{
-		"-o": true, "--output": true, "--output-dir": true, "-H": true, "--header": true,
-		"-d": true, "--data": true, "-X": true, "--request": true, "-u": true, "--user": true,
-		"-A": true, "--user-agent": true, "-b": true, "--cookie": true, "-c": true, "--cookie-jar": true,
-		"-w": true, "--write-out": true, "-D": true, "--dump-header": true, "-T": true, "--upload-file": true,
-	})
+	flags, _ := scanArgs(rest, set.Of[string](
+		"-o", "--output", "--output-dir", "-H", "--header",
+		"-d", "--data", "-X", "--request", "-u", "--user",
+		"-A", "--user-agent", "-b", "--cookie", "-c", "--cookie-jar",
+		"-w", "--write-out", "-D", "--dump-header", "-T", "--upload-file",
+	))
 	var out []write
 	for _, f := range []string{"-o", "--output", "--cookie-jar", "-c", "-D", "--dump-header"} {
 		if v, ok := flags[f]; ok && v.text != "" && !isDeviceFile(v.text) {
@@ -327,11 +330,11 @@ func curlWrites(seg segment, rest []word) []write {
 }
 
 func ghWrites(seg segment, rest []word) []write {
-	_, operands := scanArgs(rest, nil)
+	_, operands := scanArgs(rest, noFlags)
 	if len(operands) < 2 || operands[0].text != "release" || operands[1].text != "download" {
 		return nil
 	}
-	flags, _ := scanArgs(rest, map[string]bool{"-O": true, "--output": true, "-D": true, "--dir": true, "-p": true, "--pattern": true, "-A": true, "--archive": true, "-R": true, "--repo": true})
+	flags, _ := scanArgs(rest, set.Of[string]("-O", "--output", "-D", "--dir", "-p", "--pattern", "-A", "--archive", "-R", "--repo"))
 	if v, ok := flags["-O"]; ok {
 		return []write{{route: "gh release download -O", paths: []word{v}, dir: seg.cwd}}
 	}
@@ -368,7 +371,7 @@ func inPlaceRewrite(seg segment, name string, rest []word) []write {
 	if !longFlag && !(shortFlag && shortInPlaceTools.Contains(name)) {
 		return nil
 	}
-	_, operands := scanArgs(rest, nil)
+	_, operands := scanArgs(rest, noFlags)
 	// An unrecognised tool's operands hold its subcommand as well as its files
 	// (`ffs fmt -w x.ffs`), so only the ones that look like paths are reported --
 	// a denial naming "fmt" tells the reader nothing.
@@ -429,7 +432,7 @@ var shortInPlaceTools = set.Of[string]("gofmt", "goimports", "shfmt", "ffs",
 // scanArgs splits an argv into its flags and its operands. A flag named in
 // valueFlags consumes the next word, which is what keeps `head -n 20 file` from
 // reading 20 as a path. Bundled short flags each register on their own.
-func scanArgs(rest []word, valueFlags map[string]bool) (map[string]word, []word) {
+func scanArgs(rest []word, valueFlags set.Set[string]) (map[string]word, []word) {
 	flags := map[string]word{}
 	var operands []word
 	dashDash := false
@@ -445,14 +448,14 @@ func scanArgs(rest []word, valueFlags map[string]bool) (map[string]word, []word)
 				flags[k] = word{text: v, static: rest[i].static}
 				continue
 			}
-			if valueFlags[t] && i+1 < len(rest) {
+			if valueFlags.Contains(t) && i+1 < len(rest) {
 				i++
 				flags[t] = rest[i]
 				continue
 			}
 			flags[t] = word{static: true}
 		case len(t) > 1 && strings.HasPrefix(t, "-"):
-			if valueFlags[t] && i+1 < len(rest) {
+			if valueFlags.Contains(t) && i+1 < len(rest) {
 				i++
 				flags[t] = rest[i]
 				continue

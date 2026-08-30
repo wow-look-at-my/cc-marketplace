@@ -78,7 +78,7 @@ func interpreterWrites(seg segment, name string, rest []word, roots []string) ([
 // got there through Write or Edit and is visible in the diff -- and a system
 // script is the tool it belongs to, so only a scratch script denies.
 func scratchScriptWrites(seg segment, name string, rest []word, roots []string) []write {
-	_, operands := scanArgs(rest, nil)
+	_, operands := scanArgs(rest, noFlags)
 	for _, o := range operands {
 		if !o.static {
 			return []write{{route: name, opaque: "a " + name + " script path built from an expansion, so what it runs is not in the command text"}}
@@ -98,7 +98,7 @@ func scratchScriptWrites(seg segment, name string, rest []word, roots []string) 
 func editorWrites(seg segment, name string, rest []word) []write {
 	// -s is silent/script mode for ed, ex and vim and takes no value; reading it
 	// as one swallows the file operand and the write disappears.
-	valueFlags := map[string]bool{"-c": true, "--command": true, "--eval": true, "-u": true, "-i": true, "--load": true}
+	valueFlags := set.Of[string]("-c", "--command", "--eval", "-u", "-i", "--load")
 	flags, operands := scanArgs(rest, valueFlags)
 	if len(operands) > 0 {
 		return []write{{route: name, paths: operands, dir: seg.cwd}}

@@ -1,6 +1,10 @@
 package main
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
+)
 
 // sed and awk are the two filters that can write a file without being told to on
 // the argv: sed's `w` command and awk's `print >` both name their target inside
@@ -8,7 +12,7 @@ import "strings"
 // 5'` writes nothing) from a writer, so neither is denied for its name alone.
 
 func sedWrites(seg segment, rest []word) []write {
-	valueFlags := map[string]bool{"-e": true, "--expression": true, "-f": true, "--file": true, "-l": true, "--line-length": true}
+	valueFlags := set.Of[string]("-e", "--expression", "-f", "--file", "-l", "--line-length")
 	flags, operands := scanArgs(rest, valueFlags)
 
 	inPlace := false
@@ -195,7 +199,7 @@ func dropSedAddress(piece string) string {
 }
 
 func awkWrites(seg segment, rest []word) []write {
-	valueFlags := map[string]bool{"-v": true, "--assign": true, "-f": true, "--file": true, "-F": true, "--field-separator": true, "-i": true, "--include": true}
+	valueFlags := set.Of[string]("-v", "--assign", "-f", "--file", "-F", "--field-separator", "-i", "--include")
 	flags, operands := scanArgs(rest, valueFlags)
 
 	// gawk spells in-place editing as loading its inplace library, `-i inplace`,
