@@ -27,19 +27,19 @@ type ProcessRule struct {
 
 // Commands that run their first non-flag, non-assignment argument as a new
 // process. Stripping them resolves `env python3` and `sudo -E python3`.
-var execWrappers = map[string]bool{
-	"env": true, "sudo": true, "doas": true, "nohup": true, "command": true,
-	"exec": true, "nice": true, "ionice": true, "stdbuf": true, "setsid": true,
-	"time": true, "timeout": true, "xargs": true, "watch": true, "script": true,
-	"uv": true, "uvx": true, "pipx": true, "poetry": true, "hatch": true,
-	"pdm": true, "conda": true, "rye": true, "micromamba": true, "npx": true, "bunx": true,
-}
+var execWrappers = set.Of(
+	"env", "sudo", "doas", "nohup", "command",
+	"exec", "nice", "ionice", "stdbuf", "setsid",
+	"time", "timeout", "xargs", "watch", "script",
+	"uv", "uvx", "pipx", "poetry", "hatch",
+	"pdm", "conda", "rye", "micromamba", "npx", "bunx",
+)
 
 // Wrapper subcommands preceding the real command: `uv run python`.
-var wrapperSubcommands = map[string]bool{"run": true, "exec": true}
+var wrapperSubcommands = set.Of("run", "exec")
 
 // Arguments meaning "the script arrives on stdin".
-var stdinMarkers = map[string]bool{"-": true, "/dev/stdin": true}
+var stdinMarkers = set.Of("-", "/dev/stdin")
 
 // resolveArgs splits words into the process name and its own arguments, after
 // stripping assignments, wrappers and wrapper flags. Empty name = nothing runs.
@@ -56,7 +56,7 @@ func resolveArgs(args []string) (string, []string) {
 			continue // a wrapper's own flag
 		}
 		base := path.Base(arg)
-		if execWrappers[base] || wrapperSubcommands[base] {
+		if execWrappers.Contains(base) || wrapperSubcommands.Contains(base) {
 			continue
 		}
 		return base, args[i+1:]
@@ -88,7 +88,7 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 		return true
 	}
 	for i, arg := range args {
-		if stdinMarkers[arg] {
+		if stdinMarkers.Contains(arg) {
 			return true
 		}
 		for _, f := range d.EvalFlags {
