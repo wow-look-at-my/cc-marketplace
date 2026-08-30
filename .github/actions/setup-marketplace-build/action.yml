@@ -3,17 +3,6 @@ description: Build or restore cached marketplace-build CLI
 
 # Caller permissions: see docs/ci-yaml-notes.md#composite-action-caller-permissions
 
-inputs:
-  go-toolchain-installed:
-    description: >-
-      Set to 'true' by a caller that already ran wow-look-at-my/go-toolchain@v1
-      in THIS job. That action hands its build outputs to a cache key of (run,
-      job), so a second call in the same job loses the save to a 409 Conflict
-      and fails the job. The CLI the first call installed builds the same thing
-      with no hand-off, so this switches to it.
-    required: false
-    default: 'false'
-
 runs:
   using: composite
   steps:
@@ -28,12 +17,12 @@ runs:
 
     - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # https://github.com/extractions/setup-just/releases/tag/v4
 
-    # go-toolchain writes build/<name>; naming a per-platform slot caches nothing and only breaks once the key misses.
+    # Keyed on this file too: it decides HOW the binary is built, so a recipe change must not reuse the old one.
     - uses: wow-look-at-my/actions@smart-cache#latest
       id: cache
       with:
         path: tools/marketplace-build/build/marketplace-build
-        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
+        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum', '.github/actions/setup-marketplace-build/action.yml') }}
 
     - name: Check binary exists
       id: binary
@@ -44,18 +33,11 @@ runs:
         fi
 
     - uses: wow-look-at-my/go-toolchain@v1
-      if: steps.binary.outputs.exists != 'true' && inputs.go-toolchain-installed != 'true'
+      if: steps.binary.outputs.exists != 'true'
       with:
         working-directory: "tools/marketplace-build"
         # An internal CI helper, not a release artifact.
         autorelease: "false"
-
-    # Same build, via the CLI the caller's own go-toolchain step already put on PATH.
-    - name: Build marketplace-build with the installed go-toolchain
-      if: steps.binary.outputs.exists != 'true' && inputs.go-toolchain-installed == 'true'
-      shell: bash
-      working-directory: tools/marketplace-build
-      run: go-toolchain
 
     - name: Install marketplace-build
       shell: bash
