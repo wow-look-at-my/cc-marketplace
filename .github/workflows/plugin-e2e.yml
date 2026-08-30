@@ -55,23 +55,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Assert the hook rewrote the trailing | head
-        run: |
-          set -euo pipefail
-          log="${{ runner.temp }}/hook.log"
-          if ! [ -s "$log" ]; then
-            echo "::error::hook log file is empty -- the hook never fired"
-            exit 1
-          fi
-          if ! grep -q 'REWRITE' "$log"; then
-            echo "::error::hook log has no REWRITE entries"
-            exit 1
-          fi
-          # The rewrite strips the trailing | head and injects set -o pipefail.
-          if ! grep -qF 'cleaned="set -o pipefail\nseq 1 10"' "$log"; then
-            echo "::error::expected | head stripped and pipefail injected"
-            exit 1
-          fi
-          echo "OK: hook stripped the trailing | head and injected pipefail"
+        run: plugins/cleanup-bash-cmds/tests/assert-hook-log.sh "${{ runner.temp }}/hook.log"
 
   # see docs/ci-yaml-notes.md#css-duplication-lsp-job
   css-duplication-lsp:
