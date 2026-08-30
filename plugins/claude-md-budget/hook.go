@@ -9,6 +9,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"io"
 	"os"
 	"path/filepath"
@@ -63,14 +64,14 @@ func cwdOrDot() string {
 // forty that do not, which is how a guard teaches the model to skim past it.
 func findOffenders(cwd string, limit int) []offender {
 	floor := nearLimit(limit)
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	var offenders []offender
 	for _, path := range allCandidatePaths(cwd) {
 		key, err := filepath.Abs(path)
-		if err != nil || seen[key] {
+		if err != nil || seen.Contains(key) {
 			continue
 		}
-		seen[key] = true
+		seen.Add(key)
 		chars, _, ok := measure(path)
 		if ok && chars >= floor {
 			offenders = append(offenders, offender{Path: path, Chars: chars})

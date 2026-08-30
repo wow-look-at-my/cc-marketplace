@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // filler pads an index so a word's document frequency means something.
@@ -64,10 +65,10 @@ func TestADerivedPhraseIsNeverADuplicate(t *testing.T) {
 	got, _ := buildIndex([]repo{repoFixture("widget-press", "The widget press presses widgets.")}, nil, 0)
 	require.Len(t, got, 1)
 
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	for _, phrase := range append(got[0].Match, got[0].Terms...) {
-		assert.False(t, seen[phrase], "%q appears twice", phrase)
-		seen[phrase] = true
+		assert.False(t, seen.Contains(phrase), "%q appears twice", phrase)
+		seen.Add(phrase)
 	}
 }
 

@@ -1,0 +1,25 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "no-counts-in-docs",
+	"description": "Refuses a write that states a count in a markdown document -- 'this repo's 15 plugins', 'the four rules below'. A count is true until somebody adds an item, and nothing corrects it when they do",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["markdown", "docs", "counts", "staleness", "pretooluse", "hook", "enforcement"],
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-counts-in-docs"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}
