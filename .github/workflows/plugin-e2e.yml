@@ -96,6 +96,9 @@ jobs:
           autorelease: 'false'
 
       - uses: ./.github/actions/setup-marketplace-build
+        with:
+          # This job already ran the go-toolchain action above; a second call collides on its hand-off key.
+          go-toolchain-installed: 'true'
 
       # The cook stages the file .lsp.json names -- see docs/ci-yaml-notes.md#css-duplication-lsp-job
       - name: Cook the plugin the way a release does

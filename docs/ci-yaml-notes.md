@@ -56,6 +56,21 @@ calling job was granted. `setup-marketplace-build` runs `go-toolchain` when its
 cache misses, so every job that uses it carries the four grants above even when
 its own steps need none of them.
 
+## one-go-toolchain-action-call-per-job
+
+`wow-look-at-my/go-toolchain@v1` ends by handing its build outputs to a cache
+entry keyed on the run and the job name. Two calls in one job therefore write
+the same key, and the second gets `(409) Conflict: cache entry with the same
+key, version, and scope already exists`, which fails the action and every step
+after it.
+
+Two jobs legitimately need a plugin built AND `marketplace-build` built. They
+call the action once, for the plugin, and pass
+`go-toolchain-installed: 'true'` to `setup-marketplace-build`, which then runs
+the `go-toolchain` CLI that first call left on `PATH`. Order matters: the
+action call has to come first. This only ever bites on a `marketplace-build`
+cache miss, so a stale cache entry hides it for months at a time.
+
 ## release-build-binary-format-and-action-pin
 
 `targets: cosmo` is not a size optimization: it is the only native output the

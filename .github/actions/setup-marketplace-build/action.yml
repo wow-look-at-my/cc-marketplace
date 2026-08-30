@@ -3,6 +3,17 @@ description: Build or restore cached marketplace-build CLI
 
 # Caller permissions: see docs/ci-yaml-notes.md#composite-action-caller-permissions
 
+inputs:
+  go-toolchain-installed:
+    description: >-
+      Set to 'true' by a caller that already ran wow-look-at-my/go-toolchain@v1
+      in THIS job. That action hands its build outputs to a cache key of (run,
+      job), so a second call in the same job loses the save to a 409 Conflict
+      and fails the job. The CLI the first call installed builds the same thing
+      with no hand-off, so this switches to it.
+    required: false
+    default: 'false'
+
 runs:
   using: composite
   steps:
@@ -33,11 +44,18 @@ runs:
         fi
 
     - uses: wow-look-at-my/go-toolchain@v1
-      if: steps.binary.outputs.exists != 'true'
+      if: steps.binary.outputs.exists != 'true' && inputs.go-toolchain-installed != 'true'
       with:
         working-directory: "tools/marketplace-build"
         # An internal CI helper, not a release artifact.
         autorelease: "false"
+
+    # Same build, via the CLI the caller's own go-toolchain step already put on PATH.
+    - name: Build marketplace-build with the installed go-toolchain
+      if: steps.binary.outputs.exists != 'true' && inputs.go-toolchain-installed == 'true'
+      shell: bash
+      working-directory: tools/marketplace-build
+      run: go-toolchain
 
     - name: Install marketplace-build
       shell: bash
