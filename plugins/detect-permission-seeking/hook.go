@@ -22,7 +22,7 @@ type TranscriptEntry struct {
 }
 
 var permissionPattern = regexp.MustCompile(
-	`(Want me to .+\?|Would you like me to .+\?|Shall I .+\?|Should I .+\?|Do you want me to .+\?|Let me know if you'?d like|I can .+ if you'?d like)`,
+	`(Want me to .+\?|Would you like me to .+\?|Shall I .+\?|Should I .+\?|Do you want me to .+\?|Let me know if you'?d like|I can .+ if you'?d like|Say the word)`,
 )
 
 const lecture = `STOP. Your message ends with a permission-seeking pattern, which is unhelpful and demonstrates a complete lack of autonomy.

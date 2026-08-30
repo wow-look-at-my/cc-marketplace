@@ -69,6 +69,16 @@ func TestBlockLetMeKnow(t *testing.T) {
 	assert.Equal(t, 2, code)
 }
 
+// The phrase reads as an offer and works as a refusal: the diagnosis and the
+// patch are both in hand, and the work stops until the user speaks.
+func TestBlockSayTheWord(t *testing.T) {
+	code, _ := runEvaluate(t, HookInput{
+		HookEventName:        "Stop",
+		LastAssistantMessage: "I have the two-file patch ready. Say the word and I will push it.",
+	})
+	assert.Equal(t, 2, code)
+}
+
 func TestBlockICanIfYoudLike(t *testing.T) {
 	code, _ := runEvaluate(t, HookInput{
 		HookEventName:        "Stop",

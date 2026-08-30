@@ -22,11 +22,12 @@ duplicated declaration block. The assertion step requires six lines in that log
 (config loaded, process started, handshake finished, diagnostics published,
 registered, delivered) and refuses two (a failed stop, a crash).
 
-Cooking is load-bearing. `marketplace-build release-plugin` stages the file
-`.lsp.json` names at `build/<name>`. Claude Code `execve()`s that path, so a job
-that skips the cook and points the manifest at a raw build output gets
-`undefined is not an object (evaluating 'this.#handle')` and no server at all.
-Driving the cooked tree is also what makes this job test the package that ships.
+Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh`
+launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside
+it. Claude Code `execve()`s that path directly, and an APE is neither ELF nor a
+`#!` script, so pointing the manifest at the raw APE fails with `undefined is
+not an object (evaluating 'this.#handle')` and no server at all. Driving the
+cooked tree is also what makes this job test the package that ships.
 
 The prompt asks for a read-back after the edit: diagnostics drain into an
 attachment on the NEXT turn, so a prompt that ends at the edit can finish
@@ -64,10 +65,11 @@ fails naming the missing file rather than letting a later step discover it.
 
 ## release-build-binary-format-and-action-pin
 
-`targets: cosmo` is not a size optimization: it is the only native output the
-pinned action still emits, since the host-native build path was removed from
-`v1`. One file covers Linux, macOS and Windows, and `stageBinaries`
-(`tools/marketplace-build/ape_package.go`) turns it into the shipping layout.
+`targets: cosmo` is not a size optimization: the fat APE is the only native
+output the pinned action still emits, since the host-native build path was
+removed from `v1`. One file covers Linux, macOS and Windows, and
+`stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the
+shipping layout — the APE plus the launcher every manifest already points at.
 
 `autorelease: 'false'` because plugins publish as git orphan tags, not to
 buildhost; leaving it on would demand `deployments`/`artifact-metadata` write
