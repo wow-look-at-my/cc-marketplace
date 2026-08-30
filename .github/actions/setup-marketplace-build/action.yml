@@ -17,11 +17,7 @@ runs:
 
     - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # https://github.com/extractions/setup-just/releases/tag/v4
 
-    # go-toolchain's default emits ONE fat build at build/<name>; the
-    # per-platform slot names it used to write are gone. Naming a slot here
-    # cannot fail loudly -- the cache simply stores nothing and the install
-    # below dies on a missing file, but only once the key misses, so a stale
-    # entry keeps every job green while the build path is broken.
+    # go-toolchain writes build/<name>; naming a per-platform slot caches nothing and only breaks once the key misses.
     - uses: wow-look-at-my/actions@smart-cache#latest
       id: cache
       with:
