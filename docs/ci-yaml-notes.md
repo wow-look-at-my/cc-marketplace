@@ -53,29 +53,15 @@ declares its own must list all four.
 ## composite-action-caller-permissions
 
 A composite action cannot request permissions; it runs with whatever the
-calling job was granted. `setup-marketplace-build` builds `marketplace-build`
-with a plain `go build` (see `marketplace-build-build-mechanism`), which needs
-no OIDC or `contents: write`, so a job that uses it only needs the grants its
-own steps require. Jobs that also run `go-toolchain` directly (the release
-`build` job, `css-duplication-lsp`) still carry the four grants for that step.
+calling job was granted. `setup-marketplace-build` runs `go-toolchain` when its
+cache misses, so every job that uses it carries the four grants above even when
+its own steps need none of them.
 
 ## marketplace-build-cache-miss
 
 `setup-marketplace-build` builds only when its cache misses, so a warm entry
 hides a break in that path for months. The install step is the backstop: it
 fails naming the missing file rather than letting a later step discover it.
-
-## marketplace-build-build-mechanism
-
-`setup-marketplace-build` builds `marketplace-build` with a plain `go build`,
-not `wow-look-at-my/go-toolchain@v1`. go-toolchain ends by uploading a cache
-hand-off named `go-build-<job>`; a job that also runs go-toolchain for a plugin
-(`css-duplication-lsp`, the release `build` job) would then run it twice in the
-same job and the second upload collides on that name, failing with a 409
-`Failed to CreateCacheEntry`. `marketplace-build` is an internal CI helper, not
-a release artifact, so it needs neither the cosmo fat APE nor a buildhost
-upload — a plain `go build` (the same build the `justfile` `build` recipe makes)
-is sufficient and emits no hand-off.
 
 ## release-build-binary-format-and-action-pin
 
