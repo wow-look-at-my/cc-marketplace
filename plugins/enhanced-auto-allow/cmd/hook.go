@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wow-look-at-my/go-containers/set"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -22,13 +23,8 @@ type ToolInput struct {
 	Command string `json:"command"`
 }
 
-// Rules configuration - array-based recursive structure.
-//
-// Three sections, evaluated deny > ask > allow. Within each, a rule is either a
-// COMMAND rule (matched against argv as written, with flag and argument
-// constraints) or a PROCESS rule (matched against the resolved process name,
-// however it is spelled). The same node type means the same rule can deny under
-// <deny> and allow under <allow>.
+// Three sections, evaluated deny > ask > allow. A rule matches either argv as
+// written or the resolved process name; see CommandNode.
 type Rules struct {
 	Allow []CommandNode `json:"allow"`
 	Ask   []CommandNode `json:"ask"`
@@ -64,14 +60,9 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// The two events this binary answers. They are not interchangeable:
-// PermissionRequest runs ONLY when the permission engine lands on "ask", so a
-// deny rule registered there alone is silent under any mode that resolves the
-// call earlier -- `defaultMode: "auto"` allows Bash before the ask path is
-// reached, and python ran unblocked for as long as that was the only
-// registration. PreToolUse runs on every tool call regardless of the outcome,
-// so the deny half rides it.
-// see docs/two-event-registration.md
+// Not interchangeable: PermissionRequest runs only once the engine lands on
+// "ask", so a deny there alone is silent under any mode that resolves earlier.
+// The deny half rides PreToolUse. See docs/two-event-registration.md.
 const (
 	eventPermissionRequest = "PermissionRequest"
 	eventPreToolUse        = "PreToolUse"
@@ -113,10 +104,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// PreToolUse denies and nothing else. An allow there is not a convenience,
-	// it is an override: it settles the call before the permission engine runs,
-	// so the user's own deny rules never get a vote. Auto-approval stays on
-	// PermissionRequest, which is downstream of them.
+	// PreToolUse denies only. An allow there settles the call before the
+	// engine runs, so the user's own deny rules never get a vote.
 	denyOnly := hi.HookEventName == eventPreToolUse
 
 	// Allow all read-only tools
@@ -160,11 +149,8 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
-	// Process rules first, and deny before ask before allow. They are answered
-	// by walking the parse tree rather than by matching argv, so they still see
-	// a command the allow path below refuses to read -- a `$(...)`, a subshell,
-	// anything with a redirect. A denied program must not be reachable by
-	// wrapping it in a construct that makes the whitelist give up.
+	// Process rules first. They walk the parse tree, so they still see a
+	// command the allow path below refuses to read.
 	for _, section := range []struct {
 		rules    []ProcessRule
 		behavior string
@@ -266,10 +252,8 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		return "deny", node.DenyWithMessage
 	}
 
-	// If any argument contains a denied substring, this node does not match.
-	// Used for tools that accept script arguments (awk, sed, etc.) where
-	// dangerous features (system(), getline, I/O redirection) appear as
-	// substrings of the script body.
+	// A denied substring in any argument un-matches the node: awk and sed take
+	// a script, and its dangerous features are substrings of that body.
 	if len(node.DenyArgSubstrings) > 0 {
 		for _, arg := range args {
 			for _, substr := range node.DenyArgSubstrings {
@@ -394,15 +378,15 @@ func checkAllowedFlags(args []string, allowedFlags interface{}) bool {
 	case string:
 		return v == "*"
 	case []interface{}:
-		allowed := make(map[string]bool)
+		allowed := set.New[string]()
 		for _, f := range v {
 			if s, ok := f.(string); ok {
-				allowed[s] = true
+				allowed.Add(s)
 			}
 		}
 		// Check all flags are allowed
 		for _, arg := range args {
-			if strings.HasPrefix(arg, "-") && !allowed[arg] {
+			if strings.HasPrefix(arg, "-") && !allowed.Contains(arg) {
 				return false
 			}
 		}
@@ -510,14 +494,14 @@ func extractWord(word *syntax.Word) string {
 // e.g., for args ["-name", "*.h", "-exec", "grep", "-l", "pattern", "{}", ";"]
 // with execFlags ["-exec"], returns [["grep", "-l", "pattern"]].
 func extractExecSubCommands(args []string, execFlags []string) [][]string {
-	flagSet := make(map[string]bool, len(execFlags))
+	flagSet := set.New[string]()
 	for _, f := range execFlags {
-		flagSet[f] = true
+		flagSet.Add(f)
 	}
 
 	var result [][]string
 	for i := 0; i < len(args); i++ {
-		if !flagSet[args[i]] {
+		if !flagSet.Contains(args[i]) {
 			continue
 		}
 		// Collect args until ";" or "+"
@@ -627,16 +611,16 @@ func hasDangerousConstruct(node syntax.Node) bool {
 }
 
 func hasAnyFlag(args []string, flags []string) bool {
-	flagSet := make(map[string]bool)
+	flagSet := set.New[string]()
 	for _, f := range flags {
-		flagSet[f] = true
+		flagSet.Add(f)
 	}
 	for _, arg := range args {
-		if flagSet[arg] {
+		if flagSet.Contains(arg) {
 			return true
 		}
 		// Also match --flag=value form.
-		if idx := strings.Index(arg, "="); idx > 0 && flagSet[arg[:idx]] {
+		if idx := strings.Index(arg, "="); idx > 0 && flagSet.Contains(arg[:idx]) {
 			return true
 		}
 	}
@@ -644,13 +628,13 @@ func hasAnyFlag(args []string, flags []string) bool {
 }
 
 func stripFlagsWithValue(args []string, flags []string) []string {
-	flagSet := make(map[string]bool, len(flags))
+	flagSet := set.New[string]()
 	for _, f := range flags {
-		flagSet[f] = true
+		flagSet.Add(f)
 	}
 	var result []string
 	for i := 0; i < len(args); i++ {
-		if flagSet[args[i]] && i+1 < len(args) {
+		if flagSet.Contains(args[i]) && i+1 < len(args) {
 			i++ // skip the value too
 			continue
 		}
@@ -660,12 +644,12 @@ func stripFlagsWithValue(args []string, flags []string) []string {
 }
 
 func getFlagValue(args []string, flags []string) string {
-	flagSet := make(map[string]bool)
+	flagSet := set.New[string]()
 	for _, f := range flags {
-		flagSet[f] = true
+		flagSet.Add(f)
 	}
 	for i, arg := range args {
-		if flagSet[arg] && i+1 < len(args) {
+		if flagSet.Contains(arg) && i+1 < len(args) {
 			return args[i+1]
 		}
 	}

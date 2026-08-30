@@ -4,33 +4,24 @@ import (
 	"path"
 	"strings"
 
+	"github.com/wow-look-at-my/go-containers/set"
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// Process-level deny.
+// Process-level deny. Unlike the allow path, which bails to passthrough on
+// anything it cannot fully read, this walks the WHOLE tree -- a denied program
+// is otherwise one `$(...)` away from running.
 //
-// The allow path answers "is this command on the whitelist", and it deliberately
-// bails to passthrough on anything it cannot fully read -- an output redirect, a
-// command substitution, a subshell. That is the right posture for GRANTING
-// permission and exactly the wrong one for REFUSING it: a denied program would
-// slip through by being wrapped in any construct the allow path declines to
-// parse. So this walks the whole tree instead and asks one question of every
-// statement: what process would this start, and how is it being fed?
-//
-// It answers structurally rather than by pattern, because a pattern list can
-// never be finished. `python3`, `/usr/bin/python3`, `env python3`, `python3.11`,
-// `sudo -E python`, `uv run python` are one process start wearing six spellings,
-// and the next one is always the spelling nobody enumerated.
+// It resolves structurally rather than by pattern: `python3`, `env python3`,
+// `python3.11` and `uv run python` are one process start wearing four
+// spellings, and the next one is always the spelling nobody enumerated.
 type ProcessRule struct {
 	Name string
 	// Behavior is the section this rule came from: allow, ask or deny.
 	Behavior string
 	Message  string
-	// InlineOnly denies just the forms that execute a script handed to the
-	// interpreter on the command line or on stdin, leaving `node script.js`
-	// alone. Interpreters that must stay usable (node runs this environment's
-	// own hooks) are denied this way; ones with no business running at all are
-	// denied outright.
+	// InlineOnly denies only a script handed to the interpreter on the command
+	// line or on stdin, leaving `node script.js` alone.
 	InlineOnly bool
 	// EvalFlags are the flags that take a script as their value (-e, --eval).
 	// For single-dash flags they also match inside a cluster, so perl's -pe,
@@ -43,20 +34,20 @@ type ProcessRule struct {
 // Wrappers that run their first non-flag, non-assignment argument as a new
 // process. Stripping them is what makes `env python3` and `sudo -E python3`
 // resolve to python.
-var execWrappers = map[string]bool{
-	"env": true, "sudo": true, "doas": true, "nohup": true, "command": true,
-	"exec": true, "nice": true, "ionice": true, "stdbuf": true, "setsid": true,
-	"time": true, "timeout": true, "xargs": true, "watch": true, "script": true,
-	"uv": true, "uvx": true, "pipx": true, "poetry": true, "hatch": true,
-	"pdm": true, "conda": true, "rye": true, "micromamba": true, "npx": true, "bunx": true,
-}
+var execWrappers = set.Of(
+	"env", "sudo", "doas", "nohup", "command",
+	"exec", "nice", "ionice", "stdbuf", "setsid",
+	"time", "timeout", "xargs", "watch", "script",
+	"uv", "uvx", "pipx", "poetry", "hatch",
+	"pdm", "conda", "rye", "micromamba", "npx", "bunx",
+)
 
 // Subcommands of a wrapper that precede the real command: `uv run python`,
 // `poetry run python`, `conda run -n env python`.
-var wrapperSubcommands = map[string]bool{"run": true, "exec": true}
+var wrapperSubcommands = set.Of("run", "exec")
 
 // Arguments meaning "the script arrives on stdin".
-var stdinMarkers = map[string]bool{"-": true, "/dev/stdin": true}
+var stdinMarkers = set.Of("-", "/dev/stdin")
 
 // resolveArgs splits a command's words into the process name and the arguments
 // belonging to it, after stripping VAR=VAL assignments, wrapper commands and the
@@ -74,7 +65,7 @@ func resolveArgs(args []string) (string, []string) {
 			continue // a wrapper's own flag
 		}
 		base := path.Base(arg)
-		if execWrappers[base] || wrapperSubcommands[base] {
+		if execWrappers.Contains(base) || wrapperSubcommands.Contains(base) {
 			continue
 		}
 		return base, args[i+1:]
@@ -109,7 +100,7 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 		return true
 	}
 	for i, arg := range args {
-		if stdinMarkers[arg] {
+		if stdinMarkers.Contains(arg) {
 			return true
 		}
 		for _, f := range d.EvalFlags {
@@ -151,10 +142,10 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 
 	// A statement on the receiving end of a pipe reads its input from it, which
 	// is how `echo 'code' | node` smuggles a script past an argument check.
-	piped := map[*syntax.Stmt]bool{}
+	piped := set.New[*syntax.Stmt]()
 	syntax.Walk(file, func(n syntax.Node) bool {
 		if b, ok := n.(*syntax.BinaryCmd); ok && (b.Op == syntax.Pipe || b.Op == syntax.PipeAll) {
-			piped[b.Y] = true
+			piped.Add(b.Y)
 		}
 		return true
 	})
@@ -180,7 +171,7 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 		if name == "" {
 			return true
 		}
-		fedByStdin := piped[stmt]
+		fedByStdin := piped.Contains(stmt)
 		for _, r := range stmt.Redirs {
 			switch r.Op {
 			case syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc, syntax.RdrIn:
