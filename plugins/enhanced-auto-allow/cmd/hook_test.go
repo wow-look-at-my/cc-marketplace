@@ -211,8 +211,7 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 
 			var resp PreToolUseResponse
 			require.NoError(t, json.Unmarshal(out, &resp), "output was: %s", out)
-			// The CLI rejects a payload whose hookEventName is not the event it
-			// dispatched, so the shape must follow the event.
+			// The CLI rejects a payload naming the wrong hookEventName.
 			assert.Equal(t, eventPreToolUse, resp.HookSpecificOutput.HookEventName)
 			assert.Equal(t, "deny", resp.HookSpecificOutput.PermissionDecision, "%q must be denied", command)
 			assert.NotEmpty(t, resp.HookSpecificOutput.PermissionDecisionReason, "a deny must say why -- the reason reaches the model verbatim")
@@ -362,10 +361,10 @@ func loadTestRules(t *testing.T) {
 	require.NoError(t, err, "Failed to parse rules.xml")
 }
 
-// One malformed byte disables EVERY rule, since loadXMLRules failing makes the
+// A malformed byte disables EVERY rule, since loadXMLRules failing makes the
 // hook exit 0 and pass everything through. The usual cause is a "--" inside an
-// <!-- --> comment, which XML forbids: it turns thirty unrelated tests red at
-// once and none of them says "the rules file does not parse".
+// <!-- --> comment, which XML forbids: it turns unrelated tests red in a batch
+// and none of them says "the rules file does not parse".
 func TestRulesXMLParses(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))

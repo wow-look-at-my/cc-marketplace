@@ -25,7 +25,7 @@ type ToolInput struct {
 
 // Rules configuration - array-based recursive structure.
 //
-// Three sections, evaluated deny > ask > allow. Within each, a rule is either a
+// The sections are evaluated deny > ask > allow. Within each, a rule is either a
 // COMMAND rule (matched against argv as written, with flag and argument
 // constraints) or a PROCESS rule (matched against the resolved process name,
 // however it is spelled). The same node type means the same rule can deny under
@@ -65,14 +65,13 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// The two events this binary answers. They are not interchangeable:
+// The events this binary answers. They are not interchangeable:
 // PermissionRequest runs ONLY when the permission engine lands on "ask", so a
 // deny rule registered there alone is silent under any mode that resolves the
 // call earlier -- `defaultMode: "auto"` allows Bash before the ask path is
-// reached, and python ran unblocked for as long as that was the only
-// registration. PreToolUse runs on every tool call regardless of the outcome,
-// so the deny half rides it.
-// see docs/two-event-registration.md
+// reached, and python ran unblocked while that was the whole registration.
+// PreToolUse runs on every tool call regardless of the outcome, so the deny
+// half rides it. See docs/two-event-registration.md
 const (
 	eventPermissionRequest = "PermissionRequest"
 	eventPreToolUse        = "PreToolUse"
@@ -103,6 +102,10 @@ type PreToolUseResponse struct {
 
 var rules Rules
 
+// main reads the hook payload and answers it. On PreToolUse it may only deny:
+// an allow there is not a convenience but an override, settling the call before
+// the permission engine runs, so the user's own deny rules never get a vote.
+// Auto-approval stays on PermissionRequest, which is downstream of them.
 func main() {
 	input, _ := io.ReadAll(os.Stdin)
 	var hi HookInput
@@ -114,13 +117,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// PreToolUse denies and nothing else. An allow there is not a convenience,
-	// it is an override: it settles the call before the permission engine runs,
-	// so the user's own deny rules never get a vote. Auto-approval stays on
-	// PermissionRequest, which is downstream of them.
 	denyOnly := hi.HookEventName == eventPreToolUse
 
-	// Allow all read-only tools
 	if hi.ToolName == "Read" || hi.ToolName == "Glob" || hi.ToolName == "Grep" {
 		if !denyOnly {
 			outputDecision(hi.HookEventName, "allow", "")
@@ -161,7 +159,7 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
-	// Process rules first, and deny before ask before allow. They are answered
+	// Process rules lead, and deny precedes ask precedes allow. They are answered
 	// by walking the parse tree rather than by matching argv, so they still see
 	// a command the allow path below refuses to read -- a `$(...)`, a subshell,
 	// anything with a redirect. A denied program must not be reachable by
@@ -198,8 +196,7 @@ func evaluateCommand(command string) (string, string) {
 	} {
 		for _, args := range commands {
 			if decision, msg := evaluateArgs(args, section.nodes); decision == "allow" || decision == "deny" {
-				// A match in a deny/ask section means that section's behavior,
-				// whatever the rule's internal verdict was.
+				// The section's behavior wins over the rule's own verdict.
 				return section.behavior, msg
 			}
 		}
@@ -233,8 +230,7 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 	current := args[0]
 	remaining := args[1:]
 
-	// Try all matching nodes and merge results.
-	// Deny wins over allow; allow wins over passthrough.
+	// Every matching node is tried; deny beats allow, allow beats passthrough.
 	anyAllowed := false
 	for _, node := range nodes {
 		if !matchesName(node.Name, current) {
@@ -262,15 +258,12 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		return "allow", ""
 	}
 
-	// Check deny with message first
 	if node.DenyWithMessage != "" {
 		return "deny", node.DenyWithMessage
 	}
 
-	// If any argument contains a denied substring, this node does not match.
-	// Used for tools that accept script arguments (awk, sed, etc.) where
-	// dangerous features (system(), getline, I/O redirection) appear as
-	// substrings of the script body.
+	// A denied substring in any argument unmatches the node. This is how a tool
+	// taking a script (awk, sed) refuses system(), getline and redirection.
 	if len(node.DenyArgSubstrings) > 0 {
 		for _, arg := range args {
 			for _, substr := range node.DenyArgSubstrings {
@@ -323,9 +316,9 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		if decision != "" {
 			return decision, msg
 		}
-		// If the first remaining arg looks like a subcommand (not a flag)
-		// but didn't match any known subcommand, don't fall through to
-		// allowedFlags - it's an unknown/mutating subcommand.
+		// A leading remaining arg that looks like a subcommand (not a flag) but
+		// matched no known subcommand must not fall through to allowedFlags --
+		// it is an unknown, possibly mutating subcommand.
 		if !strings.HasPrefix(subcommandArgs[0], "-") {
 			return "", ""
 		}
@@ -563,7 +556,8 @@ func hasOutputRedirect(node syntax.Node) bool {
 }
 
 // isAllowedRedirect reports whether a redirect operation is safe to auto-allow.
-// Permitted: 2>&1, and stdout/stderr writes to /dev/null or under /tmp/.
+// Permitted: duplicating stderr onto stdout, and stdout or stderr writes to
+// /dev/null or under /tmp/.
 func isAllowedRedirect(r *syntax.Redirect) bool {
 	fd := "1"
 	if r.N != nil {
@@ -571,7 +565,6 @@ func isAllowedRedirect(r *syntax.Redirect) bool {
 	}
 	target := redirectTarget(r)
 
-	// 2>&1
 	if r.Op == syntax.DplOut {
 		return fd == "2" && target == "1"
 	}
@@ -590,8 +583,8 @@ func isAllowedRedirect(r *syntax.Redirect) bool {
 	return isSafeRedirectPath(target)
 }
 
-// isSafeRedirectPath reports whether target is /dev/null or a path under /tmp/.
-// path.Clean defeats traversal attempts like /tmp/../etc/passwd.
+// isSafeRedirectPath accepts /dev/null or a path under /tmp/, cleaned so that a
+// traversal like /tmp/../etc/passwd does not pass.
 func isSafeRedirectPath(target string) bool {
 	if target == "/dev/null" {
 		return true
