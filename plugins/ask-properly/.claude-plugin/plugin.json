@@ -1,0 +1,24 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "ask-properly",
+	"description": "Refuses to end a turn on a question put to the user in prose. Answer it yourself, or ask it through AskUserQuestion with your recommendation first and the cost of every option spelled out",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["questions", "askuserquestion", "deferral", "stop", "hook", "enforcement"],
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/ask-properly"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}

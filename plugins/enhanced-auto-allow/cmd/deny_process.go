@@ -8,23 +8,32 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// Process-level deny: a rule matches the process a statement would START, not
-// the argv spelling, because a spelling list can never be finished.
+// Process-level deny. Unlike the allow path, which bails to passthrough on
+// anything it cannot fully read, this walks the WHOLE tree -- a denied program
+// is otherwise a `$(...)` away from running.
+//
+// It resolves structurally rather than by pattern: `python3`, `env python3`,
+// `python3.x` and `uv run python` are the same process start wearing different
+// spellings, and the next spelling is always whichever nobody enumerated.
 type ProcessRule struct {
 	Name string
-	// The section this rule came from: allow, ask or deny.
+	// Behavior is the section this rule came from: allow, ask or deny.
 	Behavior string
 	Message  string
-	// Deny a script handed to the interpreter, sparing `node script.js`.
+	// InlineOnly denies only a script handed to the interpreter on the command
+	// line or on stdin, leaving `node script.js` alone.
 	InlineOnly bool
-	// Flags taking a script as their value; a single-dash flag matches inside a cluster too, covering perl's -pe and -lane.
+	// EvalFlags are the flags that take a script as their value (-e, --eval).
+	// For single-dash flags they also match inside a cluster, so perl's -pe,
+	// -ne and -lane are caught without listing every combination.
 	EvalFlags []string
-	// Subcommand spellings of the same thing (deno eval).
+	// EvalSubcommands are the subcommand forms meaning the same (deno eval).
 	EvalSubcommands []string
 }
 
-// Commands that run their leading non-flag, non-assignment argument as a new
-// process. Stripping them resolves `env python3` and `sudo -E python3`.
+// Wrappers that run their leading non-flag, non-assignment argument as a new
+// process. Stripping them is what makes `env python3` and `sudo -E python3`
+// resolve to python.
 var execWrappers = set.Of(
 	"env", "sudo", "doas", "nohup", "command",
 	"exec", "nice", "ionice", "stdbuf", "setsid",
@@ -33,14 +42,16 @@ var execWrappers = set.Of(
 	"pdm", "conda", "rye", "micromamba", "npx", "bunx",
 )
 
-// Wrapper subcommands preceding the real command: `uv run python`.
+// Subcommands of a wrapper that precede the real command: `uv run python`,
+// `poetry run python`, `conda run -n env python`.
 var wrapperSubcommands = set.Of("run", "exec")
 
 // Arguments meaning "the script arrives on stdin".
 var stdinMarkers = set.Of("-", "/dev/stdin")
 
-// resolveArgs splits words into the process name and its own arguments, after
-// stripping assignments, wrappers and wrapper flags. Empty name = nothing runs.
+// resolveArgs splits a command's words into the process name and the arguments
+// belonging to it, after stripping VAR=VAL assignments, wrapper commands and the
+// flags those wrappers consumed. Returns ("", nil) when nothing is left to run.
 func resolveArgs(args []string) (string, []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -62,8 +73,9 @@ func resolveArgs(args []string) (string, []string) {
 	return "", nil
 }
 
-// matchesDenied reports whether a resolved name is the denied program. A
-// trailing version is the same program, so `python` covers every suffixed spelling.
+// matchesDenied reports whether a resolved process name is the denied program.
+// A trailing version counts as the same program, so a bare `python` entry
+// covers every versioned spelling without enumerating them.
 func matchesDenied(name, denied string) bool {
 	if name == denied {
 		return true
@@ -80,7 +92,9 @@ func matchesDenied(name, denied string) bool {
 }
 
 // isInlineScript reports whether an invocation hands the interpreter a script
-// rather than a file. fedByStdin carries what the argument list cannot show.
+// rather than pointing it at a file: an eval flag, an eval subcommand, a stdin
+// marker, or a heredoc/pipe feeding it. fedByStdin carries the cases the
+// argument list alone cannot show.
 func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 	if fedByStdin {
 		return true
@@ -110,10 +124,13 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 	return false
 }
 
-// matchProcessRule walks EVERY statement, including the substitutions,
-// subshells and conditionals the allow path refuses to read -- a denied program
-// must never be a `$(...)` away from running. Known gap: a program named inside
-// a string handed to another interpreter is an argument here, not a command.
+// deniedProcess walks every statement in the parse tree -- including those inside
+// command substitutions, subshells, loops and conditionals, which the allow path
+// refuses to read -- and returns the earliest denied process it finds.
+//
+// Known limit: a program named only inside a string handed to another
+// interpreter (`bash -c "python3 x.py"`) is not visible here, because at parse
+// time that is an opaque argument, not a command.
 func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 	if len(denies) == 0 {
 		return "", ""
@@ -123,7 +140,8 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 		return "", ""
 	}
 
-	// `echo 'code' | node` smuggles a script past an argument check.
+	// A statement on the receiving end of a pipe reads its input from it, which
+	// is how `echo 'code' | node` smuggles a script past an argument check.
 	piped := set.New[*syntax.Stmt]()
 	syntax.Walk(file, func(n syntax.Node) bool {
 		if b, ok := n.(*syntax.BinaryCmd); ok && (b.Op == syntax.Pipe || b.Op == syntax.PipeAll) {
@@ -176,8 +194,9 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 }
 
 // wordLiteral renders a word for name resolution only. Unlike extractWord it
-// never gives up: an unresolvable part is skipped, so `"py"thon3` still yields
-// something to inspect instead of dropping the command from consideration.
+// never gives up on a word it cannot fully resolve: unresolvable parts are
+// skipped, so `"py"thon3` still yields something to inspect rather than dropping
+// the whole command from consideration.
 func wordLiteral(w *syntax.Word) string {
 	var b strings.Builder
 	for _, part := range w.Parts {
