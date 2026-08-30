@@ -97,9 +97,7 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      # The raw APE is not ELF and has no shebang, so execve() answers ENOEXEC and the
-      # client's spawn dies. Driving the COOKED plugin is what puts the launcher at the
-      # path .lsp.json names, and is what makes this job test the package that ships.
+      # The cook stages the launcher .lsp.json names beside the APE -- see docs/ci-yaml-notes.md#css-duplication-lsp-job
       - name: Cook the plugin the way a release does
         id: cook
         run: marketplace-build release-plugin css-duplication >> "$GITHUB_OUTPUT"
