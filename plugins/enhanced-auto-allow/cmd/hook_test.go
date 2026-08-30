@@ -183,7 +183,7 @@ func TestEndToEndGhRepoView(t *testing.T) {
 	}
 }
 
-// PermissionRequest is answered only once the engine has landed on "ask", so a
+// PermissionRequest is answered only after the engine lands on "ask", so a
 // deny riding it alone is silent under defaultMode "auto" -- which is how
 // python stayed runnable. These cases pin the deny half to PreToolUse, which is
 // unconditional, and pin the allow half OUT of it: an allow there settles the
@@ -360,8 +360,8 @@ func loadTestRules(t *testing.T) {
 	require.NoError(t, err, "Failed to parse rules.xml")
 }
 
-// A malformed byte disables EVERY rule, since loadXMLRules failing makes the
-// hook exit 0 and pass everything through. The usual cause is a "--" inside an
+// A malformed byte disables EVERY rule: loadXMLRules failing makes the hook
+// exit clean and pass everything through. The usual cause is a "--" inside an
 // <!-- --> comment, which XML forbids: it turns a pile of unrelated tests red
 // and none of them says "the rules file does not parse".
 func TestRulesXMLParses(t *testing.T) {

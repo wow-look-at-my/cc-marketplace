@@ -301,8 +301,8 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		if decision != "" {
 			return decision, msg
 		}
-		// A leading non-flag word matching no known subcommand is an unknown
-		// or mutating one: never fall through to allowedFlags.
+		// A leading non-flag word matching no known subcommand is unknown or
+		// mutating: never fall through to allowedFlags.
 		if !strings.HasPrefix(subcommandArgs[0], "-") {
 			return "", ""
 		}
