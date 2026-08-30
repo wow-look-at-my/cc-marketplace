@@ -111,10 +111,7 @@ jobs:
           # autorelease defaults true (needs deployments/artifact-metadata write) but plugins publish via orphan tag, not buildhost -- keep it false.
           autorelease: 'false'
 
-      # Runs AFTER the plugin build so a Go plugin makes only one go-toolchain action call in this job.
       - uses: ./.github/actions/setup-marketplace-build
-        with:
-          go-toolchain-installed: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
 
       - name: Build
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
