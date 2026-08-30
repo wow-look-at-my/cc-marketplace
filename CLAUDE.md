@@ -33,6 +33,7 @@ The `master` branch is protected. All changes require a pull request.
 Each plugin documents itself in its own directory. Add a new plugin's notes at
 `plugins/<name>/CLAUDE.md` and import it here so it loads from the repo root.
 
+@plugins/ask-properly/CLAUDE.md
 @plugins/cleanup-bash-cmds/CLAUDE.md
 @plugins/css-duplication/CLAUDE.md
 @plugins/no-overwrites/CLAUDE.md
