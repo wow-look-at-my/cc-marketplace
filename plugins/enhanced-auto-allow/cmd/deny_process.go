@@ -10,32 +10,22 @@ import (
 
 // Process-level deny.
 //
-// The allow path answers "is this command on the whitelist", and it deliberately
-// bails to passthrough on anything it cannot fully read -- an output redirect, a
-// command substitution, a subshell. That is the right posture for GRANTING
-// permission and exactly wrong for REFUSING it: a denied program would
-// slip through by being wrapped in any construct the allow path declines to
-// parse. So this walks the whole tree instead and asks of every statement: what
-// process would this start, and how is it being fed?
-//
-// It answers structurally rather than by pattern, because a pattern list can
-// never be finished. `python3`, `/usr/bin/python3`, `env python3`, `python3.x`,
-// `sudo -E python`, `uv run python` are the same process start wearing
-// different spellings, and the next spelling is always unenumerated.
+// The allow path bails to passthrough on anything it cannot fully read -- a
+// redirect, a command substitution, a subshell. That posture is right for
+// GRANTING permission and wrong for REFUSING it, or a denied program slips
+// through wrapped in a construct the whitelist declines to parse. So this walks
+// the whole tree and asks of every statement: what process would it start, and
+// how is it fed? It answers structurally, because a spelling list can never be
+// finished -- `python3`, `env python3`, `sudo -E python` and `uv run python`
+// are the same process start, and the next spelling is always unenumerated.
 type ProcessRule struct {
 	Name string
 	// Behavior is the section this rule came from: allow, ask or deny.
 	Behavior string
 	Message  string
-	// InlineOnly denies just the forms that execute a script handed to the
-	// interpreter on the command line or on stdin, leaving `node script.js`
-	// alone. Interpreters that must stay usable (node runs this environment's
-	// own hooks) are denied this way; ones with no business running at all are
-	// denied outright.
+	// InlineOnly denies a script given on the argv or stdin, not `node x.js`.
 	InlineOnly bool
-	// EvalFlags are the flags that take a script as their value (-e, --eval).
-	// For single-dash flags they also match inside a cluster, so perl's -pe,
-	// -ne and -lane are caught without listing every combination.
+	// EvalFlags take a script (-e); a short one matches in a cluster (-pe).
 	EvalFlags []string
 	// EvalSubcommands are subcommand words meaning the same thing (deno eval).
 	EvalSubcommands []string
@@ -52,8 +42,7 @@ var execWrappers = set.Of[string](
 	"pdm", "conda", "rye", "micromamba", "npx", "bunx",
 )
 
-// Subcommands of a wrapper that precede the real command: `uv run python`,
-// `poetry run python`, `conda run -n env python`.
+// Wrapper subcommands preceding the real command: `uv run python`.
 var wrapperSubcommands = set.Of[string]("run", "exec")
 
 // Arguments meaning "the script arrives on stdin".
@@ -150,8 +139,7 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 		return "", ""
 	}
 
-	// A statement on the receiving end of a pipe reads its input from it, which
-	// is how `echo 'code' | node` smuggles a script past an argument check.
+	// `echo 'code' | node` smuggles a script past any argument check.
 	piped := set.New[*syntax.Stmt]()
 	syntax.Walk(file, func(n syntax.Node) bool {
 		if b, ok := n.(*syntax.BinaryCmd); ok && (b.Op == syntax.Pipe || b.Op == syntax.PipeAll) {

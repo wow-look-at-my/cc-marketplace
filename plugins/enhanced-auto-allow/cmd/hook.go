@@ -23,13 +23,9 @@ type ToolInput struct {
 	Command string `json:"command"`
 }
 
-// Rules configuration - array-based recursive structure.
-//
-// The sections are evaluated deny > ask > allow. Within each, a rule is either a
-// COMMAND rule (matched against argv as written, with flag and argument
-// constraints) or a PROCESS rule (matched against the resolved process name,
-// however it is spelled). The same node type means the same rule can deny under
-// <deny> and allow under <allow>.
+// Rules is rules.xml loaded: sections evaluated deny > ask > allow, each
+// holding command rules (matched against argv) and process rules (matched
+// against the resolved process name). See xmlRules for the rule shape.
 type Rules struct {
 	Allow []CommandNode `json:"allow"`
 	Ask   []CommandNode `json:"ask"`
@@ -65,13 +61,10 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// The events this binary answers. They are not interchangeable:
-// PermissionRequest runs ONLY when the permission engine lands on "ask", so a
-// deny rule registered there alone is silent under any mode that resolves the
-// call earlier -- `defaultMode: "auto"` allows Bash before the ask path is
-// reached, and python ran unblocked while that was the whole registration.
-// PreToolUse runs on every tool call regardless of the outcome, so the deny
-// half rides it. See docs/two-event-registration.md
+// The events this binary answers, which are not interchangeable:
+// PermissionRequest runs ONLY once the engine lands on "ask", so a deny
+// registered there alone is silent under `defaultMode: "auto"`, while
+// PreToolUse runs on every call. See docs/two-event-registration.md
 const (
 	eventPermissionRequest = "PermissionRequest"
 	eventPreToolUse        = "PreToolUse"
@@ -159,11 +152,9 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
-	// Process rules lead, and deny precedes ask precedes allow. They are answered
-	// by walking the parse tree rather than by matching argv, so they still see
-	// a command the allow path below refuses to read -- a `$(...)`, a subshell,
-	// anything with a redirect. A denied program must not be reachable by
-	// wrapping it in a construct that makes the whitelist give up.
+	// Process rules lead, deny before ask before allow. They walk the parse tree
+	// rather than matching argv, so a `$(...)`, a subshell or a redirect cannot
+	// carry a denied program past the whitelist by making it give up.
 	for _, section := range []struct {
 		rules    []ProcessRule
 		behavior string
@@ -316,9 +307,8 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		if decision != "" {
 			return decision, msg
 		}
-		// A leading remaining arg that looks like a subcommand (not a flag) but
-		// matched no known subcommand must not fall through to allowedFlags --
-		// it is an unknown, possibly mutating subcommand.
+		// An unmatched subcommand word must not reach allowedFlags: it is
+		// unknown, and an unknown subcommand may mutate.
 		if !strings.HasPrefix(subcommandArgs[0], "-") {
 			return "", ""
 		}

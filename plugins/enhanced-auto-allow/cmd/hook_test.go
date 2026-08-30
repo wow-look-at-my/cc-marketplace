@@ -38,7 +38,7 @@ func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 			walk(cmd.Subcommands)
 		}
 	}
-	// Tests live wherever their rule lives, in any of the three sections.
+	// Tests live wherever their rule lives, in whichever section that is.
 	walk(xr.Allow.Rules)
 	walk(xr.Ask.Rules)
 	walk(xr.Deny.Rules)
@@ -183,7 +183,7 @@ func TestEndToEndGhRepoView(t *testing.T) {
 	}
 }
 
-// PermissionRequest is answered only once the permission engine has landed on
+// PermissionRequest is answered only after the permission engine has landed on
 // "ask", so a deny that rides it alone is silent under defaultMode "auto" --
 // which is how python stayed runnable. These cases pin the deny half to
 // PreToolUse, which is unconditional, and pin the allow half OUT of it: an
@@ -238,9 +238,9 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 // on a hook decision the client calls cancelRequest on the bridge request that
 // is displaying the card, then re-issues the call byte-identically with no
 // grant attached, so the server -- which is waiting on a human -- rejects it
-// again and the single permitted retry is spent. An allow here therefore
-// destroys the user's only working option (clicking) and converts a one-click
-// call into a guaranteed -32003 failure.
+// again and the sole permitted retry is spent. An allow here therefore
+// destroys the user's only working option -- clicking -- and converts that
+// click into a guaranteed needs-approval failure.
 //
 // Silence is not a missing feature here, it IS the fix, which is exactly why
 // this test asserts it: the previous version of this file required an allow
@@ -362,7 +362,7 @@ func loadTestRules(t *testing.T) {
 }
 
 // A malformed byte disables EVERY rule, since loadXMLRules failing makes the
-// hook exit 0 and pass everything through. The usual cause is a "--" inside an
+// hook exit clean and pass everything through. The usual cause is a "--" in an
 // <!-- --> comment, which XML forbids: it turns unrelated tests red in a batch
 // and none of them says "the rules file does not parse".
 func TestRulesXMLParses(t *testing.T) {
