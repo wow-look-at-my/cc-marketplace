@@ -37,7 +37,7 @@ type xmlCommand struct {
 	Description string `xml:"description,attr,omitempty"`
 
 	// Matches the RESOLVED process name, not the command spelling.
-	Process string `xml:"process,attr,omitempty"`
+	Process         string `xml:"process,attr,omitempty"`
 	InlineScript    bool   `xml:"inlineScript,attr,omitempty"`
 	EvalFlags       string `xml:"evalFlags,attr,omitempty"`
 	EvalSubcommands string `xml:"evalSubcommands,attr,omitempty"`
