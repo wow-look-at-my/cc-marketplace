@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/wow-look-at-my/go-containers/set"
-	"mvdan.cc/sh/v3/syntax"
 )
 
 // Hook input from Claude Code
