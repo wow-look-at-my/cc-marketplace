@@ -16,7 +16,7 @@ type ProcessRule struct {
 	Message  string
 	// InlineOnly denies a script given on the argv or stdin, not `node x.js`.
 	InlineOnly bool
-	// EvalFlags take a script (-e); a short one matches in a cluster (-pe).
+	// EvalFlags take a script (-e), and short forms match in a cluster (-pe).
 	EvalFlags []string
 	// EvalSubcommands are subcommand words meaning the same thing (deno eval).
 	EvalSubcommands []string
