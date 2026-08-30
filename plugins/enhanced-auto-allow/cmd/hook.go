@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wow-look-at-my/go-containers/set"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -394,15 +395,15 @@ func checkAllowedFlags(args []string, allowedFlags interface{}) bool {
 	case string:
 		return v == "*"
 	case []interface{}:
-		allowed := make(map[string]bool)
+		allowed := set.New[string]()
 		for _, f := range v {
 			if s, ok := f.(string); ok {
-				allowed[s] = true
+				allowed.Add(s)
 			}
 		}
 		// Check all flags are allowed
 		for _, arg := range args {
-			if strings.HasPrefix(arg, "-") && !allowed[arg] {
+			if strings.HasPrefix(arg, "-") && !allowed.Contains(arg) {
 				return false
 			}
 		}
@@ -510,14 +511,14 @@ func extractWord(word *syntax.Word) string {
 // e.g., for args ["-name", "*.h", "-exec", "grep", "-l", "pattern", "{}", ";"]
 // with execFlags ["-exec"], returns [["grep", "-l", "pattern"]].
 func extractExecSubCommands(args []string, execFlags []string) [][]string {
-	flagSet := make(map[string]bool, len(execFlags))
+	flagSet := set.New[string]()
 	for _, f := range execFlags {
-		flagSet[f] = true
+		flagSet.Add(f)
 	}
 
 	var result [][]string
 	for i := 0; i < len(args); i++ {
-		if !flagSet[args[i]] {
+		if !flagSet.Contains(args[i]) {
 			continue
 		}
 		// Collect args until ";" or "+"
@@ -627,16 +628,16 @@ func hasDangerousConstruct(node syntax.Node) bool {
 }
 
 func hasAnyFlag(args []string, flags []string) bool {
-	flagSet := make(map[string]bool)
+	flagSet := set.New[string]()
 	for _, f := range flags {
-		flagSet[f] = true
+		flagSet.Add(f)
 	}
 	for _, arg := range args {
-		if flagSet[arg] {
+		if flagSet.Contains(arg) {
 			return true
 		}
 		// Also match --flag=value form.
-		if idx := strings.Index(arg, "="); idx > 0 && flagSet[arg[:idx]] {
+		if idx := strings.Index(arg, "="); idx > 0 && flagSet.Contains(arg[:idx]) {
 			return true
 		}
 	}
@@ -644,13 +645,13 @@ func hasAnyFlag(args []string, flags []string) bool {
 }
 
 func stripFlagsWithValue(args []string, flags []string) []string {
-	flagSet := make(map[string]bool, len(flags))
+	flagSet := set.New[string]()
 	for _, f := range flags {
-		flagSet[f] = true
+		flagSet.Add(f)
 	}
 	var result []string
 	for i := 0; i < len(args); i++ {
-		if flagSet[args[i]] && i+1 < len(args) {
+		if flagSet.Contains(args[i]) && i+1 < len(args) {
 			i++ // skip the value too
 			continue
 		}
@@ -660,12 +661,12 @@ func stripFlagsWithValue(args []string, flags []string) []string {
 }
 
 func getFlagValue(args []string, flags []string) string {
-	flagSet := make(map[string]bool)
+	flagSet := set.New[string]()
 	for _, f := range flags {
-		flagSet[f] = true
+		flagSet.Add(f)
 	}
 	for i, arg := range args {
-		if flagSet[arg] && i+1 < len(args) {
+		if flagSet.Contains(arg) && i+1 < len(args) {
 			return args[i+1]
 		}
 	}
