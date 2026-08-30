@@ -30,14 +30,14 @@ type Group struct {
 // declBlockAtRules hold declarations rather than nested rules, so their bodies
 // are parsed like an ordinary rule. Anything else starting with '@' is a
 // container whose body is scanned for nested rules.
-var declBlockAtRules = map[string]bool{
-	"@font-face":           true,
-	"@page":                true,
-	"@property":            true,
-	"@counter-style":       true,
-	"@font-palette-values": true,
-	"@viewport":            true,
-}
+var declBlockAtRules = set.Of[string](
+	"@font-face",
+	"@page",
+	"@property",
+	"@counter-style",
+	"@font-palette-values",
+	"@viewport",
+)
 
 // stripComments removes /* ... */ while preserving string literals and byte
 // offsets are irrelevant afterwards -- line numbers are, so newlines inside a
@@ -214,7 +214,7 @@ func ParseRules(src string) []Rule {
 				switch {
 				case at == "@keyframes" || at == "@-webkit-keyframes":
 					// skipped entirely
-				case at != "" && !declBlockAtRules[at]:
+				case at != "" && !declBlockAtRules.Contains(at):
 					nested := context
 					if nested != "" {
 						nested += " "

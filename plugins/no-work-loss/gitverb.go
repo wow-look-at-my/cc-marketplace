@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"path/filepath"
 	"strings"
 )
@@ -155,7 +156,7 @@ func joinDir(cwd string, w word) string {
 // known or not, falls through to allow, so read-only work never pays and a new
 // git subcommand does not arrive pre-blocked.
 func classifyGit(seg segment) *finding {
-	g, ok := parseGit(seg.argv, seg.cwd, seg.gitEnv)
+	g, ok := parseGit(seg.argv, seg.cwd, seg.relocated)
 	if !ok {
 		return nil
 	}
@@ -414,14 +415,14 @@ func lastOperand(operands []word) string {
 // replaceFlag swaps the first destructive flag it finds for a safe one and
 // drops the rest, so the suggested command is the user's own command.
 func replaceFlag(argv []word, remove []string, add string) []word {
-	drop := map[string]bool{}
+	drop := set.New[string]()
 	for _, r := range remove {
-		drop[r] = true
+		drop.Add(r)
 	}
 	out := make([]word, 0, len(argv)+1)
 	added := false
 	for _, a := range argv {
-		if drop[a.text] {
+		if drop.Contains(a.text) {
 			if !added {
 				out = append(out, word{text: add, static: true})
 				added = true

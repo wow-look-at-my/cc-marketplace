@@ -9,54 +9,40 @@ import (
 	"strings"
 )
 
-// A plugin that ships a binary ships exactly ONE: the GOOS=cosmo fat APE
-// go-toolchain builds (`--targets cosmo --cosmo-slots none`), which runs on
-// Linux, macOS and Windows from a single file. The per-platform matrix it
-// replaced put four to six copies of the same program in every package.
+// A plugin that ships a binary ships exactly ONE: the single file `--targets
+// cosmo` builds, which runs on Linux, macOS and Windows.
 //
-// The APE cannot be the command a manifest names, though, and that is not a
-// style choice: Claude Code execve()s a hook/MCP/LSP command directly, and an
-// unassimilated APE is neither ELF nor a `#!` script, so the kernel answers
-// ENOEXEC and the spawn fails ("undefined is not an object (evaluating
-// 'this.#handle')" in the client's log). A shell CAN interpret its prologue --
-// which also self-assimilates the file into a native binary on first run -- so
-// what ships at the manifest's path is this launcher, with the APE beside it.
+// That file cannot be the command a manifest names. Claude Code execve()s a
+// hook/MCP/LSP command directly, the kernel answers ENOEXEC, and the spawn
+// fails ("undefined is not an object (evaluating 'this.#handle')" in the
+// client's log). A shell can run it, so the manifest's path holds the launcher
+// below and the binary sits beside it.
 
-// apeMagic is the first eight bytes of a Cosmopolitan APE: the `MZqFpD='`
-// prologue that is simultaneously a DOS header and a shell script.
+// apeMagic is the build output's first eight bytes.
 //
-// The APE is identified by these bytes, NEVER by filename, because the name is
-// not stable and every guess about it has been wrong. `--targets cosmo` builds
-// build/<name>_cosmo_fat and then copies it to per-platform slot names; locally
-// it leaves the fat name behind as a symlink, and in CI it DROPS that name
-// outright ("buildhost rejects os=cosmo uploads; the slot copies carry the
-// APE"). So build/ may hold the APE under a _cosmo_fat name, under a symlink of
-// that name, or only under <name>_linux_amd64 -- all byte-identical. What does
-// not vary is the prologue.
-//
-// This is also what keeps the fail-closed check honest: a plugin built with the
-// real per-platform matrix has ELF/PE binaries in those same slot names, and no
-// APE magic anywhere, so it still fails rather than shipping a package that
-// runs on some platforms and silently not others.
+// The file is identified by these bytes, NEVER by filename: build/ may hold it
+// under a _cosmo_fat name, under a symlink of that name, or only under
+// <name>_linux_amd64, and all three are byte-identical. This is also what keeps
+// the fail-closed check honest -- a plugin built with the per-platform matrix
+// carries ELF/PE binaries in those same names and no magic anywhere, so it
+// fails rather than shipping a package that runs on some platforms only.
 const apeMagic = "MZqFpD='"
 
-// apeSuffix is the name go-toolchain gives the fat build before it copies it
-// into the slots. Only used to prefer it when several files carry the magic,
-// and to name it in the failure message.
+// apeSuffix names the fat build before go-toolchain copies it into the slots.
+// Only used to prefer it when several files carry the magic, and to name it in
+// the failure message.
 const apeSuffix = "_cosmo_fat"
 
 // launcherScript is written at build/<name>, the path every plugin manifest
-// already points at (hooks, .mcp.json and .lsp.json alike), so switching to
-// the APE needs no manifest change anywhere.
+// already points at (hooks, .mcp.json and .lsp.json alike).
 //
 // `exec` matters: the launcher must not linger as a parent process, because an
 // LSP client tracks the pid it spawned and an MCP server's stdio must be the
 // binary's own. $0 is followed rather than assumed so a plugin cache directory
 // with spaces in its path still works.
 const launcherScript = `#!/bin/sh
-# Claude Code execve()s this path directly. A fat APE is not ELF and has no
-# shebang, so exec'ing it straight is ENOEXEC -- a shell has to interpret its
-# prologue (which also self-assimilates it into a native binary on first run).
+# Claude Code execve()s this path, and the binary beside it is not ELF and has
+# no shebang, so exec'ing it straight is ENOEXEC. A shell can run it.
 exec "$(dirname "$0")/%s%s" "$@"
 `
 

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,14 +94,14 @@ func discoverOwners(home, cwd string, c *client) ([]string, error) {
 		}
 	}
 
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	var owners []string
 	for _, owner := range candidates {
 		key := strings.ToLower(owner)
-		if owner == "" || seen[key] {
+		if owner == "" || seen.Contains(key) {
 			continue
 		}
-		seen[key] = true
+		seen.Add(key)
 		owners = append(owners, owner)
 	}
 	return owners, nil

@@ -138,8 +138,9 @@ for the verbs that need them.
 
 ## Interaction with the sibling plugins
 
-- **`no-overwrites`** already blocks `Write` on any path that exists, which is strictly stronger than "blocks Write on a dirty file". That
-  half of the guarantee is not duplicated here. Shell truncation (`>`, `tee`, `truncate -s 0`) is a Bash concern and is handled here.
+- **The `Write` tool's own refusals** (a path that exists, a path in the recycle bin) live in `writetool.go`, and are strictly stronger than
+  "blocks Write on a dirty file", so that half of the guarantee is not duplicated in the hazard model here. Shell truncation (`>`, `tee`,
+  `truncate -s 0`) is a Bash concern and is handled by this model.
 - **`cleanup-bash-cmds`** rewrites `rm` into `recycler trash`. It does not make `rm` safe on its own: hooks receive the original input, so
   neither plugin can see the other's rewrite, and `recycler` may not be installed -- on a machine without it the rewritten command simply
   fails. This plugin therefore evaluates `rm` as written. Where both fire, the deny wins, which is the correct precedence.
