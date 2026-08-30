@@ -157,6 +157,16 @@ func routeCases() []routeCase {
 		// Re-granting what the guard denies.
 		{route: "a redirect into the live settings", deny: "echo '{}' > ~/.claude/settings.json", allow: "echo '{}' > {{out}}/settings.json", names: "live Claude Code settings"},
 
+		// Found by auditing the commands this environment's permission rules
+		// already allow, rather than by listing routes from memory.
+		{route: "sort -o", deny: "sort -o src.txt src.txt", allow: "sort -o {{out}}/src.txt src.txt", names: "src.txt"},
+		{route: "split", deny: "split -l 100 {{out}}/big.txt part-", allow: "split -l 100 {{out}}/big.txt {{out}}/part-", names: "split"},
+		{route: "gzip replacing a tracked file", deny: "gzip notes.md", allow: "gzip {{out}}/notes.md", names: "notes.md"},
+		{route: "zip creating an archive in the tree", deny: "zip bundle.zip src.txt", allow: "zip {{out}}/bundle.zip src.txt", names: "bundle.zip"},
+		{route: "docker cp out of a container", deny: "docker cp web:/etc/nginx.conf src.txt", allow: "docker cp web:/etc/nginx.conf {{out}}/src.txt", names: "src.txt"},
+		{route: "scp from a remote host", deny: "scp host:/etc/hosts src.txt", allow: "scp src.txt host:/tmp/hosts", names: "src.txt"},
+		{route: "yq -i", deny: "yq -i '.a = 1' config.yaml", allow: "yq -i '.a = 1' {{out}}/config.yaml", names: "config.yaml"},
+
 		// A formatter this hook does not vouch for.
 		{route: "an unrecognised in-place rewriter", deny: "ffs fmt -w builtins/math.ffs", allow: "ffs check builtins/math.ffs", names: "builtins/math.ffs"},
 	}
@@ -224,6 +234,8 @@ func TestOrdinaryCommandsAreUntouched(t *testing.T) {
 		"grep -w foo src.txt", "rg --files", "ls -la", "find . -name '*.go'",
 		`awk '$1 > 5' src.txt`, `awk '{print $2}' src.txt`, "sed s/a/b/ src.txt",
 		"sort src.txt | uniq -c", "jq '.name' package.json", "echo hi > /dev/null",
+		"gzip -c notes.md", "docker compose up -d", "docker cp src.txt web:/tmp/x",
+		"yq '.a' config.yaml", "sort -k 2 src.txt",
 		"go test ./... 2>&1", "diff src.txt notes.md",
 
 		// The formatters this hook vouches for, and the recipe route.
