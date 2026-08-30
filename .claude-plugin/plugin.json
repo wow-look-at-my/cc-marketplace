@@ -1,0 +1,41 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Refuses the two ways a session loses authorship of the working tree: any command that would destroy content existing only there (reset --hard, checkout/switch onto a dirty tree, clean, restore, stash drop/clear, force push, rm/mv/tee/truncate/\u003e aimed at a modified or untracked file), and any change to file content that skips Write/Edit/NotebookEdit (sed -i and the other in-place editors, redirects, tee, cp/mv/install/rsync, patch and git apply, git used as an editor, extraction and downloads into the tree, symlinks over tracked paths, shell indirection it follows into scripts and aliases, the server-side GitHub commit, and the subagent grant that would sidestep all of it)",
+	"hooks": {
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-work-loss",
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			}
+		]
+	},
+	"keywords": [
+		"git",
+		"guard",
+		"hook",
+		"pretooluse",
+		"uncommitted",
+		"worktree",
+		"reset",
+		"checkout",
+		"clean",
+		"stash",
+		"force-push",
+		"data-loss",
+		"edit",
+		"write",
+		"sed",
+		"redirect",
+		"patch",
+		"provenance"
+	],
+	"name": "no-work-loss",
+	"version": "1146"
+}
