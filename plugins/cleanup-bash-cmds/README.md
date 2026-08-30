@@ -301,7 +301,7 @@ recycler restore notes.txt # put it back where it came from
 
 ### Why a rewrite and not a warning
 
-There is already a control on the adjacent case: the `no-overwrites` plugin
+There is already a control on the adjacent case: the `no-work-loss` plugin
 blocks `Write` on a path that exists and tells you to use `Edit`.
 **Delete-then-Write is the loophole around that hook** -- once the path is
 gone, `Write` is legal again. And in the window between the delete and the
