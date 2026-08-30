@@ -90,9 +90,9 @@ jobs:
         uses: wow-look-at-my/go-toolchain@v1
         with:
           working-directory: plugins/css-duplication
-          os: linux
-          arch: amd64
-          upload-artifacts: 'false'
+          # os/arch/upload-artifacts are not inputs any more: the action logs them
+          # as unexpected and builds its default target set instead. The staging
+          # step below picks the runner's own binary out of that set.
           # Exists to be driven by the e2e below; autorelease off since a branch push should not publish it to buildhost.
           autorelease: 'false'
 
@@ -111,8 +111,11 @@ jobs:
             // .lsp.json launches build/css-duplication, but go-toolchain and the npm package name the binary differently -- stage whichever artifact exists
             const wanted = path.join(buildDir, "css-duplication");
             if (!fs.existsSync(wanted)) {
-              const candidate = fs.readdirSync(buildDir)
-                .find((f) => f.startsWith("css-duplication_") && !f.endsWith("_host"));
+              // _host is the runner's own binary, and this job RUNS the server, so it
+              // is the one to stage. A cross-compiled sibling starts and never completes
+              // the handshake, which reads as a broken server rather than a wrong build.
+              const built = fs.readdirSync(buildDir).filter((f) => f.startsWith("css-duplication_"));
+              const candidate = built.find((f) => f.endsWith("_host")) ?? built[0];
               if (!candidate) throw new Error(`no built binary in ${buildDir}: ${fs.readdirSync(buildDir).join(", ")}`);
               fs.copyFileSync(path.join(buildDir, candidate), wanted);
               fs.chmodSync(wanted, 0o755);
