@@ -61,10 +61,7 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// The events this binary answers, which are not interchangeable:
-// PermissionRequest runs ONLY once the engine lands on "ask", so a deny
-// registered there alone is silent under `defaultMode: "auto"`, while
-// PreToolUse runs on every call. See docs/two-event-registration.md
+// The events this binary answers. See docs/two-event-registration.md
 const (
 	eventPermissionRequest = "PermissionRequest"
 	eventPreToolUse        = "PreToolUse"
@@ -99,6 +96,11 @@ var rules Rules
 // an allow there is not a convenience but an override, settling the call before
 // the permission engine runs, so the user's own deny rules never get a vote.
 // Auto-approval stays on PermissionRequest, which is downstream of them.
+//
+// The reverse also holds. PermissionRequest fires only after the engine has
+// landed on "ask", so a deny registered there alone stays silent under
+// `defaultMode: "auto"` -- which is how python ran unblocked. PreToolUse fires
+// on every call, so the deny half rides it.
 func main() {
 	input, _ := io.ReadAll(os.Stdin)
 	var hi HookInput
@@ -393,221 +395,6 @@ func checkAllowedFlags(args []string, allowedFlags interface{}) bool {
 		return true
 	}
 	return false
-}
-
-func parseAllCommands(command string) [][]string {
-	parser := syntax.NewParser()
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil {
-		return nil
-	}
-
-	// Reject any command with output redirections (>, >>, etc.)
-	if hasOutputRedirect(file) {
-		return nil
-	}
-
-	var allCommands [][]string
-	for _, stmt := range file.Stmts {
-		commands := extractCommands(stmt.Cmd)
-		if commands == nil {
-			return nil
-		}
-		allCommands = append(allCommands, commands...)
-	}
-
-	return allCommands
-}
-
-func extractCommands(cmd syntax.Command) [][]string {
-	if cmd == nil {
-		return nil
-	}
-
-	// Check for dangerous constructs
-	if hasDangerousConstruct(cmd) {
-		return nil
-	}
-
-	switch c := cmd.(type) {
-	case *syntax.CallExpr:
-		args := extractCallArgs(c)
-		if args == nil {
-			return nil
-		}
-		return [][]string{args}
-
-	case *syntax.BinaryCmd:
-		// Handle &&, ||, |
-		left := extractCommands(c.X.Cmd)
-		if left == nil {
-			return nil
-		}
-		right := extractCommands(c.Y.Cmd)
-		if right == nil {
-			return nil
-		}
-		return append(left, right...)
-
-	default:
-		return nil
-	}
-}
-
-func extractCallArgs(call *syntax.CallExpr) []string {
-	var args []string
-	for _, word := range call.Args {
-		arg := extractWord(word)
-		if arg == "" {
-			return nil
-		}
-		args = append(args, arg)
-	}
-	return args
-}
-
-func extractWord(word *syntax.Word) string {
-	var parts []string
-	for _, part := range word.Parts {
-		switch p := part.(type) {
-		case *syntax.Lit:
-			parts = append(parts, p.Value)
-		case *syntax.SglQuoted:
-			parts = append(parts, p.Value)
-		case *syntax.DblQuoted:
-			// Double quotes are OK if they only contain literals
-			for _, qpart := range p.Parts {
-				if lit, ok := qpart.(*syntax.Lit); ok {
-					parts = append(parts, lit.Value)
-				} else {
-					return "" // Contains variable expansion or similar
-				}
-			}
-		default:
-			return "" // Unknown part type
-		}
-	}
-	return strings.Join(parts, "")
-}
-
-// extractExecSubCommands extracts sub-commands from exec-style flags.
-// e.g., for args ["-name", "*.h", "-exec", "grep", "-l", "pattern", "{}", ";"]
-// with execFlags ["-exec"], returns [["grep", "-l", "pattern"]].
-func extractExecSubCommands(args []string, execFlags []string) [][]string {
-	flagSet := set.New[string]()
-	for _, f := range execFlags {
-		flagSet.Add(f)
-	}
-
-	var result [][]string
-	for i := 0; i < len(args); i++ {
-		if !flagSet.Contains(args[i]) {
-			continue
-		}
-		// Collect args until ";" or "+"
-		var subCmd []string
-		i++
-		for i < len(args) {
-			a := args[i]
-			if a == ";" || a == "+" {
-				break
-			}
-			if a != "{}" {
-				subCmd = append(subCmd, a)
-			}
-			i++
-		}
-		if len(subCmd) > 0 {
-			result = append(result, subCmd)
-		}
-	}
-	return result
-}
-
-func hasOutputRedirect(node syntax.Node) bool {
-	found := false
-	syntax.Walk(node, func(n syntax.Node) bool {
-		if stmt, ok := n.(*syntax.Stmt); ok {
-			for _, r := range stmt.Redirs {
-				switch r.Op {
-				case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll,
-					syntax.DplOut, syntax.ClbOut, syntax.RdrInOut:
-					if isAllowedRedirect(r) {
-						continue
-					}
-					found = true
-					return false
-				}
-			}
-		}
-		return !found
-	})
-	return found
-}
-
-// isAllowedRedirect reports whether a redirect operation is safe to auto-allow.
-// Permitted: duplicating stderr onto stdout, and stdout or stderr writes to
-// /dev/null or under /tmp/.
-func isAllowedRedirect(r *syntax.Redirect) bool {
-	fd := "1"
-	if r.N != nil {
-		fd = r.N.Value
-	}
-	target := redirectTarget(r)
-
-	if r.Op == syntax.DplOut {
-		return fd == "2" && target == "1"
-	}
-
-	switch r.Op {
-	case syntax.RdrOut, syntax.AppOut:
-		if fd != "1" && fd != "2" {
-			return false
-		}
-	case syntax.RdrAll, syntax.AppAll:
-		// &> and &>> redirect both stdout and stderr
-	default:
-		return false
-	}
-
-	return isSafeRedirectPath(target)
-}
-
-// isSafeRedirectPath accepts /dev/null or a path under /tmp/, cleaned so that a
-// traversal like /tmp/../etc/passwd does not pass.
-func isSafeRedirectPath(target string) bool {
-	if target == "/dev/null" {
-		return true
-	}
-	return strings.HasPrefix(path.Clean(target), "/tmp/")
-}
-
-func redirectTarget(r *syntax.Redirect) string {
-	if r.Word == nil {
-		return ""
-	}
-	var parts []string
-	for _, p := range r.Word.Parts {
-		lit, ok := p.(*syntax.Lit)
-		if !ok {
-			return ""
-		}
-		parts = append(parts, lit.Value)
-	}
-	return strings.Join(parts, "")
-}
-
-func hasDangerousConstruct(node syntax.Node) bool {
-	dangerous := false
-	syntax.Walk(node, func(n syntax.Node) bool {
-		switch n.(type) {
-		case *syntax.CmdSubst, *syntax.ParamExp, *syntax.ArithmExp, *syntax.ProcSubst:
-			dangerous = true
-			return false
-		}
-		return true
-	})
-	return dangerous
 }
 
 func hasAnyFlag(args []string, flags []string) bool {

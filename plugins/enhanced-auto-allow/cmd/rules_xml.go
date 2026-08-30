@@ -12,10 +12,9 @@ type xmlTest struct {
 	Expected string `xml:"expect,attr"`
 }
 
-// Every section holds the same rule type. A <rule> is a COMMAND rule (name plus
-// flag and argument constraints) or a PROCESS rule (process=, matched against
-// the resolved process name). The section gives the rule its verdict, so an
-// identical node denies under <deny> and allows under <allow>.
+// Every section holds the same rule type: a <rule> is a COMMAND rule (name plus
+// flag and argument constraints) or a PROCESS rule (process=). The section
+// gives it the verdict, so an identical node denies or allows by where it sits.
 type xmlRules struct {
 	XMLName    xml.Name       `xml:"rules"`
 	Tests      []xmlTest      `xml:"test"`

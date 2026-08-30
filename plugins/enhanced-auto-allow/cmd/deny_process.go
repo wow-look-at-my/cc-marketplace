@@ -8,16 +8,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// Process-level deny.
-//
-// The allow path bails to passthrough on anything it cannot fully read -- a
-// redirect, a command substitution, a subshell. That posture is right for
-// GRANTING permission and wrong for REFUSING it, or a denied program slips
-// through wrapped in a construct the whitelist declines to parse. So this walks
-// the whole tree and asks of every statement: what process would it start, and
-// how is it fed? It answers structurally, because a spelling list can never be
-// finished -- `python3`, `env python3`, `sudo -E python` and `uv run python`
-// are the same process start, and the next spelling is always unenumerated.
+// ProcessRule matches a program by what it resolves to, not how it is spelled.
 type ProcessRule struct {
 	Name string
 	// Behavior is the section this rule came from: allow, ask or deny.
@@ -123,9 +114,17 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 	return false
 }
 
-// deniedProcess walks every statement in the parse tree -- including those inside
-// command substitutions, subshells, loops and conditionals, which the allow path
-// refuses to read -- and returns the earliest denied process it finds.
+// matchProcessRule walks every statement in the parse tree -- command
+// substitutions, subshells, loops and conditionals included, all of which the
+// allow path refuses to read -- and returns the earliest rule that matches.
+//
+// The whole tree is walked because bailing to passthrough is right when
+// GRANTING permission and wrong when REFUSING it: a denied program would
+// otherwise slip through wrapped in a construct the whitelist declines to
+// parse. Matching is structural rather than by spelling, because a spelling
+// list can never be finished -- `python3`, `env python3`, `sudo -E python` and
+// `uv run python` are the same process start, and the next spelling is always
+// unenumerated.
 //
 // Known limit: a program named only inside a string handed to another
 // interpreter (`bash -c "python3 x.py"`) is not visible here, because at parse
