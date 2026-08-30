@@ -47,7 +47,7 @@ func (a *aliasResolver) expand(seg segment, depth int) []segment {
 	if depth >= maxAliasDepth {
 		return nil
 	}
-	g, ok := parseGit(seg.argv, seg.cwd, seg.gitEnv)
+	g, ok := parseGit(seg.argv, seg.cwd, seg.relocated)
 	if !ok || g.verb == "" || gitBuiltins[g.verb] {
 		return nil
 	}
@@ -64,7 +64,7 @@ func (a *aliasResolver) expand(seg segment, depth int) []segment {
 		if len(rest) > 0 {
 			text += " " + shellJoin(rest)
 		}
-		segs, parsed := parseSegments(text, g.dir)
+		segs, _, parsed := parseSegments(text, g.dir)
 		if !parsed {
 			return nil
 		}
@@ -76,7 +76,7 @@ func (a *aliasResolver) expand(seg segment, depth int) []segment {
 		argv = append(argv, word{text: fld, static: true})
 	}
 	argv = append(argv, rest...)
-	return []segment{{argv: argv, cwd: g.dir, gitEnv: seg.gitEnv}}
+	return []segment{{argv: argv, cwd: g.dir, relocated: seg.relocated}}
 }
 
 const maxAliasDepth = 3

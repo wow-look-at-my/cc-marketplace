@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,8 +31,8 @@ func newRepo(t *testing.T) string {
 	git(t, dir, "init", "-q")
 	git(t, dir, "config", "user.email", "guard@example.com")
 	git(t, dir, "config", "user.name", "Guard")
-	write(t, dir, "tracked.go", "package a\n")
-	write(t, dir, ".gitignore", "build/\n")
+	writeAt(t, dir, "tracked.go", "package a\n")
+	writeAt(t, dir, ".gitignore", "build/\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "initial")
 	return dir
@@ -47,7 +46,9 @@ func git(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
 }
 
-func write(t *testing.T, dir, name, content string) {
+// writeAt puts a file in a fixture repository. Named for its shape rather than
+// the verb, because `write` is the type the provenance half is built on.
+func writeAt(t *testing.T, dir, name, content string) {
 	t.Helper()
 	p := filepath.Join(dir, name)
 	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
@@ -56,26 +57,21 @@ func write(t *testing.T, dir, name, content string) {
 
 // modify dirties a tracked file; untrack adds a file git has never seen. The
 // two are deliberately separate everywhere in these tests.
-func modify(t *testing.T, dir string) { write(t, dir, "tracked.go", "package a\n// edited\n") }
+func modify(t *testing.T, dir string) { writeAt(t, dir, "tracked.go", "package a\n// edited\n") }
 func untrack(t *testing.T, dir string, name string) {
-	write(t, dir, name, "scratch\n")
+	writeAt(t, dir, name, "scratch\n")
 }
 
-// ask drives the real hook entry point, JSON in and verdict out.
-func ask(t *testing.T, cwd, command string) string {
-	t.Helper()
-	in := hookInput{HookEventName: "PreToolUse", ToolName: "Bash", Cwd: cwd}
-	in.ToolInput.Command = command
-	raw, err := json.Marshal(in)
-	require.NoError(t, err)
-	return decide(raw)
-}
+// ask lives in harness_test.go: one entry-point driver for both halves.
 
 func denied(t *testing.T, cwd, command string) string {
 	t.Helper()
 	r := ask(t, cwd, command)
 	require.NotEmpty(t, r, "expected DENY for %q", command)
-	assert.Contains(t, r, "run: ", "a denial must name the safe alternative: %s", r)
+	// Both halves owe the reader a way forward: the destruction half names a
+	// command to run instead, the provenance half names the tool to use.
+	assert.True(t, strings.Contains(r, "run: ") || strings.Contains(r, "Use Edit") || strings.Contains(r, "ask the user"),
+		"a denial must name the safe alternative: %s", r)
 	return r
 }
 
@@ -178,7 +174,13 @@ func TestDeniesShellAliasHidingResetHard(t *testing.T) {
 
 func TestAllowsResetHardOnCleanTree(t *testing.T) {
 	dir := newRepo(t)
-	allowed(t, dir, "git reset --hard origin/master")
+	assert.Empty(t, lossOnly(t, dir, "git reset --hard origin/master"),
+		"a clean tree has no uncommitted work to lose")
+
+	// The merged hook still refuses it, for the other reason: a hard reset
+	// replaces the files on disk with a commit's version, and that is a content
+	// change no edit tool made.
+	assert.Contains(t, denied(t, dir, "git reset --hard origin/master"), "git reset")
 }
 
 func TestAllowsBranchCreationEvenWhenDirty(t *testing.T) {
@@ -212,7 +214,7 @@ func TestAllowsCommandsThatCreateRecovery(t *testing.T) {
 
 func TestAllowsRmOfGitignoredArtifact(t *testing.T) {
 	dir := newRepo(t)
-	write(t, dir, "build/go-proxy", "binary\n")
+	writeAt(t, dir, "build/go-proxy", "binary\n")
 	allowed(t, dir, "rm build/go-proxy")
 }
 
@@ -229,7 +231,7 @@ func TestAllowsRmOfCleanTrackedFile(t *testing.T) {
 func TestResetHardSparesUntrackedFiles(t *testing.T) {
 	dir := newRepo(t)
 	untrack(t, dir, "scratch.txt")
-	allowed(t, dir, "git reset --hard") // reset never touches untracked files
+	assert.Empty(t, lossOnly(t, dir, "git reset --hard"), "reset never touches untracked files")
 }
 
 func TestCleanSparesTrackedModifications(t *testing.T) {
@@ -240,7 +242,7 @@ func TestCleanSparesTrackedModifications(t *testing.T) {
 
 func TestCleanWithoutXSparesIgnoredFiles(t *testing.T) {
 	dir := newRepo(t)
-	write(t, dir, "build/go-proxy", "binary\n")
+	writeAt(t, dir, "build/go-proxy", "binary\n")
 	allowed(t, dir, "git clean -fd")
 	denied(t, dir, "git clean -fdx")
 }
@@ -309,11 +311,6 @@ func TestDeniesUnparseableCommandNamingADestructiveVerb(t *testing.T) {
 	assert.Contains(t, r, "could not be parsed")
 }
 
-func TestAllowsUnparseableCommandWithNothingDestructive(t *testing.T) {
-	dir := newRepo(t)
-	allowed(t, dir, "echo `")
-}
-
 func TestFlagVariantsAllReachTheSameVerdict(t *testing.T) {
 	dir := newRepo(t)
 	untrack(t, dir, "scratch.txt")
@@ -355,10 +352,16 @@ func TestAllowsStashSubcommandsThatPreserveContent(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	git(t, dir, "stash", "push", "-m", "wip")
-	allowed(t, dir, "git stash apply")
-	allowed(t, dir, "git stash pop")
 	allowed(t, dir, "git stash show")
 	allowed(t, dir, "git stash branch recovered")
+
+	// pop and apply destroy nothing -- that is what separates them from drop --
+	// but they put a stash's content back into the worktree, which is a change
+	// no edit tool made.
+	for _, c := range []string{"git stash apply", "git stash pop"} {
+		assert.Empty(t, lossOnly(t, dir, c), "%s discards nothing", c)
+		denied(t, dir, c)
+	}
 }
 
 func TestAllowsStashDropWhenStashIsEmpty(t *testing.T) {
@@ -403,15 +406,11 @@ func TestDeniesTruncatingRedirectOntoDirtyFile(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	denied(t, dir, "echo x > tracked.go")
-	allowed(t, dir, "echo x >> tracked.go") // appending loses nothing
-}
-
-func TestAllowsRedirectOntoNewOrIgnoredFile(t *testing.T) {
-	dir := newRepo(t)
-	allowed(t, dir, "echo x > brand-new.txt")
-	allowed(t, dir, "echo x > build/out.log")
-	allowed(t, dir, "git status 2>/dev/null")
-	allowed(t, dir, "git status > /dev/null 2>&1")
+	// An append loses nothing, so the destruction half allows it. The provenance
+	// half still refuses: appended text is authored content, and Edit is how
+	// authored content reaches a tracked file.
+	assert.Empty(t, lossOnly(t, dir, "echo x >> tracked.go"))
+	assert.Contains(t, denied(t, dir, "echo x >> tracked.go"), "tracked.go")
 }
 
 func TestDeniesMvOverDirtyDestination(t *testing.T) {
@@ -433,7 +432,8 @@ func TestDeniesTeeAndTruncateOntoDirtyFile(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	denied(t, dir, "echo x | tee tracked.go")
-	allowed(t, dir, "echo x | tee -a tracked.go")
+	assert.Empty(t, lossOnly(t, dir, "echo x | tee -a tracked.go"), "appending loses nothing")
+	denied(t, dir, "echo x | tee -a tracked.go") // but it is still authoring
 	denied(t, dir, "truncate -s 0 tracked.go")
 }
 
@@ -445,24 +445,14 @@ func TestIgnoresNonBashToolsAndOtherEvents(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 
-	in := hookInput{HookEventName: "PreToolUse", ToolName: "Read", Cwd: dir}
-	in.ToolInput.Command = "git reset --hard"
-	raw, err := json.Marshal(in)
-	require.NoError(t, err)
-	assert.Empty(t, decide(raw))
-
-	in.HookEventName = "PostToolUse"
-	in.ToolName = "Bash"
-	raw, err = json.Marshal(in)
-	require.NoError(t, err)
-	assert.Empty(t, decide(raw))
-
+	assert.Empty(t, decideWithEvent(t, "PreToolUse", "Read", dir, "git reset --hard"))
+	assert.Empty(t, decideWithEvent(t, "PostToolUse", "Bash", dir, "git reset --hard"))
 	assert.Empty(t, decide([]byte("not json at all")))
 }
 
 func TestAllowsDestructiveCommandsOutsideAnyRepository(t *testing.T) {
 	plain := t.TempDir()
-	write(t, plain, "notes.txt", "hi\n")
+	writeAt(t, plain, "notes.txt", "hi\n")
 	allowed(t, plain, "rm notes.txt")
 }
 

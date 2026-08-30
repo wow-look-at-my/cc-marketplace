@@ -52,12 +52,14 @@ func TestCdScopeFollowsTheShell(t *testing.T) {
 	modify(t, dir)
 	clean := newRepoAt(t)
 
-	// A cd inside a subshell does not move the commands after it.
-	assert.Empty(t, ask(t, clean, "(cd "+dir+" && git status) && git reset --hard"),
+	// A cd inside a subshell does not move the commands after it. Asked of the
+	// destruction half, because the provenance half refuses a hard reset in
+	// either repository and would not tell the two cases apart.
+	assert.Empty(t, lossOnly(t, clean, "(cd "+dir+" && git status) && git reset --hard"),
 		"the cd was contained in the subshell, so the reset ran in the clean repo")
 
 	// A cd in a sequence does.
-	assert.NotEmpty(t, ask(t, clean, "cd "+dir+" && git reset --hard"))
+	assert.NotEmpty(t, lossOnly(t, clean, "cd "+dir+" && git reset --hard"))
 }
 
 func TestRelativeAndAbsoluteCdBothResolve(t *testing.T) {
@@ -89,7 +91,7 @@ func newRepoAt(t *testing.T) string {
 	git(t, dir, "init", "-q")
 	git(t, dir, "config", "user.email", "guard@example.com")
 	git(t, dir, "config", "user.name", "Guard")
-	write(t, dir, "tracked.go", "package a\n")
+	writeAt(t, dir, "tracked.go", "package a\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "initial")
 	return dir

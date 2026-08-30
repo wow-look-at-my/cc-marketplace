@@ -80,8 +80,56 @@ entry and reads as safe.
   `shell_test.go` (compound forms, wrappers, cd scoping), `hookio_test.go` (the raw JSON keys of the deny payload)
 - **Depth**: `plugins/no-work-loss/docs/decision-model.md`
 
-Relationship to the siblings: **`no-overwrites`** already blocks `Write` on any existing path, which is strictly stronger than blocking Write
-on a dirty file, so that half is not duplicated here -- shell truncation is a Bash concern and stays here. **`cleanup-bash-cmds`** rewrites
+## The provenance half: every change to file content goes through Write, Edit or NotebookEdit
+
+The plugin answers a second question of the same parsed command: not "would this destroy something" but "did this content get here through an
+edit tool". Bash exists to run things -- git, builds, tests, validation, search -- and does not author files. The two halves share the shell walk,
+the wrapper stripping and the path resolution, which is the whole reason they are one plugin: a second copy of that machinery would drift from
+this one within a release.
+
+**Where the two disagree, the destruction half's message wins**, because losing unsaved edits is the more urgent fact and its message names the
+stash that saves them. Its suggested rewrites had to change for the merge: `> file` used to advise `>> file` and `tee` used to advise `tee -a`,
+and both of those are now refused by the other half -- advice that gets denied on the next call is worse than no advice.
+
+**This half fails CLOSED, the opposite of its sibling.** A command that does not parse, a target built from an expansion, a `cd` into a directory
+the text does not name, a `GIT_DIR` that relocates the repository, an in-place `sed` whose files arrive from `xargs`: each denies, because a path
+this hook cannot name is a path it cannot clear. A panic denies too. The destruction half keeps its fail-open posture (a bug while checking `ls`
+must not wedge a session), so the two postures sit side by side deliberately -- one refuses what it cannot verify, the other only refuses what it
+can see is dangerous.
+
+**There is no opt-out.** No environment variable, no flag, no settings key. An opt-out is the hole.
+
+**Scope is paths, never commands.** A build directory (`build`, `dist`, `target`, `node_modules`, `.cache`, ...) is writable by whatever writes it;
+anything outside the guarded roots, including the `/tmp` scratchpad, was never in scope. The guarded roots are the repository containing the
+payload's `cwd` and `CLAUDE_PROJECT_DIR`, found by walking up for `.git` rather than paying for a subprocess in front of every Bash call.
+
+**What it does NOT do, stated so nobody has to rediscover it**: it does not sandbox the programs it starts. `go build`, `npm test` and `make`
+write what they write. What it closes is every route where the command text itself performs or directs the write. The formatters it vouches for
+(`gofmt`, `goimports`, `shfmt`, `prettier`, `rustfmt`, `cargo fmt`, `terraform fmt`, `go generate`, `go-toolchain`) are an explicit table, not an
+omission -- each writes only a canonical reformat or a repo-owned regeneration of the file it is handed. A tool NOT on that table does not become
+allowed by being a formatter: an unrecognised in-place rewrite denies, and the way to run one is a named recipe (`just fmt`, `make fmt`).
+
+- [docs/write-routes.md](docs/write-routes.md) -- every route, the shape of each rule, the two places the enumerated list collides with ordinary
+  workflow, and the boundaries this half deliberately does not cross.
+- **Route catalog**: `routes.go` (redirects, the argv writers, the unknown-tool in-place rule), `textproc.go` (sed's `w` and awk's `print >`,
+  read out of the program text so a filter is not mistaken for a writer), `interpreters.go` (inline scripts, editors, the formatter table),
+  `gitroutes.go` (git as an editor, and the plumbing that skips the worktree), `remote.go` (the GitHub API commit), `auditedroutes.go` (the five
+  routes found by reading the permission rules rather than listing writers from memory), `tree.go` (guarded roots and the writable directories),
+  `writeroutes.go` (the verdict, plus the tools that are not Bash at all).
+- **Tests**: `routes_test.go` is a table of one deny and one control per route -- the same command aimed outside the tree, which is what makes each
+  case load-bearing rather than a rule matching on shape. Every denial must NAME the path or route it stopped, so a deny arriving from an unrelated
+  rule cannot satisfy the assertion. `merged_test.go` pins the cases where the two halves disagree; `tools_test.go` covers the non-Bash routes.
+
+## The Write tool's own refusals (formerly the no-overwrites plugin)
+
+`writetool.go` carries what used to be a separate bash hook. Write authors a whole file, so aimed at a path that already holds something it
+replaces content nobody reviewed the loss of -- Edit is the tool for that. Once that is refused, "delete the path, then Write it" is the obvious
+way round, so a path sitting in the recycle bin is refused too, naming `recycler restore <path>`: in that window the only other copy of the file is
+in the model's context, where a compaction destroys it. It keeps no ledger of its own (recycler already tracks original locations) and compares
+both the literal and the physically resolved path, because recycler records `/tmp/x` as `/private/tmp/x` on macOS. Every failure -- no recycler, an
+unreadable bin, no match -- falls through to allow.
+
+Relationship to the siblings: **`cleanup-bash-cmds`** rewrites
 `rm` to `recycler trash`, which does NOT make `rm` safe on its own: hooks receive the original input so neither plugin sees the other's
 rewrite, and `recycler` may be absent (it is missing in the web-session image, where the rewritten command simply fails). This plugin
 evaluates `rm` as written; where both fire, the deny wins.

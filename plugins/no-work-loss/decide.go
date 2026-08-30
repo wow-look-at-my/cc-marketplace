@@ -8,7 +8,7 @@ import (
 // analyze is the whole decision: flatten the command, classify every unit,
 // and consult repository state only for the units that could destroy something.
 func analyze(command, cwd string) string {
-	segs, ok := parseSegments(command, cwd)
+	segs, _, ok := parseSegments(command, cwd)
 	if !ok {
 		// Ambiguity resolves to denial, but only when there is something worth
 		// being ambiguous about.
