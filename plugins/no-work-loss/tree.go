@@ -128,8 +128,14 @@ func isBuildOutput(rel string) bool {
 // display renders a path the way the message should name it: relative to the
 // root it violates, because that is the spelling the reader recognises.
 func display(root, abs string) string {
-	if rel, err := filepath.Rel(root, abs); err == nil && !strings.HasPrefix(rel, "..") {
+	rel, err := filepath.Rel(root, abs)
+	switch {
+	case err != nil || strings.HasPrefix(rel, ".."):
+		return abs
+	case rel == ".":
+		// "." names nothing to a reader. The root's own name does.
+		return filepath.Base(root) + "/"
+	default:
 		return rel
 	}
-	return abs
 }

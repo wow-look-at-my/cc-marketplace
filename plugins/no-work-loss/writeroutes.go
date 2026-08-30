@@ -37,13 +37,13 @@ func decide(raw []byte) string {
 
 	switch {
 	case in.ToolName == "Bash":
-		// The provenance question runs first. When a command both rewrites a
-		// tracked file and would lose uncommitted work, "use Edit" is the answer
-		// that tells the reader what to do next.
-		if reason := evaluateWrites(ti.Command, in.Cwd); reason != "" {
+		// Destruction is asked first. Where both halves object -- `> tracked.go`
+		// over a file with unsaved edits -- losing the edits is the more urgent
+		// fact, and its message names the stash that saves them.
+		if reason := evaluateLoss(ti.Command, in.Cwd); reason != "" {
 			return reason
 		}
-		return evaluateLoss(ti.Command, in.Cwd)
+		return evaluateWrites(ti.Command, in.Cwd)
 	case isEditTool(in.ToolName):
 		return editToolReason(in.ToolName, ti, in.Cwd)
 	case isAgentTool(in.ToolName):
