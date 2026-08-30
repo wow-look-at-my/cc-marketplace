@@ -21,9 +21,9 @@ type ToolInput struct {
 	Command string `json:"command"`
 }
 
-// Rules is rules.xml loaded: sections evaluated deny > ask > allow, each
-// holding command rules (matched against argv) and process rules (matched
-// against the resolved process name). See xmlRules for the rule shape.
+// Sections evaluated deny > ask > allow. A rule matches argv as written
+// (CommandNode) or the resolved process name (ProcessRule). Sharing the node
+// type lets the same rule deny under <deny> and allow under <allow>.
 type Rules struct {
 	Allow []CommandNode `json:"allow"`
 	Ask   []CommandNode `json:"ask"`
@@ -59,7 +59,8 @@ type RequireFlagRule struct {
 	Allowed []string `json:"allowed"`
 }
 
-// The events this binary answers. See docs/two-event-registration.md
+// The events this binary answers. They are NOT interchangeable; the deny half
+// rides PreToolUse. see docs/two-event-registration.md
 const (
 	eventPermissionRequest = "PermissionRequest"
 	eventPreToolUse        = "PreToolUse"
@@ -76,10 +77,9 @@ type PermissionResponse struct {
 	} `json:"hookSpecificOutput"`
 }
 
-// PreToolUse response. A flat permissionDecision rather than the nested
-// decision object, and the CLI rejects a payload whose hookEventName is not
-// the event it dispatched -- so the shape must follow the event, not the
-// verdict.
+// PreToolUse response: a flat permissionDecision, not the nested object. The
+// CLI rejects a hookEventName that is not the event it dispatched, so the shape
+// follows the event rather than the verdict.
 type PreToolUseResponse struct {
 	HookSpecificOutput struct {
 		HookEventName            string `json:"hookEventName"`
@@ -90,15 +90,6 @@ type PreToolUseResponse struct {
 
 var rules Rules
 
-// main reads the hook payload and answers it. On PreToolUse it may only deny:
-// an allow there is not a convenience but an override, settling the call before
-// the permission engine runs, so the user's own deny rules never get a vote.
-// Auto-approval stays on PermissionRequest, which is downstream of them.
-//
-// The reverse also holds. PermissionRequest fires only after the engine has
-// landed on "ask", so a deny registered there alone stays silent under
-// `defaultMode: "auto"` -- which is how python ran unblocked. PreToolUse fires
-// on every call, so the deny half rides it.
 func main() {
 	input, _ := io.ReadAll(os.Stdin)
 	var hi HookInput
@@ -110,8 +101,10 @@ func main() {
 		os.Exit(0)
 	}
 
+	// An allow here would settle the call before the user's deny rules vote.
 	denyOnly := hi.HookEventName == eventPreToolUse
 
+	// Allow all read-only tools
 	if hi.ToolName == "Read" || hi.ToolName == "Glob" || hi.ToolName == "Grep" {
 		if !denyOnly {
 			outputDecision(hi.HookEventName, "allow", "")
@@ -152,9 +145,9 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
-	// Process rules lead, deny before ask before allow. They walk the parse tree
-	// rather than matching argv, so a `$(...)`, a subshell or a redirect cannot
-	// carry a denied program past the whitelist by making it give up.
+	// Process rules outrank command rules, and are answered by walking the parse
+	// tree, so they still see a command the allow path below refuses to read --
+	// a `$(...)`, a subshell, anything with a redirect.
 	for _, section := range []struct {
 		rules    []ProcessRule
 		behavior string
@@ -175,9 +168,8 @@ func evaluateCommand(command string) (string, string) {
 		return "", ""
 	}
 
-	// Command rules, same precedence. Every command in a compound must clear
-	// the bar: if any is denied, deny; if all are allowed, allow; otherwise
-	// passthrough and let the normal permission flow decide.
+	// Every command in a compound must clear the bar: any denied denies, all
+	// allowed allows, anything else passes through to the permission flow.
 	for _, section := range []struct {
 		nodes    []CommandNode
 		behavior string
@@ -187,7 +179,7 @@ func evaluateCommand(command string) (string, string) {
 	} {
 		for _, args := range commands {
 			if decision, msg := evaluateArgs(args, section.nodes); decision == "allow" || decision == "deny" {
-				// The section's behavior wins over the rule's own verdict.
+				// The section supplies the verdict, not the rule.
 				return section.behavior, msg
 			}
 		}
@@ -221,7 +213,7 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 	current := args[0]
 	remaining := args[1:]
 
-	// Every matching node is tried; deny beats allow, allow beats passthrough.
+	// Merge every matching node: deny beats allow beats passthrough.
 	anyAllowed := false
 	for _, node := range nodes {
 		if !matchesName(node.Name, current) {
@@ -253,8 +245,8 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		return "deny", node.DenyWithMessage
 	}
 
-	// A denied substring in any argument unmatches the node. This is how a tool
-	// taking a script (awk, sed) refuses system(), getline and redirection.
+	// A denied substring unmatches the node: in a script argument (awk, sed)
+	// a dangerous feature appears inside the body, not as its own word.
 	if len(node.DenyArgSubstrings) > 0 {
 		for _, arg := range args {
 			for _, substr := range node.DenyArgSubstrings {
@@ -307,8 +299,8 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 		if decision != "" {
 			return decision, msg
 		}
-		// An unmatched subcommand word must not reach allowedFlags: it is
-		// unknown, and an unknown subcommand may mutate.
+		// A leading non-flag word matching no known subcommand is unknown or
+		// mutating: never fall through to allowedFlags.
 		if !strings.HasPrefix(subcommandArgs[0], "-") {
 			return "", ""
 		}

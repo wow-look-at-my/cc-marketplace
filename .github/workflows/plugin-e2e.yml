@@ -90,8 +90,17 @@ jobs:
         uses: wow-look-at-my/go-toolchain@v1
         with:
           working-directory: plugins/css-duplication
+          # Same build release.yml makes, because the cook below only stages a fat APE.
+          targets: cosmo
           # Exists to be driven by the e2e below; autorelease off since a branch push should not publish it to buildhost.
           autorelease: 'false'
+
+      - uses: ./.github/actions/setup-marketplace-build
+
+      # The cook stages the launcher .lsp.json names beside the APE -- see docs/ci-yaml-notes.md#css-duplication-lsp-job
+      - name: Cook the plugin the way a release does
+        id: cook
+        run: marketplace-build release-plugin css-duplication >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/setup-claude-code
 
@@ -99,22 +108,11 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_WOW }}
           LSP_DEBUG_LOG: ${{ runner.temp }}/lsp-debug.log
+          PLUGIN_DIR: ${{ steps.cook.outputs.source_dir }}
         uses: wow-look-at-my/actions@typescript#latest
         with:
           script: |
-            const pluginDir = path.join(process.env.GITHUB_WORKSPACE!, "plugins", "css-duplication");
-            const buildDir = path.join(pluginDir, "build");
-
-            // .lsp.json launches build/css-duplication, but go-toolchain and the npm package name the binary differently -- stage whichever artifact exists
-            const wanted = path.join(buildDir, "css-duplication");
-            if (!fs.existsSync(wanted)) {
-              const candidate = fs.readdirSync(buildDir)
-                .find((f) => f.startsWith("css-duplication_") && !f.endsWith("_host"));
-              if (!candidate) throw new Error(`no built binary in ${buildDir}: ${fs.readdirSync(buildDir).join(", ")}`);
-              fs.copyFileSync(path.join(buildDir, candidate), wanted);
-              fs.chmodSync(wanted, 0o755);
-              core.info(`staged ${candidate} as build/css-duplication`);
-            }
+            const pluginDir = process.env.PLUGIN_DIR!;
 
             // the fixture starts already duplicated; the edit below adds one more copy, triggering didChange/didSave and the server's diagnostics
             const work = path.join(process.env.RUNNER_TEMP!, "lsp-e2e");

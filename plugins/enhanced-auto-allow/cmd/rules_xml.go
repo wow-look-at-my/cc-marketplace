@@ -12,9 +12,8 @@ type xmlTest struct {
 	Expected string `xml:"expect,attr"`
 }
 
-// Every section holds the same rule type: a <rule> is a COMMAND rule (name plus
-// flag and argument constraints) or a PROCESS rule (process=). The section
-// gives it the verdict, so a node denies or allows by where it sits.
+// A <rule> matches the command as written or the resolved process name. The
+// section gives a rule its meaning: an identical node denies under <deny>.
 type xmlRules struct {
 	XMLName    xml.Name       `xml:"rules"`
 	Tests      []xmlTest      `xml:"test"`
@@ -37,8 +36,9 @@ type xmlCommand struct {
 	Name        string `xml:"name,attr"`
 	Description string `xml:"description,attr,omitempty"`
 
-	// Process rule: matched on the resolved process name, not the spelling.
-	Process         string `xml:"process,attr,omitempty"`
+	// The resolved process name: basename, wrappers stripped, version ignored.
+	Process string `xml:"process,attr,omitempty"`
+	// Narrows Process to an invocation handed a script, sparing `node file.js`.
 	InlineScript    bool   `xml:"inlineScript,attr,omitempty"`
 	EvalFlags       string `xml:"evalFlags,attr,omitempty"`
 	EvalSubcommands string `xml:"evalSubcommands,attr,omitempty"`
