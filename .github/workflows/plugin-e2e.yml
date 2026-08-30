@@ -90,9 +90,6 @@ jobs:
         uses: wow-look-at-my/go-toolchain@v1
         with:
           working-directory: plugins/css-duplication
-          os: linux
-          arch: amd64
-          upload-artifacts: 'false'
           # Exists to be driven by the e2e below; autorelease off since a branch push should not publish it to buildhost.
           autorelease: 'false'
 
