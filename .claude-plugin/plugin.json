@@ -1,0 +1,15 @@
+{
+	"author": {
+		"name": "wow-look-at-my-code"
+	},
+	"description": "Assorted standalone skills with no theme in common, kept here instead of each getting its own plugin",
+	"keywords": [
+		"skills",
+		"misc",
+		"review",
+		"refactor",
+		"audit"
+	],
+	"name": "misc-skills",
+	"version": "1144"
+}
