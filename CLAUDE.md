@@ -35,7 +35,6 @@ Each plugin documents itself in its own directory. Add a new plugin's notes at
 
 @plugins/cleanup-bash-cmds/CLAUDE.md
 @plugins/css-duplication/CLAUDE.md
-@plugins/no-overwrites/CLAUDE.md
 @plugins/no-work-loss/CLAUDE.md
 @plugins/docs/CLAUDE.md
 @plugins/enhanced-auto-allow/CLAUDE.md
@@ -46,5 +45,6 @@ Each plugin documents itself in its own directory. Add a new plugin's notes at
 @plugins/misc-skills/CLAUDE.md
 @plugins/no-blame-language/CLAUDE.md
 @plugins/no-busy-poll/CLAUDE.md
+@plugins/no-counts-in-docs/CLAUDE.md
 @plugins/repo-index/CLAUDE.md
 
