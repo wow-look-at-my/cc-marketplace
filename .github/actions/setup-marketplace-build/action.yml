@@ -55,6 +55,9 @@ runs:
       if: steps.binary.outputs.exists != 'true' && inputs.go-toolchain-installed == 'true'
       shell: bash
       working-directory: tools/marketplace-build
+      # The CLI requires this; the action sets it for you, a composite step does not inherit it.
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: go-toolchain
 
     - name: Install marketplace-build

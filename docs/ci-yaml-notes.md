@@ -68,8 +68,14 @@ Two jobs legitimately need a plugin built AND `marketplace-build` built. They
 call the action once, for the plugin, and pass
 `go-toolchain-installed: 'true'` to `setup-marketplace-build`, which then runs
 the `go-toolchain` CLI that first call left on `PATH`. Order matters: the
-action call has to come first. This only ever bites on a `marketplace-build`
-cache miss, so a stale cache entry hides it for months at a time.
+action call has to come first, and that step must pass
+`GITHUB_TOKEN: ${{ github.token }}` itself — the CLI requires it and the action
+is what normally supplies it.
+
+Both halves of this only ever run on a `marketplace-build` cache miss, so a
+stale cache entry hides a break here for months. The install step is the
+backstop: it fails naming the missing file rather than letting a later step
+discover it.
 
 ## release-build-binary-format-and-action-pin
 
