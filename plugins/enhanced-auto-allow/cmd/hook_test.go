@@ -38,7 +38,7 @@ func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 			walk(cmd.Subcommands)
 		}
 	}
-	// Tests live wherever their rule lives, in any of the three sections.
+	// Tests live wherever their rule lives, in any section.
 	walk(xr.Allow.Rules)
 	walk(xr.Ask.Rules)
 	walk(xr.Deny.Rules)
@@ -183,12 +183,11 @@ func TestEndToEndGhRepoView(t *testing.T) {
 	}
 }
 
-// PermissionRequest is answered only once the permission engine has landed on
-// "ask", so a deny that rides it alone is silent under defaultMode "auto" --
-// which is how python stayed runnable. These cases pin the deny half to
-// PreToolUse, which is unconditional, and pin the allow half OUT of it: an
-// allow from PreToolUse settles the call before the user's own deny rules are
-// consulted.
+// PermissionRequest is answered only after the engine lands on "ask", so a
+// deny riding it alone is silent under defaultMode "auto" -- which is how
+// python stayed runnable. These cases pin the deny half to PreToolUse, which is
+// unconditional, and pin the allow half OUT of it: an allow there settles the
+// call before the user's own deny rules are consulted.
 func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 	binaryPath := buildTestBinary(t)
 
@@ -211,8 +210,7 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 
 			var resp PreToolUseResponse
 			require.NoError(t, json.Unmarshal(out, &resp), "output was: %s", out)
-			// The CLI rejects a payload whose hookEventName is not the event it
-			// dispatched, so the shape must follow the event.
+			// The CLI rejects a hookEventName that is not the dispatched event.
 			assert.Equal(t, eventPreToolUse, resp.HookSpecificOutput.HookEventName)
 			assert.Equal(t, "deny", resp.HookSpecificOutput.PermissionDecision, "%q must be denied", command)
 			assert.NotEmpty(t, resp.HookSpecificOutput.PermissionDecisionReason, "a deny must say why -- the reason reaches the model verbatim")
@@ -239,9 +237,9 @@ func TestPreToolUseDeniesButNeverAllows(t *testing.T) {
 // on a hook decision the client calls cancelRequest on the bridge request that
 // is displaying the card, then re-issues the call byte-identically with no
 // grant attached, so the server -- which is waiting on a human -- rejects it
-// again and the single permitted retry is spent. An allow here therefore
-// destroys the user's only working option (clicking) and converts a one-click
-// call into a guaranteed -32003 failure.
+// again and the only permitted retry is spent. An allow here therefore destroys
+// the user's sole working option, clicking, and turns a call they could have
+// approved into a guaranteed failure.
 //
 // Silence is not a missing feature here, it IS the fix, which is exactly why
 // this test asserts it: the previous version of this file required an allow
@@ -362,10 +360,10 @@ func loadTestRules(t *testing.T) {
 	require.NoError(t, err, "Failed to parse rules.xml")
 }
 
-// One malformed byte disables EVERY rule, since loadXMLRules failing makes the
-// hook exit 0 and pass everything through. The usual cause is a "--" inside an
-// <!-- --> comment, which XML forbids: it turns thirty unrelated tests red at
-// once and none of them says "the rules file does not parse".
+// A malformed byte disables EVERY rule: loadXMLRules failing makes the hook
+// exit clean and pass everything through. The usual cause is a "--" inside an
+// <!-- --> comment, which XML forbids: it turns a pile of unrelated tests red
+// and none of them says "the rules file does not parse".
 func TestRulesXMLParses(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	data, err := os.ReadFile(filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml"))
