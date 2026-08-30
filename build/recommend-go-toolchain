@@ -1,0 +1,5 @@
+#!/bin/sh
+# Claude Code execve()s this path directly. A fat APE is not ELF and has no
+# shebang, so exec'ing it straight is ENOEXEC -- a shell has to interpret its
+# prologue (which also self-assimilates it into a native binary on first run).
+exec "$(dirname "$0")/recommend-go-toolchain.ape" "$@"
