@@ -87,11 +87,8 @@ func gitWrites(seg segment, name string, rest []word) ([]write, bool) {
 	route, hit := plumbingVerbs[verb]
 	if !hit {
 		route, hit = worktreeVerbs[verb]
-		if hit && !gitVerbWrites(verb, args, dir) {
-			return nil, true
-		}
 	}
-	if !hit {
+	if !hit || !gitVerbWrites(verb, args, dir) {
 		return nil, true
 	}
 	if relocated {
@@ -139,6 +136,12 @@ func gitVerbWrites(verb string, args []word, dir string) bool {
 		// A soft or mixed reset moves refs and the index; only these three
 		// rewrite the files on disk.
 		return has("--hard", "--merge", "--keep")
+	case "update-ref":
+		// Setting a ref is the last step of the plumbing route -- hash a blob,
+		// build a tree, point a ref at it -- so it introduces content. Deleting
+		// one introduces none, and the destruction half already judges whether
+		// the commits it drops survive elsewhere.
+		return !has("-d", "--delete")
 	}
 	return true
 }

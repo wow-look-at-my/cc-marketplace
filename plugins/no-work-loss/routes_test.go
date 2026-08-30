@@ -149,7 +149,7 @@ func routeCases() []routeCase {
 		{route: "curl PUT on contents", deny: "curl -X PUT https://api.github.com/repos/o/r/contents/README.md -d @{{out}}/body.json", allow: "curl https://api.github.com/repos/o/r/contents/README.md", names: "GitHub API"},
 
 		// Ambiguity, which fails closed.
-		{route: "a command that does not parse", deny: "echo 'unterminated", allow: "echo fine", names: "does not parse as shell"},
+		{route: "a command that does not parse", deny: "echo 'unfinished", allow: "echo fine", names: "does not parse as shell"},
 		{route: "a target built from an expansion", deny: `sed -i s/a/b/ "$TARGET"`, allow: "sed -i s/a/b/ {{out}}/src.txt", names: "expansion"},
 		{route: "a cd this hook cannot follow", deny: `cd "$D" && echo hi > f.txt`, allow: "cd {{out}} && echo hi > f.txt", names: "not statically known"},
 		{route: "a git repository relocated by the environment", deny: "GIT_DIR={{out}}/.git git apply x.diff", allow: "cd {{out}} && git apply x.diff", names: "relocated"},

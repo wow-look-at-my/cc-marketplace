@@ -68,7 +68,10 @@ func denied(t *testing.T, cwd, command string) string {
 	t.Helper()
 	r := ask(t, cwd, command)
 	require.NotEmpty(t, r, "expected DENY for %q", command)
-	assert.Contains(t, r, "run: ", "a denial must name the safe alternative: %s", r)
+	// Both halves owe the reader a way forward: the destruction half names a
+	// command to run instead, the provenance half names the tool to use.
+	assert.True(t, strings.Contains(r, "run: ") || strings.Contains(r, "Use Edit") || strings.Contains(r, "ask the user"),
+		"a denial must name the safe alternative: %s", r)
 	return r
 }
 
@@ -358,10 +361,16 @@ func TestAllowsStashSubcommandsThatPreserveContent(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	git(t, dir, "stash", "push", "-m", "wip")
-	allowed(t, dir, "git stash apply")
-	allowed(t, dir, "git stash pop")
 	allowed(t, dir, "git stash show")
 	allowed(t, dir, "git stash branch recovered")
+
+	// pop and apply destroy nothing -- that is what separates them from drop --
+	// but they put a stash's content back into the worktree, which is a change
+	// no edit tool made.
+	for _, c := range []string{"git stash apply", "git stash pop"} {
+		assert.Empty(t, lossOnly(t, dir, c), "%s discards nothing", c)
+		denied(t, dir, c)
+	}
 }
 
 func TestAllowsStashDropWhenStashIsEmpty(t *testing.T) {
