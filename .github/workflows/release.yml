@@ -110,7 +110,6 @@ jobs:
         with:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
-          upload-artifacts: 'false'
           # autorelease defaults true (needs deployments/artifact-metadata write) but plugins publish via orphan tag, not buildhost -- keep it false.
           autorelease: 'false'
 
