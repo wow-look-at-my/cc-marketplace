@@ -57,6 +57,12 @@ calling job was granted. `setup-marketplace-build` runs `go-toolchain` when its
 cache misses, so every job that uses it carries the four grants above even when
 its own steps need none of them.
 
+## marketplace-build-cache-miss
+
+`setup-marketplace-build` builds only when its cache misses, so a warm entry
+hides a break in that path for months. The install step is the backstop: it
+fails naming the missing file rather than letting a later step discover it.
+
 ## release-build-binary-format-and-action-pin
 
 `targets: cosmo` is not a size optimization: the fat APE is the only native

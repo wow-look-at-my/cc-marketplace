@@ -17,17 +17,18 @@ runs:
 
     - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # https://github.com/extractions/setup-just/releases/tag/v4
 
+    # Keyed on this file too: it decides HOW the binary is built, so a recipe change must not reuse the old one.
     - uses: wow-look-at-my/actions@smart-cache#latest
       id: cache
       with:
-        path: tools/marketplace-build/build/marketplace-build_linux_amd64
-        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum') }}
+        path: tools/marketplace-build/build/marketplace-build
+        key: marketplace-build-${{ hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/marketplace-build/go.sum', '.github/actions/setup-marketplace-build/action.yml') }}
 
     - name: Check binary exists
       id: binary
       shell: bash
       run: |
-        if [ -f tools/marketplace-build/build/marketplace-build_linux_amd64 ]; then
+        if [ -f tools/marketplace-build/build/marketplace-build ]; then
           echo "exists=true" >> "$GITHUB_OUTPUT"
         fi
 
@@ -40,4 +41,13 @@ runs:
 
     - name: Install marketplace-build
       shell: bash
-      run: cp "tools/marketplace-build/build/marketplace-build_linux_amd64" "/usr/local/bin/marketplace-build"
+      run: |
+        set -euo pipefail
+        src="tools/marketplace-build/build/marketplace-build"
+        if [ ! -f "$src" ]; then
+          echo "::error::$src missing -- go-toolchain writes build/<name>, not a per-platform slot"
+          ls -la tools/marketplace-build/build 2>&1 || true
+          exit 1
+        fi
+        cp "$src" /usr/local/bin/marketplace-build
+        marketplace-build --help >/dev/null

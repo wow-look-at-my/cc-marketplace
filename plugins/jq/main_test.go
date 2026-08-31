@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 func TestMain(m *testing.M) {
@@ -68,14 +69,14 @@ func TestInitialize(t *testing.T) {
 func TestListTools(t *testing.T) {
 	session := connect(t)
 
-	names := map[string]bool{}
+	names := set.New[string]()
 	for tool, err := range session.Tools(context.Background(), nil) {
 		require.NoError(t, err)
-		names[tool.Name] = true
+		names.Add(tool.Name)
 	}
 
-	assert.True(t, names["jq"])
-	assert.True(t, names["jq_read"])
+	assert.True(t, names.Contains("jq"))
+	assert.True(t, names.Contains("jq_read"))
 }
 
 func TestJqInlineInput(t *testing.T) {

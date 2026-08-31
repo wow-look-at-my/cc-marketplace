@@ -21,8 +21,11 @@ func classifyFS(seg segment) []*finding {
 		}
 		out = append(out, &finding{
 			label: "> " + r.file.text, haz: hazTracked | hazUntracked, dir: seg.cwd,
-			paths:   []word{r.file},
-			rewrite: ">> " + r.file.text + "   # append, or commit the file first",
+			paths: []word{r.file},
+			// Not `>> file`: appending spares the existing content but is still
+			// a write outside the edit tools, so the provenance half refuses it
+			// and this would be advice that gets denied on the next call.
+			rewrite: "commit the file first, then change it with Edit",
 		})
 	}
 
@@ -77,8 +80,10 @@ func classifyFS(seg segment) []*finding {
 		}
 		out = append(out, &finding{
 			label: "tee", haz: hazTracked | hazUntracked, dir: seg.cwd,
-			paths:   operands,
-			rewrite: "tee -a " + shellJoin(operands) + "   # append instead of truncating",
+			paths: operands,
+			// `tee -a` is the append form, and appends are refused by the
+			// provenance half for the same reason `>>` is.
+			rewrite: "commit the file first, then change it with Edit",
 		})
 
 	case "truncate":

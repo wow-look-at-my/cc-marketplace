@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // A language server, not a hook: diagnostics arrive in context on their own
@@ -87,7 +89,7 @@ const (
 // A preprocessor's nesting changes what a duplicate body MEANS (`&:hover`
 // under two parents is not a repeated rule), so this parser only claims plain
 // CSS.
-var stylesheetExts = map[string]bool{".css": true}
+var stylesheetExts = set.Of[string](".css")
 
 // Serve runs the stdio JSON-RPC loop until the stream ends or `exit` arrives.
 func (s *Server) Serve(in io.Reader) error {
@@ -335,7 +337,7 @@ func isStylesheet(uri string) bool {
 	if u, err := url.Parse(uri); err == nil && u.Scheme == "file" {
 		path = u.Path
 	}
-	return stylesheetExts[strings.ToLower(filepath.Ext(path))]
+	return stylesheetExts.Contains(strings.ToLower(filepath.Ext(path)))
 }
 
 func (s *Server) notify(method string, params any) {

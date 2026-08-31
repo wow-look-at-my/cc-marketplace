@@ -1,10 +1,18 @@
-// no-work-loss: a PreToolUse hook that refuses Bash commands which would
-// destroy content that exists only in the working tree.
+// no-work-loss: a PreToolUse hook that refuses the two ways a session loses
+// authorship of the working tree.
 //
-// The invariant: a modified-but-uncommitted or untracked file is in no git
-// object, so losing it is unrecoverable. Committed work is reachable from the
-// reflog and is deliberately NOT protected here.
-// see docs/decision-model.md
+//   - Destruction: a command that would destroy content existing only in the
+//     working tree. A modified-but-uncommitted or untracked file is in no git
+//     object, so losing it is unrecoverable; committed work is reachable from
+//     the reflog and is deliberately NOT protected.
+//   - Provenance: a change to file content that does not go through Write, Edit
+//     or NotebookEdit. Bash runs things -- git, builds, tests, validation,
+//     search -- and does not author files.
+//
+// Both questions are asked of the same parsed command, which is why they live in
+// one plugin: the shell walk, the wrapper stripping and the path resolution are
+// the same machinery, and two copies of it would drift.
+// see docs/decision-model.md and docs/write-routes.md
 package main
 
 import (
@@ -14,14 +22,10 @@ import (
 )
 
 type hookInput struct {
-	HookEventName string    `json:"hook_event_name"`
-	ToolName      string    `json:"tool_name"`
-	Cwd           string    `json:"cwd"`
-	ToolInput     toolInput `json:"tool_input"`
-}
-
-type toolInput struct {
-	Command string `json:"command"`
+	HookEventName string          `json:"hook_event_name"`
+	ToolName      string          `json:"tool_name"`
+	Cwd           string          `json:"cwd"`
+	ToolInput     json.RawMessage `json:"tool_input"`
 }
 
 // The CLI rejects a payload whose hookEventName is not the event it
@@ -37,6 +41,9 @@ type preToolUseResponse struct {
 func main() {
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
+		// Reading the payload failed, so nothing is known about the call. This is
+		// the one place neither half can fail closed: with no payload there is no
+		// decision to emit and no reason to attach to it.
 		return
 	}
 	if reason := decide(raw); reason != "" {
@@ -44,34 +51,18 @@ func main() {
 	}
 }
 
-// decide returns the denial reason, or "" to stay out of the way. Split from
-// main so the tests drive the real entry path rather than a rewritten copy.
-func decide(raw []byte) string {
-	var in hookInput
-	if json.Unmarshal(raw, &in) != nil {
-		return ""
-	}
-	if in.HookEventName != "PreToolUse" || in.ToolName != "Bash" {
-		return ""
-	}
-	command := in.ToolInput.Command
-	if command == "" {
-		return ""
-	}
-	// Cheap byte scan first: the overwhelming majority of Bash calls name no
-	// verb that can delete anything, and those must not pay for a parse or a
+// evaluateLoss runs the destruction analysis under a recover. This half fails
+// OPEN on a panic unless the command names a destructive verb, because a bug
+// while checking `ls` must not wedge a session -- the opposite posture from
+// evaluateWrites, and deliberately so: one half refuses what it cannot verify,
+// the other only refuses what it can see is dangerous.
+func evaluateLoss(command, cwd string) (reason string) {
+	// Cheap byte scan first: the overwhelming majority of Bash calls name no verb
+	// that can delete anything, and those must not pay for a parse or a
 	// subprocess.
-	if !mayDestroy(command) {
+	if command == "" || !mayDestroy(command) {
 		return ""
 	}
-	return evaluate(command, in.Cwd)
-}
-
-// evaluate runs the real analysis under a recover, because this hook's whole
-// purpose is defeated if a panic inside it lets a destructive command through.
-// A crash on a command that names a destructive verb denies; anything else
-// stays open so a bug here cannot brick a session.
-func evaluate(command, cwd string) (reason string) {
 	defer func() {
 		if r := recover(); r != nil {
 			reason = ""

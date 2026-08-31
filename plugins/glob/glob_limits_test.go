@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,13 +43,12 @@ func TestRealCapTruncationAndPersistence(t *testing.T) {
 
 	assert.Equal(t, globTruncationLine, lines[len(lines)-1])
 
-	seen := make(map[string]bool, globMaxResults)
+	seen := set.New[string]()
 	for _, l := range lines[:globMaxResults] {
 		require.False(t, !strings.HasPrefix(l, "f") || !strings.HasSuffix(l, ".txt"))
 
-		require.False(t, seen[l])
-
-		seen[l] = true
+		require.False(t, seen.Contains(l))
+		seen.Add(l)
 	}
 }
 

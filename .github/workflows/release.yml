@@ -101,8 +101,6 @@ jobs:
         id: hash
         run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod') }}" >> $GITHUB_OUTPUT
 
-      - uses: ./.github/actions/setup-marketplace-build
-
       # see docs/ci-yaml-notes.md#release-build-binary-format-and-action-pin
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
@@ -112,6 +110,8 @@ jobs:
           targets: cosmo
           # autorelease defaults true (needs deployments/artifact-metadata write) but plugins publish via orphan tag, not buildhost -- keep it false.
           autorelease: 'false'
+
+      - uses: ./.github/actions/setup-marketplace-build
 
       - name: Build
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
