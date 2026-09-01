@@ -3,16 +3,22 @@
 Rationale the workflow files point at, kept here so a `.yml` stays readable.
 Each heading is the anchor a `# see docs/ci-yaml-notes.md#...` comment names.
 
-## plugin-e2e-workflow-rationale
+## plugin-e2e-jobs
 
-`plugin-e2e.yml` drives a real `claude` process with a plugin loaded. The Go
+The `e2e-*` jobs drive a real `claude` process with a plugin loaded. The Go
 and bash unit suites assert what a hook or a server DOES with a given input;
 they cannot assert that Claude Code registers it, spawns it, and uses its
-answer. Every defect this workflow has caught lived in that gap: a malformed
+answer. Every defect these jobs have caught lived in that gap: a malformed
 JSON-RPC response only vscode-jsonrpc rejects, and a binary format only a real
 `execve()` refuses.
 
 One job per plugin whose contract is with the client, not with its own input.
+
+They live in `release.yml` rather than a workflow of their own. Both triggered
+on the same push, so a second workflow bought nothing but a second checkout, a
+second required-check surface, and two places to keep the go-toolchain ref in
+step. Nothing needs them: they carry no `needs:`, so they start immediately and
+do not gate publishing, exactly as they did as a separate workflow.
 
 ## css-duplication-lsp-job
 
