@@ -38,7 +38,7 @@ hook or a server, which no model tier changes, and each runs on every push.
 
 ## go-toolchain-permission-grants
 
-`wow-look-at-my/go-toolchain@master` needs four grants, and fails without them:
+`wow-look-at-my/go-toolchain@lkgb` needs four grants, and fails without them:
 
 - `id-token: write` — OIDC, for secret-server and buildhost.
 - `contents: write` — it submits a dependency-graph snapshot; GitHub rejects
@@ -67,9 +67,9 @@ fails naming the missing file rather than letting a later step discover it.
 
 `targets: cosmo` is not a size optimization: the fat APE is the only native
 output the action still emits, since the host-native build path was removed
-from go-toolchain. The ref is `@master`: the `v1` branch every workflow used to
-name no longer exists in that repository, and `@master` is what its own README
-documents. One file covers Linux, macOS and Windows, and
+from go-toolchain. The ref is `@lkgb`, that repository's last-known-good-build
+tag: the `v1` branch every workflow used to name no longer exists there, and
+`@master` would move under every run. One file covers Linux, macOS and Windows, and
 `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the
 shipping layout — the APE plus the launcher every manifest already points at.
 
