@@ -145,7 +145,7 @@ prebuild:
 
 The marketplace builder runs in this order:
 
-1. **go-toolchain** (CI runs `wow-look-at-my/go-toolchain@latest` action if any `.go` files are found — builds cross-platform binaries for linux/darwin × amd64/arm64)
+1. **go-toolchain** (CI runs the `wow-look-at-my/go-toolchain@master` action if any `.go` files are found — builds cross-platform binaries for linux/darwin × amd64/arm64)
 2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
