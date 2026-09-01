@@ -45,8 +45,9 @@
 # its permissionDecisionReason (without it the model would retry heredocs
 # forever) but carries no systemMessage either.
 #
-# Operator tokens in shfmt's typed JSON are version-dependent numbers, so
-# they are probed at runtime from the same shfmt binary (see $probe below).
+# Operator tokens in shfmt's typed JSON are version-dependent (numbers before
+# 3.14, strings from 3.14 on), so they are probed at runtime from the same
+# shfmt binary (see $probe below).
 #
 # If the command needs rewriting, emits hookSpecificOutput JSON carrying
 # updatedInput on stdout and exits 0. The output deliberately carries NO
@@ -94,7 +95,10 @@ ops=$(printf '%s' "$probe" | jq -c '{
 	hdoc: .Stmts[7].Redirs[0].Op,
 	dashhdoc: .Stmts[8].Redirs[0].Op
 }' 2>&1) || exit 0
-printf '%s' "$ops" | jq -e 'all(.[]; type == "number")' >/dev/null 2>&1 || exit 0
+# shfmt < 3.14 emits operator tokens as numbers; 3.14 emits them as strings
+# ("|", "<<", ...). The transform only ever compares a node's Op against the
+# probed value, so either representation works as long as every probe landed.
+printf '%s' "$ops" | jq -e 'all(.[]; (type == "number") or (type == "string" and length > 0))' >/dev/null 2>&1 || exit 0
 
 # Parse the command; anything that is not valid bash fails open.
 ast=$(printf '%s' "$cmd" | shfmt --to-json 2>&1) || exit 0
