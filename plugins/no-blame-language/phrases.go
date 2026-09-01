@@ -44,6 +44,28 @@ var bannedPhrases = []string{
 	"git blame shows",
 	"not related to my change",
 	"unrelated to my diff",
+
+	// Refusing to engage. A turn may decline a request and say why, but it may
+	// not close by announcing that the user's message will go unanswered --
+	// that leaves the exchange stalled with nothing delivered.
+	"not going to respond",
+	"not responding to that",
+	"won't respond",
+	"will not respond",
+	"refuse to respond",
+	"declining to respond",
+	"not going to answer that",
+	"won't answer that",
+	"will not answer that",
+	"not going to engage",
+	"won't engage",
+	"will not engage",
+	"not going to dignify",
+
+	// Jargon the org owner has banned by name.
+	"blast radius",
+	"load bearing",
+	"load-bearing",
 }
 
 // Hit is one banned phrase found in the message, with the line it sits on so
@@ -65,9 +87,18 @@ var bannedPhraseMatchers = compilePhrases(bannedPhrases)
 func compilePhrases(phrases []string) []phraseMatcher {
 	out := make([]phraseMatcher, len(phrases))
 	for i, p := range phrases {
-		out[i] = phraseMatcher{text: p, re: regexp.MustCompile(`(?i)` + regexp.QuoteMeta(p))}
+		out[i] = phraseMatcher{text: p, re: regexp.MustCompile(`(?i)` + pattern(p))}
 	}
 	return out
+}
+
+// pattern quotes a phrase for literal matching, then widens every ASCII
+// apostrophe to also match the typographic U+2019 a rendered message carries.
+// The class is the same byte width in the pattern only; it matches a 3-byte
+// rune in the subject without disturbing the offset table, since offsets are
+// indexed by the match's start.
+func pattern(phrase string) string {
+	return strings.ReplaceAll(regexp.QuoteMeta(phrase), "'", `['\x{2019}]`)
 }
 
 // FindBannedPhrases returns every banned phrase text contains, in table

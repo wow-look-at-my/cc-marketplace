@@ -9,6 +9,9 @@
 	<test cmd="git status &amp;&amp; gh run view 123" expect="deny"/>
 	<test cmd="git status &amp;&amp; git diff &amp;&amp; git log" expect="allow"/>
 	<test cmd="git status; git diff" expect="allow"/>
+	<!-- The shape cleanup-bash-cmds actually hands this hook: pipefail
+	     prepended, the narration echo collapsed to `:`. -->
+	<test cmd="set -o pipefail; gh repo list wow-look-at-my --limit 200 --json name,url,isPrivate | grep -i ffs; :; gh search repos ffs --owner wow-look-at-my --limit 100 --json fullName,url" expect="allow"/>
 	<test cmd="cd some/folder &amp;&amp; git diff Config/DefaultEngine.ini" expect="allow"/>
 	<test cmd="git log $(echo test)" expect=""/>
 	<test cmd="git log | python" expect="deny"/>
@@ -155,6 +158,22 @@
 	<rule name="printf" allowedFlags="*"/>
 	<rule name="true" allowedFlags="*"/>
 	<rule name="false" allowedFlags="*"/>
+
+	<!-- Shell builtins that arrive from cleanup-bash-cmds rather than from the
+	     model: it prepends `set -o pipefail` to every command and rewrites a
+	     narration echo to `:`. A verdict is "allow" only when EVERY statement
+	     clears, so an injected statement with no rule sends the whole command
+	     to the permission prompt. Neither builtin can run a program. -->
+	<rule name="set" allowedFlags="*">
+		<test cmd="set -o pipefail" expect="allow"/>
+		<test cmd="set -euo pipefail" expect="allow"/>
+		<test cmd="set -o pipefail; ls" expect="allow"/>
+		<test cmd="set -o pipefail; python --version" expect="deny"/>
+	</rule>
+	<rule name=":" allowedFlags="*">
+		<test cmd=":" expect="allow"/>
+		<test cmd="set -o pipefail; ls | grep -i ffs; :; git status" expect="allow"/>
+	</rule>
 	<rule name="test" allowedFlags="*"/>
 	<rule name="[" allowedFlags="*"/>
 	<rule name="date" allowedFlags="*"/>
@@ -496,6 +515,17 @@
 		<rule name="api">
 			<test cmd="gh api /repos/owner/repo" expect="allow"/>
 			<test cmd="gh api -X POST /repos/owner/repo" expect=""/>
+			<test cmd="gh api repos/o/r/actions/jobs/123/logs" expect="deny"/>
+			<test cmd="gh api repos/o/r/actions/runs/123/logs" expect="deny"/>
+			<test cmd="gh api --allow-escape-sequences repos/o/r/actions/jobs/1/logs" expect="deny"/>
+			<test cmd="gh api repos/o/r/actions/runs/123/jobs" expect="allow"/>
+			<!-- The logs endpoint is how the `gh run view` deny above gets
+			     walked around: same bytes, no rule, and reaching for it comes
+			     packaged with a hand-rolled sleep-and-poll loop around it.
+			     `gh wait-ci` waits and reports the failing jobs in one call. -->
+			<denyArgPatterns>
+				<pattern substring="/logs" message="Use 'gh wait-ci' -- it waits for CI and reports which jobs failed. Do not read logs through the raw API, and do not build a polling loop around it"/>
+			</denyArgPatterns>
 			<requireFlagValue default="GET">
 				<flag name="-X" />
 				<flag name="--method" />

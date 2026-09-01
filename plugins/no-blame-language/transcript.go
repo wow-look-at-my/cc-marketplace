@@ -9,6 +9,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"strings"
 )
@@ -84,12 +85,22 @@ func readTail(path string) ([][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Skip to the window by READING, not seeking. The cosmopolitan runtime
+	// this binary ships under implements neither Seek nor ReadAt on a file --
+	// both fail with "function not implemented" -- so positional I/O here
+	// returns nothing at runtime however well it tests natively.
 	offset := int64(0)
 	if st.Size() > transcriptTailBytes {
 		offset = st.Size() - transcriptTailBytes
+		if _, err := io.CopyN(io.Discard, f, offset); err != nil {
+			return nil, err
+		}
 	}
-	buf := make([]byte, st.Size()-offset)
-	if _, err := f.ReadAt(buf, offset); err != nil && len(buf) == 0 {
+	// Read to EOF and surface any failure. Ignoring a short read hands the
+	// caller zero bytes that parse as an empty transcript, which allows every
+	// stop without ever saying it failed.
+	buf, err := io.ReadAll(f)
+	if err != nil {
 		return nil, err
 	}
 

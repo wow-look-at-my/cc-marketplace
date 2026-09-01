@@ -49,8 +49,18 @@ type CommandNode struct {
 	HelpAlwaysAllowed  bool             `json:"helpAlwaysAllowed,omitempty"`
 	BareOnly           bool             `json:"bareOnly,omitempty"`
 	DenyArgSubstrings  []string         `json:"denyArgSubstrings,omitempty"`
+	DenyArgPatterns    []DenyArgPattern `json:"denyArgPatterns,omitempty"`
 	AllowedArgPrefixes []string         `json:"allowedArgPrefixes,omitempty"`
 	Subcommands        []CommandNode    `json:"subcommands,omitempty"`
+}
+
+// DenyArgPattern denies a node whose argument carries Substring, and says what
+// to run instead. denyArgSubstrings only UNMATCHES, which sends the command to
+// the permission prompt -- fine for a dangerous awk body, useless for a command
+// with a correct spelling to point at.
+type DenyArgPattern struct {
+	Substring string `json:"substring"`
+	Message   string `json:"message"`
 }
 
 type RequireFlagRule struct {
@@ -243,6 +253,16 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 
 	if node.DenyWithMessage != "" {
 		return "deny", node.DenyWithMessage
+	}
+
+	// A denied pattern names the command to run instead, so it denies outright
+	// rather than unmatching into a prompt the operator would just approve.
+	for _, pattern := range node.DenyArgPatterns {
+		for _, arg := range args {
+			if strings.Contains(arg, pattern.Substring) {
+				return "deny", pattern.Message
+			}
+		}
 	}
 
 	// A denied substring unmatches the node: in a script argument (awk, sed)

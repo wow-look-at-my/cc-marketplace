@@ -56,6 +56,58 @@ func TestOrdinaryProseIsNotAHit(t *testing.T) {
 	}
 }
 
+// The sentences that prompted the refusal entries, in the spellings a closing
+// message actually uses.
+func TestRefusingToEngageIsAHit(t *testing.T) {
+	cases := map[string]string{
+		"I'm not going to respond to that one.":         "not going to respond",
+		"I won't respond to that.":                      "won't respond",
+		"I will not engage with that.":                  "will not engage",
+		"Not responding to that; moving on.":            "not responding to that",
+		"I am declining to respond to the last line.":   "declining to respond",
+		"That is not going to dignify a reply from me.": "not going to dignify",
+	}
+	for text, phrase := range cases {
+		hits := FindBannedPhrases(text)
+		require.NotEmpty(t, hits, "expected a hit for %q", text)
+		assert.Contains(t, phraseTexts(hits), phrase, "for %q", text)
+	}
+}
+
+// A rendered message may carry U+2019 rather than an ASCII apostrophe. The
+// table is ASCII, so the matcher has to widen it.
+func TestATypographicApostropheStillMatches(t *testing.T) {
+	hits := FindBannedPhrases("I won\u2019t respond to that.")
+	assert.Contains(t, phraseTexts(hits), "won't respond")
+}
+
+func TestBannedJargonIsAHit(t *testing.T) {
+	cases := map[string]string{
+		"Check the blast radius before merging.":    "blast radius",
+		"That check is load-bearing for the guard.": "load-bearing",
+		"The spacing is load bearing here.":         "load bearing",
+	}
+	for text, phrase := range cases {
+		hits := FindBannedPhrases(text)
+		require.NotEmpty(t, hits, "expected a hit for %q", text)
+		assert.Contains(t, phraseTexts(hits), phrase, "for %q", text)
+	}
+}
+
+// Declining a request and saying why is allowed; announcing that the user gets
+// no answer is not. These are the near-misses that must stay clean.
+func TestAnHonestDeclineIsNotAHit(t *testing.T) {
+	cases := []string{
+		"I can't run that here without a credential; here is the command to run yourself.",
+		"That would delete uncommitted work, so I stopped and am asking first.",
+		"The bearing walls of the design are the two hooks described above.",
+		"The radius of the search was the whole repo.",
+	}
+	for _, text := range cases {
+		assert.Empty(t, FindBannedPhrases(text), "expected no hit for %q", text)
+	}
+}
+
 func TestAFixedAndOwnedFindingIsNotAHit(t *testing.T) {
 	text := "Found a bug in the retry loop and fixed it in this same change. " +
 		"Tests pass and the suite is green."
