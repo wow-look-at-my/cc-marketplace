@@ -22,11 +22,12 @@ duplicated declaration block. The assertion step requires six lines in that log
 (config loaded, process started, handshake finished, diagnostics published,
 registered, delivered) and refuses two (a failed stop, a crash).
 
-Cooking is load-bearing. `marketplace-build release-plugin` stages the file
-`.lsp.json` names at `build/<name>`. Claude Code `execve()`s that path, so a job
-that skips the cook and points the manifest at a raw build output gets
-`undefined is not an object (evaluating 'this.#handle')` and no server at all.
-Driving the cooked tree is also what makes this job test the package that ships.
+Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh`
+launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside
+it. Claude Code `execve()`s that path directly, and an APE is neither ELF nor a
+`#!` script, so pointing the manifest at the raw APE fails with `undefined is
+not an object (evaluating 'this.#handle')` and no server at all. Driving the
+cooked tree is also what makes this job test the package that ships.
 
 The prompt asks for a read-back after the edit: diagnostics drain into an
 attachment on the NEXT turn, so a prompt that ends at the edit can finish
@@ -56,33 +57,19 @@ calling job was granted. `setup-marketplace-build` runs `go-toolchain` when its
 cache misses, so every job that uses it carries the four grants above even when
 its own steps need none of them.
 
-## one-go-toolchain-action-call-per-job
+## marketplace-build-cache-miss
 
-`wow-look-at-my/go-toolchain@v1` ends by handing its build outputs to a cache
-entry keyed on the run and the job name. Two calls in one job therefore write
-the same key, and the second gets `(409) Conflict: cache entry with the same
-key, version, and scope already exists`, which fails the action and every step
-after it.
-
-Two jobs legitimately need a plugin built AND `marketplace-build` built. They
-call the action once, for the plugin, and pass
-`go-toolchain-installed: 'true'` to `setup-marketplace-build`, which then runs
-the `go-toolchain` CLI that first call left on `PATH`. Order matters: the
-action call has to come first, and that step must pass
-`GITHUB_TOKEN: ${{ github.token }}` itself — the CLI requires it and the action
-is what normally supplies it.
-
-Both halves of this only ever run on a `marketplace-build` cache miss, so a
-stale cache entry hides a break here for months. The install step is the
-backstop: it fails naming the missing file rather than letting a later step
-discover it.
+`setup-marketplace-build` builds only when its cache misses, so a warm entry
+hides a break in that path for months. The install step is the backstop: it
+fails naming the missing file rather than letting a later step discover it.
 
 ## release-build-binary-format-and-action-pin
 
-`targets: cosmo` is not a size optimization: it is the only native output the
-pinned action still emits, since the host-native build path was removed from
-`v1`. One file covers Linux, macOS and Windows, and `stageBinaries`
-(`tools/marketplace-build/ape_package.go`) turns it into the shipping layout.
+`targets: cosmo` is not a size optimization: the fat APE is the only native
+output the pinned action still emits, since the host-native build path was
+removed from `v1`. One file covers Linux, macOS and Windows, and
+`stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the
+shipping layout — the APE plus the launcher every manifest already points at.
 
 `autorelease: 'false'` because plugins publish as git orphan tags, not to
 buildhost; leaving it on would demand `deployments`/`artifact-metadata` write
