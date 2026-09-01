@@ -184,11 +184,14 @@ jobs:
           BUILD_PLUGINS: ${{ needs.prepare.outputs.build_plugins }}
         run: |
           set -euo pipefail
+          # .cjs outside the workspace: the bundle is CommonJS and this repo's package.json says "type": "module", which makes node read a .js under it as ESM.
+          bundle="$RUNNER_TEMP/cache-download.cjs"
+          cp "$GITHUB_WORKSPACE/.cache-download/dist/index.js" "$bundle"
           [ -n "$BUILD_PLUGINS" ] || BUILD_PLUGINS='[]'
           for plugin in $(echo "$BUILD_PLUGINS" | jq -r '.[]'); do
             INPUT_NAME="packaged-$plugin" \
             INPUT_PATH="/tmp/all-plugin-artifacts/packaged-$plugin" \
-              node "$GITHUB_WORKSPACE/.cache-download/dist/index.js"
+              node "$bundle"
           done
 
       - name: Prepare combined input

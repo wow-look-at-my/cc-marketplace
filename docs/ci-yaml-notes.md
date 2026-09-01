@@ -96,6 +96,11 @@ public) and runs its bundle once per plugin, passing `name` and `path` as the
 `INPUT_*` variables the runner would set. It is the same code the `uses:` form
 runs, driven by a loop.
 
+The bundle is copied to a `.cjs` file under `RUNNER_TEMP` before it runs. It is
+CommonJS, and `actions/checkout` can only place it inside the workspace, where
+this repo's `package.json` (`"type": "module"`) makes node read a `.js` as ESM
+and fail with `exports is not defined in ES module scope`.
+
 Do not replace the loop with a fixed set of download steps. The plugin list is
 whatever `prepare-matrix` finds, and a hard-coded list silently drops a plugin
 added later — the exact failure the section below describes.
