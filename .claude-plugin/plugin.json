@@ -1,0 +1,30 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Refuses a write that states a count in a markdown document -- 'this repo's 15 plugins', 'the four rules below'. A count is true until somebody adds an item, and nothing corrects it when they do",
+	"hooks": {
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-counts-in-docs",
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			}
+		]
+	},
+	"keywords": [
+		"markdown",
+		"docs",
+		"counts",
+		"staleness",
+		"pretooluse",
+		"hook",
+		"enforcement"
+	],
+	"name": "no-counts-in-docs",
+	"version": "1203"
+}
