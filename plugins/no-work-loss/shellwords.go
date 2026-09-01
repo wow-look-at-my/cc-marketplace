@@ -152,6 +152,20 @@ func isShell(name string) bool {
 	return false
 }
 
+// isInstalledPluginScript reports whether path sits inside a Claude Code
+// plugin installation (a `.claude/plugins/` directory in its resolved path).
+// Such a script is the harness's own pre-vetted infrastructure, versioned and
+// installed outside any project the model can edit, so its internal write
+// routes are not the "did this content get here through an edit tool"
+// question this walk exists to answer.
+func isInstalledPluginScript(path string) bool {
+	if path == "" {
+		return false
+	}
+	sep := string(filepath.Separator)
+	return strings.Contains(path, sep+".claude"+sep+"plugins"+sep)
+}
+
 func hasShellShebang(path string) bool {
 	if path == "" {
 		return false

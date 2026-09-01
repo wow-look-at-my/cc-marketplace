@@ -266,10 +266,22 @@ func (w *walker) expand(name string, eff []word, cwd string) bool {
 		return false
 	}
 	// `./deploy.sh` names a file rather than a program on PATH. When its shebang
-	// says shell, its text is readable and gets the same treatment.
-	if strings.Contains(eff[0].text, "/") && eff[0].static && hasShellShebang(abs(cwd, eff[0].text)) {
-		w.scriptFile(eff[0], cwd)
-		return true
+	// says shell, its text is readable and gets the same treatment -- except for
+	// an installed Claude Code plugin script, which this walk treats as an
+	// opaque trusted program instead. Those scripts are pre-vetted, versioned,
+	// harness-invoked infrastructure, not content the model authored, and one of
+	// them can legitimately contain a debug-log write behind a guard this
+	// dataflow-free walk cannot see through (an env-var-gated `>>"$path"`), which
+	// would otherwise deny on an ambiguous target every time the script runs.
+	if strings.Contains(eff[0].text, "/") && eff[0].static {
+		p := abs(cwd, eff[0].text)
+		if isInstalledPluginScript(p) {
+			return false
+		}
+		if hasShellShebang(p) {
+			w.scriptFile(eff[0], cwd)
+			return true
+		}
 	}
 	return false
 }

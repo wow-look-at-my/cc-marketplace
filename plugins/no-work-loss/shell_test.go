@@ -81,6 +81,39 @@ func TestCdDashIsUnknowable(t *testing.T) {
 	assert.Contains(t, r, "cannot tell")
 }
 
+// An installed Claude Code plugin script is pre-vetted harness infrastructure,
+// not content the model authored, so running one directly is allowed even
+// when its source contains a write this walk cannot statically resolve --
+// mirroring cleanup-bash-cmds/hook.sh's own env-var-gated debug log
+// (`local path=${LOG:-}; [ -n "$path" ] || return 0; ... >>"$path"`), which
+// used to deny every direct invocation of that hook.
+func TestInstalledPluginScriptIsNotFollowed(t *testing.T) {
+	dir := newRepo(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	script := filepath.Join(home, ".claude", "plugins", "marketplaces", "m", "some-plugin", "hook.sh")
+	writeFile(t, script, guardedLogScript)
+
+	assert.Empty(t, ask(t, dir, script), "an installed plugin script's own internal writes are not this hook's business")
+
+	// The same script shape OUTSIDE a .claude/plugins tree is still followed
+	// and still denies -- the exemption is scoped to installed plugins, not a
+	// blanket pass for "a guarded write to a variable path".
+	other := filepath.Join(home, "scripts", "hook.sh")
+	writeFile(t, other, guardedLogScript)
+	assert.NotEmpty(t, ask(t, dir, other), "the same script outside .claude/plugins is still analysed")
+}
+
+const guardedLogScript = `#!/usr/bin/env bash
+set -euo pipefail
+log() {
+	local path=${SOME_LOG:-}
+	[ -n "$path" ] || return 0
+	printf 'x\n' >>"$path"
+}
+log
+`
+
 // newRepoAt builds a second, clean repository without re-pointing HOME, so a
 // test can hold two repositories at once.
 func newRepoAt(t *testing.T) string {
