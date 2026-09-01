@@ -77,6 +77,23 @@ shipping layout — the APE plus the launcher every manifest already points at.
 buildhost; leaving it on would demand `deployments`/`artifact-metadata` write
 for an upload nothing consumes.
 
+## plugin-tree-hand-off
+
+Each cooked tree travels from its `build` matrix leg to `publish-marketplace`
+inside the same run, which is what `wow-look-at-my/actions@cache-upload#latest`
+is for — GitHub bills artifact storage and does not bill cache storage. The
+consumer side has one wrinkle. `cache-download` restores a SINGLE named
+hand-off; it has no `pattern:` like `actions/download-artifact`, and a workflow
+cannot repeat a `uses:` step over a list whose length is decided at runtime by
+`prepare`. So `publish-marketplace` checks the action out (its repository is
+public) and runs its bundle once per plugin, passing `name` and `path` as the
+`INPUT_*` variables the runner would set. It is the same code the `uses:` form
+runs, driven by a loop.
+
+Do not replace the loop with a fixed set of download steps. The plugin list is
+whatever `prepare-matrix` finds, and a hard-coded list silently drops a plugin
+added later — the exact failure the section below describes.
+
 ## marketplace-json-replacement-and-a-stale-cache-key
 
 `update-marketplace` writes `marketplace.json` from the cooked trees it is

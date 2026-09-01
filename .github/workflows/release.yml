@@ -144,12 +144,12 @@ jobs:
           rm -rf "/tmp/packaged-${{ matrix.plugin }}"
           cp -r "${{ steps.release.outputs.source_dir }}" "/tmp/packaged-${{ matrix.plugin }}"
 
-      - name: Upload plugin artifact
-        uses: actions/upload-artifact@v4
+      # Cache hand-off, not an artifact: this tree only travels to publish-marketplace in the same run, and artifact storage is billed where cache storage is not.
+      - name: Hand off the cooked tree
+        uses: wow-look-at-my/actions@cache-upload#latest
         with:
           name: packaged-${{ matrix.plugin }}
           path: /tmp/packaged-${{ matrix.plugin }}
-          retention-days: 1
 
       - name: Save plugin cache
         uses: actions/cache/save@v6
@@ -177,11 +177,25 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
-      - name: Download all plugin artifacts
-        uses: actions/download-artifact@v4
+      # see docs/ci-yaml-notes.md#plugin-tree-hand-off
+      - name: Check out the cache-download action
+        uses: actions/checkout@v7
         with:
-          pattern: packaged-*
-          path: /tmp/all-plugin-artifacts
+          repository: wow-look-at-my/actions
+          ref: cache-download#latest
+          path: .cache-download
+
+      - name: Restore every cooked tree
+        env:
+          BUILD_PLUGINS: ${{ needs.prepare.outputs.build_plugins }}
+        run: |
+          set -euo pipefail
+          [ -n "$BUILD_PLUGINS" ] || BUILD_PLUGINS='[]'
+          for plugin in $(echo "$BUILD_PLUGINS" | jq -r '.[]'); do
+            INPUT_NAME="packaged-$plugin" \
+            INPUT_PATH="/tmp/all-plugin-artifacts/packaged-$plugin" \
+              node "$GITHUB_WORKSPACE/.cache-download/dist/index.js"
+          done
 
       - name: Prepare combined input
         env:
