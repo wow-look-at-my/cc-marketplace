@@ -224,6 +224,43 @@ func TestExternalConstantsAreNeverCandidates(t *testing.T) {
 	}
 }
 
+// The compiled matcher replaced a pattern, so the pattern is the oracle: the
+// generated switch plus the Go tokenizer must pick out exactly the words
+// `regexp` did. Keeping the regex here and nowhere else is the point -- it
+// proves the swap rather than describing it.
+func TestTheCompiledShapeMatcherAgreesWithThePatternItReplaced(t *testing.T) {
+	oracle := regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b|\b[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*\b`)
+
+	corpus := []string{
+		"see TestDarwinStatfsToLinux for the pin",
+		"returns ENOSYS unless RLIMIT_CORE and SYS_STATFS agree",
+		"darwin_mnt_flags and syscall6SlowDarwin and plain words here",
+		"_leading and trailing_ and __dunder__ and a1B2c3",
+		"CamelCase lowerCamel snake_case SCREAMING_CASE mixed_Snake_Case",
+		"punctuation:separated;names,like/this.and(that)",
+		"", "   ", "x", "ab_cd", "URLParser", "parseURL", "a", "9lives",
+		"unicode é and ünïcodeName next to asciiName",
+	}
+
+	for _, text := range corpus {
+		var got []string
+		for _, w := range identifierWords(text) {
+			if matchesIdentifierShape(w) {
+				got = append(got, w)
+			}
+		}
+		assert.Equal(t, oracle.FindAllString(text, -1), got,
+			"tokenize+compiled-match must equal the pattern on %q", text)
+	}
+
+	// Whole-string agreement too, which is the call isCandidate actually makes.
+	for _, w := range []string{"TestDarwinStatfsToLinux", "darwin_mnt_flags", "ENOSYS",
+		"statfs", "lowerCamel", "UpperCamelCase", "no", "_x", "a_b", "AB", "aB"} {
+		assert.Equal(t, oracle.FindString(w) == w, matchesIdentifierShape(w),
+			"whole-string verdict must agree on %q", w)
+	}
+}
+
 func TestEveryFailurePathAllowsTheCall(t *testing.T) {
 	cases := map[string]string{
 		"unparseable payload": "{not json",
