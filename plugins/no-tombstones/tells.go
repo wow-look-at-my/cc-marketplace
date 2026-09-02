@@ -12,6 +12,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"regexp"
 	"strings"
 )
@@ -105,7 +106,7 @@ var tells = []tell{
 // reads as true and current. That cap is the one tier no rewording defeats.
 func FindTombstones(blocks []Block, maxLines int) []Hit {
 	var hits []Hit
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	for _, b := range blocks {
 		if maxLines > 0 && b.Lines > maxLines {
 			hits = append(hits, Hit{
@@ -122,10 +123,10 @@ func FindTombstones(blocks []Block, maxLines int) []Hit {
 				}
 				phrase := strings.TrimSpace(line[at[0]:at[1]])
 				key := t.name + "\x00" + strings.ToLower(phrase)
-				if seen[key] {
+				if seen.Contains(key) {
 					continue
 				}
-				seen[key] = true
+				seen.Add(key)
 				hits = append(hits, Hit{Tell: t.name, Phrase: phrase, Line: strings.TrimSpace(line)})
 			}
 		}

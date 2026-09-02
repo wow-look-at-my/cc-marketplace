@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,24 +47,24 @@ func DeadReferents(path, added string, blocks []Block) []string {
 		return nil
 	}
 
-	names := map[string]bool{}
+	names := set.New[string]()
 	for _, b := range blocks {
 		for _, m := range candidate.FindAllString(b.Text, -1) {
 			if len(m) < 8 || m == strings.ToUpper(m) {
 				continue
 			}
-			names[m] = true
+			names.Add(m)
 		}
 	}
-	if len(names) == 0 || len(names) > 40 {
+	if names.Len() == 0 || names.Len() > 40 {
 		return nil // an unbounded set is a comment this rule cannot judge cheaply
 	}
 
 	args := []string{"--no-messages", "--fixed-strings", "--files-with-matches", "--max-count", "1"}
 	var ordered []string
-	for n := range names {
+	for n := range names.All() {
 		if strings.Count(added, n) > 1 {
-			continue // the write itself carries the symbol as well as naming it
+			continue
 		}
 		ordered = append(ordered, n)
 	}

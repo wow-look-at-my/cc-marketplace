@@ -9,6 +9,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,12 +36,12 @@ func Relocate(path string, hits []Hit) string {
 
 	var b strings.Builder
 	b.WriteString("# " + path + "\n")
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	for _, h := range hits {
-		if h.Line == "" || seen[h.Line] {
+		if h.Line == "" || seen.Contains(h.Line) {
 			continue
 		}
-		seen[h.Line] = true
+		seen.Add(h.Line)
 		b.WriteString(h.Line + "\n")
 	}
 	b.WriteString("\n")
