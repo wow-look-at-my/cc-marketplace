@@ -38,7 +38,7 @@ hook or a server, which no model tier changes, and each runs on every push.
 
 ## go-toolchain-permission-grants
 
-`wow-look-at-my/go-toolchain@v1` needs four grants, and fails without them:
+`wow-look-at-my/go-toolchain@master` needs four grants, and fails without them:
 
 - `id-token: write` — OIDC, for secret-server and buildhost.
 - `contents: write` — it submits a dependency-graph snapshot; GitHub rejects
