@@ -99,6 +99,10 @@ can see is dangerous.
 
 **There is no opt-out.** No environment variable, no flag, no settings key. An opt-out is the hole.
 
+**A syntax check is not a run.** Following `bash ./deploy.sh` into the script's text is what stops a one-word bypass, but `-n`/`--noexec` (and an `n` in a
+single-dash cluster) makes the shell parse and stop, so nothing the script names is written. `shellNoExec` short-circuits there, and the test pairs each
+allowed spelling with the same script run WITHOUT `-n`, which still denies.
+
 **Stdin is a program only when nothing else named one.** `echo 'x' | ruby` hands ruby a script the command text does not contain, and denies. `printf
 '{...}' | node hook.ts` hands a NAMED script its input, and the program is right there in the argv -- that is how a hook gets tested with the payload
 it will really receive, and refusing it stopped ordinary work rather than any write. `namesAScript` is the difference. Closing that also closed the

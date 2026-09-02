@@ -27,6 +27,25 @@ func TestDeniesInsideEveryCompoundForm(t *testing.T) {
 	}
 }
 
+// A syntax check never runs the script, so the writes named inside it do not
+// happen. Running the same script without -n still denies, which is what makes
+// the allow a property of -n rather than of the fixture.
+func TestSyntaxCheckDoesNotRunTheScript(t *testing.T) {
+	dir := newRepo(t)
+	modify(t, dir)
+	writeAt(t, dir, "deploy.sh", "#!/bin/bash\necho hi > src.txt\n")
+
+	for _, c := range []string{
+		"bash -n deploy.sh",
+		"bash --noexec deploy.sh",
+		"bash -nx deploy.sh",
+		"sh -n deploy.sh",
+	} {
+		assert.Empty(t, ask(t, dir, c), "expected ALLOW for %q", c)
+	}
+	require.NotEmpty(t, ask(t, dir, "bash deploy.sh"), "the same script without -n must still deny")
+}
+
 func TestDeniesThroughMoreWrappers(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)

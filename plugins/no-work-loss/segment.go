@@ -283,6 +283,11 @@ func (w *walker) expand(name string, eff []word, cwd string) bool {
 }
 
 func (w *walker) shellCall(eff []word, cwd string) bool {
+	// `bash -n script.sh` parses and never runs, so nothing it names is written.
+	// Following it anyway denied a syntax check over any script that writes.
+	if shellNoExec(eff) {
+		return true
+	}
 	for i := 1; i < len(eff); i++ {
 		t := eff[i].text
 		if t == "-c" {
@@ -305,6 +310,25 @@ func (w *walker) shellCall(eff []word, cwd string) bool {
 	// A bare `bash` reads its script from stdin, which is not in the text.
 	w.blockers = append(w.blockers, "a shell reading its script from stdin, whose writes cannot be resolved")
 	return true
+}
+
+// shellNoExec reports whether the shell was told to parse without executing:
+// -n, --noexec, or an n inside a single-dash cluster such as -nx. An operand
+// ends the flags, so a script named `-n` cannot masquerade as the flag.
+func shellNoExec(eff []word) bool {
+	for i := 1; i < len(eff); i++ {
+		t := eff[i].text
+		if t == "--noexec" {
+			return true
+		}
+		if t == "-c" || t == "--" || !strings.HasPrefix(t, "-") {
+			return false
+		}
+		if !strings.HasPrefix(t, "--") && strings.ContainsRune(t[1:], 'n') {
+			return true
+		}
+	}
+	return false
 }
 
 // script parses shell source found inside the command and folds its segments
