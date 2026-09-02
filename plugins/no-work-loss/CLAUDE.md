@@ -110,6 +110,8 @@ matching hole in the other direction: `stdinScript` counted pipes and heredocs b
 redirected in did not. `ruby < prog.rb` now denies too, and `node hook.ts < payload.json` stays allowed, because the operand check runs either way.
 The stdin markers are untouched: `cat evil.js | node -` and `node /dev/stdin` still deny.
 
+**`merge` and `pull` are not write routes.** They integrate a named ref's committed history; git refuses rather than overwrite an uncommitted change, and what lands is visible in the merge commit and the PR diff, so none of the provenance this half protects is lost. Denying them refused the one workflow the org's PR rules mandate -- merge the base branch into the PR head and resolve it -- and left no legal way to resolve a conflict at all, since `rebase`, `cherry-pick`, `reset` and `checkout` are all denied too. Measured: a session with a conflicted PR could not reconcile it by any route. The verbs that put genuinely unreviewed content into the tree (`restore`, `stash pop`, `apply`, `checkout`, `reset`, `revert`, `cherry-pick`, `am`, `rebase`) stay denied, and a conflict's resolution still lands through Edit or Write.
+
 **Scope is paths, never commands.** A build directory (`build`, `dist`, `target`, `node_modules`, `.cache`, ...) is writable by whatever writes it;
 anything outside the guarded roots, including the `/tmp` scratchpad, was never in scope. The guarded roots are the repository containing the
 payload's `cwd` and `CLAUDE_PROJECT_DIR`, found by walking up for `.git` rather than paying for a subprocess in front of every Bash call.

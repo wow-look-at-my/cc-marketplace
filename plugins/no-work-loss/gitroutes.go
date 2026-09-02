@@ -16,14 +16,20 @@ import (
 // it.
 
 // worktreeVerbs put committed content into the tree.
+//
+// `merge` and `pull` are deliberately NOT here. They integrate a named ref's
+// committed history, git refuses rather than overwrite an uncommitted change,
+// and the result is visible in the merge commit and the PR diff -- none of the
+// provenance this half exists to protect is lost. Denying them also refused the
+// one workflow the org's PR rules mandate ("merge the base branch into the PR
+// head and resolve it"), leaving no legal way to resolve a conflict at all. A
+// conflict's resolution still lands through Edit or Write.
 var worktreeVerbs = map[string]string{
 	"restore":     "git restore",
 	"stash":       "git stash pop",
 	"revert":      "git revert",
 	"cherry-pick": "git cherry-pick",
-	"merge":       "git merge",
 	"rebase":      "git rebase",
-	"pull":        "git pull",
 	"am":          "git am",
 	"apply":       "git apply",
 	"checkout":    "git checkout",
