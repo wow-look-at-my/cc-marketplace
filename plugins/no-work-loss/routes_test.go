@@ -79,7 +79,6 @@ func routeCases() []routeCase {
 		{route: "git stash pop", deny: "git stash pop", allow: "cd {{out}} && git stash pop", names: "git stash pop"},
 		{route: "git revert", deny: "git revert HEAD", allow: "cd {{out}} && git revert HEAD", names: "git revert"},
 		{route: "git cherry-pick", deny: "git cherry-pick abc123", allow: "cd {{out}} && git cherry-pick abc123", names: "git cherry-pick"},
-		{route: "git merge", deny: "git merge origin/master", allow: "cd {{out}} && git merge origin/master", names: "git merge"},
 		{route: "git reset --hard", deny: "git reset --hard origin/master", allow: "cd {{out}} && git reset --hard origin/master", names: "git reset"},
 
 		// The plumbing route, which never touches the worktree at all.
@@ -232,6 +231,11 @@ func TestOrdinaryCommandsAreUntouched(t *testing.T) {
 		"git checkout -b claude/fix-thing", "git switch -c claude/other", "git stash push -u",
 		"git restore --staged src.txt", "git reset src.txt", "git diff", "git log --oneline -5",
 		"git fetch origin master", "git branch -a", "git clone https://example.com/r.git {{out}}/r",
+
+		// Integrating a ref. The PR rules require merging the base branch into a
+		// PR head, there is no edit tool that performs one, and this hook has no
+		// opt-out -- so denying it wedged the workflow it was meant to protect.
+		"git merge --no-edit origin/master", "git merge FETCH_HEAD", "git pull origin master",
 
 		// Builds, tests and search.
 		"go build ./...", "go test ./...", "npm test", "make build", "just fmt",

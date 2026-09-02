@@ -97,16 +97,24 @@ which is exactly what separates them from `sed -i`. A tool not on the table is n
 example: it is recognised as an in-place rewriter and denied, and the way to run it is a named recipe, which is a reviewable line in the
 repository rather than an argv.
 
-## Two places this collides with ordinary workflow
+## Where this collides with ordinary workflow
 
 Stated plainly rather than carved out, because a carve-out nobody sees is how a guard stops meaning anything:
 
-1. **`git merge` and `git pull` are refused.** Both are on the enumerated list of git-as-an-editor routes, and `pull` is a merge with a fetch in
-   front. But the harness's own instructions tell a session to merge the base branch into a PR head to resolve a conflict, and this rule refuses
-   that. The escape today is that a human runs it. If that trade is wrong, the fix is to move `merge`/`pull` out of `worktreeVerbs` -- not to add
-   a knob.
-2. **`echo x > new-file` is refused**, even though nothing is lost. Creating a file with content in it is exactly what Write is for, so the rule
-   is consistent; it is also the refusal a session meets most often.
+- **`echo x > new-file` is refused**, even though nothing is lost. Creating a file with content in it is exactly what Write is for, so the rule
+  is consistent; it is also the refusal a session meets most often.
+
+## `git merge` and `git pull` integrate, they do not author
+
+Neither is in `worktreeVerbs`, so neither is refused. Every byte a merge writes is already in a commit, with a diff to read and a reflog to
+reach it by -- the same reasoning that lets a bare-ref `git checkout` through. Refusing them made the base-branch merge the PR rules require
+impossible: this half has no opt-out, and no edit tool performs a merge.
+
+`rebase`, `cherry-pick`, `am` and `apply` are not the same act and stay refused. The first two replay commits onto a different base; the last
+two take a patch from outside git. What those land is not a tree anything already holds.
+
+Integrating into a dirty tree is a separate question, and the destruction half answers it: both verbs reach `hazTracked` there and are refused
+with the `git stash push -u` rewrite, so uncommitted work is still protected.
 
 ## What this half deliberately does not cover
 
