@@ -2,7 +2,7 @@
 
 <!-- Vendored file. Do not edit by hand. -->
 > Vendored verbatim from [`docker/docs/content/reference/compose-file/services.md`](https://github.com/docker/docs/blob/ff96ad1711065cf2e9c3f1d701dad04775834f70/content/reference/compose-file/services.md) at commit `ff96ad1711065cf2e9c3f1d701dad04775834f70`.
-> Licensed Apache-2.0. Regenerate with `go run ./tools/vendor-docker-docs`.
+> Licensed Apache-2.0. Regenerate with `npx tsx .github/scripts/vendor-docker-docs/main.ts`.
 
 A service is an abstract definition of a computing resource within an application which can be scaled or replaced
 independently from other components. Services are backed by a set of containers, run by the platform

@@ -2,7 +2,7 @@
 
 <!-- Vendored file. Do not edit by hand. -->
 > Vendored verbatim from [`docker/docs/content/reference/compose-file/interpolation.md`](https://github.com/docker/docs/blob/ff96ad1711065cf2e9c3f1d701dad04775834f70/content/reference/compose-file/interpolation.md) at commit `ff96ad1711065cf2e9c3f1d701dad04775834f70`.
-> Licensed Apache-2.0. Regenerate with `go run ./tools/vendor-docker-docs`.
+> Licensed Apache-2.0. Regenerate with `npx tsx .github/scripts/vendor-docker-docs/main.ts`.
 
 Values in a Compose file can be set by variables and interpolated at runtime. Compose files use a Bash-like
 syntax `${VARIABLE}`. Both `$VARIABLE` and `${VARIABLE}` syntax is supported. 

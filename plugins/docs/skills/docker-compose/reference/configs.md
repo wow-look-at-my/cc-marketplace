@@ -2,7 +2,7 @@
 
 <!-- Vendored file. Do not edit by hand. -->
 > Vendored verbatim from [`docker/docs/content/reference/compose-file/configs.md`](https://github.com/docker/docs/blob/ff96ad1711065cf2e9c3f1d701dad04775834f70/content/reference/compose-file/configs.md) at commit `ff96ad1711065cf2e9c3f1d701dad04775834f70`.
-> Licensed Apache-2.0. Regenerate with `go run ./tools/vendor-docker-docs`.
+> Licensed Apache-2.0. Regenerate with `npx tsx .github/scripts/vendor-docker-docs/main.ts`.
 
 Configs let services adapt their behaviour without the need to rebuild a Docker image. As with volumes, configs are mounted as files into a container's filesystem. The location of the mount point within the container defaults to `/<config-name>` in Linux containers and `C:\<config-name>` in Windows containers. 
 

@@ -2,7 +2,7 @@
 
 <!-- Vendored file. Do not edit by hand. -->
 > Vendored verbatim from [`docker/docs/content/reference/compose-file/networks.md`](https://github.com/docker/docs/blob/ff96ad1711065cf2e9c3f1d701dad04775834f70/content/reference/compose-file/networks.md) at commit `ff96ad1711065cf2e9c3f1d701dad04775834f70`.
-> Licensed Apache-2.0. Regenerate with `go run ./tools/vendor-docker-docs`.
+> Licensed Apache-2.0. Regenerate with `npx tsx .github/scripts/vendor-docker-docs/main.ts`.
 
 Networks let services communicate with each other. By default Compose sets up a single network for your app. Each container for a service joins the default network and is both reachable by other containers on that network, and discoverable by the service's name. The top-level `networks` element lets you configure named networks that can be reused across multiple services. 
 

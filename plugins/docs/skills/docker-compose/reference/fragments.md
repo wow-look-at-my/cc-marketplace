@@ -2,7 +2,7 @@
 
 <!-- Vendored file. Do not edit by hand. -->
 > Vendored verbatim from [`docker/docs/content/reference/compose-file/fragments.md`](https://github.com/docker/docs/blob/ff96ad1711065cf2e9c3f1d701dad04775834f70/content/reference/compose-file/fragments.md) at commit `ff96ad1711065cf2e9c3f1d701dad04775834f70`.
-> Licensed Apache-2.0. Regenerate with `go run ./tools/vendor-docker-docs`.
+> Licensed Apache-2.0. Regenerate with `npx tsx .github/scripts/vendor-docker-docs/main.ts`.
 
 With Compose, you can use built-in [YAML](https://www.yaml.org/spec/1.2/spec.html#id2765878) features to make your Compose file neater and more efficient. Anchors and aliases let you create reusable blocks. This is useful if you start to find common configurations that span multiple services. Having reusable blocks minimizes potential mistakes.
 

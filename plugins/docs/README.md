@@ -24,7 +24,10 @@ The `dockerfile` and `docker-compose` skills each carry a `reference/` directory
 the complete upstream reference verbatim, pinned to the commit named in each file.
 
 Sources are `moby/buildkit` and `docker/docs`, both Apache-2.0; see each directory's
-`NOTICE.md`. Regenerate with `go run ./tools/vendor-docker-docs` — never edit by hand.
+`NOTICE.md`. Never edit them by hand.
+
+CI re-fetches them on every build of this plugin, so a published release always carries
+current text. To refresh locally: `npx tsx .github/scripts/vendor-docker-docs/main.ts`.
 
 ## Hook
 

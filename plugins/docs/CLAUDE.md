@@ -104,11 +104,27 @@ description is the only thing the model sees when deciding whether to pull the s
 The `dockerfile` and `docker-compose` skills each carry a `reference/` directory holding the **complete upstream
 reference, verbatim**: the Dockerfile reference from `moby/buildkit`, and the Compose file reference from
 `docker/docs`. Both are Apache-2.0, and each file's header plus the per-directory `NOTICE.md` records the exact
-commit it was read from. **Do not edit these by hand** -- `tools/vendor-docker-docs` regenerates them and a rerun
-overwrites the edit. That tool resolves each branch to a commit once per run so every file comes from one tree,
+commit it was read from. **Do not edit these by hand** -- `.github/scripts/vendor-docker-docs/` regenerates them
+and a rerun overwrites the edit. It resolves each branch to a commit once per run so every file comes from one tree,
 inlines Hugo `{{% include %}}` partials, rewrites root-relative links to absolute `docs.docker.com` URLs, deletes a
 file the plan no longer produces, and **fails the run on a shortcode it does not recognise** -- upstream adding one
 is exactly the change that must not pass through as either literal Hugo syntax or a silent deletion.
+
+**It runs on every CI build**, from this plugin's `justfile` `prebuild` recipe, so a published release carries
+current text rather than whatever was committed the day someone last ran it by hand. A fetch failure fails the
+build: packaging a silently stale reference is the outcome the whole arrangement exists to avoid. The release
+workflow's Build step passes `GITHUB_TOKEN` for it -- unauthenticated, the GitHub API allows 60 requests an hour
+across the entire plugin matrix, which one build exhausts on its own. The committed copies stay in git so the
+reference is readable and diffable in the repo, and so a `git diff` after a build shows what upstream changed.
+The notice deliberately carries no "last regenerated" date: it would rewrite itself on every build and produce a
+diff even when nothing upstream moved.
+
+TypeScript run by `tsx`, matching `.github/scripts/`'s existing convention rather than the org TypeScript action,
+which governs workflow STEPS -- this is a repo script that `just` and `npm` invoke. `transform.ts` is the pure half
+(frontmatter, includes, shortcodes, links, the notice) and holds the vendoring plan; `github.ts` is the entire
+network surface behind a `Client` interface, so `vendor.test.ts` drives the whole pipeline against a fake and never
+touches the network. Those tests run in CI from the release workflow's `prepare` job, not only from `just test`,
+which nothing in CI invokes.
 
 They are vendored rather than summarized because a paraphrase of a specification is a second source of truth that
 goes stale with nothing to signal it. A `summary-bar` badge becomes a `> Version-gated feature: "..."` line rather
