@@ -2,6 +2,8 @@ name: plugin e2e
 
 on:
   push:
+    # Every branch, but not the plugin/*/v* tags the release workflow pushes.
+    branches: ['**']
 
 permissions:
   id-token: write
@@ -71,7 +73,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build the language server
-        uses: wow-look-at-my/go-toolchain@v1
+        uses: wow-look-at-my/go-toolchain@master
         with:
           working-directory: plugins/css-duplication
           # Same build release.yml makes, because the cook below only stages a fat APE.
