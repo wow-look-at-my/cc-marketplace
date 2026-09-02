@@ -160,8 +160,14 @@ func deny(why string) string {
 func reason(path string, hits []Hit) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "blocked: this write adds a tombstone comment to %s.\n\n", path)
-	for _, h := range hits[:min(len(hits), 6)] {
+	const shown = 6
+	for _, h := range hits[:min(len(hits), shown)] {
 		fmt.Fprintf(&b, "  %s: %q\n      %s\n", h.Tell, h.Phrase, h.Line)
+	}
+	// Say what was not printed. A silent truncation reads as the whole list,
+	// so the next write fixes six findings and is refused again.
+	if len(hits) > shown {
+		fmt.Fprintf(&b, "  ... and %d more, not listed.\n", len(hits)-shown)
 	}
 	if dest := Relocate(path, hits); dest != "" {
 		fmt.Fprintf(&b, "\nThe refused lines are appended to %s. Nothing is lost:\n"+

@@ -64,6 +64,18 @@ func TestEveryWriteShapeIsJudged(t *testing.T) {
 	}
 }
 
+// A truncated list must say it is truncated, or the next write fixes what it
+// was shown and is refused again for what it was not.
+func TestATruncatedFindingListSaysSo(t *testing.T) {
+	var lines []string
+	for i := range 9 {
+		lines = append(lines, "// finding "+itoa(i)+": this used to be a flag, previously")
+	}
+	_, reason := decision(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
+		map[string]any{"file_path": "/repo/a.go", "content": strings.Join(lines, "\n")}))))
+	assert.Contains(t, reason, "more, not listed")
+}
+
 func TestOrdinaryCodeAndCommentsPass(t *testing.T) {
 	src := "// f returns EINVAL when the buffer is smaller than the Apple struct.\nfunc f() {}"
 	out := run(strings.NewReader(payload(t, "PreToolUse", "Write",

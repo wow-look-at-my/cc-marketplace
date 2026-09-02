@@ -47,5 +47,6 @@ Each plugin documents itself in its own directory. Add a new plugin's notes at
 @plugins/no-blame-language/CLAUDE.md
 @plugins/no-busy-poll/CLAUDE.md
 @plugins/no-counts-in-docs/CLAUDE.md
+@plugins/no-tombstones/CLAUDE.md
 @plugins/repo-index/CLAUDE.md
 
