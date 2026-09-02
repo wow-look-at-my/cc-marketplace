@@ -43,6 +43,10 @@ One node type, in all three sections; the section supplies the verdict, so the s
     `-lane` are covered), `evalSubcommands` (`deno eval`), stdin markers (`-`, `/dev/stdin`),
     heredocs, and pipes into the process. That denies `node -e '...'` while leaving `node script.js`
     working -- which matters, because this environment's own hooks are node files.
+  - A pipe or a redirect is only a script when the invocation names NO script of its own. `printf
+    '{...}' | node hook.ts` and `node hook.ts < payload.json` feed a named program its input, which
+    is how a hook is tested with the payload it will really receive; both used to deny. The stdin
+    markers still deny, so `cat evil.js | node -` is unaffected.
 
 Precedence is deny > ask > allow, and process rules are evaluated first. Deny walks the WHOLE parse
 tree, including the command substitutions, subshells and redirects the allow path deliberately
