@@ -66,7 +66,13 @@ func interpreterWrites(seg segment, name string, rest []word, roots []string) ([
 			return []write{{route: name + " -", opaque: "a " + name + " script read from stdin, which is not in the command text"}}, true
 		}
 	}
-	if seg.stdinScript {
+	// A pipe or a `< file` redirect only carries a SCRIPT when the interpreter was
+	// given nothing else to run. `printf '{...}' | node hook.ts` hands the program
+	// its input, and hook.ts is right there in the command text -- denying that
+	// stops a hook being tested with the payload it will really receive, which is
+	// how this fired on ordinary work. The stdin markers above still deny, so
+	// `cat evil.js | node -` and `node /dev/stdin` are unaffected.
+	if seg.stdinScript && !namesAScript(rest) {
 		return []write{{route: name + " (stdin)", opaque: "a " + name + " script piped in on stdin, which is not in the command text"}}, true
 	}
 	return scratchScriptWrites(seg, name, rest, roots), true
@@ -93,6 +99,14 @@ func scratchScriptWrites(seg segment, name string, rest []word, roots []string) 
 		break // the first operand is the script; the rest are its arguments
 	}
 	return nil
+}
+
+// namesAScript reports whether the invocation already carries a file for the
+// interpreter to run. Any operand counts, static or not: what matters is that
+// stdin is then the program's INPUT rather than its program.
+func namesAScript(rest []word) bool {
+	_, operands := scanArgs(rest, noFlags)
+	return len(operands) > 0
 }
 
 func editorWrites(seg segment, name string, rest []word) []write {

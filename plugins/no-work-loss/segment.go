@@ -92,6 +92,14 @@ func (w *walker) stmt(st *syntax.Stmt, cwd *string) {
 			stdin = true
 			continue // a heredoc is input; its "target" is the delimiter word
 		}
+		// `ruby < prog.rb` is the same script-on-stdin as `cat prog.rb | ruby`,
+		// and only the pipe was counted. The interpreter rule asks separately
+		// whether a script was already named, so `node hook.ts < payload.json`
+		// stays an ordinary run of a named script.
+		if r.Op == syntax.RdrIn {
+			stdin = true
+			continue // input, not a target this command writes
+		}
 		rs = append(rs, redirTarget{op: r.Op, file: wordText(r.Word)})
 	}
 	w.command(st.Cmd, cwd, rs, stdin)

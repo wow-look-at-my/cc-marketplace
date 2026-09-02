@@ -39,7 +39,11 @@ func routeCases() []routeCase {
 		{route: "ruby -pi -e", deny: `ruby -pi -e 'gsub(/a/,"b")' src.txt`, allow: "ruby --version", names: "inline ruby script"},
 		{route: "node -e with fs.writeFileSync", deny: `node -e 'require("fs").writeFileSync("src.txt","x")'`, allow: "node --version", names: "inline node script"},
 		{route: "perl -pi -e", deny: `perl -pi -e 's/a/b/' src.txt`, allow: "perl --version", names: "inline perl script"},
-		{route: "a script piped into an interpreter", deny: `echo 'x' | ruby`, allow: "echo x | grep x", names: "piped in on stdin"},
+		// The control is the shape this used to refuse: an interpreter that already
+		// names a script is being fed INPUT, and the program it runs is in the
+		// command text. Denying it stops a hook being tested with a real payload.
+		{route: "a script piped into an interpreter", deny: `echo 'x' | ruby`, allow: `echo 'x' | ruby prog.rb`, names: "piped in on stdin"},
+		{route: "a script redirected into an interpreter", deny: `ruby < prog.rb`, allow: `ruby prog.rb < data.json`, names: "piped in on stdin"},
 		{route: "busybox sed -i", deny: "busybox sed -i s/a/b/ src.txt", allow: "busybox sed -i s/a/b/ {{out}}/src.txt", names: "src.txt"},
 		{route: "sponge", deny: "sort src.txt | sponge src.txt", allow: "sort src.txt | sponge {{out}}/src.txt", names: "src.txt"},
 		{route: "xxd -r", deny: "xxd -r -p {{out}}/dump.hex src.txt", allow: "xxd -r -p {{out}}/dump.hex {{out}}/src.txt", names: "src.txt"},
