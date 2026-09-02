@@ -82,10 +82,11 @@ func matchesDenied(name, denied string) bool {
 // isInlineScript reports whether an invocation hands the interpreter a script
 // rather than a file. fedByStdin carries what the argument list cannot show.
 func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
-	if fedByStdin {
-		return true
-	}
+	namesAScript := false
 	for i, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			namesAScript = true
+		}
 		if stdinMarkers.Contains(arg) {
 			return true
 		}
@@ -107,7 +108,8 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 			}
 		}
 	}
-	return false
+	// A named script makes stdin its input, not the program.
+	return fedByStdin && !namesAScript
 }
 
 // matchProcessRule walks EVERY statement, including the substitutions,
