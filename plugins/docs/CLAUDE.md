@@ -130,11 +130,17 @@ They are vendored rather than summarized because a paraphrase of a specification
 goes stale with nothing to signal it. A `summary-bar` badge becomes a `> Version-gated feature: "..."` line rather
 than vanishing: dropping it would delete the only signal that a field needs a recent Compose.
 
-`hook.go` + `detect.go` are the mechanical half, a **PreToolUse hook on matcher `*`** that names the relevant skill
-when a call is about to touch a Dockerfile or a Compose file. It exists because the descriptions were already
-trigger-shaped and the skills still did not get pulled in: a description is consulted when the model decides to go
-looking for a skill, and that decision is the one that gets skipped. The hook fires on the tool call itself.
+`hook.go` + `detect.go` are the mechanical half, a **PreToolUse hook** that names the relevant skill when a call is
+about to touch a Dockerfile or a Compose file. It exists because the descriptions were already trigger-shaped and the
+skills still did not get pulled in: a description is consulted when the model decides to go looking for a skill, and
+that decision is the one that gets skipped. The hook fires on the tool call itself.
 
+- **The matcher is the six tool names this hook reads**, not `*`. A matcher is compared against the tool NAME and
+  nothing else -- it never sees `tool_input`, so a Dockerfile or a `compose.yaml` path cannot be selected there and
+  `detect.go` has to do that. What it does buy is not spawning the binary on Grep, Glob, Task, WebFetch or any MCP
+  call. A matcher of only letters and pipes is NOT a regex: Claude Code splits it on `|` and compares each segment for
+  equality, so a name that drifts out of sync with `topicFor` silences that tool outright instead of merely widening
+  the match. `manifest_test.go` pins the two lists together in both directions.
 - **It never denies.** The output is only `hookSpecificOutput.additionalContext`; blocking ordinary work over a
   documentation reminder is not a trade worth making. Every failure path -- unparseable payload, another event, no
   file path -- is silent.
