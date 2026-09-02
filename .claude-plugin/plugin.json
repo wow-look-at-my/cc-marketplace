@@ -1,0 +1,19 @@
+{
+	"agents": [
+		"./agents/claude-code-source.md"
+	],
+	"author": {
+		"name": "wow-look-at-my-code"
+	},
+	"description": "Corrective reference notes the model loads before touching things it reliably gets wrong from stale training data",
+	"keywords": [
+		"docs",
+		"reference",
+		"dockerfile",
+		"docker-compose",
+		"docker-images",
+		"skills"
+	],
+	"name": "docs",
+	"version": "1215"
+}
