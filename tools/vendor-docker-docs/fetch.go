@@ -30,9 +30,13 @@ func newGHClient() *ghClient {
 	return &ghClient{cache: map[string]string{}}
 }
 
+// ghBinary is a variable so a test can point it at a stub and exercise this
+// layer without a network round trip.
+var ghBinary = "gh"
+
 func gh(args ...string) (string, error) {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command("gh", args...)
+	cmd := exec.Command(ghBinary, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
