@@ -1,0 +1,34 @@
+{
+  "name": "repo-index",
+  "version": "1226",
+  "tag": "repo-index#1226",
+  "pluginJson": {
+    "author": {
+      "name": "mhaynie"
+    },
+    "description": "Suggests the repository that already solves the job. Matches each prompt against an index built from the GitHub API -- names, topics, and each repository's own description -- and injects the link and description of each relevant one, at most once per session.",
+    "hooks": {
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/repo-index",
+              "type": "command"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": [
+      "repo",
+      "index",
+      "discovery",
+      "suggest",
+      "hook",
+      "userpromptsubmit",
+      "context"
+    ],
+    "name": "repo-index",
+    "version": "1226"
+  }
+}
