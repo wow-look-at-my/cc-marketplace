@@ -116,18 +116,6 @@ two take a patch from outside git. What those land is not a tree anything alread
 Integrating into a dirty tree is a separate question, and the destruction half answers it: both verbs reach `hazTracked` there and are refused
 with the `git stash push -u` rewrite, so uncommitted work is still protected.
 
-### `git merge` and `git pull` used to be refused, and are not any more
-
-They were on the enumerated list of git-as-an-editor routes, with the escape written down as "a human runs it". An unattended session has no
-human, and this is not an occasional path: the harness tells a session to merge the base branch into its PR head, and pr-minder merges the base
-on its own schedule, so a session that does not integrate that merge cannot fast-forward its next push. The branch a session is *required* to
-work on became unpushable, which is a worse failure than the one the rule was guarding.
-
-Letting them through costs nothing this half protects. A merge writes only what two commits already hold, so every byte is attributable in
-history and reviewable there -- the same reasoning that already lets a bare `git checkout <ref>` past. The form that authors content is a patch,
-and `git am` and `git apply` are still refused. Clobbering an uncommitted edit is a different hazard and still belongs to the destruction half,
-which denies a merge into a dirty tree.
-
 `integrate_test.go` pins all three halves of that: allowed on a clean tree, denied on a dirty one, and a patch still refused either way.
 
 ## What this half deliberately does not cover
