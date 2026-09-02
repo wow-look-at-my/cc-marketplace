@@ -1,0 +1,59 @@
+{
+  "name": "focus-please",
+  "version": "1225",
+  "tag": "focus-please#1225",
+  "pluginJson": {
+    "author": {
+      "name": "mhaynie"
+    },
+    "description": "When the user's message contains a question mark, blocks every tool call except read-only lookups (Read/Grep/Glob) until the assistant answers in plain text; a message that interrupts a running turn also makes the assistant resume the interrupted work instead of stopping after its reply",
+    "hooks": {
+      "PreToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please",
+              "type": "command"
+            }
+          ],
+          "matcher": "*"
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please",
+              "type": "command"
+            }
+          ]
+        }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please",
+              "type": "command"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": [
+      "focus",
+      "question",
+      "attention",
+      "block",
+      "tools",
+      "hook",
+      "userpromptsubmit",
+      "pretooluse",
+      "stop",
+      "interrupt",
+      "resume"
+    ],
+    "name": "focus-please",
+    "version": "1225"
+  }
+}
