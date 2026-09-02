@@ -1,15 +1,19 @@
 package main
 
 import (
-	"path"
 	"strings"
 
 	"github.com/wow-look-at-my/go-containers/set"
 	"mvdan.cc/sh/v3/syntax"
+	"shellwalk"
 )
 
 // Process-level deny: a rule matches the process a statement would START, not
 // the argv spelling, because a spelling list can never be finished.
+//
+// Reading the words, peeling the wrappers, and separating a named script from a
+// script arriving on stdin all live in shellwalk, shared with no-work-loss: a
+// wrapper that either plugin misreads is a rule the other still enforces.
 type ProcessRule struct {
 	Name string
 	// The section this rule came from: allow, ask or deny.
@@ -23,71 +27,12 @@ type ProcessRule struct {
 	EvalSubcommands []string
 }
 
-// Commands that run their leading non-flag, non-assignment argument as a new
-// process. Stripping them resolves `env python3` and `sudo -E python3`.
-var execWrappers = set.Of(
-	"env", "sudo", "doas", "nohup", "command",
-	"exec", "nice", "ionice", "stdbuf", "setsid",
-	"time", "timeout", "xargs", "watch", "script",
-	"uv", "uvx", "pipx", "poetry", "hatch",
-	"pdm", "conda", "rye", "micromamba", "npx", "bunx",
-)
-
-// Wrapper subcommands preceding the real command: `uv run python`.
-var wrapperSubcommands = set.Of("run", "exec")
-
-// Arguments meaning "the script arrives on stdin".
-var stdinMarkers = set.Of("-", "/dev/stdin")
-
-// resolveArgs splits words into the process name and its own arguments, after
-// stripping assignments, wrappers and wrapper flags. Empty name = nothing runs.
-func resolveArgs(args []string) (string, []string) {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "" {
-			continue
-		}
-		if eq := strings.Index(arg, "="); eq > 0 && !strings.HasPrefix(arg, "-") && !strings.Contains(arg[:eq], "/") {
-			continue // VAR=VAL assignment
-		}
-		if strings.HasPrefix(arg, "-") {
-			continue // a wrapper's own flag
-		}
-		base := path.Base(arg)
-		if execWrappers.Contains(base) || wrapperSubcommands.Contains(base) {
-			continue
-		}
-		return base, args[i+1:]
-	}
-	return "", nil
-}
-
-// matchesDenied reports whether a resolved name is the denied program. A
-// trailing version is the same program, so `python` covers every suffixed spelling.
-func matchesDenied(name, denied string) bool {
-	if name == denied {
-		return true
-	}
-	if !strings.HasPrefix(name, denied) {
-		return false
-	}
-	for _, r := range name[len(denied):] {
-		if (r < '0' || r > '9') && r != '.' {
-			return false
-		}
-	}
-	return true
-}
-
 // isInlineScript reports whether an invocation hands the interpreter a script
 // rather than a file. fedByStdin carries what the argument list cannot show.
-func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
-	namesAScript := false
-	for i, arg := range args {
-		if !strings.HasPrefix(arg, "-") {
-			namesAScript = true
-		}
-		if stdinMarkers.Contains(arg) {
+func isInlineScript(d ProcessRule, args []shellwalk.Word, fedByStdin bool) bool {
+	for i, a := range args {
+		arg := a.Text
+		if shellwalk.StdinMarkers.Contains(arg) {
 			return true
 		}
 		for _, f := range d.EvalFlags {
@@ -109,7 +54,7 @@ func isInlineScript(d ProcessRule, args []string, fedByStdin bool) bool {
 		}
 	}
 	// A named script makes stdin its input, not the program.
-	return fedByStdin && !namesAScript
+	return fedByStdin && !shellwalk.NamesAScript(args)
 }
 
 // matchProcessRule walks EVERY statement, including the substitutions,
@@ -147,11 +92,7 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 		if !ok {
 			return true
 		}
-		var words []string
-		for _, w := range call.Args {
-			words = append(words, wordLiteral(w))
-		}
-		name, args := resolveArgs(words)
+		name, args := shellwalk.ResolveProgram(shellwalk.Words(call.Args))
 		if name == "" {
 			return true
 		}
@@ -163,7 +104,7 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 			}
 		}
 		for _, d := range denies {
-			if !matchesDenied(name, d.Name) {
+			if !shellwalk.MatchesProgram(name, d.Name) {
 				continue
 			}
 			if d.InlineOnly && !isInlineScript(d, args, fedByStdin) {
@@ -175,26 +116,4 @@ func matchProcessRule(command string, denies []ProcessRule) (string, string) {
 		return true
 	})
 	return hitName, hitMsg
-}
-
-// wordLiteral renders a word for name resolution only. Unlike extractWord it
-// never gives up: an unresolvable part is skipped, so `"py"thon3` still yields
-// something to inspect instead of dropping the command from consideration.
-func wordLiteral(w *syntax.Word) string {
-	var b strings.Builder
-	for _, part := range w.Parts {
-		switch p := part.(type) {
-		case *syntax.Lit:
-			b.WriteString(p.Value)
-		case *syntax.SglQuoted:
-			b.WriteString(p.Value)
-		case *syntax.DblQuoted:
-			for _, dp := range p.Parts {
-				if lit, ok := dp.(*syntax.Lit); ok {
-					b.WriteString(lit.Value)
-				}
-			}
-		}
-	}
-	return b.String()
 }

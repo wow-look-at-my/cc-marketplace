@@ -70,6 +70,11 @@ entry and reads as safe.
 - **Entry + fail-safety**: `plugins/no-work-loss/main.go` -- stdin JSON, the prefilter gate, the recover-into-deny, the deny payload
 - **Prefilter**: `plugins/no-work-loss/prefilter.go` -- the cheap needle scan, and the destructive-verb markers used once parsing has failed
 - **Segmentation**: `plugins/no-work-loss/segment.go` -- AST walk, cwd tracking, wrapper stripping, word staticness
+- **Shared parser**: `tools/shellwalk` -- a repo-local module, pulled in through a `replace` in `go.mod`, holding the vocabulary this
+  plugin and `enhanced-auto-allow` must agree on: reading a word, resolving a spelling to the program it names, peeling wrappers with
+  their value-taking flags understood, `NamesAScript`, and `ShellNoExec`. The two keep their own segmentation and their own postures --
+  this one fails closed, the other open -- but a wrapper either misreads is a rule the other still enforces, so "which program runs here"
+  has one implementation. `shellwords.go` is what remains: the adapters plus path resolution, which is this plugin's alone.
 - **Git verbs**: `plugins/no-work-loss/gitverb.go` -- global-option skipping, flag unbundling, per-verb hazard classification and rewrites
 - **Non-git deletion**: `plugins/no-work-loss/fsverb.go` -- `rm`, `mv` destinations, `tee`, `truncate -s 0`, truncating redirects
 - **Repository state**: `plugins/no-work-loss/repo.go` -- probing with timeouts and caching, `-z` status parsing, path containment
