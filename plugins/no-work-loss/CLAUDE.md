@@ -99,6 +99,17 @@ can see is dangerous.
 
 **There is no opt-out.** No environment variable, no flag, no settings key. An opt-out is the hole.
 
+**A syntax check is not a run.** Following `bash ./deploy.sh` into the script's text is what stops a one-word bypass, but `-n`/`--noexec` (and an `n` in a
+single-dash cluster) makes the shell parse and stop, so nothing the script names is written. `shellNoExec` short-circuits there, and the test pairs each
+allowed spelling with the same script run WITHOUT `-n`, which still denies.
+
+**Stdin is a program only when nothing else named one.** `echo 'x' | ruby` hands ruby a script the command text does not contain, and denies. `printf
+'{...}' | node hook.ts` hands a NAMED script its input, and the program is right there in the argv -- that is how a hook gets tested with the payload
+it will really receive, and refusing it stopped ordinary work rather than any write. `namesAScript` is the difference. Closing that also closed the
+matching hole in the other direction: `stdinScript` counted pipes and heredocs but not `<`, so a script piped in denied while the identical script
+redirected in did not. `ruby < prog.rb` now denies too, and `node hook.ts < payload.json` stays allowed, because the operand check runs either way.
+The stdin markers are untouched: `cat evil.js | node -` and `node /dev/stdin` still deny.
+
 **Scope is paths, never commands.** A build directory (`build`, `dist`, `target`, `node_modules`, `.cache`, ...) is writable by whatever writes it;
 anything outside the guarded roots, including the `/tmp` scratchpad, was never in scope. The guarded roots are the repository containing the
 payload's `cwd` and `CLAUDE_PROJECT_DIR`, found by walking up for `.git` rather than paying for a subprocess in front of every Bash call.
