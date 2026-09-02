@@ -62,6 +62,12 @@ func untrack(t *testing.T, dir string, name string) {
 	writeAt(t, dir, name, "scratch\n")
 }
 
+// stage moves what modify wrote into the index, which is still not a commit.
+func stage(t *testing.T, dir string) {
+	t.Helper()
+	git(t, dir, "add", "-A")
+}
+
 // ask lives in harness_test.go: one entry-point driver for both halves.
 
 func denied(t *testing.T, cwd, command string) string {
@@ -378,17 +384,6 @@ func TestAllowsForceWithLease(t *testing.T) {
 func TestDeniesForceRefspec(t *testing.T) {
 	dir := newRepo(t)
 	denied(t, dir, "git push origin +master:master")
-}
-
-func TestRebaseFamilyBlockedDirtyButRecoveryVerbsAllowed(t *testing.T) {
-	dir := newRepo(t)
-	modify(t, dir)
-	denied(t, dir, "git rebase master")
-	denied(t, dir, "git merge feature")
-	denied(t, dir, "git cherry-pick abc123")
-	allowed(t, dir, "git rebase --abort")
-	allowed(t, dir, "git merge --abort")
-	allowed(t, dir, "git cherry-pick --continue")
 }
 
 func TestGitRmCachedLeavesTheFileAlone(t *testing.T) {

@@ -308,9 +308,16 @@ func classifyGit(seg segment) *finding {
 		}
 		return nil
 
-	case "rebase", "merge", "cherry-pick", "revert", "am":
-		// The recovery halves of these verbs are how a wedged tree gets fixed;
-		// blocking them would trap the session in the state it is trying to leave.
+	case "rebase", "merge", "pull", "cherry-pick", "revert", "am":
+		// Integrating committed history is safe on a committed tree and only
+		// there: everything these verbs write is recoverable from a ref, and an
+		// uncommitted change is in no object at all. So they are allowed with
+		// nothing outstanding and denied with something outstanding, which is
+		// also why `pull` sits here rather than with the write routes -- it is
+		// `merge` with a fetch in front of it, and the merge is the hazard.
+		//
+		// The recovery halves are how a wedged tree gets fixed; blocking them
+		// would trap the session in the state it is trying to leave.
 		if g.has("--continue", "--abort", "--skip", "--quit", "--edit-todo") {
 			return nil
 		}
