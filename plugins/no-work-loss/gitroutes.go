@@ -133,6 +133,18 @@ func gitVerbWrites(verb string, args []word, dir string) bool {
 			return false
 		}
 		return dashDash || len(operands) > 1 || namesExistingPath(dir, operands)
+	case "merge", "pull":
+		// Integrating a ref is not authoring content, by the same reasoning the
+		// bare-ref checkout above rests on: every byte it writes is already in a
+		// commit, with a diff to read and a reflog to reach it by. Denying it
+		// also made the merge the PR rules require impossible, since there is no
+		// opt-out and no edit tool that performs one.
+		//
+		// The sibling verbs stay denied and are not the same act: rebase and
+		// cherry-pick replay commits onto a different base, and am and apply
+		// take a patch from outside git, so what lands is not a tree anything
+		// already holds.
+		return false
 	case "restore":
 		// --staged alone moves the index back to HEAD and leaves the file on
 		// disk untouched; anything else rewrites the file.
