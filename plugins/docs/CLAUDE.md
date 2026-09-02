@@ -1,6 +1,6 @@
 ## Docs Plugin
 
-The docs plugin lives at `plugins/docs/`. It ships no code and no hooks -- model-invoked skills (plus one agent, below)
+The docs plugin lives at `plugins/docs/`. It is model-invoked skills (plus one agent and one hook, both below)
 whose sole job is to correct the places where Claude's training data about a technology is reliably stale or wrong, so
 the corrective notes load *before* the bad output gets written rather than after review catches it. Each skill is
 written as notes to self, not documentation for a human: it names the specific wrong instinct, states what the upstream
@@ -98,6 +98,69 @@ description is the only thing the model sees when deciding whether to pull the s
   number plus verbatim quote per claim, inferences labelled, "the source does not show this" when true). `tools` is
   `Bash, Read, Grep, Glob` -- Bash is load-bearing, since step one is a `gh api` download, which is why the built-in
   `claude-code-guide` agent cannot do this job.
+
+### The vendored Docker reference, and the hook that makes it get read
+
+The `dockerfile` and `docker-compose` skills each carry a `reference/` directory holding the **complete upstream
+reference, verbatim**: the Dockerfile reference from `moby/buildkit`, and the Compose file reference from
+`docker/docs`. Both are Apache-2.0, and each file's header plus the per-directory `NOTICE.md` records the exact
+commit it was read from. **Do not edit these by hand** -- `.github/scripts/vendor-docker-docs/` regenerates them
+and a rerun overwrites the edit. It resolves each branch to a commit once per run so every file comes from one tree,
+inlines Hugo `{{% include %}}` partials, rewrites root-relative links to absolute `docs.docker.com` URLs, deletes a
+file the plan no longer produces, and **fails the run on a shortcode it does not recognise** -- upstream adding one
+is exactly the change that must not pass through as either literal Hugo syntax or a silent deletion.
+
+**It runs on every CI build**, from this plugin's `justfile` `prebuild` recipe, so a published release carries
+current text rather than whatever was committed the day someone last ran it by hand. A fetch failure fails the
+build: packaging a silently stale reference is the outcome the whole arrangement exists to avoid. The release
+workflow's Build step passes `GITHUB_TOKEN` for it -- unauthenticated, the GitHub API allows 60 requests an hour
+across the entire plugin matrix, which one build exhausts on its own. The committed copies stay in git so the
+reference is readable and diffable in the repo, and so a `git diff` after a build shows what upstream changed.
+The notice deliberately carries no "last regenerated" date: it would rewrite itself on every build and produce a
+diff even when nothing upstream moved.
+
+TypeScript run by `tsx`, matching `.github/scripts/`'s existing convention rather than the org TypeScript action,
+which governs workflow STEPS -- this is a repo script that `just` and `npm` invoke. `transform.ts` is the pure half
+(frontmatter, includes, shortcodes, links, the notice) and holds the vendoring plan; `github.ts` is the entire
+network surface behind a `Client` interface, so `vendor.test.ts` drives the whole pipeline against a fake and never
+touches the network. Those tests run in CI from the release workflow's `prepare` job, not only from `just test`,
+which nothing in CI invokes.
+
+They are vendored rather than summarized because a paraphrase of a specification is a second source of truth that
+goes stale with nothing to signal it. A `summary-bar` badge becomes a `> Version-gated feature: "..."` line rather
+than vanishing: dropping it would delete the only signal that a field needs a recent Compose.
+
+`hook.go` + `detect.go` are the mechanical half, a **PreToolUse hook** that names the relevant skill when a call is
+about to touch a Dockerfile or a Compose file. It exists because the descriptions were already trigger-shaped and the
+skills still did not get pulled in: a description is consulted when the model decides to go looking for a skill, and
+that decision is the one that gets skipped. The hook fires on the tool call itself.
+
+- **The matcher is the six tool names this hook reads**, not `*`. A matcher is compared against the tool NAME and
+  nothing else -- it never sees `tool_input`, so a Dockerfile or a `compose.yaml` path cannot be selected there and
+  `detect.go` has to do that. What it does buy is not spawning the binary on Grep, Glob, Task, WebFetch or any MCP
+  call. A matcher of only letters and pipes is NOT a regex: Claude Code splits it on `|` and compares each segment for
+  equality, so a name that drifts out of sync with `topicFor` silences that tool outright instead of merely widening
+  the match. `manifest_test.go` pins the two lists together in both directions.
+- **It never denies.** The output is only `hookSpecificOutput.additionalContext`; blocking ordinary work over a
+  documentation reminder is not a trade worth making. Every failure path -- unparseable payload, another event, no
+  file path -- is silent.
+- **Detection requires `docker` in STATEMENT position**, not anywhere in the command text. Without that,
+  `git commit -m 'docker build notes'` and `grep -r 'docker compose' docs/` both fire; both were caught by tests
+  written before the regex was. A Compose invocation that builds (`docker compose build`, `up --build`) earns the
+  Dockerfile skill too, bounded to the one statement.
+- **Compose paths are the four base names plus override and profile variants**, never every `.yaml`. A hook that
+  fires on all YAML is one the reader learns to skim past.
+- **Said once per session per skill**, via a marker under the temp directory keyed by a hash of the session id, so
+  parallel sessions never silence each other. An unwritable temp directory or a missing session id makes it speak
+  every time rather than never: a visible repeat beats a guard that has quietly stopped working.
+
+**Verified against a real Claude Code instance** (2.1.258, `--settings` registration, `--allowedTools Read`), not
+only unit tests: the hook fired on the Read, the message reached the model verbatim, and the model then invoked
+`/docs:dockerfile` and applied the reference, catching the fixture's missing `# syntax=docker/dockerfile:1`. The
+run before it appeared to prove the opposite -- the model reported receiving nothing -- because a marker from an
+earlier subprocess run had silenced it. Subprocess `claude -p` runs inherit the PARENT session's `session_id`, so
+they share markers; clear the marker directory between live runs or the second one silently proves nothing. That
+`PreToolUse` `additionalContext` really is delivered on 2.1.258 was pinned separately with a sentinel hook.
 
 Adding a skill means adding `plugins/docs/skills/<topic>/SKILL.md` with a `description` and no `name` -- no
 `plugin.json` change is needed, since skills are discovered from `skills/`. **An agent is different: it must be

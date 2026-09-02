@@ -116,6 +116,8 @@ two take a patch from outside git. What those land is not a tree anything alread
 Integrating into a dirty tree is a separate question, and the destruction half answers it: both verbs reach `hazTracked` there and are refused
 with the `git stash push -u` rewrite, so uncommitted work is still protected.
 
+`integrate_test.go` pins all three halves of that: allowed on a clean tree, denied on a dirty one, and a patch still refused either way.
+
 ## What this half deliberately does not cover
 
 - **Running programs.** A build, a test run, a generator or a `just` recipe writes what it writes. Sandboxing arbitrary execution is a different

@@ -115,7 +115,7 @@ matching hole in the other direction: `stdinScript` counted pipes and heredocs b
 redirected in did not. `ruby < prog.rb` now denies too, and `node hook.ts < payload.json` stays allowed, because the operand check runs either way.
 The stdin markers are untouched: `cat evil.js | node -` and `node /dev/stdin` still deny.
 
-**`merge` and `pull` are not write routes; the destruction half gates them on a committed tree.** They integrate a named ref's committed history, so everything they write is reachable from a ref, which leaves one thing to lose: a change that is in no object yet. They sit with `rebase` and `cherry-pick` under `hazTracked`, allowed with nothing outstanding and denied while anything tracked is -- a staged change included, because the index is not a commit. An untracked file does not deny: git refuses a merge rather than overwrite one, so denying over a build output beside a clean tree would refuse the ordinary case. The verbs that put genuinely unreviewed content into the tree (`restore`, `stash pop`, `apply`, `checkout`, `reset`, `revert`, `cherry-pick`, `am`, `rebase`) stay denied on the write-route side, and a conflict's resolution lands through Edit or Write.
+**`merge` and `pull` are not write routes; the destruction half gates them on a committed tree.** They integrate a named ref's committed history, so everything they write is reachable from a ref, which leaves one thing to lose: a change that is in no object yet. They sit with `rebase` and `cherry-pick` under `hazTracked`, allowed with nothing outstanding and denied while anything tracked is -- a staged change included, because the index is not a commit. An untracked file does not deny: git refuses a merge rather than overwrite one, so denying over a build output beside a clean tree would refuse the ordinary case. The verbs that put genuinely unreviewed content into the tree (`restore`, `stash pop`, `apply`, `checkout`, `reset`, `revert`, `cherry-pick`, `am`, `rebase`) stay denied on the write-route side, and a conflict's resolution lands through Edit or Write. Pinned by `integrate_test.go`.
 
 **Scope is paths, never commands.** A build directory (`build`, `dist`, `target`, `node_modules`, `.cache`, ...) is writable by whatever writes it;
 anything outside the guarded roots, including the `/tmp` scratchpad, was never in scope. The guarded roots are the repository containing the
@@ -134,7 +134,7 @@ write what they write. What it closes is every route where the command text itse
 omission -- each writes only a canonical reformat or a repo-owned regeneration of the file it is handed. A tool NOT on that table does not become
 allowed by being a formatter: an unrecognised in-place rewrite denies, and the way to run one is a named recipe (`just fmt`, `make fmt`).
 
-- [docs/write-routes.md](docs/write-routes.md) -- every route, the shape of each rule, the two places the enumerated list collides with ordinary
+- [docs/write-routes.md](docs/write-routes.md) -- every route, the shape of each rule, where the enumerated list collides with ordinary
   workflow, and the boundaries this half deliberately does not cross.
 - **Route catalog**: `routes.go` (redirects, the argv writers, the unknown-tool in-place rule), `textproc.go` (sed's `w` and awk's `print >`,
   read out of the program text so a filter is not mistaken for a writer), `interpreters.go` (inline scripts, editors, the formatter table),
