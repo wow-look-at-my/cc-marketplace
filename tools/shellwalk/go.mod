@@ -1,13 +1,6 @@
-module no-work-loss
+module shellwalk
 
 go 1.26
-
-// The shell-reading vocabulary is shared with enhanced-auto-allow, in the repo
-// rather than published: CI builds every plugin from a full checkout, and the
-// released package carries the built binary, never this source.
-replace shellwalk => ../../tools/shellwalk
-
-require shellwalk v0.1.0
 
 require (
 	github.com/stretchr/testify v1.11.1
