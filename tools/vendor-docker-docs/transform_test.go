@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 func TestStripFrontmatterTakesTheTitleAndDropsTheBlock(t *testing.T) {
@@ -133,10 +134,10 @@ func TestRenderFailsRatherThanEmitHugoSyntax(t *testing.T) {
 // Every destination must be unique, or one page silently overwrites another.
 func TestBundlePlanHasNoDuplicateOutputs(t *testing.T) {
 	for _, b := range bundles {
-		seen := map[string]bool{}
+		seen := set.New[string]()
 		for _, p := range b.Pages {
-			assert.False(t, seen[p.Out], "%s: %s written twice", b.Skill, p.Out)
-			seen[p.Out] = true
+			assert.False(t, seen.Contains(p.Out), "%s: %s written twice", b.Skill, p.Out)
+			seen.Add(p.Out)
 			assert.NotEqual(t, noticeFile, p.Out, "a page may not claim the notice filename")
 		}
 	}
