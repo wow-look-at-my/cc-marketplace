@@ -53,6 +53,14 @@ var tells = []tell{
 	{"a change reference", regexp.MustCompile(`(?i)\b(?:pr|pull request|issue|ticket|commit)\s+#?\d+\b`)},
 	{"a change reference", regexp.MustCompile(`(?i)\b[a-z0-9][\w.-]*/[\w.-]+#\d+\b`)},
 
+	// A contrast marker states a "then" the reader cannot see. Whatever it is
+	// contrasting with left the tree. These sit above the general former-state
+	// rules because several sentences satisfy both, and the first match names
+	// the finding: the more specific rule says more about what to rewrite.
+	{"a then-and-now contrast", regexp.MustCompile(`(?i)\brather than (?:the )?(?:old|former|previous|legacy)\b`)},
+	{"a then-and-now contrast", regexp.MustCompile(`(?i)\binstead of (?:the )?(?:old|former|previous|legacy)\b`)},
+	{"a then-and-now contrast", regexp.MustCompile(`(?i)\bwhere (?:it|this|that) (?:used to|once)\b`)},
+
 	// The referent is gone: the sentence's subject is a former state.
 	{"a former state", regexp.MustCompile(`(?i)\bused to\b`)},
 	{"a former state", regexp.MustCompile(`(?i)\b(?:previously|formerly|originally|hitherto)\b`)},
@@ -62,12 +70,6 @@ var tells = []tell{
 	{"a former state", regexp.MustCompile(`(?i)\b(?:we|this|it|that) (?:` + changeParticiples + `)\b`)},
 	{"a former state", regexp.MustCompile(`(?i)\bthis (?:replaces|supersedes|used to)\b`)},
 	{"a former state", regexp.MustCompile(`(?i)\bstopped (?:being|working|doing)\b|\bstarted (?:being|failing)\b`)},
-
-	// A contrast marker states a "then" the reader cannot see. Whatever it is
-	// contrasting with left the tree.
-	{"a then-and-now contrast", regexp.MustCompile(`(?i)\brather than (?:the )?(?:old|former|previous|legacy)\b`)},
-	{"a then-and-now contrast", regexp.MustCompile(`(?i)\binstead of (?:the )?(?:old|former|previous|legacy)\b`)},
-	{"a then-and-now contrast", regexp.MustCompile(`(?i)\bwhere (?:it|this|that) (?:used to|once)\b`)},
 
 	// The audience is the reviewer, not the next editor.
 	{"an address to the reviewer", regexp.MustCompile(`(?i)\bthis (?:pr|pull request|change|diff|commit|patch|cl)\b`)},

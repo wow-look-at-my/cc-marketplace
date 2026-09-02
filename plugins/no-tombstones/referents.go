@@ -23,9 +23,22 @@ import (
 	"time"
 )
 
-// candidate matches an identifier long enough, and mixed enough, to be a symbol
-// this repository owns rather than a word or an external constant.
-var candidate = regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b|\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*\b`)
+// identifierShape matches a name built like a symbol rather than a word:
+// snake_case, lowerCamel or UpperCamel. Shape alone is not eligibility --
+// isCandidate is the rule, and the two must be asked together.
+var identifierShape = regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b|\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*\b`)
+
+// isCandidate reports whether a name is one this repository must contain.
+//
+// An all-caps name is refused outright: ENOSYS, RLIMIT_CORE and SYS_STATFS are
+// the shape a low-level comment is full of, and none of them is the
+// repository's to define. A short name is refused for the same reason from the
+// other direction -- it is too likely to be a word.
+func isCandidate(name string) bool {
+	return len(name) >= 8 &&
+		name != strings.ToUpper(name) &&
+		identifierShape.FindString(name) == name
+}
 
 // probeTimeout bounds the search. A guard that hangs is worse than one that
 // misses, so an expired probe reports nothing.
@@ -49,11 +62,10 @@ func DeadReferents(path, added string, blocks []Block) []string {
 
 	names := set.New[string]()
 	for _, b := range blocks {
-		for _, m := range candidate.FindAllString(b.Text, -1) {
-			if len(m) < 8 || m == strings.ToUpper(m) {
-				continue
+		for _, m := range identifierShape.FindAllString(b.Text, -1) {
+			if isCandidate(m) {
+				names.Add(m)
 			}
-			names.Add(m)
 		}
 	}
 	if names.Len() == 0 || names.Len() > 40 {

@@ -148,9 +148,11 @@ func TestExternalConstantsAreNeverCandidates(t *testing.T) {
 	blocks := commentBlocks("// returns ENOSYS unless RLIMIT_CORE and SYS_STATFS agree", cLike)
 	assert.Empty(t, DeadReferents("/nonexistent/a.go", "", blocks))
 
-	for _, name := range []string{"ENOSYS", "RLIMIT_CORE", "SYS_STATFS", "statfs", "buf"} {
-		assert.NotContains(t, candidate.FindAllString(name, -1), name,
-			"%s must not be eligible, or must be filtered by length/case", name)
+	for _, name := range []string{"ENOSYS", "RLIMIT_CORE", "SYS_STATFS", "statfs", "buf", "syscall"} {
+		assert.False(t, isCandidate(name), "%s is not this repository's to define", name)
+	}
+	for _, name := range []string{"TestDarwinStatfsToLinux", "darwin_mnt_flags", "syscall6SlowDarwin"} {
+		assert.True(t, isCandidate(name), "%s is a repository symbol", name)
 	}
 }
 
