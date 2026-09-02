@@ -62,6 +62,12 @@ func untrack(t *testing.T, dir string, name string) {
 	writeAt(t, dir, name, "scratch\n")
 }
 
+// stage moves what modify wrote into the index, which is still not a commit.
+func stage(t *testing.T, dir string) {
+	t.Helper()
+	git(t, dir, "add", "-A")
+}
+
 // ask lives in harness_test.go: one entry-point driver for both halves.
 
 func denied(t *testing.T, cwd, command string) string {
@@ -378,17 +384,6 @@ func TestAllowsForceWithLease(t *testing.T) {
 func TestDeniesForceRefspec(t *testing.T) {
 	dir := newRepo(t)
 	denied(t, dir, "git push origin +master:master")
-}
-
-// Integrating a ref into a clean tree writes only bytes already in a commit, so
-// both halves let it through. Refusing it made the base-branch merge the PR
-// rules require impossible, since this hook has no opt-out and no edit tool
-// performs a merge.
-func TestMergeAndPullPassOnACleanTree(t *testing.T) {
-	dir := newRepo(t)
-	allowed(t, dir, "git merge origin/master")
-	allowed(t, dir, "git merge --no-edit FETCH_HEAD")
-	allowed(t, dir, "git pull origin master")
 }
 
 func TestRebaseFamilyBlockedDirtyButRecoveryVerbsAllowed(t *testing.T) {

@@ -70,6 +70,11 @@ entry and reads as safe.
 - **Entry + fail-safety**: `plugins/no-work-loss/main.go` -- stdin JSON, the prefilter gate, the recover-into-deny, the deny payload
 - **Prefilter**: `plugins/no-work-loss/prefilter.go` -- the cheap needle scan, and the destructive-verb markers used once parsing has failed
 - **Segmentation**: `plugins/no-work-loss/segment.go` -- AST walk, cwd tracking, wrapper stripping, word staticness
+- **Shared parser**: `tools/shellwalk` -- a repo-local module, pulled in through a `replace` in `go.mod`, holding the vocabulary this
+  plugin and `enhanced-auto-allow` must agree on: reading a word, resolving a spelling to the program it names, peeling wrappers with
+  their value-taking flags understood, `NamesAScript`, and `ShellNoExec`. The two keep their own segmentation and their own postures --
+  this one fails closed, the other open -- but a wrapper either misreads is a rule the other still enforces, so "which program runs here"
+  has one implementation. `shellwords.go` is what remains: the adapters plus path resolution, which is this plugin's alone.
 - **Git verbs**: `plugins/no-work-loss/gitverb.go` -- global-option skipping, flag unbundling, per-verb hazard classification and rewrites
 - **Non-git deletion**: `plugins/no-work-loss/fsverb.go` -- `rm`, `mv` destinations, `tee`, `truncate -s 0`, truncating redirects
 - **Repository state**: `plugins/no-work-loss/repo.go` -- probing with timeouts and caching, `-z` status parsing, path containment
@@ -110,6 +115,8 @@ matching hole in the other direction: `stdinScript` counted pipes and heredocs b
 redirected in did not. `ruby < prog.rb` now denies too, and `node hook.ts < payload.json` stays allowed, because the operand check runs either way.
 The stdin markers are untouched: `cat evil.js | node -` and `node /dev/stdin` still deny.
 
+**`merge` and `pull` are not write routes; the destruction half gates them on a committed tree.** They integrate a named ref's committed history, so everything they write is reachable from a ref, which leaves one thing to lose: a change that is in no object yet. They sit with `rebase` and `cherry-pick` under `hazTracked`, allowed with nothing outstanding and denied while anything tracked is -- a staged change included, because the index is not a commit. An untracked file does not deny: git refuses a merge rather than overwrite one, so denying over a build output beside a clean tree would refuse the ordinary case. The verbs that put genuinely unreviewed content into the tree (`restore`, `stash pop`, `apply`, `checkout`, `reset`, `revert`, `cherry-pick`, `am`, `rebase`) stay denied on the write-route side, and a conflict's resolution lands through Edit or Write. Pinned by `integrate_test.go`.
+
 **Scope is paths, never commands.** A build directory (`build`, `dist`, `target`, `node_modules`, `.cache`, ...) is writable by whatever writes it;
 anything outside the guarded roots, including the `/tmp` scratchpad, was never in scope. The guarded roots are the repository containing the
 payload's `cwd` and `CLAUDE_PROJECT_DIR`, found by walking up for `.git` rather than paying for a subprocess in front of every Bash call.
@@ -120,13 +127,6 @@ Claude Code's system prompt directs a session to put every temporary file in `<t
 tree is a write route, and the deny message advises Write, which is what produced the file. Measured cost of the gap before it was closed:
 four denied calls in one session, each a wasted round trip. `isSessionScratchpad` requires BOTH a `scratchpad` segment and a `claude`-prefixed
 ancestor inside a scratch root, so `/tmp/scratchpad` and `/tmp/claude-0/.../gen.mjs` both still deny.
-
-**`git merge` and `git pull` are integration, not authorship, and are allowed on a clean tree.** They were refused, with the escape written
-down as "a human runs it"; an unattended session has no human, and pr-minder merges the base branch on its own schedule, so a session that
-cannot integrate that merge cannot fast-forward its next push -- the branch it is required to work on became unpushable. A merge writes only
-what two commits already hold, so every byte stays attributable in history, which is the reasoning that already lets a bare `git checkout <ref>`
-past. `git am` and `git apply` still deny: a patch authors content that is in no commit. A merge into a DIRTY tree still denies, from the
-destruction half. Pinned by `integrate_test.go`.
 
 **What it does NOT do, stated so nobody has to rediscover it**: it does not sandbox the programs it starts. `go build`, `npm test` and `make`
 write what they write. What it closes is every route where the command text itself performs or directs the write. The formatters it vouches for

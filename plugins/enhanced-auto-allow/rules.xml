@@ -40,6 +40,11 @@
 	<test cmd="PYTHONPATH=/x python3 script.py" expect="deny"/>
 	<test cmd="sudo -E python3 script.py" expect="deny"/>
 	<test cmd="uv run python script.py" expect="deny"/>
+	<!-- A wrapper's VALUE stood where the program should be until shellwalk was shared: these resolved to `10` and `5`, not python. -->
+	<test cmd="nice -n 10 python3 script.py" expect="deny"/>
+	<test cmd="timeout 5 python3 script.py" expect="deny"/>
+	<test cmd="timeout -k 1 5 python3 script.py" expect="deny"/>
+	<test cmd="xargs -n 1 python3 script.py" expect="deny"/>
 	<test cmd="git status &amp;&amp; python3 script.py" expect="deny"/>
 	<test cmd="git log | python3 -" expect="deny"/>
 	<test cmd="echo $(python3 -c 'print(1)')" expect="deny"/>

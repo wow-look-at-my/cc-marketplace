@@ -309,6 +309,11 @@ func classifyGit(seg segment) *finding {
 		return nil
 
 	case "rebase", "merge", "pull", "cherry-pick", "revert", "am":
+		// Everything these verbs write is reachable from a ref, so the only
+		// thing they can lose is a change that is in no object yet. A committed
+		// tree is therefore the whole condition. pull sits here rather than with
+		// the write routes because it is merge with a fetch in front of it.
+		//
 		// The recovery halves of these verbs are how a wedged tree gets fixed;
 		// blocking them would trap the session in the state it is trying to leave.
 		if g.has("--continue", "--abort", "--skip", "--quit", "--edit-todo") {
