@@ -53,13 +53,24 @@ func main() {
 	if err := json.NewDecoder(os.Stdin).Decode(&p); err != nil {
 		return
 	}
-	if p.HookEventName != "PreToolUse" {
+
+	out, say := decide(p)
+	if !say {
 		return
+	}
+	_ = json.NewEncoder(os.Stdout).Encode(out)
+}
+
+// decide is the whole policy: what to say about a tool call, and whether to say
+// anything at all. It is separate from main so it can be exercised directly.
+func decide(p payload) (output, bool) {
+	if p.HookEventName != "PreToolUse" {
+		return output{}, false
 	}
 
 	topics := topicFor(p.ToolName, p.ToolInput)
 	if len(topics) == 0 {
-		return
+		return output{}, false
 	}
 
 	// A reminder repeated on every edit is nagging, and a reader learns to
@@ -72,13 +83,13 @@ func main() {
 		}
 	}
 	if len(fresh) == 0 {
-		return
+		return output{}, false
 	}
 
-	_ = json.NewEncoder(os.Stdout).Encode(output{hookSpecificOutput{
+	return output{hookSpecificOutput{
 		HookEventName:     "PreToolUse",
 		AdditionalContext: message(fresh, p),
-	}})
+	}}, true
 }
 
 func message(topics []topic, p payload) string {

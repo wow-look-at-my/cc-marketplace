@@ -121,18 +121,13 @@ func TestACommandCanNameBothSkills(t *testing.T) {
 func TestUnrelatedCommandsNameNothing(t *testing.T) {
 	for _, command := range []string{
 		"go test ./...",
-		"git commit -m 'docker build notes'",
+		"git commit -m 'docker build notes'", // the words, inside a message
+		"grep -r 'docker compose' docs/",     // searching for them, not running them
 		"echo docker",
 		"npm run build",
-		"grep -r 'docker compose' docs/", // mentions it, does not run it
+		"rg 'docker build' README.md",
 	} {
-		got := topicFor("Bash", toolInput{Command: command})
-		if command == "grep -r 'docker compose' docs/" {
-			// A known, accepted false positive: the words appear in argv and
-			// nothing in the string distinguishes a search from a run.
-			continue
-		}
-		assert.Empty(t, got, command)
+		assert.Empty(t, topicFor("Bash", toolInput{Command: command}), command)
 	}
 }
 

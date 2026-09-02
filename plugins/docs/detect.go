@@ -57,9 +57,17 @@ func isComposePath(path string) bool {
 // buildCommand and composeCommand find the two command families in a shell
 // string. `docker-compose` (v1, hyphenated) counts: seeing it is itself a
 // reason to load the skill, which explains why it is the wrong command.
+//
+// Both require `docker` in STATEMENT position -- the start of the string or
+// just after a separator -- rather than anywhere in the text. Without that,
+// `git commit -m 'docker build notes'` and `grep -r 'docker compose' docs/`
+// both fire, and a reminder that arrives when nothing is being built is how a
+// hook earns the reputation that gets it uninstalled.
+const statementStart = `(^|[;&|(\n])[ \t]*(sudo[ \t]+)?`
+
 var (
-	buildCommand   = regexp.MustCompile(`\bdocker\s+(buildx\s+)?build\b`)
-	composeCommand = regexp.MustCompile(`\bdocker(\s+|-)compose\b`)
+	buildCommand   = regexp.MustCompile(statementStart + `docker[ \t]+(buildx[ \t]+)?build\b`)
+	composeCommand = regexp.MustCompile(statementStart + `docker([ \t]+|-)compose\b`)
 )
 
 // topicFor decides which skill, if any, a tool call should pull in.
