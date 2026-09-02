@@ -2,8 +2,8 @@ name: plugin e2e
 
 on:
   push:
-    # Every branch, but not the plugin/*/v* tags the release workflow pushes.
-    branches: ['**']
+    # Every branch, no tag: the plugin/*/v* tags the release workflow pushes must not start this one.
+    branches: ["**"]
 
 permissions:
   id-token: write
