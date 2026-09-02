@@ -308,7 +308,7 @@ func classifyGit(seg segment) *finding {
 		}
 		return nil
 
-	case "rebase", "merge", "cherry-pick", "revert", "am":
+	case "rebase", "merge", "pull", "cherry-pick", "revert", "am":
 		// The recovery halves of these verbs are how a wedged tree gets fixed;
 		// blocking them would trap the session in the state it is trying to leave.
 		if g.has("--continue", "--abort", "--skip", "--quit", "--edit-todo") {
