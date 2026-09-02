@@ -2,6 +2,9 @@ name: Release Plugins
 
 on:
   push:
+    # Every branch, no tag. This workflow PUSHES a tag per plugin release, so an
+    # unfiltered push trigger starts it again on its own output.
+    branches: ["**"]
 
 concurrency:
   group: release-${{ github.ref }}
