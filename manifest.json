@@ -1,0 +1,34 @@
+{
+  "name": "no-blame-language",
+  "version": "1219",
+  "tag": "no-blame-language#1219",
+  "pluginJson": {
+    "author": {
+      "name": "mhaynie"
+    },
+    "description": "Refuses to end a turn whose closing message deflects a defect instead of fixing it -- 'pre-existing', 'not my problem', 'out of scope', 'flagging this for you', and their kin. Fix it, or say precisely why you are not the one to fix it",
+    "hooks": {
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/no-blame-language",
+              "type": "command"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": [
+      "blame",
+      "deflection",
+      "ownership",
+      "pre-existing",
+      "stop",
+      "hook",
+      "enforcement"
+    ],
+    "name": "no-blame-language",
+    "version": "1219"
+  }
+}
