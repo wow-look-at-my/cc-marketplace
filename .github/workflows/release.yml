@@ -104,7 +104,7 @@ jobs:
       # see docs/ci-yaml-notes.md#release-build-binary-format-and-action-pin
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
-        uses: wow-look-at-my/go-toolchain@v1
+        uses: wow-look-at-my/go-toolchain@master
         with:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
