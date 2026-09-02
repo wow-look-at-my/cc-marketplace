@@ -48,6 +48,7 @@ var destructiveMarkers = []struct{ needle, label string }{
 	{"stash", "git stash"},
 	{"clean", "git clean"},
 	{"merge", "git merge"},
+	{"pull", "git pull"},
 	{"rm", "rm"},
 	{"mv", "mv"},
 }

@@ -121,13 +121,20 @@ tree is a write route, and the deny message advises Write, which is what produce
 four denied calls in one session, each a wasted round trip. `isSessionScratchpad` requires BOTH a `scratchpad` segment and a `claude`-prefixed
 ancestor inside a scratch root, so `/tmp/scratchpad` and `/tmp/claude-0/.../gen.mjs` both still deny.
 
+**`git merge` and `git pull` are integration, not authorship, and are allowed on a clean tree.** They were refused, with the escape written
+down as "a human runs it"; an unattended session has no human, and pr-minder merges the base branch on its own schedule, so a session that
+cannot integrate that merge cannot fast-forward its next push -- the branch it is required to work on became unpushable. A merge writes only
+what two commits already hold, so every byte stays attributable in history, which is the reasoning that already lets a bare `git checkout <ref>`
+past. `git am` and `git apply` still deny: a patch authors content that is in no commit. A merge into a DIRTY tree still denies, from the
+destruction half. Pinned by `integrate_test.go`.
+
 **What it does NOT do, stated so nobody has to rediscover it**: it does not sandbox the programs it starts. `go build`, `npm test` and `make`
 write what they write. What it closes is every route where the command text itself performs or directs the write. The formatters it vouches for
 (`gofmt`, `goimports`, `shfmt`, `prettier`, `rustfmt`, `cargo fmt`, `terraform fmt`, `go generate`, `go-toolchain`) are an explicit table, not an
 omission -- each writes only a canonical reformat or a repo-owned regeneration of the file it is handed. A tool NOT on that table does not become
 allowed by being a formatter: an unrecognised in-place rewrite denies, and the way to run one is a named recipe (`just fmt`, `make fmt`).
 
-- [docs/write-routes.md](docs/write-routes.md) -- every route, the shape of each rule, the two places the enumerated list collides with ordinary
+- [docs/write-routes.md](docs/write-routes.md) -- every route, the shape of each rule, where the enumerated list collides with ordinary
   workflow, and the boundaries this half deliberately does not cross.
 - **Route catalog**: `routes.go` (redirects, the argv writers, the unknown-tool in-place rule), `textproc.go` (sed's `w` and awk's `print >`,
   read out of the program text so a filter is not mistaken for a writer), `interpreters.go` (inline scripts, editors, the formatter table),

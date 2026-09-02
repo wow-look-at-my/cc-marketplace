@@ -28,6 +28,14 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
+      # tsconfig.json covers .github/scripts; nothing ran it, so it had drifted to failing on every file.
+      - name: Typecheck scripts
+        run: npx tsc --noEmit
+
+      # Here, not in the plugin matrix: these cover the scripts, and a skipped check can never go red.
+      - name: Script tests
+        run: npx tsx --test ".github/scripts/**/*.test.ts"
+
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
@@ -115,8 +123,11 @@ jobs:
 
       - uses: ./.github/actions/setup-marketplace-build
 
+      # GITHUB_TOKEN: the docs plugin's prebuild re-vendors the Docker reference, and 60 anonymous requests an hour is not enough.
       - name: Build
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Test
         run: npx tsx .github/scripts/test-plugin.ts ${{ matrix.plugin }}
