@@ -232,6 +232,11 @@ func TestOrdinaryCommandsAreUntouched(t *testing.T) {
 		"git restore --staged src.txt", "git reset src.txt", "git diff", "git log --oneline -5",
 		"git fetch origin master", "git branch -a", "git clone https://example.com/r.git {{out}}/r",
 
+		// Integrating a ref. The PR rules require merging the base branch into a
+		// PR head, there is no edit tool that performs one, and this hook has no
+		// opt-out -- so denying it wedged the workflow it was meant to protect.
+		"git merge --no-edit origin/master", "git merge FETCH_HEAD", "git pull origin master",
+
 		// Builds, tests and search.
 		"go build ./...", "go test ./...", "npm test", "make build", "just fmt",
 		"grep -w foo src.txt", "rg --files", "ls -la", "find . -name '*.go'",

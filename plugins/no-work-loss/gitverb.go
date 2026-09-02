@@ -308,10 +308,6 @@ func classifyGit(seg segment) *finding {
 		}
 		return nil
 
-	// `pull` is a fetch and then one of these, so it reaches a dirty tree the
-	// same way and belongs on the same line. It was absent while the provenance
-	// half refused it outright; once that half stopped treating integration as
-	// authorship, nothing was left checking it.
 	case "rebase", "merge", "pull", "cherry-pick", "revert", "am":
 		// The recovery halves of these verbs are how a wedged tree gets fixed;
 		// blocking them would trap the session in the state it is trying to leave.

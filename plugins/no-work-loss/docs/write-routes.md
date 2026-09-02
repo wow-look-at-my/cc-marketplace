@@ -101,8 +101,20 @@ repository rather than an argv.
 
 Stated plainly rather than carved out, because a carve-out nobody sees is how a guard stops meaning anything:
 
-1. **`echo x > new-file` is refused**, even though nothing is lost. Creating a file with content in it is exactly what Write is for, so the rule
-   is consistent; it is also the refusal a session meets most often.
+- **`echo x > new-file` is refused**, even though nothing is lost. Creating a file with content in it is exactly what Write is for, so the rule
+  is consistent; it is also the refusal a session meets most often.
+
+## `git merge` and `git pull` integrate, they do not author
+
+Neither is in `worktreeVerbs`, so neither is refused. Every byte a merge writes is already in a commit, with a diff to read and a reflog to
+reach it by -- the same reasoning that lets a bare-ref `git checkout` through. Refusing them made the base-branch merge the PR rules require
+impossible: this half has no opt-out, and no edit tool performs a merge.
+
+`rebase`, `cherry-pick`, `am` and `apply` are not the same act and stay refused. The first two replay commits onto a different base; the last
+two take a patch from outside git. What those land is not a tree anything already holds.
+
+Integrating into a dirty tree is a separate question, and the destruction half answers it: both verbs reach `hazTracked` there and are refused
+with the `git stash push -u` rewrite, so uncommitted work is still protected.
 
 ### `git merge` and `git pull` used to be refused, and are not any more
 
