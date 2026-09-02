@@ -97,16 +97,26 @@ which is exactly what separates them from `sed -i`. A tool not on the table is n
 example: it is recognised as an in-place rewriter and denied, and the way to run it is a named recipe, which is a reviewable line in the
 repository rather than an argv.
 
-## Two places this collides with ordinary workflow
+## Where this collides with ordinary workflow
 
 Stated plainly rather than carved out, because a carve-out nobody sees is how a guard stops meaning anything:
 
-1. **`git merge` and `git pull` are refused.** Both are on the enumerated list of git-as-an-editor routes, and `pull` is a merge with a fetch in
-   front. But the harness's own instructions tell a session to merge the base branch into a PR head to resolve a conflict, and this rule refuses
-   that. The escape today is that a human runs it. If that trade is wrong, the fix is to move `merge`/`pull` out of `worktreeVerbs` -- not to add
-   a knob.
-2. **`echo x > new-file` is refused**, even though nothing is lost. Creating a file with content in it is exactly what Write is for, so the rule
+1. **`echo x > new-file` is refused**, even though nothing is lost. Creating a file with content in it is exactly what Write is for, so the rule
    is consistent; it is also the refusal a session meets most often.
+
+### `git merge` and `git pull` used to be refused, and are not any more
+
+They were on the enumerated list of git-as-an-editor routes, with the escape written down as "a human runs it". An unattended session has no
+human, and this is not an occasional path: the harness tells a session to merge the base branch into its PR head, and pr-minder merges the base
+on its own schedule, so a session that does not integrate that merge cannot fast-forward its next push. The branch a session is *required* to
+work on became unpushable, which is a worse failure than the one the rule was guarding.
+
+Letting them through costs nothing this half protects. A merge writes only what two commits already hold, so every byte is attributable in
+history and reviewable there -- the same reasoning that already lets a bare `git checkout <ref>` past. The form that authors content is a patch,
+and `git am` and `git apply` are still refused. Clobbering an uncommitted edit is a different hazard and still belongs to the destruction half,
+which denies a merge into a dirty tree.
+
+`integrate_test.go` pins all three halves of that: allowed on a clean tree, denied on a dirty one, and a patch still refused either way.
 
 ## What this half deliberately does not cover
 

@@ -16,14 +16,28 @@ import (
 // it.
 
 // worktreeVerbs put committed content into the tree.
+//
+// `merge` and `pull` are deliberately NOT here. They were, and the collision it
+// caused is the reason they are not: the harness tells a session to merge the
+// base branch into its PR head, and pr-minder merges the base on its own
+// schedule, so a session must integrate that merge before its next push can
+// fast-forward. The escape written down at the time was that a human runs it,
+// and an unattended session has no human -- which left the branch it is
+// required to work on unpushable.
+//
+// Letting them through costs nothing this half is protecting. A merge writes
+// only what two commits already hold, so every byte is attributable in history
+// and reviewable there; that is the same reasoning that already lets a bare
+// `git checkout <ref>` past. The form that authors content is a patch, and
+// `git am` and `git apply` are still refused. Clobbering an uncommitted edit is
+// a separate hazard, and the destruction half still denies a merge into a dirty
+// tree (TestRebaseFamilyBlockedDirtyButRecoveryVerbsAllowed).
 var worktreeVerbs = map[string]string{
 	"restore":     "git restore",
 	"stash":       "git stash pop",
 	"revert":      "git revert",
 	"cherry-pick": "git cherry-pick",
-	"merge":       "git merge",
 	"rebase":      "git rebase",
-	"pull":        "git pull",
 	"am":          "git am",
 	"apply":       "git apply",
 	"checkout":    "git checkout",
