@@ -68,6 +68,13 @@ const statementStart = `(^|[;&|(\n])[ \t]*(sudo[ \t]+)?`
 var (
 	buildCommand   = regexp.MustCompile(statementStart + `docker[ \t]+(buildx[ \t]+)?build\b`)
 	composeCommand = regexp.MustCompile(statementStart + `docker([ \t]+|-)compose\b`)
+
+	// A Compose invocation that builds reads the Dockerfile too, so it earns
+	// both skills: `docker compose build`, and `docker compose up --build`.
+	// Bounded to the one statement, so a build later in the chain is not
+	// attributed to the compose call in front of it.
+	composeBuild = regexp.MustCompile(
+		statementStart + `docker([ \t]+|-)compose\b[^;&|\n]*\bbuild\b`)
 )
 
 // topicFor decides which skill, if any, a tool call should pull in.
@@ -106,7 +113,7 @@ func commandTopics(command string) []topic {
 	lower := strings.ToLower(command)
 
 	var out []topic
-	if buildCommand.MatchString(lower) {
+	if buildCommand.MatchString(lower) || composeBuild.MatchString(lower) {
 		out = append(out, dockerfileTopic)
 	}
 	if composeCommand.MatchString(lower) {

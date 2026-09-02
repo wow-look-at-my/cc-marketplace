@@ -112,10 +112,29 @@ func TestComposeCommandsNameTheComposeSkill(t *testing.T) {
 	}
 }
 
-// `docker compose build` genuinely touches both formats.
+// A Compose invocation that builds reads the Dockerfile too, so it earns both.
 func TestACommandCanNameBothSkills(t *testing.T) {
-	assert.Equal(t, []string{"docs:dockerfile", "docs:docker-compose"},
-		skills(topicFor("Bash", toolInput{Command: "docker compose build && docker build ."})))
+	for _, command := range []string{
+		"docker compose build",
+		"docker compose up -d --build",
+		"docker-compose build web",
+		"docker compose config && docker build .",
+	} {
+		assert.Equal(t, []string{"docs:dockerfile", "docs:docker-compose"},
+			skills(topicFor("Bash", toolInput{Command: command})), command)
+	}
+}
+
+// A Compose call that does not build stays on the Compose skill alone.
+func TestAComposeCallWithoutABuildNamesOnlyCompose(t *testing.T) {
+	for _, command := range []string{
+		"docker compose up -d",
+		"docker compose logs -f web",
+		"docker compose down",
+	} {
+		assert.Equal(t, []string{"docs:docker-compose"},
+			skills(topicFor("Bash", toolInput{Command: command})), command)
+	}
 }
 
 func TestUnrelatedCommandsNameNothing(t *testing.T) {
