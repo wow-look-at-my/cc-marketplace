@@ -1,5 +1,5 @@
 ---
-description: Read before writing or editing a Dockerfile, Containerfile, or any `docker build` invocation. Corrects the specific things the model consistently gets wrong about Dockerfiles from stale training data - ADD tar extraction, BuildKit RUN mounts, syntax directives, exec form, ARG/ENV scoping, and cache behavior.
+description: Read before writing or editing a Dockerfile, Containerfile, dockerfile fragment, or any `docker build` / `docker buildx` invocation, and before answering any question about Dockerfile syntax or build caching. Also carries the full upstream Dockerfile reference for lookup. Corrects what the model consistently gets wrong from stale training data - ADD tar extraction, BuildKit RUN mounts, syntax directives, exec form, ARG/ENV scoping, heredocs, and cache behavior.
 ---
 
 # Dockerfile: what is actually true
@@ -8,6 +8,31 @@ Notes to self. Every line here was checked against the current Dockerfile refere
 (moby/buildkit `frontend/dockerfile/docs/reference.md`) and docs.docker.com's
 building best practices. Where my instincts and the docs disagree, **the docs win** -
 they always have, every single time this has come up.
+
+## The reference is vendored here - read it, don't recall it
+
+`reference/dockerfile.md` in this skill's folder is the **complete upstream
+Dockerfile reference**, verbatim, pinned to a commit named in its header
+(`reference/NOTICE.md` records the source and the Apache-2.0 license).
+
+The rest of this file is only the short list of things I get wrong. It is not a
+substitute for the reference, and it does not cover every instruction or flag.
+
+**Grep the reference before stating any specific fact** - a flag name, what a flag
+defaults to, which instruction accepts what, precedence between two instructions,
+whether a feature exists at all. Recalling one of those from training data is exactly
+how the errors below got written in the first place:
+
+```sh
+grep -n "^## ADD" -A 120 reference/dockerfile.md      # one instruction, in full
+grep -n "unpack\|--checksum" reference/dockerfile.md  # one flag, everywhere it appears
+grep -n "^## " reference/dockerfile.md                # the instruction index
+```
+
+Every instruction has its own `## NAME` heading: `FROM`, `RUN`, `CMD`, `LABEL`,
+`EXPOSE`, `ENV`, `ADD`, `COPY`, `ENTRYPOINT`, `VOLUME`, `USER`, `WORKDIR`, `ARG`,
+`ONBUILD`, `STOPSIGNAL`, `HEALTHCHECK`, `SHELL`, plus `Parser directives`,
+`Environment replacement`, `Shell and exec form`, and `Here-Documents`.
 
 ## Read this first
 

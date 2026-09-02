@@ -1,5 +1,5 @@
 ---
-description: Read before writing or editing a compose.yaml, compose.yml, docker-compose.yml, or any `docker compose` invocation. Corrects the specific things the model consistently gets wrong about Compose from stale training data - why `docker compose restart` never applies edits to the file, the obsolete top-level `version` key, depends_on health conditions, file naming, merge/override rules, watch, lifecycle hooks, and v2/v5 CLI differences.
+description: Read before writing or editing a compose.yaml, compose.yml, docker-compose.yml, any Compose override or fragment file, and before any `docker compose` invocation or question about a Compose field. Also carries the full upstream Compose file reference for lookup. Corrects what the model consistently gets wrong from stale training data - why `docker compose restart` never applies edits to the file, the obsolete top-level `version` key, depends_on health conditions, file naming, merge/override rules, watch, lifecycle hooks, and v2/v5 CLI differences.
 ---
 
 # Docker Compose: what is actually true
@@ -7,6 +7,39 @@ description: Read before writing or editing a compose.yaml, compose.yml, docker-
 Notes to self. Checked against the current Compose Specification pages on
 docs.docker.com (`content/reference/compose-file/**`) and the Compose manuals. Where my
 instincts and the docs disagree, **the docs win**.
+
+## The reference is vendored here - read it, don't recall it
+
+This skill's `reference/` folder holds the **complete upstream Compose file
+reference**, verbatim, pinned to a commit named in each file's header
+(`reference/NOTICE.md` records the source and the Apache-2.0 license).
+
+The rest of this file is only the short list of things I get wrong. It does not
+enumerate the service fields, and Compose has far more of them than I remember.
+
+**Grep the reference before stating any specific fact** - whether a field exists,
+what it accepts, what it defaults to, how two fields interact. Guessing a Compose
+field name from training data produces something plausible that Compose rejects:
+
+```sh
+grep -n "^### healthcheck" -A 60 reference/services.md   # one field, in full
+grep -n "^### " reference/services.md                    # every service field
+grep -rn "gpus" reference/                               # a field, wherever it lives
+```
+
+| File | Covers |
+|---|---|
+| `services.md` | every `services:` field - the big one, and the first place to look |
+| `build.md` | the `build:` sub-element |
+| `deploy.md` | `deploy:` - replicas, resources, placement, limits |
+| `develop.md` | `develop.watch` and file-sync rules |
+| `networks.md`, `volumes.md`, `configs.md`, `secrets.md`, `models.md` | those top-level elements |
+| `merge.md`, `include.md`, `fragments.md`, `extension.md` | multi-file composition, anchors, `x-` extensions |
+| `interpolation.md` | `${VAR}` syntax and its defaults |
+| `profiles.md`, `version-and-name.md` | profiles, and the `name:` top-level element |
+
+A line reading `> Version-gated feature: "..."` marks a field that needs a recent
+Compose; the reference page linked in the header gives the minimum version.
 
 ## The three reflexes to unlearn immediately
 
