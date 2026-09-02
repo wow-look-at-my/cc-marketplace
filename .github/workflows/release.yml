@@ -2,7 +2,7 @@ name: Release Plugins
 
 on:
   push:
-    # Every branch, no tag: this workflow pushes a tag per plugin release.
+    # Every branch, no tag: this workflow pushes a plugin/*/v* tag per release, which must not re-enter it.
     branches: ["**"]
 
 concurrency:

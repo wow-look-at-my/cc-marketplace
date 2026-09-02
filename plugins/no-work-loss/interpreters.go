@@ -93,6 +93,9 @@ func scratchScriptWrites(seg segment, name string, rest []word, roots []string) 
 		if _, guarded := insideGuarded(roots, p); guarded {
 			break // a script in the tree got there through Write or Edit
 		}
+		if isSessionScratchpad(p) {
+			break // the harness tells the session to put temp files here
+		}
 		if p != "" && isScratchPath(p) {
 			return []write{{route: name + " " + o.text, opaque: "a " + name + " script under a temporary directory; write the file with Write or Edit instead of generating it from a scratch script"}}
 		}
@@ -129,6 +132,34 @@ func editorWrites(seg segment, name string, rest []word) []write {
 		return []write{{route: name, opaque: "an " + name + " session driven from stdin, so its target file is not in the command text"}}
 	}
 	return nil
+}
+
+// isSessionScratchpad recognises the directory the harness ITSELF tells a
+// session to use for temporary files. Its system prompt says to put every temp
+// file there instead of /tmp, so denying the scripts written there refuses the
+// documented workflow: the file arrives through Write, is visible in the
+// transcript, and there is nowhere else the instruction allows.
+//
+// The shape is <tmp>/claude-<n>/<slug>/<session-id>/scratchpad/... -- a
+// "scratchpad" segment under an ancestor named claude or claude-<something>.
+// Both halves are required, so an ordinary /tmp/scratchpad or a stray
+// claude-notes/ directory is still a scratch path.
+func isSessionScratchpad(p string) bool {
+	if p == "" || !isScratchPath(p) {
+		return false
+	}
+	segs := strings.Split(filepath.Clean(p), string(filepath.Separator))
+	claude := false
+	for _, s := range segs {
+		if s == "claude" || strings.HasPrefix(s, "claude-") || strings.HasPrefix(s, "claude_") {
+			claude = true
+			continue
+		}
+		if claude && s == "scratchpad" {
+			return true
+		}
+	}
+	return false
 }
 
 // scratch directories: the places a file can appear without any review.

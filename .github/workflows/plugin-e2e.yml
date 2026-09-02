@@ -2,7 +2,7 @@ name: plugin e2e
 
 on:
   push:
-    # Every branch, no tag: the release workflow's tags must not start this one.
+    # Every branch, no tag: the plugin/*/v* tags the release workflow pushes must not start this one.
     branches: ["**"]
 
 permissions:

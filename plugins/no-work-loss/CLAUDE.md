@@ -114,6 +114,13 @@ The stdin markers are untouched: `cat evil.js | node -` and `node /dev/stdin` st
 anything outside the guarded roots, including the `/tmp` scratchpad, was never in scope. The guarded roots are the repository containing the
 payload's `cwd` and `CLAUDE_PROJECT_DIR`, found by walking up for `.git` rather than paying for a subprocess in front of every Bash call.
 
+**The session scratchpad is exempt from the scratch-script rule**, and that exemption is not a hole -- it is the harness's own instruction.
+Claude Code's system prompt directs a session to put every temporary file in `<tmp>/claude-<n>/<slug>/<session-id>/scratchpad`, so denying
+`node <scratchpad>/x.mjs` refuses the workflow the platform mandates, while leaving no legal path: `Write` there is allowed, `cp` into the
+tree is a write route, and the deny message advises Write, which is what produced the file. Measured cost of the gap before it was closed:
+four denied calls in one session, each a wasted round trip. `isSessionScratchpad` requires BOTH a `scratchpad` segment and a `claude`-prefixed
+ancestor inside a scratch root, so `/tmp/scratchpad` and `/tmp/claude-0/.../gen.mjs` both still deny.
+
 **What it does NOT do, stated so nobody has to rediscover it**: it does not sandbox the programs it starts. `go build`, `npm test` and `make`
 write what they write. What it closes is every route where the command text itself performs or directs the write. The formatters it vouches for
 (`gofmt`, `goimports`, `shfmt`, `prettier`, `rustfmt`, `cargo fmt`, `terraform fmt`, `go generate`, `go-toolchain`) are an explicit table, not an
