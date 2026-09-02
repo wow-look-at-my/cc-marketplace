@@ -30,6 +30,12 @@ empty flag set on purpose: it has no way to write a file, and the entry exists s
 shell scripts are read and analysed (see indirection below), and a non-shell script under a temporary directory denies, because that is the
 write-elsewhere-then-run splice. A script inside the tree got there through Write or Edit and is visible in the diff.
 
+The session scratchpad is the one temporary directory that does NOT deny. Claude Code's own system prompt tells a session to put every temp
+file there rather than in `/tmp`, so refusing to run what it writes there refuses the documented workflow, and there is nowhere else the
+instruction allows: a `cp` into the tree is a write route, and the deny message's own advice (use Write) is what the session already did.
+`isSessionScratchpad` matches a `scratchpad` segment under an ancestor named `claude` or `claude-<something>`, inside a scratch root -- both
+halves required, so a bare `/tmp/scratchpad` or a stray `claude-notes/` is still refused.
+
 **Redirection and copy-over.** `>`, `>>`, `>|`, `&>`, `<>`, and `>&file` (but not `2>&1`, which duplicates a descriptor, and not `/dev/null` and
 friends). `tee` and `tee -a`, `dd of=`, `truncate -s`, `sponge`, `xxd -r`, `base64`/`openssl -out`.
 
