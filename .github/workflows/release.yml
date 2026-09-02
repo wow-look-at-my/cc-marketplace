@@ -2,6 +2,10 @@ name: Release Plugins
 
 on:
   push:
+    # Every branch, but not tags: this workflow CREATES plugin/*/v* tags, and a
+    # bare `push:` matches those too, restarting the whole release pipeline on
+    # its own output.
+    branches: ['**']
 
 concurrency:
   group: release-${{ github.ref }}
