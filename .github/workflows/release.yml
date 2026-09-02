@@ -2,6 +2,8 @@ name: Release Plugins
 
 on:
   push:
+    # Excludes the plugin/*/v* tags this workflow pushes, which re-entered it.
+    branches: ['**']
 
 concurrency:
   group: release-${{ github.ref }}
