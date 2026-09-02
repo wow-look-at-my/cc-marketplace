@@ -63,6 +63,11 @@
 	<test cmd="deno eval 'console.log(1)'" expect="deny"/>
 	<test cmd="bun -e 'console.log(1)'" expect="deny"/>
 	<test cmd="node script.js" expect=""/>
+	<!-- Feeding a NAMED script its input is not handing node a program: the
+	     program is script.js, right there in the command text. This is how a hook
+	     gets tested with the payload it will really receive. -->
+	<test cmd="printf '{&quot;a&quot;:1}' | node hook.ts" expect=""/>
+	<test cmd="node hook.ts &lt; payload.json" expect=""/>
 	<test cmd="node --experimental-strip-types tool.ts" expect=""/>
 	<test cmd="node /home/user/.claude/setup/claude-md-budget.ts" expect=""/>
 	<test cmd="ruby script.rb" expect=""/>
