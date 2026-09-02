@@ -1,0 +1,25 @@
+{
+	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"name": "no-tombstones",
+	"description": "Refuses a write that adds a tombstone comment -- prose about a state the code is no longer in, or an argument aimed at whoever reviews the diff. The refused lines are moved to .git/TOMBSTONES for the commit message instead of deleted",
+	"author": {
+		"name": "mhaynie"
+	},
+	"keywords": ["comments", "documentation", "staleness", "narration", "pretooluse", "hook", "enforcement"],
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-tombstones"
+					}
+				]
+			}
+		]
+	},
+	"mh": {
+		"include_in_marketplace": true
+	}
+}

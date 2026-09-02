@@ -1,0 +1,138 @@
+// referents.go carries the one tier that does not read the wording at all: a
+// comment naming a symbol that exists nowhere is describing a tree that is
+// gone. "see TestDarwinStatfsToLinux for the pin", written beside the change
+// that deleted that test, is a tombstone with no tell in its phrasing, and no
+// rewording makes it true again.
+//
+// Precision comes entirely from which identifiers are eligible. A comment about
+// low-level work is full of names the repository does not define -- ENOSYS,
+// RLIMIT_CORE, SYS_STATFS -- and denying over those is how a guard earns the
+// reputation that gets it turned off. So an all-caps name is never a candidate,
+// and neither is a short one: the shape this checks is a repository's own
+// mixed-case or snake_case symbol, which the repository must contain.
+package main
+
+import (
+	"context"
+	"github.com/wow-look-at-my/go-containers/set"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// matchesIdentifierShape reports whether a whole word is built like a symbol
+// rather than a word: snake_case, lowerCamel or UpperCamel. go-regex-compiler
+// generates it into identshape_gen.go, so the shape test is a compiled switch
+// and this package links no regex engine. `just prebuild` regenerates it and
+// fails when the committed copy has drifted.
+
+// identifierWords splits text into the runs the shape test judges.
+//
+// The generated matcher answers about a WHOLE string, so the word boundaries
+// the pattern used to carry live here instead. Splitting on every character an
+// identifier cannot contain yields exactly the runs `\b...\b` delimited, and
+// costs no regex engine at run time.
+func identifierWords(text string) []string {
+	return strings.FieldsFunc(text, func(r rune) bool {
+		return !(r == '_' ||
+			(r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9'))
+	})
+}
+
+// isCandidate reports whether a name is one this repository must contain.
+//
+// An all-caps name is refused outright: ENOSYS, RLIMIT_CORE and SYS_STATFS are
+// the shape a low-level comment is full of, and none of them is the
+// repository's to define. A short name is refused for the same reason from the
+// other direction -- it is too likely to be a word.
+func isCandidate(name string) bool {
+	return len(name) >= 8 &&
+		name != strings.ToUpper(name) &&
+		matchesIdentifierShape(name)
+}
+
+// probeTimeout bounds the search. A guard that hangs is worse than one that
+// misses, so an expired probe reports nothing.
+const probeTimeout = 2 * time.Second
+
+// DeadReferents returns the identifiers a comment names that appear neither in
+// the text being written nor anywhere in the repository holding path.
+//
+// It returns nothing at all when it cannot answer: no repository, no ripgrep, a
+// timeout, or a search that errors. An absent answer must never read as "the
+// symbol is gone".
+func DeadReferents(path, added string, blocks []Block) []string {
+	root := RepoRoot(path)
+	if root == "" {
+		return nil
+	}
+	rg, err := exec.LookPath("rg")
+	if err != nil {
+		return nil
+	}
+
+	names := set.New[string]()
+	for _, b := range blocks {
+		for _, m := range identifierWords(b.Text) {
+			if isCandidate(m) {
+				names.Add(m)
+			}
+		}
+	}
+	if names.Len() == 0 || names.Len() > 40 {
+		return nil // an unbounded set is a comment this rule cannot judge cheaply
+	}
+
+	args := []string{"--no-messages", "--fixed-strings", "--files-with-matches", "--max-count", "1"}
+	var ordered []string
+	for n := range names.All() {
+		if strings.Count(added, n) > 1 {
+			continue
+		}
+		ordered = append(ordered, n)
+	}
+	if len(ordered) == 0 {
+		return nil
+	}
+
+	var dead []string
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+	for _, name := range ordered {
+		cmd := exec.CommandContext(ctx, rg, append(append([]string{}, args...), "-e", name, root)...)
+		out, err := cmd.Output()
+		if ctx.Err() != nil {
+			return nil
+		}
+		if err != nil && cmd.ProcessState != nil && cmd.ProcessState.ExitCode() > 1 {
+			return nil // ripgrep failed rather than found nothing
+		}
+		if strings.TrimSpace(string(out)) == "" {
+			dead = append(dead, name)
+		}
+	}
+	return dead
+}
+
+// RepoRoot walks up from path looking for a working tree. An empty result means
+// the write is not inside one.
+func RepoRoot(path string) string {
+	dir := path
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		dir = filepath.Dir(dir)
+	}
+	for {
+		if fi, err := os.Stat(filepath.Join(dir, ".git")); err == nil && (fi.IsDir() || fi.Mode().IsRegular()) {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}

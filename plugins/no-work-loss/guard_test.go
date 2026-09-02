@@ -386,6 +386,7 @@ func TestDeniesForceRefspec(t *testing.T) {
 	denied(t, dir, "git push origin +master:master")
 }
 
+
 func TestGitRmCachedLeavesTheFileAlone(t *testing.T) {
 	dir := newRepo(t)
 	untrack(t, dir, "scratch.txt")
