@@ -45,6 +45,8 @@ func TestTheSampleBlockSplitsIntoTombstonesAndKeepers(t *testing.T) {
 		{"a former state", "the old dispatch spine is replaced"},
 		{"a former state", "we removed the arm64 build tag from the table"},
 		{"a then-and-now contrast", "the table lives here rather than the old arm64 file"},
+		{"a then-and-now contrast", "all of them are emulated now"},
+		{"an address to the reviewer", "what is worth keeping here is the nosplit budget"},
 		{"an address to the reviewer", "this change is not tidying, and here is why"},
 		{"an address to the reviewer", "worth noting that the ubuntu leg runs these"},
 		{"a defence of the change", "an arm64-tagged table would have been dead weight"},
@@ -67,6 +69,11 @@ func TestTheSampleBlockSplitsIntoTombstonesAndKeepers(t *testing.T) {
 		"sendfile reverses Apple's first two arguments against Linux's",
 		"the size guard is what makes the struct pin load-bearing",
 		"a Linux caller passing no offset needs an lseek before and after",
+		// A demonstrative in front of a word that is also a participle. This
+		// is the false positive the first run against real prose exposed.
+		"that split has an obvious way to go wrong",
+		"this merge of the two paths is what the size guard protects",
+		"the buffer is dropped when the caller passes no offset",
 	}
 	for _, text := range keepers {
 		t.Run(text, func(t *testing.T) {

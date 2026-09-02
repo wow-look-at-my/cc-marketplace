@@ -60,6 +60,7 @@ var tells = []tell{
 	{"a then-and-now contrast", regexp.MustCompile(`(?i)\brather than (?:the )?(?:old|former|previous|legacy)\b`)},
 	{"a then-and-now contrast", regexp.MustCompile(`(?i)\binstead of (?:the )?(?:old|former|previous|legacy)\b`)},
 	{"a then-and-now contrast", regexp.MustCompile(`(?i)\bwhere (?:it|this|that) (?:used to|once)\b`)},
+	{"a then-and-now contrast", regexp.MustCompile(`(?i)\b[a-z]+ed now\b|\b(?:is|are) now (?:[a-z]+ed|the case)\b`)},
 
 	// The referent is gone: the sentence's subject is a former state.
 	{"a former state", regexp.MustCompile(`(?i)\bused to\b`)},
@@ -67,13 +68,19 @@ var tells = []tell{
 	{"a former state", regexp.MustCompile(`(?i)\bno longer\b|\banymore\b|\bnowadays\b|\bthese days\b`)},
 	{"a former state", regexp.MustCompile(`(?i)\bthe (?:former|old|previous|legacy|original) \w+`)},
 	{"a former state", regexp.MustCompile(`(?i)\b(?:was|were|has been|have been|had been|got|gets|is now|are now) (?:` + changeParticiples + `)\b`)},
-	{"a former state", regexp.MustCompile(`(?i)\b(?:we|this|it|that) (?:` + changeParticiples + `)\b`)},
+	// A demonstrative in front of a participle needs the narrower verb set:
+	// "that split has a way to go wrong" is a noun, and refusing it is how a
+	// guard earns the reputation that gets it uninstalled. The ambiguous words
+	// keep their place in the rule above, where an auxiliary settles the
+	// reading ("was split").
+	{"a former state", regexp.MustCompile(`(?i)\b(?:we|this|it|that) (?:renamed|removed|deleted|replaced|introduced|reverted|refactored|migrated|deprecated|rewrote|reworked|consolidated)\b`)},
 	{"a former state", regexp.MustCompile(`(?i)\bthis (?:replaces|supersedes|used to)\b`)},
 	{"a former state", regexp.MustCompile(`(?i)\bstopped (?:being|working|doing)\b|\bstarted (?:being|failing)\b`)},
 
 	// The audience is the reviewer, not the next editor.
 	{"an address to the reviewer", regexp.MustCompile(`(?i)\bthis (?:pr|pull request|change|diff|commit|patch|cl)\b`)},
 	{"an address to the reviewer", regexp.MustCompile(`(?i)\bworth (?:noting|your attention|knowing here)\b`)},
+	{"an address to the reviewer", regexp.MustCompile(`(?i)\bwhat is worth [a-z]+ing here\b`)},
 	{"an address to the reviewer", regexp.MustCompile(`(?i)\b(?:as|when) requested\b|\bwas never requested\b|\bnobody asked\b`)},
 	{"an address to the reviewer", regexp.MustCompile(`(?i)\bdo not (?:reintroduce|add this back|bring (?:it|this) back)\b`)},
 	{"an address to the reviewer", regexp.MustCompile(`(?i)\bper the (?:review|reviewer|feedback|comment)\b`)},
@@ -124,7 +131,10 @@ func FindTombstones(blocks []Block, maxLines int) []Hit {
 					continue
 				}
 				phrase := strings.TrimSpace(line[at[0]:at[1]])
-				key := t.name + "\x00" + strings.ToLower(phrase)
+				// One line reports once per tell. Several rows of the same
+				// tell can match one sentence, and printing each is noise the
+				// reader has to skip to reach the next finding.
+				key := t.name + "\x00" + strings.TrimSpace(line)
 				if seen.Contains(key) {
 					continue
 				}
