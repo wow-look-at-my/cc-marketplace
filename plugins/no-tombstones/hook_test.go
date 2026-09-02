@@ -132,12 +132,31 @@ func TestRefusedLinesAreRelocatedIntoTheGitDirectory(t *testing.T) {
 	assert.Contains(t, string(body), file)
 }
 
+// stubRipgrep puts an `rg` on PATH that answers the one question this plugin
+// asks it, using grep. A runner without ripgrep would otherwise skip the whole
+// dead-referent tier, which is how an untested tier reaches production looking
+// covered.
+func stubRipgrep(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\npat=''\nroot='.'\n" +
+		"while [ $# -gt 0 ]; do\n" +
+		"  case \"$1\" in\n" +
+		"    -e) pat=\"$2\"; shift 2;;\n" +
+		"    --max-count) shift 2;;\n" +
+		"    -*) shift;;\n" +
+		"    *) root=\"$1\"; shift;;\n" +
+		"  esac\n" +
+		"done\n" +
+		"grep -rlF -- \"$pat\" \"$root\" 2>/dev/null\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "rg"), []byte(script), 0o700))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
 // A name the repository does not define is the tier no rewording defeats: this
 // sentence carries no tell at all, only a referent that is gone.
 func TestANameNothingDefinesIsRefused(t *testing.T) {
-	if _, err := exec.LookPath("rg"); err != nil {
-		t.Skip("ripgrep not installed; this tier reports nothing without it")
-	}
+	stubRipgrep(t)
 	root := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", "-q", root).Run())
 	require.NoError(t, os.WriteFile(filepath.Join(root, "live.go"),
@@ -152,6 +171,43 @@ func TestANameNothingDefinesIsRefused(t *testing.T) {
 	out := run(strings.NewReader(payload(t, "PreToolUse", "Write",
 		map[string]any{"file_path": file, "content": "// see TestDarwinStatfsToLinux for the pin\nfunc f() {}"})))
 	assert.Empty(t, out, "a name the repository does define must pass")
+}
+
+// Absence of an answer must never read as "the symbol is gone", so every path
+// that cannot look reports nothing.
+func TestTheReferentTierReportsNothingWhenItCannotLook(t *testing.T) {
+	blocks := commentBlocks("// see TestSomethingMissing for the pin", cLike)
+
+	t.Run("outside a working tree", func(t *testing.T) {
+		stubRipgrep(t)
+		assert.Empty(t, DeadReferents(filepath.Join(t.TempDir(), "a.go"), "", blocks))
+	})
+
+	root := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", "-q", root).Run())
+	file := filepath.Join(root, "a.go")
+
+	t.Run("no ripgrep on PATH", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		assert.Empty(t, DeadReferents(file, "", blocks))
+	})
+
+	t.Run("too many names to judge cheaply", func(t *testing.T) {
+		stubRipgrep(t)
+		var names []string
+		for i := range 50 {
+			names = append(names, "// symbolNumber"+itoa(i)+"Here")
+		}
+		many := commentBlocks(strings.Join(names, "\n"), cLike)
+		assert.Empty(t, DeadReferents(file, "", many))
+	})
+
+	t.Run("a symbol the write itself carries", func(t *testing.T) {
+		stubRipgrep(t)
+		added := "// newHelperName does the conversion\nfunc newHelperName() {}"
+		assert.Empty(t, DeadReferents(file, added, commentBlocks(added, cLike)),
+			"a symbol this write defines is not a dead referent")
+	})
 }
 
 // An external constant is exactly the shape a low-level comment is full of, and
