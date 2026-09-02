@@ -10,12 +10,28 @@ upstream documentation, and loads before touching the relevant file type.
 |-------|--------------|
 | `/docs:dockerfile` | Writing or editing a Dockerfile, or a `docker build` command |
 | `/docs:docker-compose` | Writing or editing a `compose.yaml`, or a `docker compose` command |
+| `/docs:docker-images` | Deciding what the images should be — base image choice, layer vs mounted volume, splitting one image into several |
 | `/docs:node-typescript` | Deciding whether a file must be JavaScript, adding a build step or a `.d.ts` to ship TypeScript, or debugging a `.ts` import that will not resolve |
 | `/docs:css-cascade` | Writing or editing any CSS — before giving an element its own complete rule instead of using the cascade |
 | `/docs:claude-code-source` | Answering how Claude Code itself behaves — fetching the right version's `cli.js` and searching it from a subagent |
 
 The skills are model-invoked: their descriptions are written so Claude pulls them in on
 its own when it is about to edit one of these files. Invoking them by name also works.
+
+## Vendored Docker reference
+
+The `dockerfile` and `docker-compose` skills each carry a `reference/` directory holding
+the complete upstream reference verbatim, pinned to the commit named in each file.
+
+Sources are `moby/buildkit` and `docker/docs`, both Apache-2.0; see each directory's
+`NOTICE.md`. Regenerate with `go run ./tools/vendor-docker-docs` — never edit by hand.
+
+## Hook
+
+A `PreToolUse` hook names the matching skill when a call is about to touch a Dockerfile
+or a Compose file, because a description only helps once you decide to go looking.
+
+It reminds once per session per skill, and never blocks anything.
 
 ## Agent
 
