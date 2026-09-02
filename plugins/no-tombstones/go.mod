@@ -7,6 +7,8 @@ require (
 	github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d41 // go-toolchain:auto-branch
 )
 
+require github.com/wow-look-at-my/go-regex-compiler v0.0.0-20260709175026-98aa140090d9
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
