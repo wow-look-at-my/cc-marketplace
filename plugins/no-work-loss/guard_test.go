@@ -380,11 +380,23 @@ func TestDeniesForceRefspec(t *testing.T) {
 	denied(t, dir, "git push origin +master:master")
 }
 
+// Integrating a ref into a clean tree writes only bytes already in a commit, so
+// both halves let it through. Refusing it made the base-branch merge the PR
+// rules require impossible, since this hook has no opt-out and no edit tool
+// performs a merge.
+func TestMergeAndPullPassOnACleanTree(t *testing.T) {
+	dir := newRepo(t)
+	allowed(t, dir, "git merge origin/master")
+	allowed(t, dir, "git merge --no-edit FETCH_HEAD")
+	allowed(t, dir, "git pull origin master")
+}
+
 func TestRebaseFamilyBlockedDirtyButRecoveryVerbsAllowed(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	denied(t, dir, "git rebase master")
 	denied(t, dir, "git merge feature")
+	denied(t, dir, "git pull origin master")
 	denied(t, dir, "git cherry-pick abc123")
 	allowed(t, dir, "git rebase --abort")
 	allowed(t, dir, "git merge --abort")
