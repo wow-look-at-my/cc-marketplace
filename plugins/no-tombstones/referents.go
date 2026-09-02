@@ -26,7 +26,7 @@ import (
 // identifierShape matches a name built like a symbol rather than a word:
 // snake_case, lowerCamel or UpperCamel. Shape alone is not eligibility --
 // isCandidate is the rule, and the two must be asked together.
-var identifierShape = regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b|\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*\b`)
+var identifierShape = regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b|\b[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*\b`)
 
 // isCandidate reports whether a name is one this repository must contain.
 //
