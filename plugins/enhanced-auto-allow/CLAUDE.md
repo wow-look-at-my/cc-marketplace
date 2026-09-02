@@ -16,6 +16,17 @@ consulted, so `denyOnly` suppresses every non-deny verdict on that path.
   `cmd/deny_process.go` (process resolution), `cmd/shell.go` (the allow path's reader -- it gives up
   on a redirect, an expansion or a substitution, which is the safe answer only because the deny path
   never does)
+- **Shared parser**: `tools/shellwalk`, a repo-local module both this plugin and `no-work-loss` pull
+  in through a `replace` in their `go.mod`. It owns reading a word, resolving a spelling to the
+  program it names, peeling wrappers, and telling a named script from a script arriving on stdin.
+  The two plugins keep their own segmentation and their own verdicts -- one fails closed, the other
+  fails open, deliberately -- but they must not answer "which program runs here" separately, because
+  a wrapper either one misreads is a rule the other still enforces. Sharing it also closed two holes
+  this plugin had on its own: it skipped a wrapper's flags without knowing which of them take a
+  VALUE, so `nice -n 10 python x.py` resolved to `10` and `timeout 5 python x.py` to `5` -- the
+  denied interpreter behind each was never seen. CI hashes `tools/shellwalk/**` into both plugins'
+  cache keys, and a `shellwalk` job runs its own suite, since the plugin builds compile it without
+  ever running its tests.
 - **Plugin config**: `plugins/enhanced-auto-allow/.claude-plugin/plugin.json` -- the same binary on
   matcher `*` for both PermissionRequest and PreToolUse
 - `plugins/enhanced-auto-allow/docs/two-event-registration.md` -- why two events, the cli.js call

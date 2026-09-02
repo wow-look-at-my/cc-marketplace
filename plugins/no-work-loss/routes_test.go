@@ -231,6 +231,11 @@ func TestOrdinaryCommandsAreUntouched(t *testing.T) {
 		"git checkout -b claude/fix-thing", "git switch -c claude/other", "git stash push -u",
 		"git restore --staged src.txt", "git reset src.txt", "git diff", "git log --oneline -5",
 		"git fetch origin master", "git branch -a", "git clone https://example.com/r.git {{out}}/r",
+		// Integrating a named ref's committed history. The org's PR rules mandate
+		// this on a conflict, and denying it left no way to resolve one at all.
+		// The verbs that DO put unreviewed content in a file stay denied -- see
+		// the restore/stash/checkout rows in the deny table above.
+		"git merge origin/master", "git merge --no-ff feature", "git pull origin master",
 
 		// Integrating a ref. The PR rules require merging the base branch into a
 		// PR head, there is no edit tool that performs one, and this hook has no

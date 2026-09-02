@@ -6,6 +6,7 @@ import (
 
 	"github.com/wow-look-at-my/go-containers/set"
 	"mvdan.cc/sh/v3/syntax"
+	"shellwalk"
 )
 
 // A word carries its literal text plus whether that text is the whole story.
@@ -312,23 +313,14 @@ func (w *walker) shellCall(eff []word, cwd string) bool {
 	return true
 }
 
-// shellNoExec reports whether the shell was told to parse without executing:
-// -n, --noexec, or an n inside a single-dash cluster such as -nx. An operand
-// ends the flags, so a script named `-n` cannot masquerade as the flag.
+// shellNoExec reports whether the shell was told to parse without executing, in
+// which case nothing the script names is written.
 func shellNoExec(eff []word) bool {
-	for i := 1; i < len(eff); i++ {
-		t := eff[i].text
-		if t == "--noexec" {
-			return true
-		}
-		if t == "-c" || t == "--" || !strings.HasPrefix(t, "-") {
-			return false
-		}
-		if !strings.HasPrefix(t, "--") && strings.ContainsRune(t[1:], 'n') {
-			return true
-		}
+	shared := make([]shellwalk.Word, len(eff))
+	for i, a := range eff {
+		shared[i] = shellwalk.Word{Text: a.text, Static: a.static}
 	}
-	return false
+	return shellwalk.ShellNoExec(shared)
 }
 
 // script parses shell source found inside the command and folds its segments

@@ -4,6 +4,7 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"path/filepath"
+	"shellwalk"
 	"strings"
 )
 
@@ -105,11 +106,14 @@ func scratchScriptWrites(seg segment, name string, rest []word, roots []string) 
 }
 
 // namesAScript reports whether the invocation already carries a file for the
-// interpreter to run. Any operand counts, static or not: what matters is that
-// stdin is then the program's INPUT rather than its program.
+// interpreter to run. A stdin marker is an operand that names stdin, not a
+// script, so `node -` still reads as a program arriving on the pipe.
 func namesAScript(rest []word) bool {
-	_, operands := scanArgs(rest, noFlags)
-	return len(operands) > 0
+	shared := make([]shellwalk.Word, len(rest))
+	for i, a := range rest {
+		shared[i] = shellwalk.Word{Text: a.text, Static: a.static}
+	}
+	return shellwalk.NamesAScript(shared)
 }
 
 func editorWrites(seg segment, name string, rest []word) []write {

@@ -22,6 +22,8 @@ import (
 // by, which is the same reasoning the bare-ref checkout below rests on. rebase
 // and cherry-pick replay commits onto a different base, and am and apply take a
 // patch from outside git, so what those land is not a tree anything holds.
+// classifyGit still gates merge and pull on a committed tree: the one thing
+// they can lose is a change that is in no object yet.
 var worktreeVerbs = map[string]string{
 	"restore":     "git restore",
 	"stash":       "git stash pop",
