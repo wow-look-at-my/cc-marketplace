@@ -22,29 +22,27 @@ func main() {
 	root := flag.String("root", ".", "repository root to write into")
 	flag.Parse()
 
-	if err := run(*root); err != nil {
+	if err := run(*root, newGHClient()); err != nil {
 		fmt.Fprintln(os.Stderr, "vendor-docker-docs:", err)
 		os.Exit(1)
 	}
 }
 
-func run(root string) error {
+func run(root string, c client) error {
 	// One commit per upstream, resolved once, so every file in a run comes
 	// from the same tree.
 	commits := map[string]string{}
-	fetchers := map[string]*fetcher{}
 
 	for _, b := range bundles {
 		for _, p := range b.Pages {
 			if _, done := commits[p.Src.Repo]; done {
 				continue
 			}
-			commit, err := resolve(p.Src)
+			commit, err := c.resolve(p.Src)
 			if err != nil {
 				return err
 			}
 			commits[p.Src.Repo] = commit
-			fetchers[p.Src.Repo] = newFetcher(p.Src.Repo, commit)
 			fmt.Printf("%s@%s -> %s\n", p.Src.Repo, p.Src.Ref, commit)
 		}
 	}
@@ -54,23 +52,26 @@ func run(root string) error {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		if err := writeBundle(dir, b, commits, fetchers); err != nil {
+		if err := writeBundle(dir, b, commits, c); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func writeBundle(dir string, b bundle, commits map[string]string, fetchers map[string]*fetcher) error {
+func writeBundle(dir string, b bundle, commits map[string]string, c client) error {
 	written := set.New[string]()
 
 	for _, p := range b.Pages {
-		f := fetchers[p.Src.Repo]
-		raw, err := f.get(p.Path)
+		commit := commits[p.Src.Repo]
+		// Includes resolve against the page's own repository and commit.
+		get := func(path string) (string, error) { return c.get(p.Src.Repo, commit, path) }
+
+		raw, err := get(p.Path)
 		if err != nil {
 			return err
 		}
-		out, err := render(raw, p, commits[p.Src.Repo], f.get)
+		out, err := render(raw, p, commit, get)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.Path, err)
 		}
