@@ -121,6 +121,13 @@ func message(topics []topic, p payload) string {
 // reminder is sent every time rather than never: over-reminding is the lesser
 // failure of the two.
 func claim(sessionID, skill string) bool {
+	// With no session to key on, every session would share one marker and all
+	// but the first would go silent. Speak instead: a repeat is visible, and a
+	// hook that has quietly stopped working is not.
+	if sessionID == "" {
+		return true
+	}
+
 	sum := sha256.Sum256([]byte(sessionID + "\x00" + skill))
 	dir := filepath.Join(os.TempDir(), "docs-nudge")
 	if err := os.MkdirAll(dir, 0o700); err != nil {

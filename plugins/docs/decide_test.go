@@ -100,6 +100,15 @@ func TestClaimSpeaksUpWhenItCannotRecord(t *testing.T) {
 	assert.True(t, claim("s1", "docs:dockerfile"))
 }
 
+// With no session id there is nothing to tell sessions apart, so one shared
+// marker would silence every session after the first.
+func TestClaimSpeaksUpWithNoSessionID(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+
+	assert.True(t, claim("", "docs:dockerfile"))
+	assert.True(t, claim("", "docs:dockerfile"))
+}
+
 func TestMessageEndsWithTheGrepInstruction(t *testing.T) {
 	text := message([]topic{dockerfileTopic}, call("a", "Write", toolInput{FilePath: "Dockerfile"}))
 
