@@ -71,6 +71,18 @@ server is used only where every tool it matches on that server's real surface
 was checked read-only (hence `actions_get`/`actions_list` spelled out on
 `github`, since `actions_*` would swallow `actions_run_trigger`).
 
+### `gh run` is denied outright, and `gh wait-ci` is the replacement
+
+The whole `gh run` subcommand denies with a message naming the `gh wait-ci`
+equivalent. The read-only half is denied too, deliberately: a half-ban leaves the
+habit in place, and `gh run list` is the entry point to the rest of it.
+`PazerOP/gh-wait-ci` covers every `gh run` capability and answers questions
+`gh run` cannot -- `grep` over a run's logs, per-step filtering, and the
+check-run annotations that never appear in the logs at all. Its read
+subcommands (`runs`, `view`, `jobs`, `log`, `grep`, `annotations`, `artifacts`,
+`workflows`) are allowed; `cancel` and `rerun` change the run, so they reach the
+user like any other write.
+
 ### Adding rules
 
 - **Allow a Bash command**: add a `<rule name="...">` under `<allow>`.

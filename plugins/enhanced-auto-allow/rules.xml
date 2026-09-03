@@ -475,13 +475,38 @@
 			<rule name="list" allowedFlags="*"/>
 			<rule name="view" allowedFlags="*"/>
 		</rule>
-		<rule name="run">
-			<test cmd="gh run list" expect="allow"/>
+		<!-- `gh wait-ci` covers every one of these and answers questions `gh run`
+		     cannot: grep over a run's logs, per-step filtering, and the check-run
+		     annotations that never appear in the logs at all. The whole subcommand
+		     is denied rather than the read-only half, because a half-ban leaves the
+		     habit in place and `gh run list` is the entry point to the rest of it. -->
+		<rule name="run"
+			denyWithMessage="Use gh wait-ci instead: 'runs' to list, 'view'/'jobs' for a run, 'log --failed' to read it, 'grep &lt;pattern&gt;' to search it, 'annotations' for errors that are not in the logs, 'artifacts --download', 'cancel', 'rerun'. Bare 'gh wait-ci' waits for the current commit's runs.">
+			<test cmd="gh run list" expect="deny"/>
 			<test cmd="gh run view 123" expect="deny"/>
+			<test cmd="gh run view 123 --log-failed" expect="deny"/>
 			<test cmd="gh run watch 123" expect="deny"/>
-			<rule name="list" allowedFlags="*"/>
-			<rule name="view" denyWithMessage="Use 'gh run list' or 'gh pr checks' to read CI status"/>
-			<rule name="watch" denyWithMessage="A blocking CI wait kills the session. Poll with 'gh run list' or 'gh pr checks'"/>
+			<test cmd="gh run download 123" expect="deny"/>
+			<test cmd="gh run rerun 123 --failed" expect="deny"/>
+			<test cmd="gh run cancel 123" expect="deny"/>
+		</rule>
+		<!-- The replacement. Only the read half is auto-approved; `cancel` and
+		     `rerun` change the run, so they reach the user like any other write. -->
+		<rule name="wait-ci">
+			<test cmd="gh wait-ci runs" expect="allow"/>
+			<test cmd="gh wait-ci log 123 --failed" expect="allow"/>
+			<test cmd="gh wait-ci grep 'panic:' --json" expect="allow"/>
+			<test cmd="gh wait-ci annotations" expect="allow"/>
+			<test cmd="gh wait-ci cancel 123" expect=""/>
+			<test cmd="gh wait-ci rerun 123 --failed" expect=""/>
+			<rule name="runs" allowedFlags="*"/>
+			<rule name="view" allowedFlags="*"/>
+			<rule name="jobs" allowedFlags="*"/>
+			<rule name="log" allowedFlags="*"/>
+			<rule name="grep" allowedFlags="*"/>
+			<rule name="annotations" allowedFlags="*"/>
+			<rule name="artifacts" allowedFlags="*"/>
+			<rule name="workflows" allowedFlags="*"/>
 		</rule>
 		<rule name="search">
 			<rule name="repos" allowedFlags="*"/>
