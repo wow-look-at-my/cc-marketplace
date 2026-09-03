@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,35 +13,15 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-func TestMain(m *testing.M) {
-	path, err := exec.LookPath("jq")
-	if err == nil {
-		jqPath = path
-	}
-	os.Exit(m.Run())
-}
-
 func connect(t *testing.T) *mcp.ClientSession {
 	t.Helper()
+	return connectWith(t, jqTools{path: jqPath})
+}
 
-	if jqPath == "" {
-		t.Skip("jq not installed")
-	}
+func connectWith(t *testing.T, tools jqTools) *mcp.ClientSession {
+	t.Helper()
 
-	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "jq",
-		Version: "1.0.0",
-	}, nil)
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jq",
-		Description: "Run a jq expression against a JSON file or inline JSON string.",
-	}, runJq)
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jq_read",
-		Description: "Read and pretty-print a JSON file.",
-	}, readJson)
+	server := newServer(tools)
 
 	ctx := context.Background()
 	t1, t2 := mcp.NewInMemoryTransports()
@@ -243,24 +222,11 @@ func TestJqFileNotFound(t *testing.T) {
 }
 
 func TestJqNoJqInstalled(t *testing.T) {
-	// Temporarily clear jqPath to test the "not installed" path
-	saved := jqPath
-	jqPath = ""
-	defer func() { jqPath = saved }()
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "jq", Version: "1.0.0"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "jq"}, runJq)
-	mcp.AddTool(server, &mcp.Tool{Name: "jq_read"}, readJson)
+	// An empty path reaches only these handlers, so the tests running
+	// beside this one keep the binary they resolved.
+	session := connectWith(t, jqTools{path: ""})
 
 	ctx := context.Background()
-	t1, t2 := mcp.NewInMemoryTransports()
-	server.Connect(ctx, t1, nil)
-	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0.1"}, nil)
-	session, err := client.Connect(ctx, t2, nil)
-	require.NoError(t, err)
-	defer session.Close()
-
-	// Test jq tool
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "jq",
 		Arguments: map[string]any{"filter": ".", "input": "{}"},

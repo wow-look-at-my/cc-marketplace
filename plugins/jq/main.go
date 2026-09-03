@@ -14,7 +14,12 @@ import (
 
 const maxOutputBytes = 1 << 20 // 1MB
 
-var jqPath string
+// jqTools binds the resolved jq binary to the two handlers. It is a value
+// rather than a package variable so a test for the not-installed path can
+// build its own server without mutating state the other tests read.
+type jqTools struct {
+	path string
+}
 
 type JqArgs struct {
 	Filter    string `json:"filter" jsonschema:"The jq filter expression to apply (e.g. '.name', '.[] | select(.age > 30)', 'keys')"`
@@ -28,8 +33,8 @@ type JqReadArgs struct {
 	File string `json:"file" jsonschema:"Path to the JSON file to read and pretty-print"`
 }
 
-func runJq(ctx context.Context, _ *mcp.CallToolRequest, args JqArgs) (*mcp.CallToolResult, any, error) {
-	if jqPath == "" {
+func (j jqTools) runJq(ctx context.Context, _ *mcp.CallToolRequest, args JqArgs) (*mcp.CallToolResult, any, error) {
+	if j.path == "" {
 		return errorResult("jq is not installed. Install it with: apt install jq (Linux) or brew install jq (macOS)"), nil, nil
 	}
 
@@ -62,7 +67,7 @@ func runJq(ctx context.Context, _ *mcp.CallToolRequest, args JqArgs) (*mcp.CallT
 	execCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(execCtx, jqPath, jqArgs...)
+	cmd := exec.CommandContext(execCtx, j.path, jqArgs...)
 	cmd.Stdin = bytes.NewReader(inputBytes)
 
 	var stdout, stderr bytes.Buffer
@@ -87,8 +92,8 @@ func runJq(ctx context.Context, _ *mcp.CallToolRequest, args JqArgs) (*mcp.CallT
 	}, nil, nil
 }
 
-func readJson(ctx context.Context, _ *mcp.CallToolRequest, args JqReadArgs) (*mcp.CallToolResult, any, error) {
-	if jqPath == "" {
+func (j jqTools) readJson(ctx context.Context, _ *mcp.CallToolRequest, args JqReadArgs) (*mcp.CallToolResult, any, error) {
+	if j.path == "" {
 		return errorResult("jq is not installed. Install it with: apt install jq (Linux) or brew install jq (macOS)"), nil, nil
 	}
 
@@ -100,7 +105,7 @@ func readJson(ctx context.Context, _ *mcp.CallToolRequest, args JqReadArgs) (*mc
 	execCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(execCtx, jqPath, ".")
+	cmd := exec.CommandContext(execCtx, j.path, ".")
 	cmd.Stdin = bytes.NewReader(data)
 
 	var stdout, stderr bytes.Buffer
@@ -132,14 +137,9 @@ func errorResult(msg string) *mcp.CallToolResult {
 	}
 }
 
-func main() {
-	path, err := exec.LookPath("jq")
-	if err != nil {
-		jqPath = ""
-	} else {
-		jqPath = path
-	}
-
+// newServer registers both tools on a server bound to one jq binary. main and
+// the tests share it, so a test drives the same registration that ships.
+func newServer(tools jqTools) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "jq",
 		Version: "1.0.0",
@@ -148,14 +148,22 @@ func main() {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "jq",
 		Description: "Run a jq expression against a JSON file or inline JSON string. Returns the filtered/transformed result as text. Cannot write to files.",
-	}, runJq)
+	}, tools.runJq)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "jq_read",
 		Description: "Read and pretty-print a JSON file. Returns formatted JSON content.",
-	}, readJson)
+	}, tools.readJson)
 
-	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+	return server
+}
+
+func main() {
+	// A lookup failure leaves the path empty, and each tool then answers
+	// with the install instructions rather than the server refusing to start.
+	path, _ := exec.LookPath("jq")
+
+	if err := newServer(jqTools{path: path}).Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatal(err)
 	}
 }
