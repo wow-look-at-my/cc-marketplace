@@ -41,8 +41,58 @@ block, not an instant re-invocation of unchanged content.
 Every failure path allows the stop: an unparseable payload, a missing or unreadable transcript, and any `hook_event_name` other than `Stop` --
 a guard that blocks because it could not read a file is worse than no guard.
 
-- **Hook binary**: `plugins/no-busy-poll/hook.go` -- the Stop payload, the allow/refuse decision, and the refusal text
+- **Hook binary**: `plugins/no-busy-poll/hook.go` -- event dispatch, the Stop payload, the allow/refuse decision, and the refusal text
 - **Detection**: `plugins/no-busy-poll/detect.go` -- the spacing-aware streak walk, and the `NO_BUSY_POLL_THRESHOLD`/`NO_BUSY_POLL_MAX_GAP_SECONDS` env overrides
 - **Transcript**: `plugins/no-busy-poll/transcript.go` -- turn segmentation, the new-prompt boundary, call-signature canonicalization, and the bounded tail read
 - **Tests**: `plugins/no-busy-poll/transcript_test.go`, `detect_test.go`, `hook_test.go` -- turn segmentation across a tool-result continuation, signature equality/inequality, the paced-watch-loop false-positive check, the current-turn-breaks-the-pattern case, and every fail-open path
-- **Plugin config**: `plugins/no-busy-poll/.claude-plugin/plugin.json` -- one Stop hook registration
+- **Plugin config**: `plugins/no-busy-poll/.claude-plugin/plugin.json` -- the Stop registration and the PreToolUse registration on matcher `*`
+
+## The deny half: a status read that cannot learn anything never runs
+
+The Stop half refuses to END a turn, which means the wasted calls are already
+paid for by the time it speaks, and it compares call SIGNATURES, which a
+re-spelling defeats. A session that asks after one pull request through
+`gh wait-ci`, then `gh wait-ci checks`, then `pull_request_read`, then
+`list_commits` produces a different signature every turn and no streak at all,
+while every call learns the same nothing. So the PreToolUse half refuses the
+call itself, keyed on the SUBJECT rather than the command text.
+
+**A subject is the thing whose state is being asked after** -- a pull request
+or a commit (`subject.go`). It is read out of the tool name plus its input, so
+`gh pr view 87 --repo owner/name`, `{"owner":...,"repo":...,"pullNumber":87}`
+and a bare `owner/name#87` all normalize to one key. The same extractor runs
+over the transcript's results, so a subject that cannot be spelled
+consistently simply never matches, which allows rather than denies.
+
+Two shapes are refused, and both answer one question -- can this call learn
+anything?
+
+- **A settled subject** (`terminal.go`): a pull request this session watched
+  merge or close, or a commit whose checks it watched go green. Neither can
+  answer differently later, and a push makes a NEW commit, so the green rule
+  limits itself. A verdict in a record naming more than one pull request
+  settles none of them: nothing says which one it belongs to, and guessing
+  there would refuse a read of one that is still open.
+- **A subject already read with no signal since** (`pretool.go`): no user
+  message, no wake or notification envelope, and no push or commit of the
+  session's own. Any of those re-opens every subject, so the refusal clears
+  itself the moment something real happens rather than needing an override.
+
+**Matching runs over an unescaped copy of each record, and that is
+load-bearing.** A result's payload is a JSON string nested inside the
+record's own JSON, so a verdict reaches the transcript with its quotes
+backslashed and the marker text never appears in the raw line. `unescape`
+also folds the `\uXXXX` spellings of `<`, `>` and `&`: a Go encoder escapes
+them and a JavaScript one does not, and a guard that reads only one spelling
+fails open on the other without saying so.
+
+Every failure path allows the call -- an unparseable payload, a missing
+transcript, a call naming no subject, a tool that is not a status read, and
+any other event. The matcher is `*` and the tool name is filtered in Go, so
+the registration does not depend on matcher-regex semantics.
+
+- **Records**: `plugins/no-busy-poll/records.go` -- the raw record walk, the wake-envelope markers, and the unescaping
+- **Subjects**: `plugins/no-busy-poll/subject.go` -- the status-read tool and command tables, statement-position matching, and subject normalization
+- **Verdicts**: `plugins/no-busy-poll/terminal.go` -- the merge and green markers, and the single-subject attribution rule
+- **Decision**: `plugins/no-busy-poll/pretool.go` -- the signal window, the two refusals, and the deny payload
+- **Tests**: `plugins/no-busy-poll/pretool_test.go` -- each refusal with its negative control (another pull request, another commit), a wake, a prompt and a push each re-opening a subject, a re-spelling through another tool still counting, a command that only mentions a status read not counting, both escaped spellings of a wake envelope, and every fail-open path

@@ -26,48 +26,76 @@ import (
 	"strings"
 )
 
-// HookInput is the subset of the Stop payload this plugin reads.
+// HookInput is the subset of the two payloads this plugin reads.
 type HookInput struct {
-	HookEventName  string `json:"hook_event_name"`
-	TranscriptPath string `json:"transcript_path"`
-	StopHookActive bool   `json:"stop_hook_active"`
+	HookEventName  string          `json:"hook_event_name"`
+	TranscriptPath string          `json:"transcript_path"`
+	StopHookActive bool            `json:"stop_hook_active"`
+	ToolName       string          `json:"tool_name"`
+	ToolInput      json.RawMessage `json:"tool_input"`
 }
 
-// result is what one invocation emits: a stop is refused with exit code 2
+// result is what one invocation emits. A stop is refused with exit code 2
 // and a reason on stderr, which is how a Stop hook hands the model its
-// objection.
+// objection; a tool call is refused with a deny payload on stdout, which is
+// how a PreToolUse hook does the same thing before the call runs.
 type result struct {
+	stdout string
 	stderr string
 	code   int
 }
 
-// allow lets the turn end.
+// allow lets the turn end, or the call run.
 func allow() result { return result{} }
 
 func main() {
 	res := run(os.Stdin)
+	if res.stdout != "" {
+		fmt.Fprint(os.Stdout, res.stdout)
+	}
 	if res.stderr != "" {
 		fmt.Fprint(os.Stderr, res.stderr)
 	}
 	os.Exit(res.code)
 }
 
-// run reads a hook payload from r and decides whether the turn may end.
+// run reads a hook payload from r and dispatches on the event it carries.
 func run(r io.Reader) result {
 	data, _ := io.ReadAll(r)
 	var in HookInput
 	if err := json.Unmarshal(data, &in); err != nil {
 		return allow()
 	}
-	if in.HookEventName != "" && in.HookEventName != "Stop" {
-		return allow()
+	switch in.HookEventName {
+	case "", "Stop":
+		return runStop(in)
+	case "PreToolUse":
+		return runPreTool(in)
 	}
+	return allow()
+}
 
+// runStop is the original half: refuse to END a turn that is the latest in a
+// run of identical, closely-spaced turns.
+func runStop(in HookInput) result {
 	n, calls := streak(parseTurns(in.TranscriptPath))
 	if n < threshold() {
 		return allow()
 	}
 	return result{code: 2, stderr: reason(n, calls, in.StopHookActive)}
+}
+
+// runPreTool is the deny half: refuse a status read that cannot learn
+// anything, before it runs.
+func runPreTool(in HookInput) result {
+	if in.ToolName == "" {
+		return allow()
+	}
+	v := judgeCall(toolCall{name: in.ToolName, input: in.ToolInput}, parseRecords(in.TranscriptPath))
+	if !v.deny {
+		return allow()
+	}
+	return result{stdout: denyPayload(v.reason)}
 }
 
 // reason is what the model is told. It names the repeated call, states the
