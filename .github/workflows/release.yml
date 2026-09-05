@@ -36,6 +36,14 @@ jobs:
       - name: Script tests
         run: npx tsx --test ".github/scripts/**/*.test.ts"
 
+      # Here rather than in the plugin's prebuild: the plugin build is cached on
+      # the hash of its own directory, so a change made only upstream never
+      # invalidates it and prebuild never re-runs. This job is not cached.
+      - name: Vendored checks match upstream
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npx tsx .github/scripts/vendor-common-checks/main.ts --check
+
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
