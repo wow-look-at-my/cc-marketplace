@@ -8,79 +8,102 @@ import "github.com/wow-look-at-my/go-regex-compiler/match"
 
 
 
+import "unicode/utf8"
+
 // matchesIdentifierShape reports whether input fully matches the regex `\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b|\b[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*\b`.
 func matchesIdentifierShape(input string) bool {
 	state := 0
-	for i := 0; i < len(input); i++ {
-		c := input[i]
+	for i := 0; i < len(input); {
+		// Invalid UTF-8 decodes as (RuneError, 1) and is matched as U+FFFD,
+		// exactly like regexp: each bad byte is one U+FFFD rune.
+		r, size := utf8.DecodeRuneInString(input[i:])
 		switch state {
 
 		case 0:
 			switch {
-			case match.InRange(c, 'A', 'Z'): state = 1
-			case match.InRange(c, 'a', 'z'): state = 2
+			case match.InRange(r, 'A', 'Z'): state = 1
+			case match.InRange(r, 'a', 'z'): state = 2
 			default: return false
 			}
 		case 1:
 			switch {
-			case match.InRange(c, '0', '9'): state = 3
-			case match.InRange(c, 'A', 'Z'): state = 4
-			case c == '_': state = 5
-			case match.InRange(c, 'a', 'z'): state = 3
+			case match.InRange(r, '0', '9'): state = 3
+			case match.InRange(r, 'A', 'Z'): state = 4
+			case r == '_': state = 5
+			case match.InRange(r, 'a', 'z'): state = 3
 			default: return false
 			}
 		case 2:
 			switch {
-			case match.InRange(c, '0', '9'): state = 2
-			case match.InRange(c, 'A', 'Z'): state = 6
-			case c == '_': state = 5
-			case match.InRange(c, 'a', 'z'): state = 2
+			case match.InRange(r, '0', '9'): state = 2
+			case match.InRange(r, 'A', 'Z'): state = 6
+			case r == '_': state = 5
+			case match.InRange(r, 'a', 'z'): state = 2
 			default: return false
 			}
 		case 3:
 			switch {
-			case match.InRange(c, '0', '9'): state = 3
-			case match.InRange(c, 'A', 'Z'): state = 7
-			case c == '_': state = 5
-			case match.InRange(c, 'a', 'z'): state = 3
+			case match.InRange(r, '0', '9'): state = 3
+			case match.InRange(r, 'A', 'Z'): state = 7
+			case r == '_': state = 5
+			case match.InRange(r, 'a', 'z'): state = 3
 			default: return false
 			}
 		case 4:
 			switch {
-			case match.InRange(c, '0', '9'), match.InRange(c, 'A', 'Z'): state = 4
-			case c == '_': state = 5
-			case match.InRange(c, 'a', 'z'): state = 4
+			case match.InRange(r, '0', '9'), match.InRange(r, 'A', 'Z'): state = 4
+			case r == '_': state = 5
+			case match.InRange(r, 'a', 'z'): state = 4
 			default: return false
 			}
 		case 5:
 			switch {
-			case match.InRange(c, '0', '9'), match.InRange(c, 'A', 'Z'), match.InRange(c, 'a', 'z'): state = 8
+			case match.InRange(r, '0', '9'), match.InRange(r, 'A', 'Z'), match.InRange(r, 'a', 'z'): state = 8
 			default: return false
 			}
 		case 6:
 			switch {
-			case match.InRange(c, '0', '9'), match.InRange(c, 'A', 'Z'): state = 6
-			case c == '_': state = 5
-			case match.InRange(c, 'a', 'z'): state = 6
+			case match.InRange(r, '\x00', '/'): state = 9
+			case match.InRange(r, '0', '9'): state = 6
+			case match.InRange(r, ':', '@'): state = 9
+			case match.InRange(r, 'A', 'Z'): state = 6
+			case match.InRange(r, '[', '^'): state = 9
+			case r == '_': state = 5
+			case r == '`': state = 9
+			case match.InRange(r, 'a', 'z'): state = 6
+			case match.InRange(r, '{', '\U0010ffff'): state = 9
 			default: return false
 			}
 		case 7:
 			switch {
-			case match.InRange(c, '0', '9'), match.InRange(c, 'A', 'Z'): state = 7
-			case c == '_': state = 5
-			case match.InRange(c, 'a', 'z'): state = 7
+			case match.InRange(r, '\x00', '/'): state = 9
+			case match.InRange(r, '0', '9'): state = 7
+			case match.InRange(r, ':', '@'): state = 9
+			case match.InRange(r, 'A', 'Z'): state = 7
+			case match.InRange(r, '[', '^'): state = 9
+			case r == '_': state = 5
+			case r == '`': state = 9
+			case match.InRange(r, 'a', 'z'): state = 7
+			case match.InRange(r, '{', '\U0010ffff'): state = 9
 			default: return false
 			}
 		case 8:
 			switch {
-			case match.InRange(c, '0', '9'), match.InRange(c, 'A', 'Z'): state = 8
-			case c == '_': state = 5
-			case match.InRange(c, 'a', 'z'): state = 8
+			case match.InRange(r, '\x00', '/'): state = 9
+			case match.InRange(r, '0', '9'): state = 8
+			case match.InRange(r, ':', '@'): state = 9
+			case match.InRange(r, 'A', 'Z'): state = 8
+			case match.InRange(r, '[', '^'): state = 9
+			case r == '_': state = 5
+			case r == '`': state = 9
+			case match.InRange(r, 'a', 'z'): state = 8
+			case match.InRange(r, '{', '\U0010ffff'): state = 9
 			default: return false
 			}
 		default:
 			return false
 		}
+		i += size
 	}
 
 	switch state {
