@@ -1,8 +1,6 @@
 # docs
 
-Corrective reference notes for topics where Claude's training data is reliably stale or
-wrong. Each skill is a set of notes the model writes for itself, checked against the
-upstream documentation, and loads before touching the relevant file type.
+Corrective reference notes for topics where Claude's training data is reliably stale or wrong. Each skill is a set of notes the model writes for itself, checked against the upstream documentation, and loads before touching the relevant file type.
 
 ## Skills
 
@@ -10,29 +8,24 @@ upstream documentation, and loads before touching the relevant file type.
 |-------|--------------|
 | `/docs:dockerfile` | Writing or editing a Dockerfile, or a `docker build` command |
 | `/docs:docker-compose` | Writing or editing a `compose.yaml`, or a `docker compose` command |
-| `/docs:docker-images` | Deciding what the images should be — base image choice, layer vs mounted volume, splitting one image into several |
+| `/docs:docker-images` | Deciding what the images must be — base image choice, layer vs mounted volume, splitting one image into several |
 | `/docs:node-typescript` | Deciding whether a file must be JavaScript, adding a build step or a `.d.ts` to ship TypeScript, or debugging a `.ts` import that will not resolve |
 | `/docs:css-cascade` | Writing or editing any CSS — before giving an element its own complete rule instead of using the cascade |
 | `/docs:claude-code-source` | Answering how Claude Code itself behaves — fetching the right version's `cli.js` and searching it from a subagent |
 
-The skills are model-invoked: their descriptions are written so Claude pulls them in on
-its own when it is about to edit one of these files. Invoking them by name also works.
+Invoking them by name also works.
 
 ## Vendored Docker reference
 
-The `dockerfile` and `docker-compose` skills each carry a `reference/` directory holding
-the complete upstream reference verbatim, pinned to the commit named in each file.
+The `dockerfile` and `docker-compose` skills each carry a `reference/` directory holding the complete upstream reference verbatim, pinned to the commit named in each file.
 
-Sources are `moby/buildkit` and `docker/docs`, both Apache-2.0; see each directory's
-`NOTICE.md`. Never edit them by hand.
+Sources are `moby/buildkit` and `docker/docs`, both Apache-2.0. See each directory's `NOTICE.md`. Never edit them by hand.
 
-CI re-fetches them on every build of this plugin, so a published release always carries
-current text. To refresh locally: `npx tsx .github/scripts/vendor-docker-docs/main.ts`.
+CI re-fetches them on every build of this plugin, so a published release always carries current text. To refresh locally: `npx tsx .github/scripts/vendor-docker-docs/main.ts`.
 
 ## Hook
 
-A `PreToolUse` hook names the matching skill when a call is about to touch a Dockerfile
-or a Compose file, because a description only helps once you decide to go looking.
+A `PreToolUse` hook names the matching skill when a call is about to touch a Dockerfile or a Compose file. A description only helps once you decide to go looking.
 
 It reminds once per session per skill, and never blocks anything.
 
@@ -42,23 +35,15 @@ It reminds once per session per skill, and never blocks anything.
 |-------|---------|
 | `claude-code-source` | Any question about how Claude Code itself behaves. Reads the shipped `cli.js` for the running version so the 27 MB bundle never enters your context. |
 
-Delegate with the `Agent` tool, `subagent_type: "claude-code-source"`. It pins a Sonnet
-model and preloads the `/docs:claude-code-source` skill, so the brief is just your
-question.
+Delegate with the `Agent` tool, `subagent_type: "claude-code-source"`. It pins a Sonnet model and preloads the `/docs:claude-code-source` skill. The brief is just your question.
 
 ## Adding a skill
 
-Add `skills/<topic>/SKILL.md` with a `description` in the front matter. Write the
-description as a trigger ("Read before ..."), not a summary — it is the only thing the
-model sees when deciding whether to load the skill.
+Add `skills/<topic>/SKILL.md` with a `description` in the front matter. Write the description as a trigger ("Read before ..."), not a summary.
 
-Do not set a `name`. The directory name already determines the command
-(`skills/dockerfile/` → `/docs:dockerfile`); adding `name` additionally registers the
-bare `/dockerfile` as an alias, which pollutes the root slash namespace.
+Do not set a `name`. The directory name already determines the command (`skills/dockerfile/` → `/docs:dockerfile`). Adding `name` additionally registers the bare `/dockerfile` as an alias, which pollutes the root slash namespace.
 
-Write the body as notes to yourself, not documentation for a human. State what is
-actually true, name the specific wrong instinct it replaces, and cite the behavior
-rather than the vibe. Verify every claim against upstream docs before writing it down.
+Write the body as notes to yourself, not documentation for a human. State what is actually true, name the specific wrong instinct it replaces, and cite the behavior rather than the vibe. Verify every claim against upstream docs before writing it down.
 
 ## Installation
 
