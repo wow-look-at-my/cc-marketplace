@@ -1,11 +1,14 @@
-// Re-fetches the check modules the common-checks language server runs, so a
-// released plugin enforces what CI enforces today rather than what it enforced
-// the day somebody last copied the files by hand.
+// Fetches the check modules the common-checks language server runs, so a
+// released plugin enforces what CI enforces today.
+//
+// The output is gitignored on purpose. A copy in the tree is a second source of
+// truth: it goes stale in silence, and it puts prose the repository does not
+// author in front of every check that reads the repository.
 //
 // A fetch failure fails the build. Packaging a silently stale checker is the
 // outcome this whole arrangement exists to avoid.
 
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { GitHubClient, type Client } from "../vendor-docker-docs/github.ts";
 import {
@@ -44,61 +47,17 @@ export async function vendor(client: Client, ref: string): Promise<{ commit: str
   return { commit, files };
 }
 
-/**
- * Names the vendored files that no longer match upstream, ignoring the
- * provenance header: a header differs on every commit, and reporting that as
- * drift would make the check cry wolf on every unrelated push.
- */
-export function drifted(files: Written[], committed: Map<string, string | undefined>): string[] {
-  const out: string[] = [];
-  for (const file of files) {
-    if (file.path === "NOTICE.md") continue;
-    if (stripHeader(committed.get(file.path)) !== stripHeader(file.content)) out.push(file.path);
-  }
-  for (const path of committed.keys()) {
-    if (!files.some((file) => file.path === path)) out.push(`${path} (no longer vendored)`);
-  }
-  return out.sort();
-}
-
-function stripHeader(content: string | undefined): string | undefined {
-  if (content === undefined) return undefined;
-  return content.replace(/^(\/\/ [^\n]*\n)+\n/, "");
-}
-
-async function committedFiles(): Promise<Map<string, string | undefined>> {
-  const out = new Map<string, string | undefined>();
-  let entries: string[];
-  try {
-    entries = await readdir(VENDOR_DIR, { recursive: true });
-  } catch {
-    return out;
-  }
-  for (const entry of entries) {
-    if (!entry.endsWith(".ts")) continue;
-    out.set(entry.replace(/\\/g, "/"), await readFile(join(VENDOR_DIR, entry), "utf8"));
-  }
-  return out;
-}
-
 async function main(): Promise<void> {
   const ref = upstreamRef();
-  const check = process.argv.includes("--check");
   const { commit, files } = await vendor(new GitHubClient(), ref);
 
-  // The plugin build is cached on the hash of its own directory, so a change
-  // made only upstream never invalidates it and prebuild never re-runs. This
-  // mode runs where nothing is cached, so drift is red on every push rather
-  // than on whichever push happens to touch this plugin.
-  if (check) {
-    const stale = drifted(files, await committedFiles());
-    if (stale.length > 0) {
-      throw new Error(
-        `the vendored checks have drifted from ${UPSTREAM_REPO}@${ref} (${commit}):\n  ${stale.join("\n  ")}\n` +
-          "Re-run `just prebuild` in plugins/common-checks and commit the result.",
-      );
-    }
-    process.stderr.write(`vendored checks match ${UPSTREAM_REPO}@${ref} (${commit})\n`);
+  // `--commit` prints the resolved commit and writes nothing. The plugin build
+  // is cached on the hash of its own directory, and nothing in that directory
+  // changes when a rule changes upstream, so the release workflow folds this
+  // into the cache key. Without it a cached build serves check code that no
+  // longer matches CI.
+  if (process.argv.includes("--commit")) {
+    process.stdout.write(`${commit}\n`);
     return;
   }
 

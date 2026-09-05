@@ -29,3 +29,7 @@ Thumbs.db
 *.swo
 coverage.out
 build/
+
+# Fetched from wow-look-at-my/actions by the plugin's prebuild. Never committed:
+# a copy in the tree is a second source of truth that goes stale in silence.
+plugins/common-checks/vendor/

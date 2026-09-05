@@ -23,7 +23,7 @@ Every diagnostic is an error, because every one of them fails the merge gate. Th
 
 ## Where the rules live
 
-Nowhere in this plugin. Every build fetches each check's own module from [wow-look-at-my/actions](https://github.com/wow-look-at-my/actions) into `vendor/`. Change a rule upstream and the next release carries it. `vendor/NOTICE.md` records the commit each file came from.
+Nowhere in this plugin. Every build fetches each check's own module from [wow-look-at-my/actions](https://github.com/wow-look-at-my/actions) into `vendor/`, which is gitignored. Change a rule upstream and the next release carries it. Nothing is committed, so no copy here can go stale against CI.
 
 The build also reads `common-checks/action.yml` upstream. It fails when the set of checks that file runs no longer matches the set this plugin covers.
 

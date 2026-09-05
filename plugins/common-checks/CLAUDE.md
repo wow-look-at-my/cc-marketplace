@@ -22,9 +22,11 @@ An entry may declare `files: []`. That is how `run-once` is handled, because it 
 
 The vendor step runs from the plugin's `justfile` `prebuild` recipe on every CI build. A fetch failure fails the build, which matches the `docs` plugin's Docker reference. Packaging a silently stale checker is the outcome this arrangement exists to avoid. `COMMON_CHECKS_REF` points the fetch at a branch, for a build against a check that has not merged yet.
 
-**The `prepare` job runs a second copy of the assertion. That copy is not optional.** A plugin build is cached on the hash of its own directory. A rule corrected only upstream never invalidates that hash, so `prebuild` never re-runs and the vendored copy freezes. The `prepare` job caches nothing, so `--check` makes drift red on every push. It ignores the provenance header, which carries the commit and differs on every unrelated push.
+**The `prepare` job resolves the upstream commit, and that resolution is load-bearing twice over.** It runs the same plan assertion, so a check added upstream fails the run before any plugin builds. It also feeds the plugin's cache key. Nothing under `plugins/common-checks/` changes when a rule changes upstream, so without it a cached build serves check code that CI no longer runs.
 
-**`vendor/` is generated. Do not edit it.** A build overwrites it. Each file's header says so, and names the commit it came from. The whole directory is replaced rather than merged. A file the plan stopped producing then goes away. It does not linger as a module nothing imports and nothing refreshes.
+**`vendor/` is gitignored. That is the design rather than an oversight.** A copy of the checks in the tree is a second source of truth. It goes stale in silence, and nothing marks the moment it stops matching CI. It also puts prose the repository does not author in front of every check that reads the repository. The build fetches the modules and bundles them. Nothing is committed. Nothing can drift.
+
+The whole directory is replaced on each fetch rather than merged. A file the plan stopped producing then goes away. It does not linger as a module nothing imports and nothing refreshes.
 
 ### What `src/checks.ts` adds
 
@@ -64,7 +66,7 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 - **Server**: `plugins/common-checks/src/lsp.ts` -- base-protocol framing, the handshake, the open and change and save and close notifications, push and pull diagnostics, the per-file cap, and `relativize`. Document sync is full, because a finding is a property of the whole document
 - **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else
 - **Launcher**: `plugins/common-checks/launcher.sh` -- staged into `build/` as `common-checks-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own
-- **Vendoring**: `.github/scripts/vendor-common-checks/plan.ts` holds the plan, the drift assertion and the provenance header. `main.ts` holds the network and disk half, plus `--check`. The GitHub client is shared with the `docs` plugin's vendoring rather than written twice
+- **Fetching**: `.github/scripts/vendor-common-checks/plan.ts` holds the plan, the drift assertion and the provenance header. `main.ts` holds the network and disk half, plus `--commit`. The GitHub client is shared with the `docs` plugin's fetcher rather than written twice
 - **Tests**: `src/checks.test.ts` fires each check on the right line, with a clean control beside it. It also covers the file-kind boundaries, the ranking, the wrapped-paragraph collapse, and a heuristic-only finding staying unreported
 - **Tests**: `src/lsp.test.ts` covers the handshake, publish and clear, pull and push agreeing, and the cap's overflow note. It also covers path resolution with and without a root, and the framing edge cases. It asserts the explicit `null` shutdown result on the RAW JSON keys
 - **Tests**: the two suites under `.github/scripts/vendor-common-checks/` drive a fake client that never touches the network. A check added upstream and a check dropped upstream each fail the build by name
