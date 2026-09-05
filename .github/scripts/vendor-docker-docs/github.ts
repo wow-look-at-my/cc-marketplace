@@ -8,8 +8,10 @@ export interface Client {
   /**
    * Turns a branch name into the commit it points at right now, so every file
    * in one run comes from the same tree and the recorded provenance is exact.
+   * It asks for only the two fields it reads, so a caller with no docs plan of
+   * its own does not have to invent a blob URL and a license to call it.
    */
-  resolve(src: Upstream): Promise<string>;
+  resolve(src: Pick<Upstream, "repo" | "ref">): Promise<string>;
   /** Reads one file from a repository at a pinned commit. */
   get(repo: string, commit: string, path: string): Promise<string>;
 }
@@ -49,7 +51,7 @@ export class GitHubClient implements Client {
     throw new Error(`GET ${url} -> ${response.status} ${response.statusText}${hint}`);
   }
 
-  async resolve(src: Upstream): Promise<string> {
+  async resolve(src: Pick<Upstream, "repo" | "ref">): Promise<string> {
     const response = await this.#request(
       `${API}/repos/${src.repo}/commits/${src.ref}`,
       "application/vnd.github+json",
