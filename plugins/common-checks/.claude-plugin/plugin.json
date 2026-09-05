@@ -1,0 +1,11 @@
+{
+  "name": "common-checks",
+  "description": "Reports, while you edit, every violation that would fail the org's common-checks CI gate. Runs the checks' own code, re-fetched from wow-look-at-my/actions on every build.",
+  "author": {
+    "name": "wow-look-at-my"
+  },
+  "keywords": ["lsp", "ci", "github-actions", "lint", "common-checks"],
+  "mh": {
+    "include_in_marketplace": true
+  }
+}
