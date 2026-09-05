@@ -1,0 +1,44 @@
+{
+  "name": "no-busy-poll",
+  "version": "1304",
+  "tag": "no-busy-poll#1304",
+  "pluginJson": {
+    "author": {
+      "name": "mhaynie"
+    },
+    "description": "Stops a session burning tokens on status checks that cannot learn anything. Denies a read of a pull request or commit whose state this session already watched settle, or that it already read with no user message, wake event or push since -- keyed on the subject, so re-asking through a different tool is still a repeat. Also refuses to end a turn that is the latest in a run of identical, closely-spaced turns",
+    "hooks": {
+      "PreToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/no-busy-poll",
+              "type": "command"
+            }
+          ],
+          "matcher": "*"
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/no-busy-poll",
+              "type": "command"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": [
+      "busy-poll",
+      "token-waste",
+      "polling",
+      "stop",
+      "hook",
+      "enforcement"
+    ],
+    "name": "no-busy-poll",
+    "version": "1304"
+  }
+}
