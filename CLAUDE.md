@@ -1,0 +1,66 @@
+## No Work Loss Plugin
+
+The no-work-loss plugin lives at `plugins/no-work-loss/`. One dependency-light Go binary on a **PreToolUse/Bash** hook, refusing any command that will destroy content which exists only in the working tree. The invariant is narrow on purpose: committed work is reachable from the reflog, so history rewrites are not its business. A modified-but-uncommitted or untracked file is in no git object and cannot be recovered once overwritten. Denials emit `permissionDecision: "deny"` with a reason carrying the counts, the filenames. Everything else writes nothing at all, leaving the normal permission flow untouched.
+
+**Hazard classes are kept apart. That is the load-bearing design decision.** The obvious simplification -- one "is the tree dirty" bit -- is wrong. A boolean makes each verb refuse over the half it will not touch, which is how a guard earns the reputation that gets it uninstalled. Each verb is therefore checked only against the classes it can reach (`hazTracked` / `hazUntracked` / `hazIgnored` / `hazStash`), and `TestResetHardSparesUntrackedFiles` + `TestCleanSparesTrackedModifications` pin both halves.
+
+They are ALLOWED -- recoverable content is not protected content. `branch -D`/`-M`, `push --force`/`+refspec`/`--delete` and `update-ref -d` resolve the tip and ask whether another ref contains it (a push additionally allows a fast-forward, where nothing is rewritten). `filter-branch` requires HEAD fully pushed. `reflog expire`/`delete` requires `fsck --unreachable --no-reflogs` to find no commit. `worktree remove --force` probes that worktree's own status. Only `push --mirror` stays an unconditional deny -- it rewrites every ref at once, so no bounded set of commits can be checked. This does NOT extend to the working tree: a modified or untracked file's bytes are in no commit by definition.
+
+Two facts here were established by RUNNING git. Hence containment via `for-each-ref --contains` with remote-HEAD filtered out, rather than hand-built exclusion lists. A missing remote-tracking ref denies (`errNoRemoteRef`, "git fetch first"): absence of a local mirror is not evidence the remote is empty. A missing LOCAL ref allows, since git will error on its own -- conflating those two was itself a caught bug.
+
+**Detection parses. `git -C` and `--work-tree` apply the same way. Wrappers resolve (`env`, `sudo`, `doas`, `command`, `builtin`, `exec`, `nohup`, `nice`, `ionice`, `setsid`, `stdbuf`, `timeout`, `xargs`, leading `\`, absolute paths) with their value-taking flags understood. Short flags unbundle, so `-fdx`, `-xdf` and `-f -d -x` are one command. Aliases resolve out of `git config --get-regexp '^alias\.'`, including the `!shell` form (re-parsed as shell). Builtin verbs skip the lookup because git refuses to let an alias shadow one, chains resolve, and self-reference terminates at depth 3.
+
+**Ambiguity denies**: an unparseable command that names a destructive verb. An operand that is not statically known (`rm $TARGET`, `cd $DIR && git reset --hard`, `cd -`), or `GIT_DIR`/`GIT_WORK_TREE`/`--git-dir` relocating the repo away from the path words. An unparseable command with nothing destructive in it is allowed.
+
+**Fail-safety is honest about its one gap.** In-process. But Claude Code's own docs state a hook that times out does NOT block the call ("don't count on a stalled hook to act as a gate"). A hook cannot make itself mandatory. This is platform behavior, not an unhandled case.
+
+The allow list matters as much as the deny list. Unpushed commits are deliberately unprotected -- they are in the reflog. Only destructive verbs are enumerated, so a new git subcommand does not arrive pre-blocked.
+
+The negative control in the same repo created the branch and carried the changes across. Note `--permission-mode bypassPermissions` is rejected under root, which silently produces a run that proves nothing. Use `--allowedTools Bash`.
+
+Cost: prefilter is a substring scan for `git`/`rm`/`mv`/`>`/`tee`/`truncate` and returns before any parse or subprocess. Repo state is probed once per directory per invocation, and `--ignored` / `stash list` only for the verbs needing them. `status --porcelain` runs with `--untracked-files=all`, without which git collapses an untracked directory to its name and `rm internal/config/env.go` finds no matching entry and reads as safe.
+
+- **Entry + fail-safety**: `plugins/no-work-loss/main.go` -- stdin JSON, the prefilter gate, the recover-into-deny, the deny payload
+- **Prefilter**: `plugins/no-work-loss/prefilter.go` -- the cheap needle scan, and the destructive-verb markers used once parsing has failed
+- **Segmentation**: `plugins/no-work-loss/segment.go` -- AST walk, cwd tracking, wrapper stripping, word staticness
+- The two keep their own segmentation and their own postures. `shellwords.go` is what remains: the adapters plus path resolution, which is this plugin's alone.
+- **Git verbs**: `plugins/no-work-loss/gitverb.go` -- global-option skipping, flag unbundling, per-verb hazard classification and rewrites
+- **Non-git deletion**: `plugins/no-work-loss/fsverb.go` -- `rm`, `mv` destinations, `tee`, `truncate -s 0`, truncating redirects
+- **Repository state**: `plugins/no-work-loss/repo.go` -- probing with timeouts and caching, `-z` status parsing, path containment
+- **Decision**: `plugins/no-work-loss/decide.go` -- orchestration, the judge, and the denial text
+- **Aliases**: `plugins/no-work-loss/alias.go` -- alias table, `!shell` expansion, the builtin-verb skip list
+- **Reachability**: `plugins/no-work-loss/reach.go` -- containment, fast-forward, pushed-ness, reflog orphans, worktree probing
+- **Tests**: `guard_test.go` (the deny/allow matrix against real repos), `refverbs_test.go` (unconditional denies + their safe spellings), `shell_test.go` (compound forms, wrappers, cd scoping), `hookio_test.go` (the raw JSON keys of the deny payload)
+- **Depth**: `plugins/no-work-loss/docs/decision-model.md`
+
+## The provenance half: every change to file content goes through Write, Edit or NotebookEdit
+
+The plugin answers a second question of the same parsed command: not "would this destroy something" but "did this content get here through an edit tool". Bash exists to run things -- git, builds, tests, validation, search -- and does not author files.
+
+Its suggested rewrites had to change for the merge: `> file` used to advise `>> file` and `tee` used to advise `tee -a`.
+
+A panic denies too.
+
+**There is no opt-out.** No environment variable, no flag, no settings key. An opt-out is the hole.
+
+Nothing the script names is written. `shellNoExec` short-circuits there, and the test pairs each allowed spelling with the same script run WITHOUT `-n`, which still denies.
+
+**Stdin is a program only when nothing else named one.** `echo 'x' | ruby` hands ruby a script the command text does not contain, and denies. `printf '{...}' | node hook.ts` hands a NAMED script its input. The program is right there in the argv. `namesAScript` is the difference. Closing that also closed the matching hole in the other direction: `stdinScript` counted pipes and heredocs but not `<`. `ruby < prog.rb` now denies too, and `node hook.ts < payload.json` stays allowed, because the operand check runs either way. The stdin markers are untouched: `cat evil.js | node -` and `node /dev/stdin` still deny.
+
+**`merge` and `pull` are not write routes. The destruction half gates them on a committed tree.** They integrate a named ref's committed history. Everything they write is reachable from a ref, which leaves one thing to lose. A change that is in no object yet. An untracked file does not deny: git refuses a merge rather than overwrite one. The verbs that put genuinely unreviewed content into the tree (`restore`, `stash pop`, `apply`, `checkout`, `reset`, `revert`, `cherry-pick`, `am`, `rebase`) stay denied on the write-route side. Pinned by `integrate_test.go`.
+
+**Scope is paths, never commands.** A build directory (`build`, `dist`, `target`, `node_modules`, `.cache`, ...) is writable by whatever writes it. Anything outside the guarded roots, including the `/tmp` scratchpad, was never in scope.
+
+**The session scratchpad is exempt from the scratch-script rule**. That exemption is not a hole -- it is the harness's own instruction. Claude Code's system prompt directs a session to put every temporary file in `<tmp>/claude-<n>/<slug>/<session-id>/scratchpad`, so denying `node <scratchpad>/x.mjs` refuses the workflow the platform mandates. Measured cost of the gap before it was closed: four denied calls in one session, each a wasted round trip. `isSessionScratchpad` requires BOTH a `scratchpad` segment and a `claude`-prefixed ancestor inside a scratch root, so `/tmp/scratchpad` and `/tmp/claude-0/.../gen.mjs` both still deny.
+
+**What it does NOT do, stated so nobody has to rediscover it**. It does not sandbox the programs it starts. `go build`, `npm test` and `make` write what they write. What it closes is every route where the command text itself performs or directs the write. The formatters it vouches for (`gofmt`, `goimports`, `shfmt`, `prettier`, `rustfmt`, `cargo fmt`, `terraform fmt`, `go generate`, `go-toolchain`) are an explicit table, not an omission.
+
+- [docs/write-routes.md](docs/write-routes.md) -- every route, the shape of each rule, where the enumerated list collides with ordinary workflow, and the boundaries this half deliberately does not cross.
+- **Route catalog**: `routes.go` (redirects, the argv writers, the unknown-tool in-place rule), `textproc.go` (sed's `w` and awk's `print >`, read out of the program text so a filter is not mistaken for a writer), `interpreters.go` (inline scripts, editors, the formatter table), `gitroutes.go` (git as an editor, and the plumbing that skips the worktree), `remote.go` (the GitHub API commit), `auditedroutes.go` (the five routes found by reading the permission rules rather than listing writers from memory), `tree.go` (guarded roots and the writable directories), `writeroutes.go` (the verdict, plus the tools that are not Bash at all).
+- Every denial must NAME the path or route it stopped, so a deny arriving from an unrelated rule cannot satisfy the assertion. `merged_test.go` pins the cases where the two halves disagree. `tools_test.go` covers the non-Bash routes.
+
+## The Write tool's own refusals (formerly the no-overwrites plugin)
+
+`writetool.go` carries what used to be a separate bash hook. Once that is refused, "delete the path, then Write it" is the obvious way round. It keeps no ledger of its own (recycler already tracks original locations) and compares both the literal and the physically resolved path. Every failure -- no recycler, an unreadable bin, no match -- falls through to allow.
+
+Relationship to the siblings: **`cleanup-bash-cmds`** rewrites `rm` to `recycler trash`. This plugin evaluates `rm` as written. Where both fire, the deny wins.
