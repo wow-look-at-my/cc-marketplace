@@ -17,7 +17,7 @@ Fenced code, indented code and blockquotes are exempt (ported from `link-all-ref
 - **Hook binary**: `plugins/ask-properly/hook.go` -- the Stop payload, the used-the-tool allow, the refusal text and its escalation
 - **Detection**: `plugins/ask-properly/questions.go` -- the deferral table, the cue list, link stripping with offset tracking, the end-of-line/opens-with-cue rule, and the fenced/indented/blockquote exemption
 - **Transcript**: `plugins/ask-properly/transcript.go` -- the last assistant message's text plus whether this turn called `AskUserQuestion`, read from a bounded tail
-- **Tests**: `plugins/ask-properly/questions_test.go`, `hook_test.go`, `transcript_test.go` -- nullable types and compare URLs NOT tripping it, a real question and every deferral phrase blocking, the tool-used allow, an earlier turn's call not counting, a tool result not splitting a turn, and every fail-open path
+- **Tests**: `plugins/ask-properly/questions_test.go`, `hook_test.go`, `transcript_test.go` . Covers nullable types and compare URLs NOT tripping it, a real question and every deferral phrase blocking, the tool-used allow. Also an earlier turn's call not counting, a tool result not splitting a turn, and every fail-open path
 - **Plugin config**: `plugins/ask-properly/.claude-plugin/plugin.json` -- one Stop hook registration
 
 Keep the two in sync if either changes.

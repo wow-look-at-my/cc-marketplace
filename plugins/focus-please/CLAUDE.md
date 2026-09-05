@@ -7,5 +7,5 @@ Stop also carries the **resume rule**: a prompt that arrives while a turn is sti
 The three markers are `<tempdir>/focus-please/<sha256(session_id)[:16]>.{pending,active,resume}`, keyed per session so parallel sessions never interfere. Every failure path fails OPEN (no marker written, no denial emitted, no stop refused). All three `plugin.json` hook entries point at the same `build/focus-please` binary.
 
 - **Hook binary**: `plugins/focus-please/hook.go` -- event dispatch, the three-marker lifecycle, the lookup allowlist, and the UserPromptSubmit/PreToolUse/Stop output shapes (`result` carries stdout + stderr + exit code)
-- **Tests**: `plugins/focus-please/hook_test.go` -- arm/disarm, lookup-allow vs acting-deny, the full-turn cycle, the interjection->refuse-once->allow sequence, the `stop_hook_active` guard, per-session isolation of both the block and the resume flag, and fail-open on bad input
+- **Tests**: `plugins/focus-please/hook_test.go` . Covers arm/disarm, lookup-allow vs acting-deny, the full-turn cycle. Also the interjection->refuse-once->allow sequence, the `stop_hook_active` guard, per-session isolation of both the block and the resume flag, and fail-open on bad input
 - **Plugin config**: `plugins/focus-please/.claude-plugin/plugin.json` -- the three hook registrations (UserPromptSubmit, PreToolUse matcher `*`, Stop)

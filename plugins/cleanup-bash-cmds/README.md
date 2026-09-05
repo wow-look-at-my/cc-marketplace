@@ -77,7 +77,7 @@ You cannot be trusted with heredocs. They are gone.
 
 Two implementation notes:
 
-- shfmt's typed JSON encodes operators as version-dependent numbers (`|` is 12 in v3.8.0 but 13 in v3.13.1), so the hook probes the numbers at runtime by parsing a tiny fixed script with the same shfmt binary it will use.
+- shfmt's typed JSON encodes operators as version-dependent numbers (`|` is 12 in v3.8.0 but 13 in v3.13.1). The hook probes the numbers at runtime, by parsing a fixed script with the shfmt binary it will use.
 - A rewritten command comes back in shfmt's canonical formatting (normalized spacing. `a; b` becomes two lines). Formatting-only differences never trigger a rewrite on their own.
 
 ## perl: banned
@@ -90,7 +90,7 @@ Two implementation notes:
 ```
 
 - Deny beats rewrite. The deny is logged as a `DENY` line with `reason="perl"`.
-- `perl` as an **argument** or a **different command** is not denied -- the walk never enters word-internal contexts, so `grep perl file` and `perlcritic file` run, and `command -v perl` is a lookup, not an invocation.
+- `perl` as an **argument** or a **different command** is not denied. The walk never enters word-internal contexts, so `grep perl file` and `perlcritic file` run. `command -v perl` is a lookup, not an invocation.
 - `perl` inside a **command/process substitution** (`echo $(perl -e 1)`) is a deliberate non-goal (see Non-goals) -- the same word-scoping that keeps `grep perl` safe.
 - Fail-open still applies: an unparseable command passes through.
 
@@ -185,7 +185,7 @@ recycler restore notes.txt # put it back where it came from
 
 ### Why a rewrite and not a warning
 
-There is already a control on the adjacent case: the `no-work-loss` plugin blocks `Write` on a path that exists and tells you to use `Edit`. **Delete-then-Write is the loophole around that hook** -- once the path is gone, `Write` is legal again. And in the window between the delete and the Write, the only copy of that file's content is in the model's context: a compaction, an interruption, a rejected tool call, or a turn that simply ends there destroys it permanently, with nothing on disk to recover from.
+There is already a control on the adjacent case: the `no-work-loss` plugin blocks `Write` on a path that exists and tells you to use `Edit`. **Delete-then-Write is the loophole around that hook** -- once the path is gone, `Write` is legal again. In the window between the delete and the Write, the only copy of that content is in the model's context. A compaction, an interruption, a rejected tool call, or a turn that ends there destroys it permanently.
 
 A control that acts on the `Write` is already a full step too late. Nor can this lean on version control: the incident that motivated the rule happened in a scratchpad with no git at all. The only thing that helps is for `rm` to stop being able to destroy anything.
 
@@ -200,7 +200,7 @@ ls | while read f; do rm "$f"; done
 clean() { rm -rf build; }      ->  clean() { recycler trash build; }
 ```
 
-Because the edit happens per-`CallExpr` on the syntax tree, "only the `rm` segment is rewritten" falls out for free, and a string literal that merely *contains* an `rm` is never touched:
+The edit happens per-`CallExpr` on the syntax tree, so only the `rm` segment is rewritten. A string literal that merely *contains* an `rm` is never touched:
 
 ```bash
 echo "rm -rf /"           # untouched -- a string, not a command
@@ -223,7 +223,7 @@ rmdir empty/              # a different command
 | `--` | dropped, targets pass positionally (re-emitted if a target is dash-leading, so `rm -- -weirdname` stays correct) |
 | anything else | **DENIED** -- blocked with an explanation rather than guessing a translation |
 
-Bundled clusters count when every letter is droppable (`-rf`, `-rfv`), so an unknown letter anywhere in a cluster (`-rd`) takes the deny path, as do `--no-preserve-root`, `--one-file-system`, and `-d`.
+Bundled clusters count when every letter is droppable (`-rf`, `-rfv`). An unknown letter anywhere in a cluster (`-rd`) takes the deny path, as do `--no-preserve-root`, `--one-file-system`, and `-d`.
 
 `xargs`'s own value-taking flags (`-n N`, `-I R`, `-P N`, ...) are understood. The utility word is found correctly.
 
@@ -259,7 +259,7 @@ a | b > out             ->   a | b | tee out
 make > "$OUT" 2>err     ->   make 2>err | tee "$OUT"
 ```
 
-The redirect's target word is reused verbatim (quoting and expansions like `"$OUT"` survive), every other redirect stays on the producer, and the injected `set -o pipefail` keeps the producer's exit status from being masked by tee.
+The redirect's target word is reused verbatim, so quoting and expansions like `"$OUT"` survive. Every other redirect stays on the producer. The injected `set -o pipefail` keeps tee from masking the producer's exit status.
 
 Exclusions (left exactly as written, deliberately):
 
@@ -347,7 +347,7 @@ command command echo x ->   :
 - inside a function body (visibility is decided at the call site: `x=$(f)` will capture) or a coproc
 - carrying any expansion (`echo "$VAR"`, `echo $(date)`, `echo $((1+2))`) or glob/tilde (`echo *.txt`, `echo ~`) -- that output is information, not narration
 
-Compound bodies stay in scope: if/elif/else branches, while/until/for bodies and conditions, case items, subshells, `time`, `!`, and both sides of `&&` / `||` all count as terminal-bound statement positions.
+Compound bodies stay in scope. These all count as terminal-bound statement positions: if/elif/else branches, while/until/for bodies and conditions, case items, subshells, `time`, `!`, and both sides of `&&` / `||`.
 
 ## Non-goals (deliberately NOT touched)
 
@@ -356,12 +356,12 @@ Compound bodies stay in scope: if/elif/else branches, while/until/for bodies and
 - `>/dev/null 2>&1` -- the trailing `2>&1` is silently removed, leaving `cmd >/dev/null`
 - `2>&1` anywhere except the very end of the command (e.g. `cmd 2>&1 | wc`, or on a non-final statement of a longer script)
 - `2 >/dev/null` (that is an argument `2` plus a stdout redirect)
-- `head`/`tail` as operand-less pipeline stages (`cmd | head -5 | wc`) or on a non-final statement, and cat/head/tail inside command/process substitutions (`x=$(cat f)`) -- but a cat/head/tail that NAMES a non-magic file, anywhere in statement position, is denied (see "File reads via cat/head/tail: banned")
+- `head`/`tail` as operand-less pipeline stages (`cmd | head -5 | wc`) or on a non-final statement. Also cat/head/tail inside command/process substitutions (`x=$(cat f)`). A cat/head/tail that NAMES a non-magic file, anywhere in statement position, is denied.
 - `> file` on a non-final statement (only the final statement's redirect becomes tee)
 - `| grep`, `|| true`, `| head`, `| tail`, `> file`: all anchored at the very end of the command (last statement, rightmost `&&`/`||` member) -- one shared anchoring for every trailing-noise rule
 - `command sleep` / `\sleep` -- the sleep, stage-strip head/tail, grep, and `|| true` rules still match the plain literal command word only. Only **narration removal**, the **perl deny**, and the **file-read deny** see through `command` / `builtin` / a leading `\` / quoting. The other name-keyed rules do not.
 - `perl` inside a command substitution or process substitution (`echo $(perl -e 1)`, `<(perl ...)`) is NOT denied -- the resolver never descends into word-internal contexts (the same scoping that keeps `grep perl` / `perlcritic` safe). Flag it if you want it closed.
-- `sh -c '...'` / `bash -c '...'` payloads are opaque strings -- the hook parses the outer command, not the quoted script, so narration, perl, and every other rule inside a `-c` payload are not seen (will need recursive sub-parsing)
+- `sh -c '...'` / `bash -c '...'` payloads are opaque strings. The hook parses the outer command, not the quoted script. Every rule inside a `-c` payload is unseen, which needs recursive sub-parsing.
 - `env echo ...`, aliases, and other non-`command`/`builtin` wrappers are not resolved through
 - `set -e`, `set -u`, `set -euo pipefail`, ... -- strictness settings are never removed (and `set -euo pipefail` is recognized, so no duplicate injection)
 

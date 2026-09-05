@@ -1,5 +1,5 @@
 ---
-description: Do a full improvement pass over an existing codebase - read it end to end, find everything worth fixing, and fix it. Written for pointing a newly released model at a repo that older models have already been over, to see what it can find that they can not.
+description: Do a full improvement pass over an existing codebase - read it end to end, find everything worth fixing, and fix it. Written for pointing a newly released model at a repo that older models have already been over, to see what it can find that they cannot.
 argument-hint: [path or subsystem, default the whole repo]
 disable-model-invocation: true
 ---
@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Scope is `$ARGUMENTS`. Empty means the whole repository.
 
-This code has already been read, reviewed, and edited by earlier models. Assume the easy findings are gone. That is what you are here for. It is also the measurement: the value of this pass is the findings a weaker pass can not have produced.
+This code has already been read, reviewed, and edited by earlier models. Assume the easy findings are gone. That is what you are here for. It is also the measurement: the value of this pass is the findings a weaker pass cannot have produced.
 
 ## 1. Map it before you change anything
 

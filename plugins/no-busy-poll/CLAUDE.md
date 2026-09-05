@@ -12,7 +12,7 @@ Each turn's signature is `ToolName|<canonical JSON input>` for every `tool_use` 
 
 Threshold defaults to 4 identical, closely-spaced turns (`NO_BUSY_POLL_THRESHOLD`, floored at 2 -- a threshold of 1 will refuse a turn that never repeated anything). The refusal message names the repeated call verbatim (Bash calls render their command. It escalates on `stop_hook_active` ("this is not the first refusal"), which is safe against ever wedging a session.
 
-Every failure path allows the stop: an unparseable payload, a missing or unreadable transcript, and any `hook_event_name` other than `Stop` -- a guard that blocks because it can not read a file is worse than no guard.
+Every failure path allows the stop: an unparseable payload, an unreadable transcript, and any `hook_event_name` other than `Stop`. A guard that blocks because it cannot read a file is worse than no guard.
 
 - **Hook binary**: `plugins/no-busy-poll/hook.go` -- event dispatch, the Stop payload, the allow/refuse decision, and the refusal text
 - **Detection**: `plugins/no-busy-poll/detect.go` -- the spacing-aware streak walk, and the `NO_BUSY_POLL_THRESHOLD`/`NO_BUSY_POLL_MAX_GAP_SECONDS` env overrides
@@ -39,4 +39,4 @@ Every failure path allows the call -- an unparseable payload, a missing transcri
 - **Subjects**: `plugins/no-busy-poll/subject.go` -- the status-read tool and command tables, statement-position matching, and subject normalization
 - **Verdicts**: `plugins/no-busy-poll/terminal.go` -- the merge and green markers, and the single-subject attribution rule
 - **Decision**: `plugins/no-busy-poll/pretool.go` -- the signal window, the two refusals, and the deny payload
-- **Tests**: `plugins/no-busy-poll/pretool_test.go` -- each refusal with its negative control (another pull request, another commit), a wake, a prompt and a push each re-opening a subject, a re-spelling through another tool still counting, a command that only mentions a status read not counting, both escaped spellings of a wake envelope, and every fail-open path
+- **Tests**: `plugins/no-busy-poll/pretool_test.go` . Covers each refusal with its negative control (another pull request, another commit). Then a wake, a prompt and a push each re-opening a subject, and a re-spelling through another tool still counting. Then a command that only mentions a status read not counting, both escaped spellings of a wake envelope, and every fail-open path

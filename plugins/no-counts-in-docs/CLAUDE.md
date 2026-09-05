@@ -24,5 +24,5 @@ Every failure path allows the call: an unparseable payload, an unparseable `tool
 
 - **Hook binary**: `plugins/no-counts-in-docs/hook.go` -- the PreToolUse payload, the three write shapes, the allow/deny decision, and the refusal text
 - **Detection**: `plugins/no-counts-in-docs/counts.go` -- the cardinal-plus-plural pattern, the measure and stop-word filters, the fenced/indented/comment/frontmatter skip, inline-code blanking, and the markdown path test
-- **Tests**: `plugins/no-counts-in-docs/counts_test.go`, `hook_test.go` -- a count in every form actually blocks, a measurement and ordinary prose do not, each exemption holds, prose after a closed fence is judged again, and every write shape is covered with the same text in a non-markdown file as its negative control
+- **Tests**: `plugins/no-counts-in-docs/counts_test.go`, `hook_test.go` . A count in every form actually blocks, and a measurement and ordinary prose do not. Each exemption holds, and prose after a closed fence is judged again. Every write shape is covered, with the same text in a non-markdown file as its negative control
 - **Plugin config**: `plugins/no-counts-in-docs/.claude-plugin/plugin.json` -- one PreToolUse hook registration on matcher `*`
