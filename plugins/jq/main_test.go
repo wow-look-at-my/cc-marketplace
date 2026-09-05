@@ -18,13 +18,18 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
+// testJqPath is written once by TestMain and only read afterwards. Tests
+// run in parallel, so a jq path any test can reassign is one every other
+// test reads mid-call.
+var testJqPath string
+
 func TestMain(m *testing.M) {
 	path, err := ensureJq()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "jq bootstrap failed: %v\n", err)
 		os.Exit(1)
 	}
-	jqPath = path
+	testJqPath = path
 	os.Exit(m.Run())
 }
 
@@ -149,7 +154,7 @@ func contentText(result *mcp.CallToolResult) string {
 func connect(t *testing.T) *mcp.ClientSession {
 	t.Helper()
 
-	if jqPath == "" {
+	if testJqPath == "" {
 		t.Skip("jq not installed")
 	}
 
@@ -158,15 +163,7 @@ func connect(t *testing.T) *mcp.ClientSession {
 		Version: "1.0.0",
 	}, nil)
 
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jq",
-		Description: "Run a jq expression against a JSON file or inline JSON string.",
-	}, runJq)
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jq_read",
-		Description: "Read and pretty-print a JSON file.",
-	}, readJson)
+	jqTools{path: testJqPath}.register(server)
 
 	ctx := context.Background()
 	t1, t2 := mcp.NewInMemoryTransports()
@@ -367,14 +364,9 @@ func TestJqFileNotFound(t *testing.T) {
 }
 
 func TestJqNoJqInstalled(t *testing.T) {
-	// Temporarily clear jqPath to test the "not installed" path
-	saved := jqPath
-	jqPath = ""
-	defer func() { jqPath = saved }()
-
+	// A server registered with no jq, so nothing another test reads changes.
 	server := mcp.NewServer(&mcp.Implementation{Name: "jq", Version: "1.0.0"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "jq"}, runJq)
-	mcp.AddTool(server, &mcp.Tool{Name: "jq_read"}, readJson)
+	jqTools{}.register(server)
 
 	ctx := context.Background()
 	t1, t2 := mcp.NewInMemoryTransports()
