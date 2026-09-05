@@ -9,7 +9,7 @@
 # - Run in subagents with restricted tools
 
 name: example-skill
-description: When this skill should be used. Claude reads this to decide when to auto-load it.
+description: When this skill must be used. Claude reads this to decide when to auto-load it.
 
 # Show hint during autocomplete (e.g., "[file-path]")
 argument-hint: [arguments]
@@ -32,8 +32,7 @@ allowed-tools: Read, Glob, Grep
 
 Instructions Claude follows when this skill is active.
 
-Use `$ARGUMENTS` to reference arguments passed to the skill.
-Use `${CLAUDE_SESSION_ID}` for the current session ID.
+Use `$ARGUMENTS` to reference arguments passed to the skill. Use `${CLAUDE_SESSION_ID}` for the current session ID.
 
 ## Steps
 
