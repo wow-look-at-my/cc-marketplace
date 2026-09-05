@@ -14,13 +14,14 @@ import (
 
 const maxOutputBytes = 1 << 20 // 1MB
 
-// jqTools binds the resolved jq binary to the two handlers. The path is a
-// field rather than a package variable so a test can register a server with
-// no jq without changing what a concurrently running test sees.
+// jqTools binds the resolved jq binary to the two handlers. It is a value
+// rather than a package variable so a test for the not-installed path can
+// build its own server without mutating state the other tests read.
 type jqTools struct {
 	path string
 }
 
+// register binds the two handlers to a server constructed by the caller.
 func (j jqTools) register(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "jq",
@@ -150,17 +151,25 @@ func errorResult(msg string) *mcp.CallToolResult {
 	}
 }
 
-func main() {
-	path, _ := exec.LookPath("jq")
-
+// newServer registers both tools on a server bound to one jq binary. main and
+// the tests share it, so a test drives the same registration that ships.
+func newServer(tools jqTools) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "jq",
 		Version: "1.0.0",
 	}, nil)
 
-	jqTools{path: path}.register(server)
+	tools.register(server)
 
-	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+	return server
+}
+
+func main() {
+	// A lookup failure leaves the path empty, and each tool then answers
+	// with the install instructions rather than the server refusing to start.
+	path, _ := exec.LookPath("jq")
+
+	if err := newServer(jqTools{path: path}).Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatal(err)
 	}
 }

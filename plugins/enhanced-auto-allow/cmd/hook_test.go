@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -297,32 +298,38 @@ func TestPermissionRequestKeepsItsOwnShape(t *testing.T) {
 	assert.Equal(t, "deny", resp.HookSpecificOutput.Decision.Behavior)
 }
 
-// buildTestBinary builds the hook and returns its path. The binary must sit
-// inside the plugin's build directory and nowhere else: hook.go resolves its
-// rules as ../rules.xml from its own location, so a binary in a temp
-// directory finds no rules at all.
+var (
+	testBinaryOnce sync.Once
+	testBinaryPath string
+	testBinaryOut  []byte
+	testBinaryErr  error
+)
+
+// buildTestBinary builds the hook and hands every caller the same path.
 //
-// The FILE NAME is per-test. One shared name is a path every test both
-// writes and deletes, so any two runs that overlap -- a shuffled order, a
-// second `go test` against the same checkout, a CI step that rebuilds while
-// tests run -- have one test removing the binary another is about to exec,
-// which surfaces as a bare "no such file or directory" nowhere near its
-// cause.
+// The binary must live under the plugin, because it resolves rules.xml relative
+// to itself and finds nothing from a temporary directory. The path is therefore
+// shared, so the build is guarded and the file is never removed: these tests run
+// in parallel inside the same process, and a per-test cleanup would delete the
+// binary its siblings are still starting.
 func buildTestBinary(t *testing.T) string {
 	t.Helper()
 	pluginDir := filepath.Join(getRepoRoot(t), "plugins/enhanced-auto-allow")
 
-	buildDir := filepath.Join(pluginDir, "build")
-	require.NoError(t, os.MkdirAll(buildDir, 0o755))
-	name := "enhanced-auto-allow-test-" + strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
-	binaryPath := filepath.Join(buildDir, name)
-	t.Cleanup(func() { os.Remove(binaryPath) })
-
-	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/")
-	cmd.Dir = pluginDir
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "build failed: %s", out)
-	return binaryPath
+	testBinaryOnce.Do(func() {
+		buildDir := filepath.Join(pluginDir, "build")
+		if testBinaryErr = os.MkdirAll(buildDir, 0o755); testBinaryErr != nil {
+			return
+		}
+		path := filepath.Join(buildDir, "enhanced-auto-allow-test")
+		cmd := exec.Command("go", "build", "-o", path, "./cmd/")
+		cmd.Dir = pluginDir
+		if testBinaryOut, testBinaryErr = cmd.CombinedOutput(); testBinaryErr == nil {
+			testBinaryPath = path
+		}
+	})
+	require.NoError(t, testBinaryErr, "build failed: %s", testBinaryOut)
+	return testBinaryPath
 }
 
 func runHookBinary(t *testing.T, binaryPath string, input HookInput) []byte {
