@@ -135,18 +135,7 @@ func TestReadAllowed(t *testing.T) {
 }
 
 func TestEndToEndGhRepoView(t *testing.T) {
-	repoRoot := getRepoRoot(t)
-	pluginDir := filepath.Join(repoRoot, "plugins/enhanced-auto-allow")
-
-	buildDir := filepath.Join(pluginDir, "build")
-	os.MkdirAll(buildDir, 0o755)
-	binaryPath := filepath.Join(buildDir, "enhanced-auto-allow-test")
-	defer os.Remove(binaryPath)
-
-	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/")
-	cmd.Dir = pluginDir
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "build failed: %s", out)
+	binaryPath := buildTestBinary(t)
 
 	tests := []struct {
 		name     string
@@ -308,13 +297,25 @@ func TestPermissionRequestKeepsItsOwnShape(t *testing.T) {
 	assert.Equal(t, "deny", resp.HookSpecificOutput.Decision.Behavior)
 }
 
+// buildTestBinary builds the hook and returns its path. The binary must sit
+// inside the plugin's build directory and nowhere else: hook.go resolves its
+// rules as ../rules.xml from its own location, so a binary in a temp
+// directory finds no rules at all.
+//
+// The FILE NAME is per-test. One shared name is a path every test both
+// writes and deletes, so any two runs that overlap -- a shuffled order, a
+// second `go test` against the same checkout, a CI step that rebuilds while
+// tests run -- have one test removing the binary another is about to exec,
+// which surfaces as a bare "no such file or directory" nowhere near its
+// cause.
 func buildTestBinary(t *testing.T) string {
 	t.Helper()
 	pluginDir := filepath.Join(getRepoRoot(t), "plugins/enhanced-auto-allow")
 
 	buildDir := filepath.Join(pluginDir, "build")
 	require.NoError(t, os.MkdirAll(buildDir, 0o755))
-	binaryPath := filepath.Join(buildDir, "enhanced-auto-allow-test")
+	name := "enhanced-auto-allow-test-" + strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	binaryPath := filepath.Join(buildDir, name)
 	t.Cleanup(func() { os.Remove(binaryPath) })
 
 	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/")
