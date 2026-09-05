@@ -143,6 +143,35 @@ test("a banned modal and a contraction are both reported", () => {
   assert.match(messages, /contractions/i);
 });
 
+// Claude Code cannot accept a code action from a language server, so a repair
+// that is one word has to arrive as text or it does not arrive at all.
+test("a rule with exactly one repair names the word to write", () => {
+  const modal = findings("docs/x.md", "You should not do that.\n");
+  assert.match(modal.map((f) => f.message).join("\n"), /Write "must"\./);
+
+  const contraction = findings("docs/x.md", "It isn't ready.\n");
+  assert.match(contraction.map((f) => f.message).join("\n"), /Write "is not"\./);
+
+  const semicolon = findings("docs/x.md", "The server reads the file; it then reports.\n");
+  assert.match(semicolon[0].message, /Write "\. " and capitalize the next word\./);
+});
+
+test("a repair the rule cannot name is not invented", () => {
+  const long = findings(
+    "docs/x.md",
+    `${"word ".repeat(30)}ends here.\n`,
+  );
+  assert.ok(long.length > 0);
+  // A sentence past the cap has no single replacement, so the message must not
+  // pretend to offer one.
+  assert.doesNotMatch(long[0].message, /Write "/);
+});
+
+test("a capitalized banned word keeps its capital in the replacement", () => {
+  const found = findings("docs/x.md", "Should the server refuse, it reports.\n");
+  assert.match(found.map((f) => f.message).join("\n"), /Write "Must"\./);
+});
+
 test("ordinary conforming prose reports nothing", () => {
   assert.deepEqual(findings("docs/x.md", "The server reads the file. It reports what it finds.\n"), []);
 });

@@ -139,6 +139,45 @@ const STE_REMEDIES: Record<string, string> = {
 // Each failing bucket, in the order failureReport prints them.
 const STE_BUCKETS = ["hardLong", "contractions", "bannedModals", "semicolons", "commaSplices", "wrappedLines"] as const;
 
+// The word STE approves in place of each banned one. A contraction expands. A
+// banned modal maps onto "must" for obligation, "can" for possibility and
+// "will" for the future, which are the three the dictionary approves.
+const STE_WORD_FIX: Record<string, string> = {
+  "can't": "cannot", "won't": "will not", "don't": "do not", "doesn't": "does not",
+  "didn't": "did not", "isn't": "is not", "aren't": "are not", "wasn't": "was not",
+  "weren't": "were not", "wouldn't": "will not", "shouldn't": "must not",
+  "couldn't": "cannot", "mustn't": "must not", "hasn't": "has not",
+  "haven't": "have not", "hadn't": "had not", "it's": "it is", "that's": "that is",
+  "there's": "there is", "here's": "here is", "let's": "let us", "we're": "we are",
+  "they're": "they are", "you're": "you are", "i'm": "I am", "i've": "I have",
+  "we've": "we have", "they've": "they have", "you've": "you have", "i'll": "I will",
+  "we'll": "we will", "they'll": "they will", "you'll": "you will", "he's": "he is",
+  "she's": "she is", "who's": "who is", "what's": "what is",
+  should: "must", shall: "must", could: "can", might: "can", would: "will",
+};
+
+/**
+ * The replacement to write, when the rule has exactly one.
+ *
+ * Claude Code cannot accept a fix from a language server: cli.js 2.1.241
+ * declares no `codeAction` capability, never sends `textDocument/codeAction`,
+ * and has no `workspace/applyEdit` handler. The diagnostic message is the only
+ * channel to the model, and it survives as text. So a rule whose repair is one
+ * word says that word here, and the reader makes a one-token edit rather than
+ * re-deriving it.
+ */
+function steFix(bucket: string, detail: string): string {
+  const quoted = /"([^"]+)"/.exec(detail)?.[1];
+  if ((bucket === "contractions" || bucket === "bannedModals") && quoted) {
+    const fix = STE_WORD_FIX[quoted.toLowerCase()];
+    // A capitalized original keeps its capital, so the replacement is a drop-in.
+    if (fix) return ` Write "${/^[A-Z]/.test(quoted) ? fix[0].toUpperCase() + fix.slice(1) : fix}".`;
+  }
+  if (bucket === "semicolons") return ' Write ". " and capitalize the next word.';
+  if (bucket === "commaSplices") return " Write a period in place of the comma and capitalize the next word.";
+  return "";
+}
+
 /**
  * ste-lint reports `<name>:<line>: <detail>` strings, so the line comes back
  * out by matching on the name it was given.
@@ -166,7 +205,7 @@ function ste(relativePath: string, content: string): Finding[] {
         check: "ste-lint",
         startLine: parsed.line,
         endLine: parsed.line,
-        message: `${STE_REMEDIES[bucket]}${detail}`,
+        message: `${STE_REMEDIES[bucket]}${detail}${steFix(bucket, parsed.detail)}`,
       });
     }
   }
