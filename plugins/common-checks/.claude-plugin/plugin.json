@@ -5,7 +5,6 @@
     "name": "wow-look-at-my"
   },
   "keywords": ["lsp", "ci", "github-actions", "lint", "common-checks"],
-  "lspServers": "./.lsp.json",
   "mh": {
     "include_in_marketplace": true
   }

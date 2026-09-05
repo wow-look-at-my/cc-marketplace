@@ -1,7 +1,6 @@
 # common-checks
 
-A language server that reports, while you edit, the violations that would fail
-the org's `common-checks` CI gate.
+A language server that reports, while you edit, the violations that fail the org's `common-checks` CI gate.
 
 ## Installation
 
@@ -20,19 +19,13 @@ Needs Node 18 or later on `PATH`, or `COMMON_CHECKS_NODE` set to a Node binary.
 | any `action.yml` | `yaml-comment-block`, `no-tests-in-yaml` |
 | any `*.md` | `ste-lint` |
 
-Every diagnostic is an error, because every one of them fails the merge gate.
-`ste-lint`'s heuristic findings (passive voice, noun clusters, word choice) never
-fail CI, so they are not reported.
+Every diagnostic is an error, because every one of them fails the merge gate. The heuristic findings of `ste-lint` never fail CI, so this plugin does not report them. Those are passive voice, noun clusters and word choice.
 
 ## Where the rules live
 
-Nowhere in this plugin. Each check's own module is fetched from
-[wow-look-at-my/actions](https://github.com/wow-look-at-my/actions) on every
-build and lands under `vendor/`. Change a rule upstream and the next release
-carries it. `vendor/NOTICE.md` records the commit each file came from.
+Nowhere in this plugin. Every build fetches each check's own module from [wow-look-at-my/actions](https://github.com/wow-look-at-my/actions) into `vendor/`. Change a rule upstream and the next release carries it. `vendor/NOTICE.md` records the commit each file came from.
 
-The build also reads `common-checks/action.yml` upstream and fails if the set of
-checks it runs no longer matches the set this plugin covers.
+The build also reads `common-checks/action.yml` upstream. It fails when the set of checks that file runs no longer matches the set this plugin covers.
 
 ## Configuration
 
