@@ -32,8 +32,7 @@ allowed-tools: Read, Glob, Grep
 
 Instructions Claude follows when this skill is active.
 
-Use `$ARGUMENTS` to reference arguments passed to the skill.
-Use `${CLAUDE_SESSION_ID}` for the current session ID.
+Use `$ARGUMENTS` to reference arguments passed to the skill. Use `${CLAUDE_SESSION_ID}` for the current session ID.
 
 ## Steps
 
