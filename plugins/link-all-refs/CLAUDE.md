@@ -6,7 +6,7 @@ The link-all-refs plugin lives at `plugins/link-all-refs/`. It is one Stop hook:
 
 **A branch is matched by its prefix, and a bare `owner/repo` is not matched at all.** `claude/x`, `feature/x`, `fix/x` and the rest of the conventional prefixes are unmistakable. A bare `owner/repo` has the same shape as a directory path, and nothing separates `go/core` from a repository slug by looks alone. The `owner/repo#N` form IS matched, because the number carries it. That is the deliberate boundary of the check, not an oversight to fix by guessing.
 
-A commit SHA needs both a digit and an a-f letter, which is what separates one from a decimal number and from a word spelled in hex ("defaced"). A `&#N;` character reference is stripped before matching, so this org's `&#0;` is not read as an issue number. Every failure path -- unparseable payload, missing transcript, a message with no text -- ALLOWS the stop: a guard that blocks because it could not read a file is worse than no guard.
+A commit SHA needs both a digit and an a-f letter. A `&#N;` character reference is stripped before matching, so this org's `&#0;` is not read as an issue number. Every failure path -- unparseable payload, missing transcript, a message with no text -- ALLOWS the stop: a guard that blocks because it can not read a file is worse than no guard.
 
 - **Hook binary**: `plugins/link-all-refs/hook.go` -- the Stop payload, the allow/refuse decision, and the refusal text (which escalates on `stop_hook_active`, but still refuses: the model can always satisfy this by writing the link)
 - **Detection**: `plugins/link-all-refs/refs.go` -- link stripping, the fenced/quoted exemption, the four matchers and their boundary checks

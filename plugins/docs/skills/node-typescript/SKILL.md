@@ -42,7 +42,7 @@ Two more that follow from it, and both have bitten:
 
 If you control `tsconfig.json`. The documented answer is `allowImportingTsExtensions` so `import { x } from './mod.ts'` type-checks. Its constraint (verified: `TS5096`) is that it needs `noEmit` or `emitDeclarationOnly` — or `rewriteRelativeImportExtensions`, which rewrites `./mod.ts` to `./mod.js` on emit, i.e. for compile-and-ship, not run-directly.
 
-When the compiler options are fixed by a host that will not let you add either — a GitHub Action that type-checks inline scripts, an embedded tsc, a sandbox — a `.ts` specifier is rejected (`TS5097`) and you may think you are forced back to `.js`. You are not. Split the two resolutions, because they have different rules:
+When the compiler options are fixed by a host that will not let you add either. You are not. Split the two resolutions, because they have different rules:
 
 ```ts
 const { thing } = require("/abs/path/mod.ts") as typeof import("/abs/path/mod");

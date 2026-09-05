@@ -24,7 +24,7 @@ Every instruction has its own `## NAME` heading: `FROM`, `RUN`, `CMD`, `LABEL`, 
 
 ## Read this first
 
-**Start every Dockerfile with `# syntax=docker/dockerfile:1`.** Line 1, before anything, including comments. It makes BuildKit pull the latest stable frontend instead of the one bundled with the local engine. Without it, half of what follows silently does not exist. Parser directives must be at the very top - once any comment, blank line, or instruction is processed, BuildKit stops looking, and a later `# syntax=` line is just a comment.
+**Start every Dockerfile with `# syntax=docker/dockerfile:1`.** Line 1, before anything, including comments. It makes BuildKit pull the latest stable frontend instead of the one bundled with the local engine. Without it, half of what follows silently does not exist. Parser directives must be at the very top - once any comment, blank line, or instruction is processed, BuildKit stops looking.
 
 Second directive worth knowing: `# check=error=true` turns build-check warnings into failures (pin the syntax version if you use it, or a future check will break the build). `# check=skip=JSONArgsRecommended,StageNameCasing` skips named checks. Check names are Pascal case and case-sensitive. `docker build --check .` runs the checks without building.
 

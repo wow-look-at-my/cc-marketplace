@@ -18,9 +18,9 @@ A path that is not statically known (`sed -i "$F"`). A directory that is not (`c
 
 **In-place editors.** `sed -i` in every spelling (`-i.bak`, a cluster like `-ri`, `--in-place=`), plus sed's `w`/`W` commands and the `w` flag on an `s` command, read out of the script text. `awk -i inplace` and `awk '{print > "f"}'` -- awk's grammar makes an unparenthesised `>` after `print` a redirect and anything else a comparison, which is what keeps `awk '$1 > 5'` a filter and not a writer. `ed`, `ex`, `vi`, `vim`, `nvim`, `emacs` (a file operand is the target. A `--batch --eval` with no operand is opaque. `emacs --version` writes nothing and is not an editing session). `busybox` resolves to its applet, so `busybox sed -i` reaches the sed rule.
 
-**Interpreters.** An inline script -- `node -e`, `ruby -e`, `perl -e`/`-E`, `python -c`, `php -r`, `lua -e`, `deno eval`, `Rscript -e`, `osascript -e` -- is opaque and denies wherever it runs, as does a script arriving on stdin through a pipe or a heredoc. `jq` is listed with an empty flag set on purpose: it has no way to write a file, and the entry exists so nobody adds one. A script *file* is judged by where it lives: shell scripts are read and analysed (see indirection below), and a non-shell script under a temporary directory denies, because that is the write-elsewhere-then-run splice. A script inside the tree got there through Write or Edit and is visible in the diff.
+**Interpreters.** An inline script -- `node -e`, `ruby -e`, `perl -e`/`-E`, `python -c`, `php -r`, `lua -e`, `deno eval`, `Rscript -e`, `osascript -e` -- is opaque and denies wherever it runs, as does a script arriving on stdin through a pipe or a heredoc. `jq` is listed with an empty flag set on purpose: it has no way to write a file, and the entry exists so nobody adds one. A script *file* is judged by where it lives: shell scripts are read and analysed (see indirection below). A script inside the tree got there through Write or Edit and is visible in the diff.
 
-The session scratchpad is the one temporary directory that does NOT deny. Claude Code's own system prompt tells a session to put every temp file there rather than in `/tmp`, so refusing to run what it writes there refuses the documented workflow, and there is nowhere else the instruction allows: a `cp` into the tree is a write route, and the deny message's own advice (use Write) is what the session already did. `isSessionScratchpad` matches a `scratchpad` segment under an ancestor named `claude` or `claude-<something>`, inside a scratch root -- both halves required, so a bare `/tmp/scratchpad` or a stray `claude-notes/` is still refused.
+The session scratchpad is the one temporary directory that does NOT deny. Claude Code's own system prompt tells a session to put every temp file there rather than in `/tmp`. `isSessionScratchpad` matches a `scratchpad` segment under an ancestor named `claude` or `claude-<something>`, inside a scratch root -- both halves required, so a bare `/tmp/scratchpad` or a stray `claude-notes/` is still refused.
 
 **Redirection and copy-over.** `>`, `>>`, `>|`, `&>`, `<>`, and `>&file` (but not `2>&1`, which duplicates a descriptor, and not `/dev/null` and friends). `tee` and `tee -a`, `dd of=`, `truncate -s`, `sponge`, `xxd -r`, `base64`/`openssl -out`.
 
@@ -42,13 +42,13 @@ The session scratchpad is the one temporary directory that does NOT deny. Claude
 
 **Writes that never touch a local file.** `gh api --method PUT .../contents/...`, the `createCommitOnBranch` GraphQL mutation, the same two through `curl`, and the `mcp__*__create_or_update_file` / `push_files` / `delete_file` family. The file content rides in the request and never exists on disk, so every path rule above misses them.
 
-**Routes that are not Bash at all.** A subagent spawn (`Agent`, `Task`, `create_session`) carrying a tool grant or a permissive `permissionMode` is refused: a child must not be handed what the parent was denied, and a spawn asking for neither is ordinary delegation. The live settings (`~/.claude/settings.json`, any `.claude/settings*.json`) are refused to every tool including Edit, and so are the skills whose purpose is to rewrite them -- re-granting what a guard denies is its own route. A repository's own plugin sources are not this: editing `plugins/x/.claude-plugin/plugin.json` is ordinary work on source code.
+**Routes that are not Bash at all.** A subagent spawn (`Agent`, `Task`, `create_session`) carrying a tool grant or a permissive `permissionMode` is refused: a child must not be handed what the parent was denied, and a spawn asking for neither is ordinary delegation. The live settings (`~/.claude/settings.json`, any `.claude/settings*.json`) are refused to every tool including Edit, and so are the skills whose purpose is to rewrite them. A repository's own plugin sources are not this: editing `plugins/x/.claude-plugin/plugin.json` is ordinary work on source code.
 
 ## The unknown-tool rule, and why the formatter table is a decision rather than an omission
 
 A catalog of program names leaks the moment a session reaches for one nobody named. So a long in-place flag -- `--in-place`, `--in-place=`, `--write` -- counts for any program at all, recognised or not. Short `-i` and `-w` are ambiguous (`grep -w`, `curl -w`) and count only for the tools known to spell in-place that way. Operands that are plainly not filenames are dropped from the report, so `yq -i '.a = 1' config.yaml` names the file rather than the program.
 
-That leaves the tools which rewrite by design. They are an explicit table (`allowedFormatter`). The principle is stated there: each one writes only a canonical reformat, or a regeneration the repository owns, of the file it is handed -- none can be pointed at content the model authored, which is exactly what separates them from `sed -i`. A tool not on the table is not allowed by being a formatter. `ffs fmt -w` is the worked example: it is recognised as an in-place rewriter and denied, and the way to run it is a named recipe, which is a reviewable line in the repository rather than an argv.
+That leaves the tools which rewrite by design. They are an explicit table (`allowedFormatter`). The principle is stated there: each one writes only a canonical reformat, or a regeneration the repository owns, of the file it is handed. A tool not on the table is not allowed by being a formatter. `ffs fmt -w` is the worked example: it is recognised as an in-place rewriter and denied, and the way to run it is a named recipe, which is a reviewable line in the repository rather than an argv.
 
 ## Where this collides with ordinary workflow
 
@@ -62,13 +62,13 @@ Neither is in `worktreeVerbs`, so neither is refused. Every byte a merge writes 
 
 `rebase`, `cherry-pick`, `am` and `apply` are not the same act and stay refused. The first two replay commits onto a different base. The last two take a patch from outside git. What those land is not a tree anything already holds.
 
-Integrating into a dirty tree is a separate question. The destruction half answers it: both verbs reach `hazTracked` there and are refused with the `git stash push -u` rewrite, so uncommitted work is still protected.
+Integrating into a dirty tree is a separate question. The destruction half answers it: both verbs reach `hazTracked` there and are refused with the `git stash push -u` rewrite.
 
 `integrate_test.go` pins all three halves of that: allowed on a clean tree, denied on a dirty one, and a patch still refused either way.
 
 ## What this half deliberately does not cover
 
-- **Running programs.** A build, a test run, a generator or a `just` recipe writes what it writes. Sandboxing arbitrary execution is a different mechanism, and pretending otherwise would mean denying every build.
+- **Running programs.** A build, a test run, a generator or a `just` recipe writes what it writes. Sandboxing arbitrary execution is a different mechanism, and pretending otherwise will mean denying every build.
 - **Deletion.** `rm`, `find -delete` and `git clean` remove content rather than author it. The destruction half and `cleanup-bash-cmds` own that.
 - **File metadata.** `chmod`, `chown`, `touch` and `mkdir` change no content.
 - **A hook that times out.** Claude Code's own docs state that a hook which times out does not block the call, so a killed binary lets the command through. A hook cannot make itself mandatory. This is platform behaviour, not an unhandled case.

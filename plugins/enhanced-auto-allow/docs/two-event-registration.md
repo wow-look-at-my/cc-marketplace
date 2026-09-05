@@ -16,7 +16,7 @@ let y = QdE(t, i, l, n, c)   // -> executePermissionRequestHooks
 
 `QdE` is the only caller of `executePermissionRequestHooks`. Everything it produces is tagged `decideLocation: "ask-path"`. So a `PermissionRequest` hook gets a vote **only when the permission engine has already landed on "ask"**.
 
-Anything that resolves the call earlier silences it. `defaultMode: "auto"` is exactly that: the auto-mode classifier answers "allow" before the ask path is reached. For as long as `PermissionRequest` was this plugin's only registration, every deny rule in `rules.xml` was dead under that mode — `python3 -c "print(1)"` ran with no prompt, while feeding the binary a synthetic `PermissionRequest` payload for the same command returned a correct deny. The rules were right. Nothing ever asked them.
+Anything that resolves the call earlier silences it. `defaultMode: "auto"` is exactly that: the auto-mode classifier answers "allow" before the ask path is reached. For as long as `PermissionRequest` was this plugin's only registration, every deny rule in `rules.xml` was dead under that mode. The rules were right. Nothing ever asked them.
 
 ## PreToolUse fires unconditionally
 
@@ -26,7 +26,7 @@ When it denies, `gan` short-circuits before `canUseTool`, the tool never execute
 
 ## Why PreToolUse denies and never allows
 
-`denyOnly` in `hook.go` suppresses every non-deny verdict on the `PreToolUse` path. An allow there would settle the call *before* the permission engine runs, so the user's own `permissions.deny` rules and auto-mode's `hard_deny` entries would never get a vote — this plugin would be overriding the environment instead of adding to it. Auto-approval is a convenience and belongs downstream of those rules, which is where `PermissionRequest` sits.
+`denyOnly` in `hook.go` suppresses every non-deny verdict on the `PreToolUse` path. An allow there will settle the call *before* the permission engine runs. Auto-approval is a convenience and belongs downstream of those rules, which is where `PermissionRequest` sits.
 
 The split is therefore: **deny rides `PreToolUse`** (must always fire), **allow rides `PermissionRequest`** (must never outrank the user).
 

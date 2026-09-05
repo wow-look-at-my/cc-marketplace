@@ -2,7 +2,7 @@
 
 A turn does not end while it is the latest in a run of turns that each made the exact same tool call, spaced too close together for anything to actually have changed.
 
-Re-running the same status check every turn instead of waiting for a real event burns tokens for zero new signal -- the answer cannot have changed in the seconds since the last check. The Stop hook refuses the stop and names the call:
+Re-running the same status check every turn instead of waiting for a real event burns tokens for zero new signal. The Stop hook refuses the stop and names the call:
 
 ```
 Stop. The last 4 turns in a row made the exact same call, with nothing else

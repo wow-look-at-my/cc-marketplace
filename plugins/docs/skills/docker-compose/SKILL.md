@@ -172,7 +172,7 @@ Three different mechanisms, routinely confused:
 - **`attach: false`** stops Compose collecting that service's logs.
 - **`label_file`** loads labels from a file, like `env_file`. `labels:` wins on conflict.
 - **`init: true`** for signal forwarding / zombie reaping when the image's PID 1 cannot.
-- `container_name` **prevents scaling** past one container. Do not set it on anything that might be scaled.
+- `container_name` **prevents scaling** past one container. Do not set it on anything that can be scaled.
 
 ## Volumes
 

@@ -2,7 +2,7 @@
 
 A write does not land while it states an inventory count in a markdown document.
 
-`this repo's 15 plugins`, `the four rules below`, `it has three sections`: each says how many of something is here at the moment it was typed. The edit that adds an item leaves the number wrong, and nothing in the repository corrects it — the reader keeps trusting a figure that has quietly gone stale. The PreToolUse hook refuses the write and quotes the count back.
+`this repo's 15 plugins`, `the four rules below`, `it has three sections`: each says how many of something is here at the moment it was typed. The edit that adds an item leaves the number wrong, and nothing in the repository corrects it. The PreToolUse hook refuses the write and quotes the count back.
 
 ```
 blocked: this write states a count in /repo/CLAUDE.md.
@@ -38,6 +38,6 @@ A quantity with no frame is ordinary technical prose and passes: `pre-2.1.205 cl
 
 Fenced code, indented code, HTML comments, YAML frontmatter and inline backtick spans are skipped whole: a number inside verbatim machinery is a literal, not the document's own claim about itself. That is also how this page quotes the shape it refuses.
 
-`one` is deliberately unmatched. In prose it is almost always a pronoun (`the wrong one`), and matching it would refuse far more good writing than bad. That is a known gap, not an oversight.
+`one` is deliberately unmatched. In prose it is almost always a pronoun (`the wrong one`), and matching it will refuse far more good writing than bad. That is a known gap, not an oversight.
 
 Only the text a write ADDS is judged, so a count already sitting in a file never blocks an unrelated edit to it.

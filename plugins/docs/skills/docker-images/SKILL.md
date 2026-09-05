@@ -14,14 +14,14 @@ A host ran agent sessions in containers. There was one big runtime image (termin
 - `docker run` each payload image once, purely to `cp -a /agent/.` into a named volume.
 - start the session from the RUNTIME image with that volume mounted read-only at `/agent`.
 
-So the payload image's own filesystem was never a container root. It existed to carry a directory. Asked why the agents were not simply `FROM` the runtime image, I argued layering would save nothing, because the only layer it would share (`ubuntu:24.04`) was already shared. The arithmetic was right and the conclusion was wrong: **I was comparing byte counts and missing that I had reimplemented distribution.** The reply was "I don't think you understand how docker is supposed to work," and it was correct.
+So the payload image's own filesystem was never a container root. It existed to carry a directory. Asked why the agents were not simply `FROM` the runtime image, I argued layering will save nothing. The arithmetic was right and the conclusion was wrong: **I was comparing byte counts and missing that I had reimplemented distribution.** The reply was "I don't think you understand how docker is supposed to work," and it was correct.
 
 What the copy-into-a-volume design cost, none of which is a byte count:
 
 - a marker file (`/agent/.agent-host-image`) and refresh logic, to answer "is the volume's content still the right version?" -- a question a tag answers.
 - a `docker run` per agent per host, before any session can start.
 - a volume per agent that nothing garbage-collects.
-- weight nobody could see. One agent image shipped 831 MiB against ~95 MiB for its siblings -- a whole build toolchain and a second Node install -- because a standalone carrier image has no base to be a diff against, so nothing looked wrong. Layering makes that visible as "this child adds 700 MiB".
+- weight nobody can see. One agent image shipped 831 MiB against ~95 MiB for its siblings. Layering makes that visible as "this child adds 700 MiB".
 
 The rule I must have started from: **layer the program files, mount only the mutable state.** An image is the unit of distribution AND the unit of execution. Splitting those two apart is the smell.
 
@@ -83,7 +83,7 @@ Built with `--build-arg BASE_IMAGE=registry.example.com/myapp-runtime:<sha>`. Ke
 This is where the design change actually shows up in a pipeline. It is easy to get wrong because a matrix looks so tidy:
 
 - **A base and its children cannot build in parallel.** The children need the base to exist first. That means separate jobs with `needs:`, not one matrix.
-- **The child's builder pulls the base from the REGISTRY**. The base has to be pushed, not merely built, before the child starts -- and the child's job needs registry credentials to pull a private base. This is easy to miss when the push path authenticates some other way (a CLI with its own token), because then nothing else in the job ever needed a `docker login`.
+- **The child's builder pulls the base from the REGISTRY**. The base has to be pushed, not merely built, before the child starts. This is easy to miss when the push path authenticates some other way (a CLI with its own token), because then nothing else in the job ever needed a `docker login`.
 - **Put that login in the build action, not in every caller.** A caller adding a login step to work around an action that cannot pull its own registry's images is a workaround. Fix the action.
 - **A stale base is a real failure mode.** If children are rebuilt without the base, they silently keep the old runtime. Tie them together with an exact tag, and assert it: an inherited `LABEL` from the base is a cheap check that the child really was layered on the version you think.
 
@@ -127,4 +127,4 @@ That is how the 831 MiB outlier above was found -- after it had already shipped.
 
 ## Keep this file growing
 
-This skill exists because I was wrong in a way that a page of docs would not have caught -- the mistake was architectural, not syntactic. **When something about established Docker design surprises you, add it here in the same shape: what the instinct was, what is actually true, and the evidence.** A surprise is the signal that a wrong model just got corrected. The correction is worth more written down than remembered. Verify against docs.docker.com, the OCI image-spec, or the observed behavior of a real daemon before writing it. A confidently wrong note in this plugin is worse than no note, because it loads automatically.
+This skill exists because I was wrong in a way that a page of docs will not have caught -- the mistake was architectural, not syntactic. **When something about established Docker design surprises you, add it here in the same shape: what the instinct was, what is actually true, and the evidence.** A surprise is the signal that a wrong model just got corrected. The correction is worth more written down than remembered. Verify against docs.docker.com, the OCI image-spec, or the observed behavior of a real daemon before writing it. A confidently wrong note in this plugin is worse than no note, because it loads automatically.

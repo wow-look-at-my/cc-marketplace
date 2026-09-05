@@ -28,9 +28,9 @@ a:hover { text-decoration: underline; }
 
 ## Order of attack when something needs styling
 
-1. **Would this be right for every one of these elements on the page?** Put it on the type selector (`a`, `table`, `code`, `input`). No class, no rule per instance.
+1. **Will this be right for every one of these elements on the page?** Put it on the type selector (`a`, `table`, `code`, `input`). No class, no rule per instance.
 2. **Is it right for everything inside one container?** Put it on the container and let it inherit, or scope it (`.panel a`).
-3. **Is it genuinely one thing behaving differently?** NOW write the specific rule, and put only the DELTA in it -- not a fresh copy of the base with one line changed.
+3. **Is it genuinely one thing behaving differently?** NOW write the specific rule, and put only the DELTA in it.
 4. **Is the same value appearing twice?** That is a custom property (`--accent` in `:root`), not two literals that will drift.
 
 Before adding a declaration to an existing stylesheet, grep it: `grep -n 'text-decoration' foo.css`. One command. It is exactly what the six-copy failure above skipped.
@@ -72,4 +72,4 @@ Consequences worth internalizing:
 
 A base rule that every specific rule then has to override is worse than the duplication it replaced: it adds a line to every rule instead of removing five. If most instances need an override. The base is wrong -- narrow it, scope it to a container, or drop it. Same for `:root` custom properties named after one component, and for utility classes that exist in one place.
 
-Duplication that is NOT a defect: identical blocks in different `@media` contexts, `from`/`to` in `@keyframes`, vendor-prefixed pairs, and a design token deliberately restated in a theme override. The rule is about the same block repeated in the SAME context.
+Duplication that is NOT a defect: identical blocks in different `@media` contexts, `from`/`to` in `@keyframes`, vendor-prefixed pairs. The rule is about the same block repeated in the SAME context.

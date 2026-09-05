@@ -14,7 +14,7 @@ Every call. No "Allow always". Adding the tool to `permissions.allow` changes no
 
 1. Local rules evaluate normally, allow, and `tools/call` is dispatched.
 2. The CCR MCP proxy answers with JSON-RPC `-32003` plus an `args_sha256` in `error.data` — "needs_approval".
-3. The client raises a retroactive approval card whose precomputed decision (`behavior: "ask"`, `suppressAlwaysAllowRule: true`) is handed straight to `canUseTool`, so the whole deny/ask/allow-rule and classifier pipeline is never invoked and no approval can ever be persisted.
+3. The client raises a retroactive approval card whose precomputed decision (`behavior: "ask"`, `suppressAlwaysAllowRule: true`) is handed straight to `canUseTool`.
 
 What was wrong was the conclusion drawn from step 3.
 
@@ -36,7 +36,7 @@ if (!s)
   })()
 ```
 
-`cancelRequest(g)` cancels the very bridge request that is displaying the card, and `y?.()` tears down the listener that a human click would have resolved through. That listener is the **only** code path in the bundle that produces a decision with `source: { type: "user" }` for this flow.
+`cancelRequest(g)` cancels the very bridge request that is displaying the card, and `y?.()` tears down the listener that a human click will have resolved through. That listener is the **only** code path in the bundle that produces a decision with `source: { type: "user" }` for this flow.
 
 Then the retry goes out:
 
@@ -58,7 +58,7 @@ The instinct on seeing an instant error is "the card was never raised, so the ho
 
 **A `PermissionRequest` hook cannot make these calls succeed, and can only make them fail.** The one working outcome is to leave the ask unanswered so the dialog stands and a human clicks it. That is what an absent `<mcpServer>` block achieves — the hook returns nothing for this server, `L5p`'s `if (!s)` branch resolves to nothing. The bridge listener stays alive until the real click arrives.
 
-This is not a limitation to work around. There is nothing to convey a hook-sourced approval to the server. The source shows no field, header, or side-channel that could.
+This is not a limitation to work around. There is nothing to convey a hook-sourced approval to the server. The source shows no field, header, or side-channel that can.
 
 ## `send_later`, and why "but it needs to be unattended" is not a counterargument
 
@@ -77,7 +77,7 @@ Removing the block restores the click. The obvious next question is whether the 
 
 The bridge round-trip a human's click completes is the only real network exchange in this whole flow. It is the only path that produces a decision with `source: { type: "user" }`.
 
-Worth knowing for the day this gets fixed upstream: a genuine auto-resolve-by-polling-the-server mechanism already exists in the client (`serverApprovalWatch`), and it resolves an ask WITHOUT transmitting anything locally. It is wired to one unrelated feature and is simply not attached to the connector decision object. That, not a hook, is the shape a real fix takes.
+Worth knowing for the day this gets fixed upstream: a genuine auto-resolve-by-polling-the-server mechanism already exists in the client (`serverApprovalWatch`). It is wired to one unrelated feature and is simply not attached to the connector decision object. That, not a hook, is the shape a real fix takes.
 
 ## What still works unattended, and what genuinely does not
 

@@ -2,7 +2,7 @@
 
 Surfaces the same declaration block written under more than one selector, as **LSP diagnostics on the offending lines** while you edit the stylesheet.
 
-The failure it catches is one specific bad habit: giving every element its own complete rule instead of using the cascade, so `color: var(--accent); text-decoration: none;` ends up under five selectors and the sixth link needs a sixth copy. On the stylesheet that motivated the plugin it flags every copy, with the other copies attached as related locations, and says what to write instead.
+The failure it catches is one specific bad habit: giving every element its own complete rule instead of using the cascade. On the stylesheet that motivated the plugin it flags every copy, with the other copies attached as related locations, and says what to write instead.
 
 ## What it reports
 

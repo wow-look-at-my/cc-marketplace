@@ -13,7 +13,7 @@ git checkout master             # a dirty tree silently rides along to master
 git reset --hard origin/master  # ...and the edits are gone, with no reflog entry
 ```
 
-Note the shape. The first command is individually reasonable and destroys nothing. It is what makes the second one lethal. A guard that only gated `reset --hard` would have watched this happen. So moving HEAD with a dirty tree is itself treated as a hazard, which is why `git checkout <branch>` is refused on a dirty tree even though git would have "succeeded".
+Note the shape. The first command is individually reasonable and destroys nothing. It is what makes the second one lethal. A guard that only gated `reset --hard` will have watched this happen. So moving HEAD with a dirty tree is itself treated as a hazard, which is why `git checkout <branch>` is refused on a dirty tree even though git will have "succeeded".
 
 ## Hazard classes, and why they are not one bit
 
@@ -50,7 +50,7 @@ Two facts here were established by running git, and both had already produced a 
 - **`--exclude` does not take a full refname.** For `--branches` and `--remotes` the pattern matches the name *without* the `refs/heads/` or `refs/remotes/` prefix. `--exclude=refs/heads/feature --branches` silently excludes nothing, so a branch holding the only copy of a commit reported "0 would be lost". A silent false negative is the worst outcome available here, which is why containment via `for-each-ref --contains` is used instead of hand-built exclusion lists.
 - **`refs/remotes/<remote>/HEAD` is a symbolic alias** for the branch being overwritten. Counting it as "somewhere else" made every force push look safe. It is filtered out explicitly.
 
-`push --mirror` remains an unconditional refusal: it rewrites every ref at once, so there is no bounded set of commits whose survival could be checked. It is the only member of the family without a reachability answer.
+`push --mirror` remains an unconditional refusal: it rewrites every ref at once, so there is no bounded set of commits whose survival can be checked. It is the only member of the family without a reachability answer.
 
 When a push cannot be verified -- no remote-tracking ref exists locally -- the answer is deny, not allow. Absence of a local mirror is not evidence the remote is empty. The fix named in the denial is `git fetch`.
 
@@ -58,10 +58,10 @@ A force push judged safe is still judged against possibly-stale local knowledge 
 
 ## What is deliberately NOT blocked
 
-- **Unpushed commits.** `git reset --hard origin/master` on a clean tree is allowed even when HEAD is ahead of upstream. Those commits are in the reflog. Blocking here would refuse a routine, reversible operation and buy nothing.
-- **Anything already pushed, merged, or living on another branch.** This is the whole point of the reachability section above: recoverable content is not protected content. Note that it cannot apply to the working tree -- a modified or untracked file's current bytes are in no commit by definition, so "already pushed" is never true of them. That is why the dirty-tree verbs stay state-based and the ref verbs are reachability-based. `git stash drop` sits with the former: stashing is precisely the act of putting content somewhere no branch points at.
+- **Unpushed commits.** `git reset --hard origin/master` on a clean tree is allowed even when HEAD is ahead of upstream. Those commits are in the reflog. Blocking here will refuse a routine, reversible operation and buy nothing.
+- **Anything already pushed, merged, or living on another branch.** This is the whole point of the reachability section above: recoverable content is not protected content. Note that it cannot apply to the working tree. That is why the dirty-tree verbs stay state-based and the ref verbs are reachability-based. `git stash drop` sits with the former: stashing is precisely the act of putting content somewhere no branch points at.
 - **`git checkout -b` / `git switch -c`.** Creating a branch carries changes across. It cannot drop them. Dirty or not, allowed.
-- **`git stash push`, `git commit`, `git add`.** These create recovery. `stash push` is also the suggested fix in most denials, so blocking it would make the guard unescapable.
+- **`git stash push`, `git commit`, `git add`.** These create recovery. `stash push` is also the suggested fix in most denials, so blocking it will make the guard unescapable.
 - **`git restore --staged`** without `--worktree`: it rewrites the index from HEAD and leaves the file on disk, so the content survives.
 - **Read-only verbs, and unknown verbs.** Only destructive verbs are enumerated. Everything else falls through to allow, so `git status` costs one substring scan and a new git subcommand does not arrive pre-blocked.
 - **Appending.** `>>`, `tee -a`, and `git rm --cached` all leave content in place.
@@ -98,4 +98,4 @@ The prefilter is a substring scan for `git`, `rm`, `mv`, `>`, `tee`, `truncate`.
 ## Interaction with the sibling plugins
 
 - **The `Write` tool's own refusals** (a path that exists, a path in the recycle bin) live in `writetool.go`, and are strictly stronger than "blocks Write on a dirty file", so that half of the guarantee is not duplicated in the hazard model here. Shell truncation (`>`, `tee`, `truncate -s 0`) is a Bash concern and is handled by this model.
-- **`cleanup-bash-cmds`** rewrites `rm` into `recycler trash`. It does not make `rm` safe on its own: hooks receive the original input, so neither plugin can see the other's rewrite, and `recycler` may not be installed -- on a machine without it the rewritten command simply fails. This plugin therefore evaluates `rm` as written. Where both fire, the deny wins, which is the correct precedence.
+- **`cleanup-bash-cmds`** rewrites `rm` into `recycler trash`. It does not make `rm` safe on its own: hooks receive the original input, so neither plugin can see the other's rewrite. This plugin therefore evaluates `rm` as written. Where both fire, the deny wins, which is the correct precedence.

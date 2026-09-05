@@ -1,5 +1,5 @@
 ---
-description: Do a full improvement pass over an existing codebase - read it end to end, find everything worth fixing, and fix it. Written for pointing a newly released model at a repo that older models have already been over, to see what it can find that they could not.
+description: Do a full improvement pass over an existing codebase - read it end to end, find everything worth fixing, and fix it. Written for pointing a newly released model at a repo that older models have already been over, to see what it can find that they can not.
 argument-hint: [path or subsystem, default the whole repo]
 disable-model-invocation: true
 ---
@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Scope is `$ARGUMENTS`. Empty means the whole repository.
 
-This code has already been read, reviewed, and edited by earlier models. Assume the easy findings are gone. What is left is what needs more of the codebase held in mind at once than the last pass managed, or a fact the last model did not know. That is what you are here for. It is also the measurement: the value of this pass is the findings a weaker pass could not have produced.
+This code has already been read, reviewed, and edited by earlier models. Assume the easy findings are gone. What is left is what needs more of the codebase held in mind at once than the last pass managed, or a fact the last model did not know. That is what you are here for. It is also the measurement: the value of this pass is the findings a weaker pass can not have produced.
 
 ## 1. Map it before you change anything
 
@@ -24,7 +24,7 @@ Rank effort toward defects that only show up when you are holding several files 
 - **Invariants stated in one place and broken in another.** A comment, a doc, or a validator says X holds. Some other path constructs a value where it does not.
 - **Wrong edge-case behavior.** Empty input, one element, duplicate keys, unicode, timezone and DST, integer overflow, concurrent access, retry that is not idempotent, cancellation mid-write.
 - **Silent failure.** Swallowed errors, defaulted-away missing config. A fallback nobody is told fired, a truncation with no log, a catch that continues into code that needed the thing that failed. A green run that did nothing is the worst defect class in any repo.
-- **Tests that assert the easy half.** A test that would still pass with the bug present. Reproduce it: break the code deliberately and see whether the suite notices.
+- **Tests that assert the easy half.** A test that will still pass with the bug present. Reproduce it: break the code deliberately and see whether the suite notices.
 - **Stale knowledge.** APIs, language features, tool flags, and library idioms that moved after the last pass was written. You know things earlier models did not -- check the current docs before rewriting on a hunch, then use what is actually available now instead of the workaround built to avoid its absence.
 - **Duplication with drift.** The same logic in three places, two of which have been fixed. Hoist it, or at minimum fix the stragglers.
 - **Dead code and dead branches.** A guard for a state the system is never in, a flag nothing sets, an exported function nobody calls.
@@ -37,28 +37,28 @@ Finding it creates the obligation to repair it. You have the repo open and the d
 
 For a behavior bug: write the failing test first, watch it go red against the unfixed code, then fix it. A test that never went red proves nothing.
 
-Defer only what genuinely needs a human decision -- a design fork with more than one defensible answer, an irreversible action, access you do not have. Then name it exactly, say what the fix would be, and put it in the report.
+Defer only what genuinely needs a human decision. Then name it exactly, say what the fix will be, and put it in the report.
 
 ## 4. This is not a security audit
 
-Hardening here means the code fails loudly, handles its real inputs correctly, and does not corrupt state when something goes wrong. It does not mean bolting auth onto a local script, validating inputs that come from your own code, adding defensive `try`/`catch` around things that cannot throw, or rewriting a working parser because a hostile input could theoretically exist.
+Hardening here means the code fails loudly, handles its real inputs correctly, and does not corrupt state when something goes wrong. It does not mean bolting auth onto a local script, validating inputs that come from your own code, adding defensive `try`/`catch` around things that cannot throw, or rewriting a working parser because a hostile input can theoretically exist.
 
 If you find a real exploitable bug in something that actually faces untrusted input, fix it and say so. Do not go looking for a threat model the project does not have.
 
 ## 5. Do not churn
 
-The failure mode of this skill is a huge diff of taste changes that buries three real fixes. Every change needs a reason the owner would agree with out loud.
+The failure mode of this skill is a huge diff of taste changes that buries three real fixes. Every change needs a reason the owner will agree with out loud.
 
 - No reformatting, no renaming for style, no reordering, no reshuffling files.
 - No rewriting working code into your preferred idiom.
 - No new abstraction with one caller.
 - No new dependency where a few lines of the standard library do it.
-- Match the surrounding code's conventions, including the ones you would not have chosen.
+- Match the surrounding code's conventions, including the ones you will not have chosen.
 - Dependency and toolchain upgrades are in scope when they fix something or unlock something you then use. A version bump for its own sake is not.
 
 ## 6. Verify
 
-Run the build. Run the tests. Run the repo's own toolchain command if it has one -- check `CLAUDE.md`, the `justfile`, or the CI workflow for what that is, and use it rather than the raw language tool. If a change touches something rendered, look at it rendered. Report what you ran and what it said, including anything still failing.
+Run the build. Run the tests. Run the repo's own toolchain command if it has one. If a change touches something rendered, look at it rendered. Report what you ran and what it said, including anything still failing.
 
 Commit in coherent pieces, one concern per commit, with messages that say why.
 
@@ -67,7 +67,7 @@ Commit in coherent pieces, one concern per commit, with messages that say why.
 The report is the deliverable of the pass, because it is what gets compared against the last model's. Write it as:
 
 - **Fixed** -- each defect, where it was, why it was wrong, how you verified.
-- **Found and left** -- what it is, where, what the fix would be, why it needs a decision.
+- **Found and left** -- what it is, where, what the fix will be, why it needs a decision.
 - **Checked and fine** -- the areas you read carefully and found genuinely healthy. This is not filler. Without it, silence about a subsystem is ambiguous between "clean" and "never opened".
 - **Not covered** -- anything in scope you did not get to.
 

@@ -1,6 +1,6 @@
 # cleanup-bash-cmds
 
-A PreToolUse hook that rewrites Bash tool commands before they run. The command is **parsed, not pattern-matched**: shfmt turns it into a syntax tree, a jq program rewrites the tree, and shfmt turns the tree back into a command. No compiled binary -- bash + jq + shfmt work the same on every platform.
+A PreToolUse hook that rewrites Bash tool commands before they run. The command is **parsed, not pattern-matched**: shfmt turns it into a syntax tree, a jq program rewrites the tree. No compiled binary -- bash + jq + shfmt work the same on every platform.
 
 It does ten jobs:
 
@@ -19,7 +19,7 @@ It does ten jobs:
 
 The hook never announces a rewrite -- no `systemMessage`, no `additionalContext`, ever, for any rule combination. Every rewrite emits only the replacement input plus `suppressOutput: true`, so nothing about the hook appears in the transcript. Reason: any visible hook message just gives the model something to blame for its own command mistakes.
 
-The only observable trace of a rewrite is the executed command itself. For debugging, set `CLEANUP_BASH_CMDS_LOG` (see Logging) -- the log records every rewrite with the rules that fired. The single exception is the bans (heredoc, perl, file reads), which must return a `permissionDecisionReason` (without one the model would retry forever). They carry no `systemMessage` either.
+The only observable trace of a rewrite is the executed command itself. For debugging, set `CLEANUP_BASH_CMDS_LOG` (see Logging) -- the log records every rewrite with the rules that fired. The single exception is the bans (heredoc, perl, file reads), which must return a `permissionDecisionReason` (without one the model will retry forever). They carry no `systemMessage` either.
 
 ## Before / After
 
@@ -55,7 +55,7 @@ hook stdin JSON -> jq (extract .tool_input.command)
 
 Because the rewrite operates on real `Redirect` and pipeline nodes, string literals and comments that merely *contain* `2>/dev/null` or `| head` are never touched. A rewrite is emitted only when the tree semantically changed (positions are ignored in the comparison). Untouched commands pass through byte-for-byte.
 
-The statement-count guard is belt and braces: no rule can splice the statement list (they map over it, edit within a statement, or prepend pipefail), but if a future rule bug or a shfmt regeneration regression ever ate a statement, the hook would drop the whole rewrite (and log a `GUARD` line) rather than execute a truncated command.
+The statement-count guard is belt and braces: no rule can splice the statement list (they map over it, edit within a statement, or prepend pipefail). The hook will drop the whole rewrite (and log a `GUARD` line) rather than execute a truncated command.
 
 ## Heredocs: banned
 
@@ -187,7 +187,7 @@ recycler restore notes.txt # put it back where it came from
 
 There is already a control on the adjacent case: the `no-work-loss` plugin blocks `Write` on a path that exists and tells you to use `Edit`. **Delete-then-Write is the loophole around that hook** -- once the path is gone, `Write` is legal again. And in the window between the delete and the Write, the only copy of that file's content is in the model's context: a compaction, an interruption, a rejected tool call, or a turn that simply ends there destroys it permanently, with nothing on disk to recover from.
 
-A control that acts on the `Write` is already a full step too late, and a ledger entry naming the destroyed path does not bring the bytes back. Nor can this lean on version control: the incident that motivated the rule happened in a scratchpad with no git at all. The only thing that helps is for `rm` to stop being able to destroy anything.
+A control that acts on the `Write` is already a full step too late. Nor can this lean on version control: the incident that motivated the rule happened in a scratchpad with no git at all. The only thing that helps is for `rm` to stop being able to destroy anything.
 
 ### The rewrite is unconditional and tree-wide
 
@@ -208,7 +208,7 @@ grep "rm -rf" script.sh   # untouched
 rmdir empty/              # a different command
 ```
 
-`recycler` is emitted as a bare word so `PATH` resolves it. A call that is already `recycler` is never rewritten again (the transform runs to a fixpoint, so an unguarded rule would recurse). The rule only ever emits `recycler trash` -- never `purge` or `empty`, which are themselves permanent deletes.
+`recycler` is emitted as a bare word so `PATH` resolves it. A call that is already `recycler` is never rewritten again (the transform runs to a fixpoint. An unguarded rule will recurse). The rule only ever emits `recycler trash` -- never `purge` or `empty`, which are themselves permanent deletes.
 
 ### Flag translation
 
@@ -229,7 +229,7 @@ Bundled clusters count when every letter is droppable (`-rf`, `-rfv`), so an unk
 
 ### One code path
 
-`recycler` is a **hard dependency** of this rule, exactly as `jq` and `shfmt` are hard dependencies of the hook. It is simply the command the transform emits: there is no probe, no `command -v`, no conditional, and **no fallback to `rm`**. If `recycler trash` fails at runtime -- permissions, an unreachable recycle bin -- the file is still there and the command reports the error, which is the correct outcome. The failure is never caught and never retried as `rm`.
+`recycler` is a **hard dependency** of this rule, exactly as `jq` and `shfmt` are hard dependencies of the hook. It is simply the command the transform emits: there is no probe, no `command -v`, no conditional, and **no fallback to `rm`**. If `recycler trash` fails at runtime -- permissions, an unreachable recycle bin -- the file is still there and the command reports the error. The failure is never caught and never retried as `rm`.
 
 One consequence worth knowing: `rm -f nonexistent` is silent success for real `rm`, but `recycler trash nonexistent` is a visible error. That is the same fail-loud posture as the rest of the hook.
 
@@ -246,7 +246,7 @@ There is no source file to move in these. They are **denied** with the alternati
 
 `git rm --cached` does not touch the working tree and passes through untouched.
 
-**A plain `> file` redirect is deliberately NOT denied.** It truncates, but stdout redirection is overwhelmingly ordinary output routing -- and the `tee` rule above already owns that shape. Denying it would fight the plugin's own behavior and fire constantly on non-deletions. So `: > file` still truncates: a known, accepted gap, and the right trade.
+**A plain `> file` redirect is deliberately NOT denied.** It truncates, but stdout redirection is overwhelmingly ordinary output routing -- and the `tee` rule above already owns that shape. Denying it will fight the plugin's own behavior and fire constantly on non-deletions. So `: > file` still truncates: a known, accepted gap, and the right trade.
 
 ## Stdout redirects become tee
 
@@ -279,7 +279,7 @@ docker compose restart             -> docker compose up -d --force-recreate
 docker compose restart api worker  -> docker compose up -d --force-recreate api worker
 ```
 
-The rewrite applies anywhere commands execute, including loops, functions, subshells, and command substitutions. Trailing service names and flags, assignments, redirects, and surrounding `&&` / `||` / pipeline structure are preserved, and the rule composes with the other cleanup passes. It does not touch the separate `docker-compose` executable, text passed as arguments to another command, or opaque `sh -c` / `bash -c` strings.
+The rewrite applies anywhere commands execute, including loops, functions, subshells, and command substitutions. Trailing service names and flags, assignments, redirects, and surrounding `&&` / `||` / pipeline structure are preserved. It does not touch the separate `docker-compose` executable, text passed as arguments to another command, or opaque `sh -c` / `bash -c` strings.
 
 ## Sleep capped at 3 seconds
 
@@ -306,7 +306,7 @@ Notes:
 
 ## Constant narration echoes and printfs are removed
 
-`echo <constants>` (or `printf <constant>`) is the model narrating into the transcript -- `echo "=== step 2 ==="` separators and friends. A matched narration command is **removed**: its whole command is rewritten to the no-op `:`, so it produces no output, exits 0, and leaves every surrounding statement, redirect, and pipe stage intact. `:` is used instead of deleting the statement so the top-level statement count never drops and exit-0 is preserved.
+`echo <constants>` (or `printf <constant>`) is the model narrating into the transcript -- `echo "=== step 2 ==="` separators and friends. A matched narration command is **removed**: its whole command is rewritten to the no-op `:`, so it produces no output, exits 0. `:` is used instead of deleting the statement so the top-level statement count never drops and exit-0 is preserved.
 
 ```bash
 echo "=== files present ==="   ->   :
@@ -344,7 +344,7 @@ command command echo x ->   :
 - feeding a pipe (`echo foo | cat`, `echo '{"x":1}' | jq .x`) -- but a FINAL pipe stage (`x | echo foo`) prints to the terminal and IS removed
 - captured (`X=$(echo abc)`, backticks, `<( )`, `>( )`)
 - redirected (`echo foo > file`, `echo foo >&2`). Pure stderr redirects (`echo warn 2>>err.log`) do not disqualify, and any redirect on an enclosing compound (`{ echo a; } > f`, `for ...; done > log`) makes the whole body data
-- inside a function body (visibility is decided at the call site: `x=$(f)` would capture) or a coproc
+- inside a function body (visibility is decided at the call site: `x=$(f)` will capture) or a coproc
 - carrying any expansion (`echo "$VAR"`, `echo $(date)`, `echo $((1+2))`) or glob/tilde (`echo *.txt`, `echo ~`) -- that output is information, not narration
 
 Compound bodies stay in scope: if/elif/else branches, while/until/for bodies and conditions, case items, subshells, `time`, `!`, and both sides of `&&` / `||` all count as terminal-bound statement positions.
@@ -361,7 +361,7 @@ Compound bodies stay in scope: if/elif/else branches, while/until/for bodies and
 - `| grep`, `|| true`, `| head`, `| tail`, `> file`: all anchored at the very end of the command (last statement, rightmost `&&`/`||` member) -- one shared anchoring for every trailing-noise rule
 - `command sleep` / `\sleep` -- the sleep, stage-strip head/tail, grep, and `|| true` rules still match the plain literal command word only. Only **narration removal**, the **perl deny**, and the **file-read deny** see through `command` / `builtin` / a leading `\` / quoting. The other name-keyed rules do not.
 - `perl` inside a command substitution or process substitution (`echo $(perl -e 1)`, `<(perl ...)`) is NOT denied -- the resolver never descends into word-internal contexts (the same scoping that keeps `grep perl` / `perlcritic` safe). Flag it if you want it closed.
-- `sh -c '...'` / `bash -c '...'` payloads are opaque strings -- the hook parses the outer command, not the quoted script, so narration, perl, and every other rule inside a `-c` payload are not seen (would need recursive sub-parsing)
+- `sh -c '...'` / `bash -c '...'` payloads are opaque strings -- the hook parses the outer command, not the quoted script, so narration, perl, and every other rule inside a `-c` payload are not seen (will need recursive sub-parsing)
 - `env echo ...`, aliases, and other non-`command`/`builtin` wrappers are not resolved through
 - `set -e`, `set -u`, `set -euo pipefail`, ... -- strictness settings are never removed (and `set -euo pipefail` is recognized, so no duplicate injection)
 

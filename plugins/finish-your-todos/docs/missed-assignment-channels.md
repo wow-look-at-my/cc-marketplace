@@ -20,7 +20,7 @@ Two of those rows caused real losses.
 
 A message sent while a turn is running is not submitted. It is **enqueued**. The queue is drained inside the running turn and each entry becomes a `queued_command` attachment. No `UserPromptSubmit` is dispatched anywhere on that path.
 
-This is not rare. On a bridge/web surface *every* inbound user message goes through the queue, so any message that arrives while the session is busy — which is nearly all of them, for a session doing work — was invisible to the gate.
+This is not rare. On a bridge/web surface *every* inbound user message goes through the queue, so any message that arrives while the session is busy.
 
 In the session that prompted this fix, five such messages arrived. Every one carried an instruction. None reached the gate:
 
@@ -51,11 +51,11 @@ Verified against a live transcript. Note the rendered form lands inside a `tool_
 
 ### System envelopes ride the same queue
 
-Webhook events, background-task completions and reminders are queued exactly like a typed message. Arming on those would refuse every tool call over a PR notification nobody asked for, which is the fastest possible way to get the whole plugin turned off. They are filtered by envelope prefix (`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …) *and* by `commandMode`.
+Webhook events, background-task completions and reminders are queued exactly like a typed message. Arming on those will refuse every tool call over a PR notification nobody asked for, which is the fastest possible way to get the whole plugin turned off. They are filtered by envelope prefix (`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …) *and* by `commandMode`.
 
 ### Arming at most once
 
-A high-water mark (the last interjection's uuid) is stored beside the debt, in its own file. It cannot live in the debt file: that is deleted every time a task is filed, so a settled interjection would arm again on the very next tool call and the session would never move.
+A high-water mark (the last interjection's uuid) is stored beside the debt, in its own file. It cannot live in the debt file: that is deleted every time a task is filed. A settled interjection will arm again on the very next tool call and the session will never move.
 
 ## Gap 2: `/goal <work>` was skipped on the leading slash
 

@@ -39,7 +39,7 @@ Delegate with the `Agent` tool, `subagent_type: "claude-code-source"`. It pins a
 
 ## Adding a skill
 
-Add `skills/<topic>/SKILL.md` with a `description` in the front matter. Write the description as a trigger ("Read before ..."), not a summary — it is the only thing the model sees when deciding whether to load the skill.
+Add `skills/<topic>/SKILL.md` with a `description` in the front matter. Write the description as a trigger ("Read before ..."), not a summary.
 
 Do not set a `name`. The directory name already determines the command (`skills/dockerfile/` → `/docs:dockerfile`). Adding `name` additionally registers the bare `/dockerfile` as an alias, which pollutes the root slash namespace.
 

@@ -2,7 +2,7 @@
 
 Keeps you in charge of the working tree. Two refusals, one parse of the command:
 
-- **Destruction** — a command that would destroy content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything.
+- **Destruction** — a command that will destroy content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything.
 - **Provenance** — a change to file content that skips Write, Edit or NotebookEdit. Bash runs things. It does not author files.
 
 ## Installation
