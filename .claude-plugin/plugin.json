@@ -1,0 +1,15 @@
+{
+	"author": {
+		"name": "wow-look-at-my"
+	},
+	"description": "Reports, while you edit, every violation that would fail the org's common-checks CI gate. Runs the checks' own code, re-fetched from wow-look-at-my/actions on every build.",
+	"keywords": [
+		"lsp",
+		"ci",
+		"github-actions",
+		"lint",
+		"common-checks"
+	],
+	"name": "common-checks",
+	"version": "1302"
+}
