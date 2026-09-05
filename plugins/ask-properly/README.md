@@ -2,7 +2,7 @@
 
 A turn does not end while its closing message hands the user a decision in prose.
 
-A question typed into a closing message is work pushed back onto the user: they have to reconstruct which options were meant and compose an answer. `AskUserQuestion` renders the choices instead, and writing them down forces the options to have been thought through. The Stop hook refuses the stop and quotes what it found:
+A question typed into a closing message is work pushed back onto the user. They have to reconstruct which options were meant and compose an answer. `AskUserQuestion` renders the choices instead, and writing them down forces the options to have been thought through. The Stop hook refuses the stop and quotes what it found:
 
 ```
 Do not stop here. This message ends by handing the user a decision in prose:

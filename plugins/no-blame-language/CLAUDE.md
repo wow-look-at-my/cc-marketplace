@@ -1,6 +1,6 @@
 ## No Blame Language Plugin
 
-The no-blame-language plugin lives at `plugins/no-blame-language/`. It is one Stop hook, modeled closely on the sibling `link-all-refs` plugin: a turn does not end while its closing message uses deflecting, blame-shifting language. The refusal is exit code 2 with the offending phrase and the line it sits on, on stderr, which is how a Stop hook hands the model its objection.
+The no-blame-language plugin lives at `plugins/no-blame-language/`. It is one Stop hook, modeled closely on the sibling `link-all-refs` plugin. A turn does not end while its closing message uses deflecting, blame-shifting language. The refusal is exit code 2 with the offending phrase and the line it sits on, on stderr, which is how a Stop hook hands the model its objection.
 
 **The banned-phrase table is data, not code.** `phrases.go`'s `bannedPhrases` is a plain `[]string`, so extending the list is editing one slice. Every entry traces to a written source: `not mine to fix`, `worth your attention`, `flagging this for you`, `left as-is`, `someone should`, `out of scope`, `not caused by my change`, and `you may want to` are the tells named verbatim in `found-it-fix-it.md`. `that predates this session`, `this was existing code`, `i only copied it`, and `git blame shows` are the provenance openers named verbatim in `you-wrote-it-own-it.md`. `pre-existing` and `preexisting` are the org owner's own explicit addition -- called out by name as a gap that must already have been closed. The rest (`not related to my change`, `unrelated to my diff`, and the `not my *` family) are direct synonyms of an entry already on the list, kept narrow rather than speculative.
 
@@ -12,7 +12,7 @@ The no-blame-language plugin lives at `plugins/no-blame-language/`. It is one St
 
 Every failure path allows the stop: an unparseable payload, a missing or unreadable transcript, a message with no text, and a `hook_event_name` that is not `Stop` -- a guard that blocks because it can not read a file is worse than no guard.
 
-- **Hook binary**: `plugins/no-blame-language/hook.go` -- the Stop payload, the allow/refuse decision, and the refusal text (which escalates on `stop_hook_active`, but still refuses: the model can always satisfy this by rewriting the message)
+- **Hook binary**: `plugins/no-blame-language/hook.go` -- the Stop payload, the allow/refuse decision, and the refusal text (which escalates on `stop_hook_active`, but still refuses. The model can always satisfy this by rewriting the message)
 - **Detection**: `plugins/no-blame-language/phrases.go` -- the banned-phrase table, the compiled case-insensitive matchers, whitespace normalization with offset tracking, and the fenced/indented/blockquote exemption
 - **Transcript**: `plugins/no-blame-language/transcript.go` -- the last assistant message's text blocks, read from a bounded tail (shared verbatim in design with `link-all-refs/transcript.go`)
 - **Tests**: `plugins/no-blame-language/phrases_test.go`, `hook_test.go`, `transcript_test.go` -- every banned phrase actually blocks, case-insensitivity, whitespace normalization across a line wrap, the fenced/indented/blockquote exemption, inline backticks NOT being exempt, a fixed-and-owned finding and an honest deferral both being allowed, and every fail-open path

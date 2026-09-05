@@ -22,7 +22,7 @@ The three are independent, and each report says which one fired. A file that is 
 
 ## Why it watches files, not tool calls
 
-`tool_input.file_path` exists only for `Write`, `Edit` and `MultiEdit`. A `CLAUDE.md` rewritten through Bash — a heredoc, `sed -i`, `tee`, a formatter — names no path. That is not hypothetical: it is how a session edited an over-budget `CLAUDE.md` a dozen times while the guard said nothing.
+`tool_input.file_path` exists only for `Write`, `Edit` and `MultiEdit`. A `CLAUDE.md` rewritten through Bash — a heredoc, `sed -i`, `tee`, a formatter — names no path. That is not hypothetical. It is how a session edited an over-budget `CLAUDE.md` a dozen times while the guard said nothing.
 
 So the sweep diffs a size+mtime snapshot of the candidate files after every tool call. Watching the files is the only version of this that cannot be walked around by choosing a different tool.
 

@@ -1,6 +1,6 @@
 ## No Busy Poll Plugin
 
-The no-busy-poll plugin lives at `plugins/no-busy-poll/`. It is one Stop hook, modeled closely on the sibling `link-all-refs` and `no-blame-language` plugins: a turn does not end while it is the latest in a run of several turns that each made the exact same tool call, closely spaced in time, with nothing else different in between. The refusal is exit code 2 with the repeated call and the two ways out on stderr, which is how a Stop hook hands the model its objection.
+The no-busy-poll plugin lives at `plugins/no-busy-poll/`. It is one Stop hook, modeled closely on the sibling `link-all-refs` and `no-blame-language` plugins. A turn does not end while it is the latest in a run of several turns that each made the exact same tool call, closely spaced in time, with nothing else different in between. The refusal is exit code 2 with the repeated call and the two ways out on stderr, which is how a Stop hook hands the model its objection.
 
 **The incident this exists for**: a session waiting on a PR merge ran `gh pr view 186 --json state,mergedAt` in an automated Stop-hook-driven loop, dozens of times back to back, each time reporting a near-identical "still open, holding" message. Nothing about the answer can have changed in the seconds between calls. `babysit-workers.md` and `send-later-unavailable.md` already say what to do instead: wait for a queued notification, or arm a real wakeup (`ScheduleWakeup`, `send_later`, a `Monitor` watch) with a genuine delay. This plugin is the mechanical backstop for when that instruction gets skipped anyway.
 
@@ -28,7 +28,7 @@ The Stop half refuses to END a turn, which means the wasted calls are already pa
 
 Two shapes are refused, and both answer one question -- can this call learn anything?
 
-- **A settled subject** (`terminal.go`): a pull request this session watched merge or close, or a commit whose checks it watched go green. Neither can answer differently later. A push makes a NEW commit, so the green rule limits itself. A verdict in a record naming more than one pull request settles none of them: nothing says which one it belongs to, and guessing there will refuse a read of one that is still open.
+- **A settled subject** (`terminal.go`): a pull request this session watched merge or close, or a commit whose checks it watched go green. Neither can answer differently later. A push makes a NEW commit, so the green rule limits itself. A verdict in a record naming more than one pull request settles none of them. Nothing says which one it belongs to, and guessing there will refuse a read of one that is still open.
 - **A subject already read with no signal since** (`pretool.go`): no user message, no wake or notification envelope, and no push or commit of the session's own. Any of those re-opens every subject, so the refusal clears itself the moment something real happens rather than needing an override.
 
 **Matching runs over an unescaped copy of each record. That is load-bearing.** A result's payload is a JSON string nested inside the record's own JSON. `unescape` also folds the `\uXXXX` spellings of `<`, `>` and `&`: a Go encoder escapes them and a JavaScript one does not. A guard that reads only one spelling fails open on the other without saying so.

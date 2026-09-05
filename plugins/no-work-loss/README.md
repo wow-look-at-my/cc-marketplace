@@ -70,7 +70,7 @@ Write itself is refused on a path that already exists (use Edit), and on a path 
 
 ## What it does not block
 
-`git checkout -b`, `git switch -c`, `git stash push`, `git commit`, `git add`, `git restore --staged`, `git rm --cached`, every read-only verb, and any command on a clean tree. Builds, tests and generators write what they write — this is not a sandbox. Build output (`build/`, `dist/`, `node_modules/`, `.cache/`, ...) and everything outside the working tree, including `/tmp`, are writable by anything. The formatters that rewrite by design — `gofmt -w`, `prettier --write`, `go generate`, `go-toolchain` and friends — are an explicit allow list. Unpushed commits are not protected either: they are in the reflog. A guard that blocks ordinary work gets switched off, and then it protects nothing.
+`git checkout -b`, `git switch -c`, `git stash push`, `git commit`, `git add`, `git restore --staged`, `git rm --cached`, every read-only verb, and any command on a clean tree. Builds, tests and generators write what they write — this is not a sandbox. Build output (`build/`, `dist/`, `node_modules/`, `.cache/`, ...) and everything outside the working tree, including `/tmp`, are writable by anything. The formatters that rewrite by design — `gofmt -w`, `prettier --write`, `go generate`, `go-toolchain` and friends — are an explicit allow list. Unpushed commits are not protected either. They are in the reflog. A guard that blocks ordinary work gets switched off, and then it protects nothing.
 
 There is no opt-out: no environment variable, no flag, no settings key.
 

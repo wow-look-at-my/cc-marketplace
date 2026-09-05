@@ -55,7 +55,7 @@ Webhook events, background-task completions and reminders are queued exactly lik
 
 ### Arming at most once
 
-A high-water mark (the last interjection's uuid) is stored beside the debt, in its own file. It cannot live in the debt file: that is deleted every time a task is filed. A settled interjection will arm again on the very next tool call and the session will never move.
+A high-water mark (the last interjection's uuid) is stored beside the debt, in its own file. It cannot live in the debt file. That is deleted every time a task is filed. A settled interjection will arm again on the very next tool call and the session will never move.
 
 ## Gap 2: `/goal <work>` was skipped on the leading slash
 
@@ -76,6 +76,6 @@ Command arguments get a **stricter** rule than prose, because they are just as o
 
 ## What is still not covered
 
-- A local command returning text (`/effort high`) fires nothing, so no hook can see it. Not a loss: those are settings, not assignments.
+- A local command returning text (`/effort high`) fires nothing, so no hook can see it. Not a loss. Those are settings, not assignments.
 - Subagent prompts fire `SubagentStart`, not this event. Out of scope — a subagent's work is the parent's task.
 - A scheduled prompt folded mid-turn is caught by the transcript pass like any other queued entry. One drained at idle goes through `UserPromptSubmit` normally.

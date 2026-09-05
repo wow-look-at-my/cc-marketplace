@@ -38,13 +38,13 @@ A composite action cannot request permissions. It runs with whatever the calling
 
 ## release-build-binary-format-and-action-pin
 
-`targets: cosmo` is not a size optimization: the fat APE is the only native output the pinned action still emits, since the host-native build path was removed from `v1`. One file covers Linux, macOS and Windows, and `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the shipping layout.
+`targets: cosmo` is not a size optimization. The fat APE is the only native output the pinned action still emits, since the host-native build path was removed from `v1`. One file covers Linux, macOS and Windows, and `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the shipping layout.
 
 `autorelease: 'false'` because plugins publish as git orphan tags, not to buildhost. Leaving it on will demand `deployments`/`artifact-metadata` write for an upload nothing consumes.
 
 ## marketplace-json-replacement-and-a-stale-cache-key
 
-`update-marketplace` writes `marketplace.json` from the cooked trees it is given, replacing the file rather than patching it. A plugin whose tree is absent — a cache hit that restored nothing, a build job that never ran — therefore drops out of the published marketplace silently, and the next `claude plugin update` for it 404s. The loop before that step fails the job instead, naming every plugin with no cooked tree.
+`update-marketplace` writes `marketplace.json` from the cooked trees it is given, replacing the file rather than patching it. A plugin whose tree is absent therefore drops out of the published marketplace silently, and the next `claude plugin update` for it 404s. The loop before that step fails the job instead, naming every plugin with no cooked tree.
 
 ## smoke-test-job-rationale
 

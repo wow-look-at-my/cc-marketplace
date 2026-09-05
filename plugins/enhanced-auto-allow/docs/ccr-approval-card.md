@@ -52,7 +52,7 @@ Telemetry names this exactly: the second failure emits `fe("mcp_ccr_needs_approv
 
 A card that appears and vanishes before it can be clicked, then `MCP error -32003: MCP tool call requires approval`. That string is the server's own JSON-RPC `message` echoed through `McpError` — not client text.
 
-The instinct on seeing an instant error is "the card was never raised, so the hook never got the chance". The opposite is true: the card was raised, the hook got there first. The hook is what removed it.
+The instinct on seeing an instant error is "the card was never raised, so the hook never got the chance". The opposite is true. The card was raised, the hook got there first. The hook is what removed it.
 
 ## The rule
 

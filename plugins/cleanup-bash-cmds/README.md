@@ -376,7 +376,7 @@ The hook needs three tools on PATH at runtime. If any is missing it **fails open
 | shfmt | parse/print bash | needs `--to-json` / `--from-json` (v3.7.0+. Verified with 3.8.0 and 3.13.1) |
 | recycler | the target of the `rm` rewrite | must be on `PATH` when a rewritten `rm` RUNS. The hook itself never invokes or probes it |
 
-`bash`, `jq`, and `shfmt` are needed by the hook itself -- if `jq` or `shfmt` is missing the hook fails open and emits no rewrite. `recycler` is different: it is needed by the *rewritten command*, not by the hook, so a missing `recycler` does not disable the rewrite. It surfaces as a visible "command not found" with the file still on disk, which is the correct failure mode (see "One code path" above).
+`bash`, `jq`, and `shfmt` are needed by the hook itself -- if `jq` or `shfmt` is missing the hook fails open and emits no rewrite. `recycler` is different. It is needed by the *rewritten command*, not by the hook, so a missing `recycler` does not disable the rewrite. It surfaces as a visible "command not found" with the file still on disk, which is the correct failure mode (see "One code path" above).
 
 Installing shfmt:
 

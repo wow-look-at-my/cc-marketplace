@@ -87,7 +87,7 @@ Three cases produce a denial without a state answer, because a destructive verb 
 
 ## Fail-safety, stated honestly
 
-Inside the process, failure denies for destructive verbs: a panic is recovered and converted to a denial, a git subprocess that errors or exceeds the 3-second timeout produces "cannot tell whether ... would lose uncommitted work". An unreadable repository is never assumed clean. Everything non-destructive fails open. A bug here cannot brick a session.
+Inside the process, failure denies for destructive verbs. A panic is recovered and converted to a denial, a git subprocess that errors or exceeds the 3-second timeout produces "cannot tell whether ... would lose uncommitted work". An unreadable repository is never assumed clean. Everything non-destructive fails open. A bug here cannot brick a session.
 
 **The one gap, which cannot be closed from inside the plugin:** Claude Code's own documentation states that a hook which times out does not block the tool call -- "don't count on a stalled hook to act as a gate". So if the binary itself is killed or hangs past the harness timeout, the command proceeds. The internal 3-second git timeout exists to keep the process well inside that window so the deny path is reached rather than the harness's. A hook cannot make itself mandatory. This is a property of the platform, not something the plugin declines to handle.
 

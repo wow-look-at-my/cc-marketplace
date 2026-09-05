@@ -38,7 +38,7 @@ Consequences worth holding onto:
 
 - **A child image's cost is its own layers.** `FROM big-base` then one `RUN` transfers and stores that one layer for anyone who has the base.
 - **Sharing is by digest, not by name.** Two images share a layer when the layer is byte-identical, whatever the tags say. Rebuilding a base non-reproducibly gives a new digest, and every child that referenced it stops sharing.
-- **"Layering saves no bytes here" can be TRUE and still not be the argument.** It was true in the case above. It was also irrelevant: the win is that the daemon does the distribution, versioning and identity, and you delete the code that was doing it by hand.
+- **"Layering saves no bytes here" can be TRUE and still not be the argument.** It was true in the case above. It was also irrelevant. The win is that the daemon does the distribution, versioning and identity, and you delete the code that was doing it by hand.
 - **Layer count is not the metric.** Squashing to save a layer trades away sharing and cache hits.
 
 ## Image or volume: the actual test

@@ -16,7 +16,7 @@ Claude already receives a system reminder about keeping a task list on most turn
 
 When a prompt looks like an assignment, the next tool call is refused with a message quoting the assignment and naming the way out. `TaskCreate` files the work. `TaskUpdate` covers work that maps onto a task already on the list. Both settle the debt, and the refused call then goes through unchanged.
 
-`TaskList` and `TaskGet` stay callable while blocked. The list can be checked for duplicates first. There is deliberately no "declare that there is no task" escape: an escape hatch is the hole the plugin exists to close.
+`TaskList` and `TaskGet` stay callable while blocked. The list can be checked for duplicates first. There is deliberately no "declare that there is no task" escape. An escape hatch is the hole the plugin exists to close.
 
 **What counts as an assignment** is biased toward yes, because a false positive costs one `TaskCreate` and a false negative costs the whole point. Pure questions ("why is this failing?"), bare acknowledgements ("ok", "thanks"), and slash commands pass through. A question carrying an instruction ("why is that failing? fix it") arms the gate — the instruction is the part that gets forgotten. So does an auxiliary opener without a question mark ("do the thing", "can you add a test"), which is an instruction, not a question.
 
@@ -40,6 +40,6 @@ The Stop hook honors `stop_hook_active`. Once a stop is already being retried be
 
 ## Notes
 
-- Everything fails open. Unparseable stdin, a missing session id, an unreadable transcript, or an unrecognized status allows the action rather than blocking it: a broken guard must never wedge a session.
+- Everything fails open. Unparseable stdin, a missing session id, an unreadable transcript, or an unrecognized status allows the action rather than blocking it. A broken guard must never wedge a session.
 - Per-session state lives in a temp file keyed by session id, so parallel sessions never collide.
 - A session that never gets an assignment and never files a task is never touched by either hook.
