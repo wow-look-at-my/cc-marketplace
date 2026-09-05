@@ -134,6 +134,18 @@ func downloadExecutable(url, dest string) error {
 	return os.Rename(tmp.Name(), dest)
 }
 
+// contentText joins a tool result's text blocks so an assertion can quote
+// what jq actually said. Without it a failure reads only "Should be false".
+func contentText(result *mcp.CallToolResult) string {
+	var parts []string
+	for _, c := range result.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			parts = append(parts, tc.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
 func connect(t *testing.T) *mcp.ClientSession {
 	t.Helper()
 
@@ -202,7 +214,7 @@ func TestJqInlineInput(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.False(t, result.IsError)
+	require.Falsef(t, result.IsError, "tool reported an error: %s", contentText(result))
 
 	text := strings.TrimSpace(result.Content[0].(*mcp.TextContent).Text)
 	assert.Equal(t, `"test"`, text)
@@ -403,7 +415,7 @@ func TestJqSlurp(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.False(t, result.IsError)
+	require.Falsef(t, result.IsError, "tool reported an error: %s", contentText(result))
 
 	text := strings.TrimSpace(result.Content[0].(*mcp.TextContent).Text)
 	assert.Equal(t, "2", text)
