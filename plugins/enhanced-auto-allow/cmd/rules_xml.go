@@ -55,6 +55,7 @@ type xmlCommand struct {
 	RequiredFlags      *xmlFlagList    `xml:"requiredFlags"`
 	FlagsWithValue     *xmlFlagList    `xml:"flagsWithValue"`
 	DenyArgSubstrings  *xmlStringList  `xml:"denyArgSubstrings"`
+	DenyArgPatterns    *xmlDenyArgList `xml:"denyArgPatterns"`
 	AllowedArgPrefixes *xmlStringList  `xml:"allowedArgPrefixes"`
 	RequireFlagValue   *xmlRequireFlag `xml:"requireFlagValue"`
 	Subcommands        []xmlCommand    `xml:"rule"`
@@ -70,6 +71,15 @@ type xmlFlag struct {
 
 type xmlStringList struct {
 	Values []string `xml:"value"`
+}
+
+type xmlDenyArgList struct {
+	Patterns []xmlDenyArg `xml:"pattern"`
+}
+
+type xmlDenyArg struct {
+	Substring string `xml:"substring,attr"`
+	Message   string `xml:"message,attr"`
 }
 
 type xmlRequireFlag struct {
@@ -171,6 +181,15 @@ func convertXMLCommand(xc xmlCommand) CommandNode {
 
 	if xc.DenyArgSubstrings != nil {
 		node.DenyArgSubstrings = xc.DenyArgSubstrings.Values
+	}
+
+	if xc.DenyArgPatterns != nil {
+		for _, p := range xc.DenyArgPatterns.Patterns {
+			node.DenyArgPatterns = append(node.DenyArgPatterns, DenyArgPattern{
+				Substring: p.Substring,
+				Message:   p.Message,
+			})
+		}
 	}
 
 	if xc.AllowedArgPrefixes != nil {

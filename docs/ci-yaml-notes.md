@@ -3,16 +3,22 @@
 Rationale the workflow files point at, kept here so a `.yml` stays readable.
 Each heading is the anchor a `# see docs/ci-yaml-notes.md#...` comment names.
 
-## plugin-e2e-workflow-rationale
+## plugin-e2e-jobs
 
-`plugin-e2e.yml` drives a real `claude` process with a plugin loaded. The Go
+The `e2e-*` jobs drive a real `claude` process with a plugin loaded. The Go
 and bash unit suites assert what a hook or a server DOES with a given input;
 they cannot assert that Claude Code registers it, spawns it, and uses its
-answer. Every defect this workflow has caught lived in that gap: a malformed
+answer. Every defect these jobs have caught lived in that gap: a malformed
 JSON-RPC response only vscode-jsonrpc rejects, and a binary format only a real
 `execve()` refuses.
 
 One job per plugin whose contract is with the client, not with its own input.
+
+They live in `release.yml` rather than a workflow of their own. Both triggered
+on the same push, so a second workflow bought nothing but a second checkout, a
+second required-check surface, and two places to keep the go-toolchain ref in
+step. Nothing needs them: they carry no `needs:`, so they start immediately and
+do not gate publishing, exactly as they did as a separate workflow.
 
 ## css-duplication-lsp-job
 
@@ -38,7 +44,7 @@ hook or a server, which no model tier changes, and each runs on every push.
 
 ## go-toolchain-permission-grants
 
-`wow-look-at-my/go-toolchain@master` needs four grants, and fails without them:
+`wow-look-at-my/go-toolchain@lkgb` needs four grants, and fails without them:
 
 - `id-token: write` — OIDC, for secret-server and buildhost.
 - `contents: write` — it submits a dependency-graph snapshot; GitHub rejects
@@ -66,14 +72,38 @@ fails naming the missing file rather than letting a later step discover it.
 ## release-build-binary-format-and-action-pin
 
 `targets: cosmo` is not a size optimization: the fat APE is the only native
-output the pinned action still emits, since the host-native build path was
-removed from `v1`. One file covers Linux, macOS and Windows, and
+output the action still emits, since the host-native build path was removed
+from go-toolchain. The ref is `@lkgb`, that repository's last-known-good-build
+tag: the `v1` branch every workflow used to name no longer exists there, and
+`@master` would move under every run. One file covers Linux, macOS and Windows, and
 `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the
 shipping layout — the APE plus the launcher every manifest already points at.
 
 `autorelease: 'false'` because plugins publish as git orphan tags, not to
 buildhost; leaving it on would demand `deployments`/`artifact-metadata` write
 for an upload nothing consumes.
+
+## plugin-tree-hand-off
+
+Each cooked tree travels from its `build` matrix leg to `publish-marketplace`
+inside the same run, which is what `wow-look-at-my/actions@cache-upload#latest`
+is for — GitHub bills artifact storage and does not bill cache storage. The
+consumer side has one wrinkle. `cache-download` restores a SINGLE named
+hand-off; it has no `pattern:` like `actions/download-artifact`, and a workflow
+cannot repeat a `uses:` step over a list whose length is decided at runtime by
+`prepare`. So `publish-marketplace` checks the action out (its repository is
+public) and runs its bundle once per plugin, passing `name` and `path` as the
+`INPUT_*` variables the runner would set. It is the same code the `uses:` form
+runs, driven by a loop.
+
+The bundle is copied to a `.cjs` file under `RUNNER_TEMP` before it runs. It is
+CommonJS, and `actions/checkout` can only place it inside the workspace, where
+this repo's `package.json` (`"type": "module"`) makes node read a `.js` as ESM
+and fail with `exports is not defined in ES module scope`.
+
+Do not replace the loop with a fixed set of download steps. The plugin list is
+whatever `prepare-matrix` finds, and a hard-coded list silently drops a plugin
+added later — the exact failure the section below describes.
 
 ## marketplace-json-replacement-and-a-stale-cache-key
 
