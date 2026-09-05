@@ -32,7 +32,14 @@ export const PLAN: CheckPlan[] = [
   { name: "no-all-builds-job", files: ["src/detect.ts"] },
   { name: "yaml-comment-block", files: ["src/scan.ts"] },
   { name: "no-tests-in-yaml", files: ["src/scan.ts"] },
-  { name: "push-excludes-tags", files: ["src/scan.ts"] },
+  {
+    name: "push-excludes-tags",
+    files: [],
+    why:
+      "its rule is an inline script inside a composite action, which nothing can import. " +
+      "Converting it to a node action to expose one eight-line rule cost 642 lines against 34, " +
+      "386 of them a lockfile, on an action every repository in the org runs.",
+  },
   {
     name: "ste-lint",
     files: ["src/lint.ts", "src/blocks.ts", "src/ste100-banned-words.ts", "src/guard.ts"],

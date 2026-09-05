@@ -60,7 +60,7 @@ test("opening a dirty workflow publishes one diagnostic per finding", () => {
   assert.equal(published[0]!.uri, CI);
   assert.deepEqual(
     published[0]!.diagnostics.map((diagnostic) => diagnostic.code),
-    ["push-excludes-tags", "no-all-builds-job", "yaml-comment-block"],
+    ["no-all-builds-job", "yaml-comment-block"],
   );
 });
 

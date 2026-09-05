@@ -18,7 +18,11 @@ The checks are TypeScript. The server is TypeScript too. `esbuild` bundles it in
 
 Vendoring the modules alone leaves the plugin quietly enforcing four fifths of the gate. That is the failure this assertion prevents.
 
-An entry may declare `files: []`. That is how `run-once` is handled, because it claims the workflow run for one job and no open file can violate it. Such an entry is required rather than optional. The assertion cannot tell a decision from an omission.
+An entry may declare `files: []` plus the reason. Such an entry is required rather than optional, because the assertion cannot tell a decision from an omission. Two checks use it, for the two different reasons a check reports nothing.
+
+`run-once` has no rule an open file can break. It claims the workflow run for one job.
+
+`push-excludes-tags` has a real rule, inline in a composite action, where nothing can import it. Making it importable meant converting it to a node action. That cost 642 lines against 34, on an action every repository in the org runs. 386 of those lines were a lockfile, for an eight-line rule. The gap is declared rather than paid for. Never close it by reimplementing the rule here.
 
 The vendor step runs from the plugin's `justfile` `prebuild` recipe on every CI build. A fetch failure fails the build, which matches the `docs` plugin's Docker reference. Packaging a silently stale checker is the outcome this arrangement exists to avoid. `COMMON_CHECKS_REF` points the fetch at a branch, for a build against a check that has not merged yet.
 
@@ -38,7 +42,7 @@ A **line** for `no-all-builds-job`, whose CI form names the job and never the li
 
 ### Ranking, and the client's budget
 
-Ranking decides what the model actually sees. The client injects only the first handful of diagnostics per file. ste-lint reports hundreds of findings on one document, and `push-excludes-tags` reports one. So the order puts the structural checks first and ste-lint last.
+Ranking decides what the model actually sees. The client injects only the first handful of diagnostics per file. ste-lint reports hundreds of findings on one document, and `no-all-builds-job` reports one. So the order puts the structural checks first and ste-lint last.
 
 Two more things follow from the same budget. A hard-wrapped paragraph reports ONE finding at its first continuation line, rather than one per line. That is the same information. It leaves room for everything else. A file with more findings than the cap says so on the last diagnostic it sends. Dropping the tail in silence reads as a claim that the list is complete.
 

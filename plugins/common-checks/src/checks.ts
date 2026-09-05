@@ -10,7 +10,6 @@
 import * as commentBlock from "../vendor/yaml-comment-block/scan.ts";
 import * as testsInYaml from "../vendor/no-tests-in-yaml/scan.ts";
 import * as allBuildsJob from "../vendor/no-all-builds-job/detect.ts";
-import * as pushExcludesTags from "../vendor/push-excludes-tags/scan.ts";
 import * as steLint from "../vendor/ste-lint/lint.ts";
 import * as steGuard from "../vendor/ste-lint/guard.ts";
 
@@ -44,7 +43,7 @@ export function fileKind(relativePath: string): FileKind {
 // document and the structural checks produce one or two. The client injects
 // only the first handful, so a voluminous check must never crowd out a
 // structural one.
-const ORDER = ["push-excludes-tags", "no-all-builds-job", "yaml-comment-block", "no-tests-in-yaml", "ste-lint"];
+const ORDER = ["no-all-builds-job", "yaml-comment-block", "no-tests-in-yaml", "ste-lint"];
 
 function rank(check: string): number {
   const index = ORDER.indexOf(check);
@@ -106,15 +105,6 @@ function noAllBuildsJob(relativePath: string, content: string): Finding[] {
       message: allBuildsJob.formatViolation(`job ${violation.jobKey}`),
     };
   });
-}
-
-function pushTrigger(content: string): Finding[] {
-  return pushExcludesTags.scanWorkflowYaml(content).map((finding) => ({
-    check: "push-excludes-tags",
-    startLine: finding.line,
-    endLine: finding.line,
-    message: pushExcludesTags.REMEDY,
-  }));
 }
 
 // A step allowed to fail is not a gate. The guard reports `uses: ... (line N)`,
@@ -208,7 +198,7 @@ export function findings(relativePath: string, content: string): Finding[] {
     out.push(...yamlCommentBlock(content), ...noTestsInYaml(content));
   }
   if (kind === "workflow") {
-    out.push(...noAllBuildsJob(relativePath, content), ...pushTrigger(content), ...neuteredGate(content));
+    out.push(...noAllBuildsJob(relativePath, content), ...neuteredGate(content));
   }
   if (kind === "markdown") {
     out.push(...ste(relativePath, content));

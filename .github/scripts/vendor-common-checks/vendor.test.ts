@@ -83,12 +83,16 @@ test("a check dropped upstream fails the build and names itself", () => {
   );
 });
 
-test("a check that reports nothing still has to be named", () => {
-  // run-once is the live example: it runs, and no open file can violate it.
-  const runOnce = PLAN.find((entry) => entry.name === "run-once");
-  assert.ok(runOnce);
-  assert.equal(runOnce.files.length, 0);
-  assert.ok(runOnce.why && runOnce.why.length > 0);
+// Two live examples, for the two reasons a check reports nothing. run-once has
+// no rule an open file can break. push-excludes-tags has one, inline in a
+// composite action, where nothing can import it.
+test("a check that reports nothing still has to be named, with its reason", () => {
+  for (const name of ["run-once", "push-excludes-tags"]) {
+    const entry = PLAN.find((candidate) => candidate.name === name);
+    assert.ok(entry, `${name} is missing from PLAN`);
+    assert.equal(entry.files.length, 0);
+    assert.ok(entry.why && entry.why.length > 0, `${name} declares no reason`);
+  }
 });
 
 test("the header names the commit and the upstream path, and keeps the body verbatim", () => {
@@ -108,12 +112,15 @@ test("a full run writes every planned file plus the notice", async () => {
   const { commit, files } = await vendor(new FakeClient(filesFor(COMPOSITE)), "master");
   const paths = files.map((file) => file.path);
   assert.ok(paths.includes("ste-lint/lint.ts"));
-  assert.ok(paths.includes("push-excludes-tags/scan.ts"));
+  assert.ok(paths.includes("yaml-comment-block/scan.ts"));
   assert.ok(paths.includes("NOTICE.md"));
+  // A check the plan declares uncovered contributes no file to fetch.
+  assert.ok(!paths.some((path) => path.startsWith("push-excludes-tags/")));
   const noticeFile = files.find((file) => file.path === "NOTICE.md");
   assert.ok(noticeFile?.content.includes(commit));
-  // run-once has to appear, so the notice explains its absence from the covered list.
+  // Every uncovered check appears, so the notice explains its absence from the covered list.
   assert.ok(noticeFile?.content.includes("run-once"));
+  assert.ok(noticeFile?.content.includes("push-excludes-tags"));
 });
 
 test("a drifted composite fails the run before anything is written", async () => {

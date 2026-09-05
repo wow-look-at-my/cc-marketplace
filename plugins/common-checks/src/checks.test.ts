@@ -39,13 +39,12 @@ test("a single comment line is not a wall", () => {
   assert.deepEqual(checks(WORKFLOW, content), []);
 });
 
-test("an unfiltered push trigger is reported on the push key", () => {
-  const found = findings(WORKFLOW, "name: CI\non:\n  push:\njobs: {}\n");
-  assert.deepEqual(
-    found.map((finding) => [finding.check, finding.startLine]),
-    [["push-excludes-tags", 3]],
-  );
-  assert.match(found[0].message, /names no ref filter/);
+// push-excludes-tags keeps its rule inline in a composite action, so there is
+// no module to run and the plan declares it uncovered. A diagnostic here would
+// mean this plugin had reimplemented the rule, which is the one thing it must
+// never do.
+test("an unfiltered push trigger is not reported", () => {
+  assert.deepEqual(checks(WORKFLOW, "name: CI\non:\n  push:\njobs: {}\n"), []);
 });
 
 test("an all-builds job key is reported on its own line", () => {
@@ -183,9 +182,9 @@ test("a structural finding outranks a voluminous one", () => {
     "    runs-on: x",
     "",
   ].join("\n");
-  assert.deepEqual(checks(WORKFLOW, content), ["push-excludes-tags", "no-all-builds-job", "yaml-comment-block"]);
+  assert.deepEqual(checks(WORKFLOW, content), ["no-all-builds-job", "yaml-comment-block"]);
 });
 
-test("unparseable YAML is not judged", () => {
-  assert.deepEqual(checks(WORKFLOW, "on:\n  push:\n :::not yaml\n\t\tbad\n").includes("push-excludes-tags"), false);
+test("unparseable YAML is not judged by the check that parses it", () => {
+  assert.deepEqual(checks(WORKFLOW, "on:\n  push:\njobs:\n  all-builds:\n :::not yaml\n\t\tbad\n").includes("no-all-builds-job"), false);
 });

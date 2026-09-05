@@ -15,7 +15,7 @@ Needs Node 18 or later on `PATH`, or `COMMON_CHECKS_NODE` set to a Node binary.
 
 | File | Checks |
 |------|--------|
-| `.github/workflows/*.yml` | `push-excludes-tags`, `no-all-builds-job`, `yaml-comment-block`, `no-tests-in-yaml`, `ste-lint`'s continue-on-error guard |
+| `.github/workflows/*.yml` | `no-all-builds-job`, `yaml-comment-block`, `no-tests-in-yaml`, `ste-lint`'s continue-on-error guard |
 | any `action.yml` | `yaml-comment-block`, `no-tests-in-yaml` |
 | any `*.md` | `ste-lint` |
 
