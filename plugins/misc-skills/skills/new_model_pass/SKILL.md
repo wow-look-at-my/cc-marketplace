@@ -8,13 +8,13 @@ disable-model-invocation: true
 
 Scope is `$ARGUMENTS`. Empty means the whole repository.
 
-This code has already been read, reviewed, and edited by earlier models. Assume the easy findings are gone. What is left is what needs more of the codebase held in mind at once than the last pass managed, or a fact the last model did not know. That is what you are here for. It is also the measurement: the value of this pass is the findings a weaker pass can not have produced.
+This code has already been read, reviewed, and edited by earlier models. Assume the easy findings are gone. That is what you are here for. It is also the measurement: the value of this pass is the findings a weaker pass can not have produced.
 
 ## 1. Map it before you change anything
 
 Read the build files, the entry points, the test layout, `CLAUDE.md` and `docs/`. Learn what the thing is supposed to do before judging what it does. Then read the actual source -- whole files, not the hits from a grep. A defect that lives in the relationship between two files is invisible to a search for a pattern.
 
-Cover everything in scope. If it is too large for that, split it into passes and say in the final report which parts you covered and which you did not. Never let partial coverage read as complete.
+Cover everything in scope. Never let partial coverage read as complete.
 
 ## 2. Hunt where context is required
 
@@ -25,7 +25,7 @@ Rank effort toward defects that only show up when you are holding several files 
 - **Wrong edge-case behavior.** Empty input, one element, duplicate keys, unicode, timezone and DST, integer overflow, concurrent access, retry that is not idempotent, cancellation mid-write.
 - **Silent failure.** Swallowed errors, defaulted-away missing config. A fallback nobody is told fired, a truncation with no log, a catch that continues into code that needed the thing that failed. A green run that did nothing is the worst defect class in any repo.
 - **Tests that assert the easy half.** A test that will still pass with the bug present. Reproduce it: break the code deliberately and see whether the suite notices.
-- **Stale knowledge.** APIs, language features, tool flags, and library idioms that moved after the last pass was written. You know things earlier models did not -- check the current docs before rewriting on a hunch, then use what is actually available now instead of the workaround built to avoid its absence.
+- **Stale knowledge.** APIs, language features, tool flags, and library idioms that moved after the last pass was written.
 - **Duplication with drift.** The same logic in three places, two of which have been fixed. Hoist it, or at minimum fix the stragglers.
 - **Dead code and dead branches.** A guard for a state the system is never in, a flag nothing sets, an exported function nobody calls.
 - **Performance that matters.** Quadratic behavior on input that grows, work repeated inside a loop, a query per row. Ignore micro-optimizations nobody can measure.
@@ -41,7 +41,7 @@ Defer only what genuinely needs a human decision. Then name it exactly, say what
 
 ## 4. This is not a security audit
 
-Hardening here means the code fails loudly, handles its real inputs correctly, and does not corrupt state when something goes wrong. It does not mean bolting auth onto a local script, validating inputs that come from your own code, adding defensive `try`/`catch` around things that cannot throw, or rewriting a working parser because a hostile input can theoretically exist.
+Hardening here means the code fails loudly, handles its real inputs correctly, and does not corrupt state when something goes wrong.
 
 If you find a real exploitable bug in something that actually faces untrusted input, fix it and say so. Do not go looking for a threat model the project does not have.
 

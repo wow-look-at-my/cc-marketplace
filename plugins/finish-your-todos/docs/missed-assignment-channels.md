@@ -47,11 +47,11 @@ The authoritative shape is the attachment, not the rendered prose:
 
 `prompt` is the raw text with no wrapper to strip, and `commandMode` separates a typed message (`prompt`) from a harness-injected one (`task-notification`).
 
-Verified against a live transcript. Note the rendered form lands inside a `tool_result` block, not a `text` block — reading only `text` blocks finds nothing, which is how the first attempt at this silently matched zero messages.
+Verified against a live transcript.
 
 ### System envelopes ride the same queue
 
-Webhook events, background-task completions and reminders are queued exactly like a typed message. Arming on those will refuse every tool call over a PR notification nobody asked for, which is the fastest possible way to get the whole plugin turned off. They are filtered by envelope prefix (`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …) *and* by `commandMode`.
+Webhook events, background-task completions and reminders are queued exactly like a typed message. They are filtered by envelope prefix (`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …) *and* by `commandMode`.
 
 ### Arming at most once
 

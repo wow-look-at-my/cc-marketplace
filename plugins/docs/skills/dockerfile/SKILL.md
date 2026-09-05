@@ -12,7 +12,7 @@ Notes to self. Every line here was checked against the current Dockerfile refere
 
 The rest of this file is only the short list of things I get wrong. It is not a substitute for the reference. It does not cover every instruction or flag.
 
-**Grep the reference before stating any specific fact** - a flag name, what a flag defaults to, which instruction accepts what, precedence between two instructions, whether a feature exists at all. Recalling one of those from training data is exactly how the errors below got written in the first place:
+Recalling one of those from training data is exactly how the errors below got written in the first place:
 
 ```sh
 grep -n "^## ADD" -A 120 reference/dockerfile.md      # one instruction, in full
@@ -57,7 +57,7 @@ Other `ADD` facts I under-use:
 ## COPY
 
 - `COPY --from=` takes a **stage name, a named build context, or an image reference**. `COPY --from=nginx:latest /etc/nginx/nginx.conf /nginx.conf` is legal and useful. Source paths in `--from` always resolve from the filesystem root of that stage/image.
-- **`--link` is recommended by default.** It puts the copied files on their own layer that does not get invalidated when earlier layers change, which is exactly what makes `COPY --from` in multi-stage builds cache well. Only skip it when the destination path contains a symlink that must be followed (with `--link`. The destination path is always plain directories).
+- Only skip it when the destination path contains a symlink that must be followed (with `--link`. The destination path is always plain directories).
 - `--chmod` accepts **symbolic notation** since v1.14, not just octal: `COPY --chmod=u=rwX,go=rX . /app/` (capital `X` = executable only if a directory or already executable). `--chmod`/`--chown` are unsupported for Windows containers.
 - `--parents` (v1.20) preserves source directory structure. `./x/./y/*.txt` pivots on the `./` marker like rsync's `--relative`. `**` matches any number of path components.
 - `--exclude=<pattern>` (v1.19), repeatable.
@@ -161,7 +161,7 @@ Need shell features (globs, pipes, `&&`) at runtime? Write an entrypoint script 
 - Automatic platform args exist in global scope and need re-declaring per stage: `TARGETPLATFORM`, `TARGETOS`, `TARGETARCH`, `TARGETVARIANT`, `BUILDPLATFORM`, `BUILDOS`, `BUILDARCH`, `BUILDVARIANT`.
 - Proxy args (`HTTP_PROXY`, `NO_PROXY`, `ALL_PROXY`, lower-case variants, ...) are predefined, excluded from `docker history`, and cache-exempt unless explicitly re-declared with `ARG`.
 - Bash-style modifiers work in the builder: `${VAR:-default}`, `${VAR-default}`, `${VAR:+alt}`, `${VAR+alt}`. Pattern operators (`${var#pat}`, `${var/a/b}`) are **pre-release only** (`docker/dockerfile-upstream:master`) - do not reach for them.
-- Substitution happens only in `ADD`, `COPY`, `ENV`, `EXPOSE`, `FROM`, `LABEL`, `STOPSIGNAL`, `USER`, `VOLUME`, `WORKDIR`, and `ONBUILD` wrapping one of those. In `RUN`/`CMD`/`ENTRYPOINT` the *shell* does it - which means exec form does no substitution at all. `RUN ["echo", "$HOME"]` prints the literal string.
+- In `RUN`/`CMD`/`ENTRYPOINT` the *shell* does it - which means exec form does no substitution at all. `RUN ["echo", "$HOME"]` prints the literal string.
 
 ## Everything else worth not getting wrong
 
@@ -185,4 +185,4 @@ Need shell features (globs, pipes, `&&`) at runtime? Write an entrypoint script 
 
 ## Before saying it is done
 
-Run `docker build --check .` if a daemon is available. It catches stage-name casing, `FROM ... as` casing, JSON args, legacy key/value, undefined vars, undeclared `ARG` in `FROM`, secrets in `ARG`/`ENV`, duplicate/reserved stage names, redundant `--platform=$TARGETPLATFORM`, empty continuation lines, and more - cheaply, and without guessing.
+Run `docker build --check .` if a daemon is available.

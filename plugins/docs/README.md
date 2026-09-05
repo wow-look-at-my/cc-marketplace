@@ -13,7 +13,7 @@ Corrective reference notes for topics where Claude's training data is reliably s
 | `/docs:css-cascade` | Writing or editing any CSS — before giving an element its own complete rule instead of using the cascade |
 | `/docs:claude-code-source` | Answering how Claude Code itself behaves — fetching the right version's `cli.js` and searching it from a subagent |
 
-The skills are model-invoked: their descriptions are written so Claude pulls them in on its own when it is about to edit one of these files. Invoking them by name also works.
+Invoking them by name also works.
 
 ## Vendored Docker reference
 

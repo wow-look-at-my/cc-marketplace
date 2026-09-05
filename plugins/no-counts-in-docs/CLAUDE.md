@@ -1,8 +1,8 @@
 ## No Counts In Docs Plugin
 
-The no-counts-in-docs plugin lives at `plugins/no-counts-in-docs/`. It is one PreToolUse hook, modeled closely on the sibling `no-blame-language` plugin: a `Write`, `Edit` or `MultiEdit` aimed at a markdown file is refused when the text it ADDS states a count. The refusal is `permissionDecision: "deny"` with the offending phrase. The line it sits on, and the shape to write instead.
+The no-counts-in-docs plugin lives at `plugins/no-counts-in-docs/`. The refusal is `permissionDecision: "deny"` with the offending phrase. The line it sits on, and the shape to write instead.
 
-**The incident this exists for**: a session removed a plugin from the payload and dutifully edited `claude-code-web-config/CLAUDE.md` from `this repo's 14 plugins` to `15 plugins`, in the same turn it was declining to fix a red CI. The owner's ruling was that maintaining a count in a markdown file is not the kind of work worth doing at all. This is the same rule go-toolchain's own analyzer enforces on Go comments ("a number in a comment is a count of what exists today, and the edit that adds an item leaves it wrong"), applied to the documents the analyzer never reads.
+The owner's ruling was that maintaining a count in a markdown file is not the kind of work worth doing at all. This is the same rule go-toolchain's own analyzer enforces on Go comments ("a number in a comment is a count of what exists today, and the edit that adds an item leaves it wrong"), applied to the documents the analyzer never reads.
 
 **A count needs a FRAME as well as a QUANTITY. The frame is the whole precision story.** The first draft matched a quantity alone. A PreToolUse deny that broad makes every existing doc unwritable, which is how a guard earns the reputation that uninstalls it. So a quantity only counts when a frame says the sentence is talking about what is HERE:
 

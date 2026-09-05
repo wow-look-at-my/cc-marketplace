@@ -37,7 +37,7 @@ Ref-destroying commands are judged on whether the commits survive somewhere else
 | `reflog expire` / `delete` | a commit is reachable only through the reflog |
 | `worktree remove --force` | that worktree has uncommitted changes |
 
-So deleting a merged branch, force-pushing when the old tip is still on another branch, and dropping a remote branch already merged to master are all allowed. `push --mirror` is the one exception refused outright: it rewrites every ref at once, so there is no bounded set of commits to check.
+`push --mirror` is the one exception refused outright: it rewrites every ref at once, so there is no bounded set of commits to check.
 
 Every denial names the counts, the files, and the command to run instead:
 

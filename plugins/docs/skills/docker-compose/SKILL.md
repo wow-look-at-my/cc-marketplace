@@ -37,7 +37,7 @@ A line reading `> Version-gated feature: "..."` marks a field that needs a recen
 
 1. **Do not write `version:`.** The top-level `version` property is *obsolete*. Compose always validates against the newest schema regardless of it, and emits a warning telling you it is obsolete. `version: "3.8"` at the top of a file is a tell that the output came from 2019 training data. Delete it from files being edited too.
 2. **The file is `compose.yaml`.** That is the preferred name, then `compose.yml`. `docker-compose.yaml` / `docker-compose.yml` are supported for backward compatibility only, and `compose.yaml` wins if both exist. When creating a new file, create `compose.yaml`. When editing an existing `docker-compose.yml`, leave the name alone - renaming is not the task.
-3. **The command is `docker compose`, two words.** `docker-compose` is Compose v1 (Python, 2014). Compose v2 (Go, 2020) ignores `version:` entirely. **Compose v5 (2025)** is functionally identical to v2 and adds an official Go SDK - the jump from 2 to 5 exists to avoid colliding with the old "file format v2/v3" names. Compose file format 1 (no `services:` key) does not run at all on v2/v5.
+3. **The command is `docker compose`, two words.** `docker-compose` is Compose v1 (Python, 2014). Compose file format 1 (no `services:` key) does not run at all on v2/v5.
 
 ## `docker compose restart` does not apply file changes. Ever.
 
@@ -48,9 +48,9 @@ The loop to never run again: edit `compose.yaml`, run `docker compose restart`, 
 > (which are added after a container is built, but before the container's command is
 > executed) are not updated after restarting.
 
-`restart` bounces the **existing** containers. Container config is fixed at creation time, so anything the file changes - `environment`, `ports`, `volumes`, `command`, `image` - requires a **new container**, not a restarted one. Same trap with `stop`+`start`: `stop` explicitly "stops running containers without removing them," and `start` starts "existing containers." Neither reads the file.
+`restart` bounces the **existing** containers. Same trap with `stop`+`start`: `stop` explicitly "stops running containers without removing them," and `start` starts "existing containers." Neither reads the file.
 
-**After editing `compose.yaml`. The command is `docker compose up -d`.** Per the `up` reference, when a service's configuration or image changed after its container was created, `up` picks up the change by stopping and recreating the container (preserving mounted volumes). So plain `up -d` is usually enough, and it only touches services that actually changed.
+**After editing `compose.yaml`. So plain `up -d` is usually enough, and it only touches services that actually changed.
 
 - `--force-recreate` recreates even when config and image are unchanged. Use it when recreation must happen regardless (or when unsure - it is never *wrong*, only broader).
 - `--no-deps` restricts the blast radius to the named service.
@@ -95,7 +95,7 @@ Services on a shared network reach each other **by service name**, on any port. 
 - `network_mode` and `networks` are mutually exclusive - Compose rejects a file with both.
 - `ports` must not be combined with `network_mode: host` (runtime error).
 - Customize the implicit network by declaring `networks: {default: {name: a_network}}`.
-- Per-network service options: `aliases`, `ipv4_address`/`ipv6_address` (needs matching `ipam` subnets), `interface_name`, `mac_address`, `link_local_ips`, `driver_opts`, `priority`, `gw_priority`. **`priority` picks the network for a service-level `mac_address`. `gw_priority` picks the default gateway.** They are different keys and neither controls `ethN` naming.
+- `gw_priority` picks the default gateway.** They are different keys and neither controls `ethN` naming.
 
 ## `ports`
 
@@ -127,7 +127,7 @@ services:
 
 Actions: `sync`, `rebuild`, `restart` (2.32+), `sync+restart` (2.23+), `sync+exec` (2.32+). Extras: `include` (allowlist patterns - quote them, a leading `*` is a YAML alias node), `ignore` (`.dockerignore` syntax, and the build context's `.dockerignore` is loaded implicitly), `initial_sync`.
 
-Prerequisites that bite: the **image must contain `stat`, `mkdir`, and `rmdir`**, and the container `USER` must be able to write the target path (so `COPY --chown` the initial content in the Dockerfile). Run it with `docker compose up --watch` or `docker compose watch`.
+Run it with `docker compose up --watch` or `docker compose watch`.
 
 ## Lifecycle hooks and init containers
 

@@ -45,11 +45,11 @@ Verified against MDN (`CSS_cascade/Inheritance`). Inherited by default: `color`,
 
 ## Specificity, exactly (MDN `CSS_cascade/Specificity`)
 
-Three columns, compared left to right: **ID (1-0-0)**, then **CLASS** — classes, attribute selectors, and pseudo-classes like `:hover` (0-1-0 each) — then **TYPE** — type selectors and pseudo-elements like `::before` (0-0-1 each). The universal selector `*` and all combinators (`>`, `+`, `~`, descendant space) add **nothing**. Inline `style` effectively outranks any selector. Only `!important` beats it.
+The universal selector `*` and all combinators (`>`, `+`, `~`, descendant space) add **nothing**. Inline `style` effectively outranks any selector. Only `!important` beats it.
 
 Consequences worth internalizing:
 
-- `a.gh-slug` (0-1-1) beats `a` (0-0-1), so a base type rule never fights an existing class rule -- **adding a base rule is safe by construction** for every element that already has one. What it changes is the elements that had NO rule (that is the point), so scan for bare instances of that element before hoisting.
+- What it changes is the elements that had NO rule (that is the point), so scan for bare instances of that element before hoisting.
 - `:is()`, `:not()` and `:has()` add no weight themselves, but take **the weight of their most specific argument**: `p:not(#fakeId)` is 1-0-1. So `:not(.btn)` quietly costs a class column -- often the reason a rule needs a bigger hammer next to it.
 - `:where()` "always has its specificity replaced with zero, 0-0-0". This is the tool for a base rule that must be trivially overridable: `:where(a) { ... }` is beaten by literally any `a` rule anywhere, in any order. Use it for defaults a consumer is expected to override. Use a plain type selector for the page's own baseline.
 - `!important` "reverses the order of stylesheets" -- it is not a specificity bump, and reaching for it means the rule is in the wrong place. Fix the structure instead. An `!important` added to win an argument is the next session's mystery.
@@ -70,6 +70,6 @@ Consequences worth internalizing:
 
 ## The opposite failure -- do not overcorrect
 
-A base rule that every specific rule then has to override is worse than the duplication it replaced: it adds a line to every rule instead of removing five. If most instances need an override. The base is wrong -- narrow it, scope it to a container, or drop it. Same for `:root` custom properties named after one component, and for utility classes that exist in one place.
+If most instances need an override. The base is wrong -- narrow it, scope it to a container, or drop it. Same for `:root` custom properties named after one component, and for utility classes that exist in one place.
 
 Duplication that is NOT a defect: identical blocks in different `@media` contexts, `from`/`to` in `@keyframes`, vendor-prefixed pairs. The rule is about the same block repeated in the SAME context.

@@ -13,8 +13,8 @@ Claude Code loads every instruction file **verbatim** into the prompt, and nothi
 ## What counts as broken
 
 - **Over budget** — more than 40,000 characters (the CLI's own floor).
-- **At the wall** — at or above 97.5% of it. Landing one character under the limit is not a fix: the next edit of any size breaks it, and whoever makes that edit inherits the reorganization that got skipped.
-- **Unwrapped** — a line past 150 columns that can have been wrapped. Code fences, tables, indented blocks, headings and unbreakable URLs are exempt. **Off unless `CC_CLAUDE_MD_WIDTH` is set** to `1`/`true`/`yes`/`on`: it mostly fired on files nowhere near the budget, and a wrapping complaint sitting next to a size number teaches the reader to skim both.
+- **At the wall** — at or above 97.5% of it.
+- **Unwrapped** — a line past 150 columns that can have been wrapped.
 
 Characters, not bytes — so `wc -c` overstates any file with non-ASCII text.
 
@@ -28,7 +28,7 @@ So the sweep diffs a size+mtime snapshot of the candidate files after every tool
 
 ## Why a plugin and not a config hook
 
-Config is installed once, when an environment is built, so a container whose snapshot predates a guard never receives it and has no way to fetch it. One ran for months with a `CLAUDE.md` at 3x budget and nothing went red.
+One ran for months with a `CLAUDE.md` at 3x budget and nothing went red.
 
 ## The Stop gate can insist, but never wedge
 
@@ -46,7 +46,7 @@ Set `CC_CLAUDE_MD_BUDGET` to override the budget, or `0` to disable entirely. Se
 
 ## CI usage
 
-The three hooks above cover a live Claude Code session. A push from anything else -- a bot, a merge-train branch, a plain `git push` -- never runs a session. `full_scan` is for that case: same walk (skipping `.git`/`node_modules`) as every other event -- there is no shallower mode to fall back to -- but it means its exit code -- 0 clean, 1 a file is genuinely over budget, never on a file merely near the wall -- because this input is never sent by Claude Code and answers to a different caller.
+The three hooks above cover a live Claude Code session. A push from anything else -- a bot, a merge-train branch, a plain `git push` -- never runs a session.
 
 ```bash
 printf '{"full_scan": true, "cwd": "%s"}' "$PWD" | claude-md-budget

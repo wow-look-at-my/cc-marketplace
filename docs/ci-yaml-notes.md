@@ -30,7 +30,7 @@ A job-level `permissions:` block REPLACES the workflow-level one, so a job that 
 
 ## composite-action-caller-permissions
 
-A composite action cannot request permissions. It runs with whatever the calling job was granted. `setup-marketplace-build` runs `go-toolchain` when its cache misses, so every job that uses it carries the four grants above even when its own steps need none of them.
+A composite action cannot request permissions. It runs with whatever the calling job was granted.
 
 ## marketplace-build-cache-miss
 
@@ -48,4 +48,4 @@ A composite action cannot request permissions. It runs with whatever the calling
 
 ## smoke-test-job-rationale
 
-Installs and updates EVERY plugin from the marketplace this run just published, through real Claude Code. Each entry points at an orphan tag this run pushed. A tag that was never pushed, or one holding the wrong tree, fails here rather than for the first person who installs it. It also asserts every source is an anonymous `https://` clone: a `github` source clones over SSH, which works on a machine with a key and fails for a user without one.
+Installs and updates EVERY plugin from the marketplace this run just published, through real Claude Code. Each entry points at an orphan tag this run pushed. A tag that was never pushed, or one holding the wrong tree, fails here rather than for the first person who installs it.

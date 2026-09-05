@@ -57,17 +57,17 @@ These facts were read out of the shipped bundle, per `/docs:claude-code-source`.
 - **`.lsp.json` at the plugin root is auto-discovered.** The manifest's `lspServers` key is read separately and merged into the same map. Either one works, and both together merge by server name. This plugin ships only the file, matching `css-duplication`.
 - **`command` and `extensionToLanguage` are the two required keys**, and every extension must start with a dot. An entry missing either is dropped with an error rather than started. `diagnostics` defaults to true. That default is what pushes `publishDiagnostics` into the agent's context after an edit. This plugin leaves it alone.
 - **Three gates stop a server before it starts.** The plugin must be enabled. A `--plugin-dir` plugin counts as enabled unless somebody disables it. Safe mode disables `lspServers` outright. Bare mode and simple mode disable it unless a caller explicitly requests it. There is no print-mode gate in 2.1.241.
-- **A fourth gate stops the FINDINGS rather than the server.** The diagnostic attachment is skipped entirely unless a Bash or PowerShell tool is in the session's tool set. A session without one gets no findings, silently. This plugin cannot detect that.
+- A session without one gets no findings, silently. This plugin cannot detect that.
 - **One server per extension, and the first registered wins**, with a warning that names the loser. This plugin claims `.yml`, `.yaml` and `.md`. That is a wide claim. Another plugin that wants full YAML or markdown diagnostics cannot run beside it. That is a real tradeoff, not a gap to fix here.
 
-**Live verification did not complete. The harness is the reason, rather than this plugin.** No plugin language server starts at all under `claude -p` with `--plugin-dir` on 2.1.261 in a headless session. The control was a plugin whose entire LSP command appends one line to a file. It never ran either, on a real `Edit` to a file with its registered extension. The diagnostics log carried `load_plugin_hooks_completed` and no LSP event of any kind.
+**Live verification did not complete. The control was a plugin whose entire LSP command appends one line to a file. It never ran either, on a real `Edit` to a file with its registered extension. The diagnostics log carried `load_plugin_hooks_completed` and no LSP event of any kind.
 
 The layer below that IS verified. A real LSP client drove the bundled `build/server.cjs` over stdio. It answered `initialize`, `didOpen` and `shutdown` correctly, and published all four workflow findings on the right lines. Run the interactive check before you trust the registration.
 
 ### Files
 
 - **Adapters**: `plugins/common-checks/src/checks.ts` -- file kind, the per-check calls into `vendor/`, the `no-all-builds-job` anchor, the ste-lint bucket wording, the wrapped-paragraph collapse, and the ranking
-- **Server**: `plugins/common-checks/src/lsp.ts` -- base-protocol framing, the handshake, the open and change and save and close notifications, push and pull diagnostics, the per-file cap, and `relativize`. Document sync is full, because a finding is a property of the whole document
+- Document sync is full, because a finding is a property of the whole document
 - **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else
 - **Launcher**: `plugins/common-checks/launcher.sh` -- staged into `server/` as `common-checks-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own. The directory is `server/` and not `build/` because `release-plugin` requires every file under `build/` to be a fat APE, and this plugin ships no Go
 - **Fetching**: `.github/scripts/vendor-common-checks/plan.ts` holds the plan, the drift assertion and the provenance header. `main.ts` holds the network and disk half, plus `--commit`. The GitHub client is shared with the `docs` plugin's fetcher rather than written twice

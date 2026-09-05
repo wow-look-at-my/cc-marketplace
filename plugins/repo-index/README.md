@@ -4,7 +4,7 @@ Points you at the repository that already does the job, before you build a secon
 
 A `UserPromptSubmit` hook matches your prompt against an index of your repositories. Each one that matches is added to the prompt as a link and a line of description. Each repository appears at most once per session.
 
-**The index is built from GitHub, never written by hand.** The description is the repository's own, or the first paragraph of its README when GitHub carries no description. The words it matches on are its name and the topics its owner set, plus the words its description uses and almost no other description does. Nothing in it is typed by a person. Nothing in it can quietly stop being true: rename a repository, retag it, rewrite its description, and the next refresh follows.
+Nothing in it is typed by a person. Nothing in it can quietly stop being true: rename a repository, retag it, rewrite its description, and the next refresh follows.
 
 ## Example
 
@@ -52,4 +52,4 @@ Requests go through the `gh` CLI when it is installed, so an existing `gh auth l
 
 ## Limits
 
-At most three repositories are added per prompt. Any beyond that are named on stderr. The cap is never silent. A repository needs more than one description word in common with your prompt before it earns an injection — naming it is enough on its own.
+At most three repositories are added per prompt. Any beyond that are named on stderr. The cap is never silent.

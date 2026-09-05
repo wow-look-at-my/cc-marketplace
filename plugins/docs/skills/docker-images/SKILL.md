@@ -14,7 +14,7 @@ A host ran agent sessions in containers. There was one big runtime image (termin
 - `docker run` each payload image once, purely to `cp -a /agent/.` into a named volume.
 - start the session from the RUNTIME image with that volume mounted read-only at `/agent`.
 
-So the payload image's own filesystem was never a container root. It existed to carry a directory. Asked why the agents were not simply `FROM` the runtime image, I argued layering will save nothing. The arithmetic was right and the conclusion was wrong: **I was comparing byte counts and missing that I had reimplemented distribution.** The reply was "I don't think you understand how docker is supposed to work," and it was correct.
+So the payload image's own filesystem was never a container root. It existed to carry a directory. Asked why the agents were not simply `FROM` the runtime image, I argued layering will save nothing.
 
 What the copy-into-a-volume design cost, none of which is a byte count:
 
@@ -23,7 +23,7 @@ What the copy-into-a-volume design cost, none of which is a byte count:
 - a volume per agent that nothing garbage-collects.
 - weight nobody can see. One agent image shipped 831 MiB against ~95 MiB for its siblings. Layering makes that visible as "this child adds 700 MiB".
 
-The rule I must have started from: **layer the program files, mount only the mutable state.** An image is the unit of distribution AND the unit of execution. Splitting those two apart is the smell.
+Splitting those two apart is the smell.
 
 ## Layers, and why the sharing argument is not about your bytes
 
@@ -60,7 +60,7 @@ The reverse mistake exists too: baking a database's data directory, a cache, or 
 
 `FROM` inherits the base's filesystem AND its configuration. That is the point. It is also where a copy-based design's habits break when you convert it:
 
-- **`ENTRYPOINT` and `CMD` are inherited.** A child of an image with an `ENTRYPOINT` needs `docker run --entrypoint ...` to run something else -- a bare `docker run child mytool --version` passes `mytool --version` as ARGUMENTS to the inherited entrypoint. Nothing warns you.
+- Nothing warns you.
 - **`ENV` is inherited, and becomes the container's environment.** A build-time `ENV HOME=/agent` was harmless while the image was only a carrier. The moment it became the image a container RUNS, it redirected every home-directory lookup. Set build-only variables per-`RUN` (`RUN export HOME=/agent && ...`), never as `ENV`.
 - **`LABEL`, `WORKDIR`, `EXPOSE`, `USER`, `VOLUME` are inherited too.** Inherited labels are useful: a child carrying the base's version label is checkable evidence it really was built on that base.
 - **`ARG` is not inherited the way you expect** -- and a global `ARG` (before the first `FROM`) is the ONLY kind usable in a `FROM` line. Declared after a `FROM` it belongs to that stage, resolves empty in the next `FROM`, and the build fails on an invalid reference. `/docs:dockerfile` has the full scoping table. I have gotten this wrong with the correct answer already written down, so read it rather than reasoning it out.
@@ -76,16 +76,16 @@ FROM ${BASE_IMAGE}
 RUN install-one-thing
 ```
 
-Built with `--build-arg BASE_IMAGE=registry.example.com/myapp-runtime:<sha>`. Keep the child's tag equal to the base's: a child tagged with a different revision than the base it was built on is a lie a reader cannot detect.
+Built with `--build-arg BASE_IMAGE=registry.example.com/myapp-runtime:<sha>`.
 
 ## CI: build order follows FROM
 
 This is where the design change actually shows up in a pipeline. It is easy to get wrong because a matrix looks so tidy:
 
 - **A base and its children cannot build in parallel.** The children need the base to exist first. That means separate jobs with `needs:`, not one matrix.
-- **The child's builder pulls the base from the REGISTRY**. The base has to be pushed, not merely built, before the child starts. This is easy to miss when the push path authenticates some other way (a CLI with its own token), because then nothing else in the job ever needed a `docker login`.
-- **Put that login in the build action, not in every caller.** A caller adding a login step to work around an action that cannot pull its own registry's images is a workaround. Fix the action.
-- **A stale base is a real failure mode.** If children are rebuilt without the base, they silently keep the old runtime. Tie them together with an exact tag, and assert it: an inherited `LABEL` from the base is a cheap check that the child really was layered on the version you think.
+- **The child's builder pulls the base from the REGISTRY**. The base has to be pushed, not merely built, before the child starts.
+- Fix the action.
+- **A stale base is a real failure mode.** If children are rebuilt without the base, they silently keep the old runtime.
 
 ## Multi-stage: the toolchain never ships
 
@@ -101,7 +101,7 @@ FROM ${BASE_IMAGE}
 COPY --from=builder /opt/thing /opt/thing
 ```
 
-The builder stage can be `FROM` anything -- nothing it contains is distributed. Single-stage builds are how 700 MiB of `g++`, `python3` and an npm cache end up in an image whose consumers only ever needed one directory.
+The builder stage can be `FROM` anything -- nothing it contains is distributed.
 
 ## Before writing the design down, check these
 
@@ -127,4 +127,4 @@ That is how the 831 MiB outlier above was found -- after it had already shipped.
 
 ## Keep this file growing
 
-This skill exists because I was wrong in a way that a page of docs will not have caught -- the mistake was architectural, not syntactic. **When something about established Docker design surprises you, add it here in the same shape: what the instinct was, what is actually true, and the evidence.** A surprise is the signal that a wrong model just got corrected. The correction is worth more written down than remembered. Verify against docs.docker.com, the OCI image-spec, or the observed behavior of a real daemon before writing it. A confidently wrong note in this plugin is worse than no note, because it loads automatically.
+The correction is worth more written down than remembered. Verify against docs.docker.com, the OCI image-spec, or the observed behavior of a real daemon before writing it. A confidently wrong note in this plugin is worse than no note, because it loads automatically.

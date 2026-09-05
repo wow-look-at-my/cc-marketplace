@@ -41,13 +41,13 @@ notes.txt:
 The old builtin's default only returned bare filenames, which forced a second search to see the matches.
 
 - Match lines render `N:text`, context lines `N-text`, and an indented `--` separates non-contiguous chunks within a file (only when a context flag with nonzero width is in effect, mirroring ripgrep's own printer). With `"-n": false` the two-space indent stays but the `N:`/`N-` prefixes are dropped.
-- Parsing rule: after the `Found N files` header, every line starting with two spaces belongs to the current file. Any other line is the next file's header (strip the one trailing `:`). This holds for filenames containing `:` and content that looks like a path — the one blind spot is a filename that itself begins with two spaces, whose header line is indistinguishable from content.
+- Parsing rule: after the `Found N files` header, every line starting with two spaces belongs to the current file. Any other line is the next file's header (strip the one trailing `:`).
 - `head_limit`/`offset` paginate the flattened stream of match/context lines across all files (headers and `--` separators are not counted). A file whose lines are entirely cut is omitted. Default `head_limit` is 250 lines. `0` means unlimited.
 - A matching line is never dropped. The builtin's `--max-columns 500` cap replaced any longer line with `[Omitted long matching line]`. This plugin instead shows the line, bounded to ~4096 characters. A line wider than that renders as a 4096-rune window with an ellipsis (`…`) marking each cut edge.
 
 `.gitignore` is respected (the opposite of the glob plugin). Searches time out after 20 seconds (`CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`).
 
-- Runs ripgrep with `--hidden` and explicit `!` exclusions for `.git .svn .hg .bzr .jj .sl`. `.gitignore` IS respected (no `--no-ignore`) — note this is the opposite of the sibling glob plugin's default. (The builtin's `--max-columns 500` is dropped so long lines are shown, then clamped in Go. See the mode notes above.) A positive `glob` parameter acts as a ripgrep whitelist: a gitignored or type-filtered file that directly matches it is still searched (builtin parity — same argv).
+- Runs ripgrep with `--hidden` and explicit `!` exclusions for `.git .svn .hg .bzr .jj .sl`. `.gitignore` IS respected (no `--no-ignore`) — note this is the opposite of the sibling glob plugin's default. (The builtin's `--max-columns 500` is dropped so long lines are shown, then clamped in Go.
 - `path` may be a file or a directory. It is whitespace-trimmed and accepts `~` / `~/sub` (expanded to the home directory) like the builtin's path resolution. Missing paths return `Path does not exist: ... Note: your current working directory is ...` with a did-you-mean suggestion when a re-rooted candidate exists.
 - `filenames_with_matches` and `filenames` order files newest-first. Equal mtimes tie-break by the builtin's localeCompare (ported via ICU root collation — case-insensitive at primary strength, so `a.txt` sorts before `B.txt`).
 - Context precedence: `context` beats `-C` beats `-B`/`-A`. `-n` defaults to true. Patterns starting with `-` are passed via `-e`.

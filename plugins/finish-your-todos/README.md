@@ -24,7 +24,7 @@ When a prompt looks like an assignment, the next tool call is refused with a mes
 
 When Claude tries to stop. The hook reads the transcript and blocks (exit 2) while anything is unfinished, naming what is left.
 
-It understands **both** task surfaces: `TodoWrite`, where each call carries the whole list. Each later update rewrites that task's status). That second half matters — environments with the task tools have no `TodoWrite` at all, so a gate that scanned only for `TodoWrite` had quietly stopped guarding.
+It understands **both** task surfaces: `TodoWrite`, where each call carries the whole list. Each later update rewrites that task's status).
 
 The only way past is a list with nothing pending or in progress: finish the work, or mark it completed/deleted so the list reflects reality.
 

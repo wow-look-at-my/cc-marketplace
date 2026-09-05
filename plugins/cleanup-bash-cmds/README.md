@@ -4,7 +4,7 @@ A PreToolUse hook that rewrites Bash tool commands before they run. The command 
 
 It does ten jobs:
 
-1. **Destroys heredocs, denies perl, and denies file reads.** Any command containing a heredoc, invoking `perl` (in any position the parser recognizes as a command), or reading a file with `cat`/`head`/`tail` (a static file operand that is not a `/proc`, `/sys`, or `/dev` pseudo-file -- use the Read tool) is DENIED outright -- not rewritten, denied. See "Heredocs: banned", "perl: banned", and "File reads via cat/head/tail: banned" below.
+1. See "Heredocs: banned", "perl: banned", and "File reads via cat/head/tail: banned" below.
 2. **Makes deletion non-destructive.** Every `rm` (and `xargs rm`) becomes `recycler trash`, which moves the target to the platform's native recycle bin instead of destroying it. Forms that cannot be rewritten that way -- `shred`/`srm`, `find ... -delete`, `git rm`, `truncate -s 0` -- are denied with the alternative that can. See "rm becomes recycler trash" below.
 3. **Confiscates `2>/dev/null`.** Every stderr-to-/dev/null redirection is removed, wherever it appears -- including inside command substitutions. You cannot responsibly use that. It has to be taken away: silencing stderr hides the very errors you need to see.
 4. **Kills trailing `| head` / `| tail` stages** -- on the FINAL statement only. Any flags or arguments (`| head`, `|head -50`, `| head -n 100`, `| head -c 4k`, `| tail -n +2`, `| tail -f`, ...), unwound until stable, so `cmd | head -5 | tail -2` collapses all the way to `cmd`. Truncating output hides the rest of it. A limiting pipe on an EARLIER statement of a multi-statement script is a deliberate part of that script and is preserved.
@@ -12,7 +12,7 @@ It does ten jobs:
 6. **Ensures `set -o pipefail`.** Every command runs with pipefail enabled -- silently prepended unless the command already turns it on. This also keeps the producer's exit status observable through the injected `| tee`.
 7. **Recreates Docker Compose services instead of restarting them.** `docker compose restart` becomes `docker compose up -d --force-recreate`, preserving service arguments and surrounding command structure.
 8. **Caps every `sleep` at 3 seconds.** Anywhere in the tree, including loops, functions, and `$( )`. Literal durations summing to <= 3 are kept. Everything else (`sleep 30`, `sleep 1m`, `sleep $DELAY`, `sleep infinity`, junk, no args) becomes `sleep 3`. See "Sleep capped at 3 seconds" below.
-9. **Removes constant narration echoes/printfs.** A terminal-bound `echo` with all-constant arguments, or a `printf` that just prints a single constant string with no `%` directive, is removed entirely -- its whole command is rewritten to the no-op `:` (no output, exit status 0, surrounding structure intact). A `printf` that actually formats (a `%` directive, extra args, or an expansion) is kept. The matcher sees through `command` / `builtin` / a leading `\` / quoting wrappers. See "Constant narration echoes and printfs are removed" below.
+9. A `printf` that actually formats (a `%` directive, extra args, or an expansion) is kept. The matcher sees through `command` / `builtin` / a leading `\` / quoting wrappers. See "Constant narration echoes and printfs are removed" below.
 10. **Removes other noise:** trailing `2>&1` and trailing `|| true`, plus trailing `| grep ...` (all anchored at the end of the command, like head/tail). Strictness settings the user wrote (`set -e` and friends) are NEVER removed -- this hook only ever adds strictness.
 
 ## Fully silent by design
@@ -59,7 +59,7 @@ The statement-count guard is belt and braces: no rule can splice the statement l
 
 ## Heredocs: banned
 
-You cannot be trusted with heredocs. They are gone. Any command whose syntax tree contains a heredoc redirect -- `<<` or `<<-`, quoted or unquoted delimiter, anywhere in the command including inside `$(...)`, process substitutions, and function bodies -- is **denied**, not rewritten:
+You cannot be trusted with heredocs. They are gone.
 
 ```json
 {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
@@ -89,7 +89,7 @@ Two implementation notes:
  "permissionDecisionReason": "perl is banned in this environment."}}
 ```
 
-- The **effective-command resolver** applies, so wrappers do not get you past it: `command perl -e 1`, `\perl -e 1`, and `builtin perl` all resolve to `perl` and are denied. Deny beats rewrite. The deny is logged as a `DENY` line with `reason="perl"`.
+- Deny beats rewrite. The deny is logged as a `DENY` line with `reason="perl"`.
 - `perl` as an **argument** or a **different command** is not denied -- the walk never enters word-internal contexts, so `grep perl file` and `perlcritic file` run, and `command -v perl` is a lookup, not an invocation.
 - `perl` inside a **command/process substitution** (`echo $(perl -e 1)`) is a deliberate non-goal (see Non-goals) -- the same word-scoping that keeps `grep perl` safe.
 - Fail-open still applies: an unparseable command passes through.
@@ -121,7 +121,7 @@ a | head -2 && b | tail -3    ->   a | head -2 && b
 
 Scope and guards:
 
-- **Final statement only.** The rule anchors at the textual end of the command: the last top-level statement, and within it the rightmost `&&` / `||` member. A limiting pipe on an earlier statement of a multi-line / `;`-joined script (`ls | tail -12` followed by more commands) is a deliberate part of that script and is preserved.
+- A limiting pipe on an earlier statement of a multi-line / `;`-joined script (`ls | tail -12` followed by more commands) is a deliberate part of that script and is preserved.
 - **Never inside `$(...)` or `<(...)`.** `VAR=$(ls | head -1)` is functional capture, not output truncation, and is preserved.
 - **Word boundaries are real.** `| headache`, `| tailscale status`, `| head5` are different commands and stay untouched (the stage's command word must be exactly `head` or `tail`).
 - **Mid-pipeline stages stay.** `cmd | head -5 | wc` keeps its `head`. If a later trailing stage is stripped and `head`/`tail` becomes trailing, the next pass strips it too. That is the point.
@@ -164,7 +164,7 @@ Also not a banned file read:
 - **Word-internal contexts.** `x=$(cat f)` and `echo $(cat f)` are capture -- the walk never enters Word parts (the same scoping that keeps `grep perl` out of the perl deny). Deliberate non-goal.
 - **Lookalike names.** `catalog`, `headache`, `head5` are different commands, and `command -v cat` is a lookup.
 
-Flags are understood when finding operands. A flag value is never mistaken for a file: the separated value of `-n` / `-c` / `-s` (`head -n 20 /proc/meminfo` is exempt -- `20` is a value), bundled clusters ending in a value-taking letter (`-qn 3`), value-taking GNU long forms (`--lines 20`), and old-style limits (`head -60`, `tail +5`) are all skipped. The **effective-command resolver** applies, so `command cat f` and `\head -5 f` are denied too.
+Flags are understood when finding operands. The **effective-command resolver** applies, so `command cat f` and `\head -5 f` are denied too.
 
 ## rm becomes recycler trash
 
@@ -191,7 +191,7 @@ A control that acts on the `Write` is already a full step too late. Nor can this
 
 ### The rewrite is unconditional and tree-wide
 
-Unlike the trailing-noise rules. This one is **not** anchored to the last statement -- an `rm` mid-script, inside a pipe, a loop body, a function, or a command substitution destroys just as much as a trailing one:
+Unlike the trailing-noise rules.
 
 ```bash
 rm -f a.js && node b.ts        ->  recycler trash a.js && node b.ts
@@ -225,7 +225,7 @@ rmdir empty/              # a different command
 
 Bundled clusters count when every letter is droppable (`-rf`, `-rfv`), so an unknown letter anywhere in a cluster (`-rd`) takes the deny path, as do `--no-preserve-root`, `--one-file-system`, and `-d`.
 
-`xargs rm` gets its own case rather than falling out of the walk: there `rm` is an *argument* of `xargs`, not a command word, so the effective-command resolver never sees it. `xargs`'s own value-taking flags (`-n N`, `-I R`, `-P N`, ...) are understood. The utility word is found correctly.
+`xargs`'s own value-taking flags (`-n N`, `-I R`, `-P N`, ...) are understood. The utility word is found correctly.
 
 ### One code path
 
@@ -246,7 +246,7 @@ There is no source file to move in these. They are **denied** with the alternati
 
 `git rm --cached` does not touch the working tree and passes through untouched.
 
-**A plain `> file` redirect is deliberately NOT denied.** It truncates, but stdout redirection is overwhelmingly ordinary output routing -- and the `tee` rule above already owns that shape. Denying it will fight the plugin's own behavior and fire constantly on non-deletions. So `: > file` still truncates: a known, accepted gap, and the right trade.
+Denying it will fight the plugin's own behavior and fire constantly on non-deletions. So `: > file` still truncates: a known, accepted gap, and the right trade.
 
 ## Stdout redirects become tee
 
@@ -283,7 +283,7 @@ The rewrite applies anywhere commands execute, including loops, functions, subsh
 
 ## Sleep capped at 3 seconds
 
-Every `sleep` in real command position -- top level, loop bodies, function bodies, subshells, `$( )` captures, either side of `&&` / `||` / `;` -- is capped. If every argument is a literal word that parses as a GNU sleep duration (decimal with optional `s`/`m`/`h`/`d` suffix) and the durations sum to <= 3 seconds. The command is untouched. EVERYTHING else has its whole argument list replaced with the single literal `3`:
+If every argument is a literal word that parses as a GNU sleep duration (decimal with optional `s`/`m`/`h`/`d` suffix) and the durations sum to <= 3 seconds. The command is untouched. EVERYTHING else has its whole argument list replaced with the single literal `3`:
 
 ```bash
 sleep 2                  ->   sleep 2          # literal, under the cap
@@ -376,7 +376,7 @@ The hook needs three tools on PATH at runtime. If any is missing it **fails open
 | shfmt | parse/print bash | needs `--to-json` / `--from-json` (v3.7.0+. Verified with 3.8.0 and 3.13.1) |
 | recycler | the target of the `rm` rewrite | must be on `PATH` when a rewritten `rm` RUNS. The hook itself never invokes or probes it |
 
-`bash`, `jq`, and `shfmt` are needed by the hook itself -- if `jq` or `shfmt` is missing the hook fails open and emits no rewrite. `recycler` is different. It is needed by the *rewritten command*, not by the hook, so a missing `recycler` does not disable the rewrite. It surfaces as a visible "command not found" with the file still on disk, which is the correct failure mode (see "One code path" above).
+`recycler` is different. It is needed by the *rewritten command*, not by the hook, so a missing `recycler` does not disable the rewrite. It surfaces as a visible "command not found" with the file still on disk, which is the correct failure mode (see "One code path" above).
 
 Installing shfmt:
 
@@ -398,7 +398,7 @@ go install github.com/wow-look-at-my/recycler@latest
 
 - **Rewritten commands come back shfmt-formatted.** Spacing is normalized and `a; b` prints as two lines. Only commands that had a real change are reformatted.
 - **The command must parse as bash.** Anything shfmt cannot parse passes through untouched (fail-open), as does anything when shfmt/jq are absent.
-- **The permission prompt still applies to rewrites.** For rewrites the hook emits `hookSpecificOutput.updatedInput` *without* a `permissionDecision`, so the normal permission flow evaluates the rewritten command (verified against `@anthropic-ai/claude-code` 2.1.201). This is a change from the original Go implementation of this plugin, which returned `permissionDecision: "allow"` and made every rewritten command skip the permission prompt. Only the bans use a `permissionDecision` (`"deny"`): heredoc, perl, file reads, `shred`/`srm`, `find -delete`, `git rm`, `truncate -s 0`, and an untranslatable `rm` flag.
+- This is a change from the original Go implementation of this plugin, which returned `permissionDecision: "allow"` and made every rewritten command skip the permission prompt.
 - **A rewritten `rm` needs `recycler` on PATH at execution time.** The rewrite itself never checks. A missing `recycler` is a visible failure with the file intact, not a silent fallback to `rm`.
 ## Logging
 

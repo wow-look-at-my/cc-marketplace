@@ -27,15 +27,15 @@ gh api -H "Accept: application/vnd.github.raw" \
 - Check `/tmp/cli-$V.js` first — a previous agent in this session may already have downloaded it.
 - **Confirm the size before searching**: a real `cli.js` is ~27 MB / ~720k lines. `gh` exits non-zero on a bad ref (`No commit found for the ref ...`) but still writes its error JSON to stdout. A failed fetch leaves a ~127-byte file rather than none. `wc -c` once. Do not grep a stub.
 - **`master` is almost never the right branch.** It holds extraction tooling, no product `cli.js`. Same for `claude/*`, `doc-js-extraction-*` and `analysis-framework`.
-- Use the version actually running unless asked about a different one. A missing branch announces itself in that fetch — list the branches then (`gh api repos/PazerOP/claude-docs-gaps/branches --paginate --jq '.[].name'`), take the highest below your version, and **say which version you actually read**.
+- Use the version actually running unless asked about a different one.
 - Cheap first stop: the `docs/` directory on the version branch and the `docs-aggregate` branch's `INDEX.md` hold prior investigations. Read those before re-deriving — then still confirm the specific claim in source.
 
 ## 2. Search it well
 
-- **Search for STRINGS, not identifiers.** Top-level names are mangled and differ between builds (`OHh`, `p7t`, `Cxt`). String literals are stable and are what the product keys on: user-visible messages, telemetry names (`tengu_*`), settings keys, `.describe("...")` text, env var names, the exact error text a user reported.
-- **Beware the long lines.** The file is prettified. A formatter cannot break a single token — a few dozen lines are one enormous string or regex literal. `rg -n` prints the whole matched line, so pipe through `cut -c1-200`, prefer `rg -o` with a tight pattern, keep `-C` small, then read the region with Read's `offset`/`limit`.
+- **Search for STRINGS, not identifiers.** Top-level names are mangled and differ between builds (`OHh`, `p7t`, `Cxt`).
+- **Beware the long lines.** The file is prettified. A formatter cannot break a single token — a few dozen lines are one enormous string or regex literal.
 - Zod-shaped schemas read as `v.object({...})` / `v.strictObject({...})`. The `.describe(...)` text on a field is often better than the published docs.
-- **Cross-check in a second place before reporting a claim as fact.** A schema accepting a field proves nothing about the code path honoring it — 2.1.220 accepts `transport: "socket"` for LSP servers and spawns stdio regardless. Find the schema AND its consumer.
+- Find the schema AND its consumer.
 
 ## 3. Report
 

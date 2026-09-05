@@ -8,7 +8,7 @@ Notes to self. Checked against `nodejs.org/api/typescript.html` and executed on 
 
 ## The wrong instinct this replaces
 
-I reach for "Node can't run TypeScript, so this file has to be `.js`" and then build something worse on top of that premise: a checked-in compiled `.js` plus a hand-written `.d.ts`, or a build step, or `ts-node`. Then I *justify* it — "an extensionless specifier can't resolve a `.ts`, so it must be JavaScript" — which is a true fact about resolution turned into a false conclusion about the language.
+Then I *justify* it — "an extensionless specifier can't resolve a `.ts`, so it must be JavaScript" — which is a true fact about resolution turned into a false conclusion about the language.
 
 **Node has run TypeScript by stripping types since v22.18.0 / v23.6.0, on by default. It is stable as of v24.12.0 / v25.2.0.** No flag, no loader, no build step. Check `node --version` before concluding anything about what a file has to be.
 
@@ -40,7 +40,7 @@ Two more that follow from it, and both have bitten:
 
 ## Getting types when you cannot set compiler options
 
-If you control `tsconfig.json`. The documented answer is `allowImportingTsExtensions` so `import { x } from './mod.ts'` type-checks. Its constraint (verified: `TS5096`) is that it needs `noEmit` or `emitDeclarationOnly` — or `rewriteRelativeImportExtensions`, which rewrites `./mod.ts` to `./mod.js` on emit, i.e. for compile-and-ship, not run-directly.
+If you control `tsconfig.json`. The documented answer is `allowImportingTsExtensions` so `import { x } from './mod.ts'` type-checks.
 
 When the compiler options are fixed by a host that will not let you add either. You are not. Split the two resolutions, because they have different rules:
 
