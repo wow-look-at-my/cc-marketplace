@@ -57,7 +57,7 @@ Consequences worth internalizing:
 ## Cascade layers, when a codebase already uses them (MDN `@layer`)
 
 - Declare order up front: `@layer base, components, utilities;`. Later layers win, and "once the layer order has been established, specificity and order of appearance are ignored" -- a lower-specificity rule in `utilities` beats a higher-specificity one in `base`.
-- **Unlayered styles beat ALL layered styles** for normal declarations: "Styles that are not defined in a layer always override styles declared in named and anonymous layers." So dropping a quick unlayered rule into a layered codebase silently outranks the whole system -- put it in a layer.
+- **Unlayered styles beat ALL layered styles** for normal declarations: "Styles that are not defined in a layer always override styles declared in named and anonymous layers." So a quick unlayered rule in a layered codebase silently outranks the whole system. Put it in a layer.
 - For `!important` the order is reversed: important declarations in layers beat important unlayered ones.
 
 ## Hoisting duplicates safely (the actual edit)

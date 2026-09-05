@@ -44,7 +44,7 @@ Then the retry goes out:
 { name: o, arguments: i, _meta: s }
 ```
 
-The one permitted retry is already spent (the `!S` guard), so the second `-32003` is rethrown to the model.
+The one permitted retry is already spent (the `!S` guard). The second `-32003` is rethrown to the model.
 
 Telemetry names this exactly: the second failure emits `fe("mcp_ccr_needs_approval", "retry_failed")`, never `"arm_not_fired"`.
 
@@ -71,7 +71,7 @@ It does not survive contact with the mechanism above: with the entry present `se
 Removing the block restores the click. The obvious next question is whether the click can be automated some other way. It cannot. These are the four attempts worth not repeating:
 
 - **A local rule of any kind.** The retry hands `canUseTool` a pre-built decision as its sixth argument, and the wrapper opens `let u = c ?? (await p9t(...))`. With that argument present the rule engine is never called, so `permissions.allow`, `permissions.deny`, the auto-mode classifier, `dontAsk` and even `bypassPermissions` are not consulted. The decision is hardcoded `behavior: "ask"`, so it always reaches the dialog.
-- **A `PermissionRequest` hook or an SDK `canUseTool` callback.** These are the same function in the same argument position, so they behave identically: the "allow" is local, it CANCELS the outstanding bridge request instead of completing it, and the retry that follows is byte-identical. `args_sha256` appears three times in the bundle and is only ever READ off the server's error — the client has no call that sends a grant back.
+- **A `PermissionRequest` hook or an SDK `canUseTool` callback.** These are the same function in the same argument position, so they behave identically. The "allow" is local. It CANCELS the outstanding bridge request instead of completing it, and the retry that follows is byte-identical. `args_sha256` appears three times in the bundle. It is only ever READ off the server's error. No client call sends a grant back.
 - It removes the recovery path rather than automating it.
 - **Pre-approving the tools server-side.** `extra_allowed_tools` / `extraAllowedTools` have ZERO occurrences in the bundle. `allowedTools` is a purely local permission layer consumed by the same rule engine the retry skips. No session-ingress or ccr-sessions request body carries a permission or allowlist payload. The client has no way to arm such a thing even if the server supports it.
 

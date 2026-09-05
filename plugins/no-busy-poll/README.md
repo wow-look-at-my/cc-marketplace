@@ -1,6 +1,6 @@
 # no-busy-poll
 
-A turn does not end while it is the latest in a run of turns that each made the exact same tool call, spaced too close together for anything to actually have changed.
+A turn does not end while it is the latest in a run of turns that each made the exact same tool call. The turns must sit too close together for anything to have changed.
 
 Re-running the same status check every turn instead of waiting for a real event burns tokens for zero new signal. The Stop hook refuses the stop and names the call:
 

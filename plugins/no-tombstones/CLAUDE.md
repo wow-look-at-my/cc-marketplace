@@ -4,7 +4,7 @@ The no-tombstones plugin lives at `plugins/no-tombstones/`. The refusal is `perm
 
 Or its AUDIENCE is the reviewer: it defends the change instead of telling the next editor what breaks. The one-line test is to delete the sentence and ask what the next editor now gets wrong -- no answer means it was narration.
 
-**Three tiers, and the wording-based one is the weakest of them.** That ordering is deliberate, because the text being judged is written by a paraphrasing machine, and a rule keyed to a phrase is a rule it eventually writes around.
+**Three tiers, and the wording-based one is the weakest of them.** That ordering is deliberate. A paraphrasing machine writes the text being judged, and a rule keyed to a phrase is a rule it eventually writes around.
 
 - It is a plain `[]tell`, so extending the plugin is adding a row. Order inside the table decides which tell a sentence is REPORTED as when several match, so the specific rules sit above the general ones.
 - **The volume cap** (`FindTombstones`, default 14 lines, `NO_TOMBSTONES_MAX_COMMENT_LINES`) is the tier no rewording defeats. A tombstone is surplus text, so an essay whose every individual sentence reads as true and current still fails here. It governs SOURCE only -- a long paragraph in a document is ordinary writing, and applying it there will make every page unwritable.

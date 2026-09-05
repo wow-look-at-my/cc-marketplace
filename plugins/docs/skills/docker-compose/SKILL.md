@@ -178,7 +178,7 @@ Three different mechanisms, routinely confused:
 
 - Short form: `VOLUME:CONTAINER_PATH[:ACCESS_MODE]` where access mode is a comma list of `rw`/`ro`/`z`/`Z`. Relative host paths must start with `.` or `..` to avoid being read as a named volume, and only work for local runtimes.
 - Short-form bind mounts **create the host directory if missing** (legacy compatibility). Use long form with `bind: {create_host_path: false}` to stop that.
-- Long form `type:` is `volume`, `bind`, `tmpfs`, `image`, `npipe`, or `cluster` - `image` mounts content straight out of an image (`image: {subpath: ...}`, 2.35+), and `volume: {subpath: ...}` mounts a subdirectory of a named volume.
+- Long form `type:` is `volume`, `bind`, `tmpfs`, `image`, `npipe`, or `cluster`. `image` mounts content straight out of an image (`image: {subpath: ...}`, 2.35+). `volume: {subpath: ...}` mounts a subdirectory of a named volume.
 - A named bind mount (stable name, fixed host path) is the `local` driver:
 
 ```yaml

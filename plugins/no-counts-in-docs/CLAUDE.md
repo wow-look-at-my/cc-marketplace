@@ -10,7 +10,7 @@ The owner's ruling was that maintaining a count in a markdown file is not the ki
 - **`havingFrame`** -- a verb asserting possession or extent (`it ships two hooks`, `there are three sections`, `the plugin registers 15 servers`).
 - **`deicticFrame`** -- a pointer into the page (`the four rules below`), where editing the page is what breaks the number.
 
-Two filters then run inside the frame. **`measureNouns`** excuses a measurement: `20 seconds`, `500 lines`, `3 attempts` are limits and sizes, still true after somebody adds a plugin. **`gapStopWords`** excuses a function word between the cardinal and the noun -- without it `it has 2 of the format drops` reads as a count of `drops`, because a bare adjective run happily swallows `of the format`.
+Two filters then run inside the frame. **`measureNouns`** excuses a measurement: `20 seconds`, `500 lines`, `3 attempts` are limits and sizes, still true after somebody adds a plugin. **`gapStopWords`** excuses a function word between the cardinal and the noun. Without it `it has 2 of the format drops` reads as a count of `drops`. A bare adjective run happily swallows `of the format`.
 
 **The digit guard lives in Go, not in the regex. That is not a style choice.** RE2 has no lookbehind. The frame can never meet the quantity -- every positive test went red at once. `continuesANumber` looks at the byte in front of the match instead.
 

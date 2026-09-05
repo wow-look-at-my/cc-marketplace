@@ -66,7 +66,7 @@ blocked: sed -i writes builtins/math.ffs, which is inside the working tree.
 Use Edit to change an existing file, or Write to create one.
 ```
 
-Write itself is refused on a path that already exists (use Edit), and on a path sitting in the recycle bin, where `recycler restore` gets the bytes back instead of re-authoring them from context.
+Write itself is refused on a path that already exists (use Edit), and on a path sitting in the recycle bin. There `recycler restore` gets the bytes back, instead of re-authoring them from context.
 
 ## What it does not block
 

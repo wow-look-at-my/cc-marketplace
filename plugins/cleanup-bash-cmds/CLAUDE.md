@@ -9,4 +9,4 @@ The cleanup-bash-cmds plugin lives at `plugins/cleanup-bash-cmds/`. Commands con
 
 For rewrites the hook emits `hookSpecificOutput.updatedInput` WITHOUT a `permissionDecision`, so the normal permission flow evaluates the rewritten command (it does not auto-allow). Only the bans emit a `permissionDecision` (`"deny"` + reason). The debug channel is `CLEANUP_BASH_CMDS_LOG`: every rewrite is logged with the rules that fired (`REWRITE ... rules="grep,pipefail"`.
 
-The other half of this lives in the `no-work-loss` plugin, which refuses a `Write` over an existing path (and over one sitting in the recycle bin) and refuses the Bash routes that change file content outside the edit tools -- see `plugins/no-work-loss/CLAUDE.md`.
+The other half lives in the `no-work-loss` plugin. It refuses a `Write` over an existing path, and over one sitting in the recycle bin. It also refuses the Bash routes that change file content outside the edit tools. See `plugins/no-work-loss/CLAUDE.md`.

@@ -73,13 +73,13 @@ Substring matching on `git reset --hard` is not sufficient and gives false confi
 
 - **Chains.** `&&`, `||`, `;`, `|`, newlines, brace blocks, subshells, `if`/`while`/`for`/`case` bodies, function bodies, and command substitutions. Each is evaluated on its own.
 - **Working directory.** A `cd` is tracked across the sequence, so `cd /other/repo && git reset --hard` is checked against `/other/repo`. The cwd pointer is shared only where the shell shares one: `&&`, `||`, `;` and brace blocks carry a `cd` forward. A pipe stage, a subshell and a conditional body each get a copy. `git -C <path>` and `--work-tree` are applied the same way.
-- **Wrappers.** `env`, `sudo`, `doas`, `command`, `builtin`, `exec`, `nohup`, `nice`, `ionice`, `setsid`, `stdbuf`, `timeout`, `xargs`, a leading `\`, and an absolute path all resolve to the same program. Value-taking flags are understood, because `nice -n 10 git reset --hard` otherwise leaves `10` sitting where the program must be and the git behind it is never seen -- a real bug this cost.
+- **Wrappers.** These all resolve to the same program: `env`, `sudo`, `doas`, `command`, `builtin`, `exec`, `nohup`. So do `nice`, `ionice`, `setsid`, `stdbuf`, `timeout`, `xargs`, a leading `\`, and an absolute path. Value-taking flags are understood. Otherwise `nice -n 10 git reset --hard` leaves `10` where the program must be, and the git behind it is never seen.
 - **Flags.** Short flags are unbundled, so `-fdx`, `-xdf` and `-f -d -x` are the same command. `--flag=value` registers as `--flag`. `--` separates operands.
 - **Aliases.** Resolved out of `git config --get-regexp '^alias\.'`, including the `!shell` form, which is re-parsed as shell. Builtin verbs skip the lookup entirely, since git refuses to let an alias shadow one. Chains resolve. Self-reference terminates at depth 3.
 
 ## Ambiguity resolves to denial
 
-Three cases produce a denial without a state answer, because a destructive verb whose target cannot be identified is exactly what this plugin exists to refuse:
+Three cases produce a denial without a state answer. A destructive verb whose target cannot be identified is what this plugin exists to refuse:
 
 - The command does not parse **and** names a destructive verb. (Unparseable with nothing destructive in it is allowed.)
 - An operand is not statically known -- `rm $TARGET`, `cd $DIR && git reset --hard`, `cd -`.

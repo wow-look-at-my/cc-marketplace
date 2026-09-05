@@ -36,9 +36,9 @@ A pipeline is judged stage by stage, so `curl ... | tar -xz` is caught at the ta
 
 **Indirection this hook follows** rather than gives up on: `sh -c '...'` and an alias definition are shell source and are parsed. A shell script file is read from disk and parsed (a script that does not exist writes nothing and is left alone, one that exists and cannot be read or parsed denies). `./script.sh` is followed when its shebang names a shell. `find -exec`/`-execdir` has its utility lifted out and walked as a call of its own (`-execdir` runs in a directory the text does not name, so its paths are unresolvable). `xargs`, `env`, `sudo`, `timeout`, `nice` and the rest are stripped with their value-taking flags understood. A function body is walked, and a background `&` changes nothing -- the writes it performs are the same writes.
 
-**Symlinks.** `ln`/`ln -sf` is judged on the link name, because pointing a tracked path at writable storage changes what the tree holds with nothing else seeing it.
+**Symlinks.** `ln`/`ln -sf` is judged on the link name. Pointing a tracked path at writable storage changes what the tree holds, with nothing else seeing it.
 
-**Routes found by audit** rather than from memory, by reading the commands this environment's permission rules already allow: `sort -o`, `split`/`csplit`, the compressors that replace their input (`gzip`, `bzip2`, `xz`, `zstd`, ... unless `-c`), `zip`, `docker cp` out of a container, `scp` from a remote host, and `yq -i`.
+**Routes found by audit** rather than from memory, by reading the commands this environment's permission rules already allow. They are `sort -o`, `split`/`csplit`, and the compressors that replace their input (`gzip`, `bzip2`, `xz`, `zstd`, ... unless `-c`). Also `zip`, `docker cp` out of a container, `scp` from a remote host, and `yq -i`.
 
 The file content rides in the request and never exists on disk, so every path rule above misses them.
 

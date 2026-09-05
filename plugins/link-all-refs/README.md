@@ -2,7 +2,7 @@
 
 A turn does not end while its closing message names something the reader cannot click.
 
-A pull request number, a commit SHA, a branch, a GitHub URL: each one is a markdown link, or the Stop hook refuses the stop and says which token is bare.
+A pull request number, a commit SHA, a branch, a GitHub URL: each one is a markdown link. If one is bare, the Stop hook refuses the stop and names it.
 
 ```
 Do not stop here. This message names things the user cannot click:

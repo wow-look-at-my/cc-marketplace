@@ -48,7 +48,7 @@ To rebuild it now, run the hook binary directly:
 
 It prints what it indexed and everything it dropped.
 
-Requests go through the `gh` CLI when it is installed, so an existing `gh auth login` is enough. Otherwise it calls the API directly with `GH_TOKEN` or `GITHUB_TOKEN`, and without either it still sees public repositories.
+Requests go through the `gh` CLI when it is installed. An existing `gh auth login` is then enough. Otherwise it calls the API directly with `GH_TOKEN` or `GITHUB_TOKEN`, and without either it still sees public repositories.
 
 ## Limits
 

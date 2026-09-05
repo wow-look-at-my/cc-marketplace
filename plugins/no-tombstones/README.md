@@ -1,6 +1,6 @@
 # no-tombstones
 
-Refuses a write that adds a tombstone comment: prose about a state the code is no longer in, or an argument aimed at whoever reviews the diff.
+Refuses a write that adds a tombstone comment. A tombstone is prose about a state the code is no longer in, or an argument aimed at the reviewer.
 
 ```
 blocked: this write adds a tombstone comment to internal/darwin/syscall.go.

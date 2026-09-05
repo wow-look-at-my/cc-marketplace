@@ -46,10 +46,10 @@ Ask for what a source answer has to carry, or it is not worth the round trip:
 
 - **Search for STRINGS, not identifiers.** Top-level names are mangled and differ between builds (`OHh`, `p7t`, `Cxt`).
 - **Beware the long lines** -- and do not mistake them for broken formatting. The file IS prettified. A formatter simply cannot break a single token. `rg -n pattern` prints the whole matched line, so pipe it (`| cut -c1-200`), prefer `rg -o` with a tight pattern, and keep `-C` small. Then read the interesting region with Read's `offset`/`limit` around the reported line.
-- Zod-shaped schemas read as `v.object({...})` / `v.strictObject({...})` with `.describe(...)` on each field — that is where config contracts live, and the `describe` text is often better than the published docs.
+- Zod-shaped schemas read as `v.object({...})` / `v.strictObject({...})` with `.describe(...)` on each field. That is where config contracts live. The `describe` text is often better than the published docs.
 - Feature gates show up as small guard calls near a subsystem's init. Env-var names and flag strings nearby tell you how a feature is turned off.
 - Cross-check a claim in a SECOND place (the schema plus its consumer) before reporting it as fact. A schema that accepts a field proves nothing about the code path honoring it — 2.1.220 accepts `transport: "socket"` for LSP servers and spawns stdio regardless.
 
 ## What this is good for
 
-Anything the docs leave vague or unstated: exact plugin manifest schemas, hook event payloads and exit-code semantics, how diagnostics or attachments are injected and what caps apply to them, settings keys and their defaults, which LSP methods the client actually calls, tool descriptions and gating, telemetry names, what a specific error message means and what emits it.
+Anything the docs leave vague or unstated: exact plugin manifest schemas, hook event payloads and exit-code semantics. How diagnostics or attachments are injected, and what caps apply to them. Settings keys and their defaults, and which LSP methods the client actually calls. Tool descriptions and gating, telemetry names, and what a specific error message means.

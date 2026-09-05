@@ -25,7 +25,7 @@ CI re-fetches them on every build of this plugin, so a published release always 
 
 ## Hook
 
-A `PreToolUse` hook names the matching skill when a call is about to touch a Dockerfile or a Compose file, because a description only helps once you decide to go looking.
+A `PreToolUse` hook names the matching skill when a call is about to touch a Dockerfile or a Compose file. A description only helps once you decide to go looking.
 
 It reminds once per session per skill, and never blocks anything.
 

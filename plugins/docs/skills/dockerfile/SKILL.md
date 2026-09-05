@@ -20,7 +20,7 @@ grep -n "unpack\|--checksum" reference/dockerfile.md  # one flag, everywhere it 
 grep -n "^## " reference/dockerfile.md                # the instruction index
 ```
 
-Every instruction has its own `## NAME` heading: `FROM`, `RUN`, `CMD`, `LABEL`, `EXPOSE`, `ENV`, `ADD`, `COPY`, `ENTRYPOINT`, `VOLUME`, `USER`, `WORKDIR`, `ARG`, `ONBUILD`, `STOPSIGNAL`, `HEALTHCHECK`, `SHELL`, plus `Parser directives`, `Environment replacement`, `Shell and exec form`, and `Here-Documents`.
+Every instruction has its own `## NAME` heading: `FROM`, `RUN`, `CMD`, `LABEL`, `EXPOSE`, `ENV`, `ADD`, `COPY`, `ENTRYPOINT`, `VOLUME`, `USER`, `WORKDIR`, `ARG`, `ONBUILD`, `STOPSIGNAL`, `HEALTHCHECK`, `SHELL`. There are also headings for `Parser directives`, `Environment replacement`, `Shell and exec form`, and `Here-Documents`.
 
 ## Read this first
 
@@ -44,7 +44,7 @@ ADD --unpack=false my-archive.tar.gz .                           # local, keep p
 ADD local.tar.gz /opt/thing/                                     # local, extracted (default)
 ```
 
-The docs explicitly prefer `ADD` over hand-rolled `wget`/`curl` + `tar`: it produces a more precise build cache, and it supports checksum validation, which curl-and-untar does not.
+The docs explicitly prefer `ADD` over hand-rolled `wget`/`curl` + `tar`. It produces a more precise build cache. It also supports checksum validation, which curl-and-untar does not.
 
 Other `ADD` facts I under-use:
 

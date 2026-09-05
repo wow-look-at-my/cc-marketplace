@@ -12,7 +12,7 @@ Then I *justify* it — "an extensionless specifier can't resolve a `.ts`, so it
 
 **Node has run TypeScript by stripping types since v22.18.0 / v23.6.0, on by default. It is stable as of v24.12.0 / v25.2.0.** No flag, no loader, no build step. Check `node --version` before concluding anything about what a file has to be.
 
-Real cost of getting this wrong: an 81-line hand-written `.d.ts` shipped beside a `.js` module, duplicating types that nothing verified against the implementation — deleted the moment the file simply became `.ts`.
+Real cost of getting this wrong: an 81-line hand-written `.d.ts` shipped beside a `.js` module. It duplicated types that nothing verified against the implementation. It was deleted the moment the file became `.ts`.
 
 ## Type stripping in one paragraph
 

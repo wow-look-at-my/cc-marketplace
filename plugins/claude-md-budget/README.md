@@ -52,4 +52,4 @@ The three hooks above cover a live Claude Code session. A push from anything els
 printf '{"full_scan": true, "cwd": "%s"}' "$PWD" | claude-md-budget
 ```
 
-CI needs the same binary this plugin ships, fetched the same way it publishes (the `claude-md-budget#latest` orphan tag), not a hand-rolled reimplementation of the walk or the threshold -- a duplicate is exactly what drifts, and a drifted copy either misses a real violation or fails a build for no reason.
+CI needs the same binary this plugin ships, fetched the same way it publishes (the `claude-md-budget#latest` orphan tag), not a hand-rolled reimplementation of the walk or the threshold. A duplicate is exactly what drifts. A drifted copy either misses a real violation or fails a build for no reason.
