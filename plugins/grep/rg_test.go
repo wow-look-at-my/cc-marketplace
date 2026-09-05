@@ -73,7 +73,9 @@ func TestRunnerOutputCapKillsAndResolvesPartial(t *testing.T) {
 func TestRunnerExitOneMeansNoMatches(t *testing.T) {
 	fake := writeFakeRg(t, "exit 1")
 	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
-	assert.False(t, err != nil || len(lines) != 0)
+	require.NoError(t, err)
+
+	assert.Empty(t, lines)
 
 }
 
@@ -156,7 +158,9 @@ func TestRunnerEAGAINRetriesSingleThreaded(t *testing.T) {
 func TestRunnerEAGAINRetriesOnlyOnce(t *testing.T) {
 	fake := writeFakeRg(t, "echo 'rg: os error 11' >&2; exit 2")
 	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
-	assert.False(t, err != nil || len(lines) != 0)
+	require.NoError(t, err)
+
+	assert.Empty(t, lines)
 
 }
 
@@ -173,7 +177,9 @@ func TestResolveRipgrepPrefersOverride(t *testing.T) {
 	fake := writeFakeRg(t, "exit 0")
 	t.Setenv("RIPGREP_PATH", fake)
 	got, err := resolveRipgrep()
-	assert.False(t, err != nil || got != fake)
+	require.NoError(t, err)
+
+	assert.Equal(t, fake, got)
 
 }
 
