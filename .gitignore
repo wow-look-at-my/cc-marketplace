@@ -34,6 +34,11 @@ build/
 # a copy in the tree is a second source of truth that goes stale in silence.
 plugins/common-checks/vendor/
 
+# The upstream Docker reference, refetched by the docs plugin's prebuild on
+# every build. Same rule as above: the build never reads the committed copy, so
+# a copy in the tree only goes stale and gets linted as prose this repo wrote.
+plugins/docs/skills/*/reference/
+
 # The bundled server and its launcher. Not build/, because release-plugin
 # requires every file there to be a fat APE and this plugin ships no Go.
 plugins/common-checks/server/
