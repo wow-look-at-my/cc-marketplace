@@ -66,7 +66,25 @@ func ensureJq() (string, error) {
 	if err := downloadExecutable(url, bin); err != nil {
 		return "", err
 	}
+	if err := checkRuns(bin); err != nil {
+		os.Remove(bin)
+		return "", err
+	}
 	return bin, nil
+}
+
+// checkRuns proves the fetched binary executes before any test depends on
+// it. Without this a download that lands something unusable -- an error page
+// served as the asset, a truncated body, a binary for the wrong platform --
+// is discovered as a tool call returning an error, which every jq test then
+// reports as its own assertion failing. That sends the reader to the test
+// rather than to the download.
+func checkRuns(bin string) error {
+	out, err := exec.Command(bin, "--version").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("fetched jq at %s does not run: %w (output: %s)", bin, err, out)
+	}
+	return nil
 }
 
 // jqReleaseAsset names the single-file binary for this platform. jq ships
