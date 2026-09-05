@@ -8,7 +8,7 @@ help:
 prebuild:
     cd ../.. && npx tsx .github/scripts/vendor-common-checks/main.ts
     cd ../.. && npx tsx --test plugins/common-checks/src/*.test.ts
-    mkdir -p build
-    cd ../.. && npx esbuild plugins/common-checks/src/server.ts --bundle --platform=node --target=node18 --format=cjs --outfile=plugins/common-checks/build/server.cjs
-    cp launcher.sh build/common-checks-lsp
-    chmod +x build/common-checks-lsp
+    mkdir -p server
+    cd ../.. && npx esbuild plugins/common-checks/src/server.ts --bundle --platform=node --target=node18 --format=cjs --outfile=plugins/common-checks/server/server.cjs
+    cp launcher.sh server/common-checks-lsp
+    chmod +x server/common-checks-lsp

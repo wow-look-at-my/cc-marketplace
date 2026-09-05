@@ -33,3 +33,7 @@ build/
 # Fetched from wow-look-at-my/actions by the plugin's prebuild. Never committed:
 # a copy in the tree is a second source of truth that goes stale in silence.
 plugins/common-checks/vendor/
+
+# The bundled server and its launcher. Not build/, because release-plugin
+# requires every file there to be a fat APE and this plugin ships no Go.
+plugins/common-checks/server/

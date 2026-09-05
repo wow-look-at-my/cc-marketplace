@@ -1,6 +1,6 @@
 {
   "common-checks": {
-    "command": "${CLAUDE_PLUGIN_ROOT}/build/common-checks-lsp",
+    "command": "${CLAUDE_PLUGIN_ROOT}/server/common-checks-lsp",
     "extensionToLanguage": {
       ".yml": "yaml",
       ".yaml": "yaml",
