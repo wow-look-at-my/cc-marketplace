@@ -96,7 +96,7 @@ For plugins in this repository:
 }
 ```
 
-With `pluginRoot: "./plugins"` set in metadata, you can shorten this to:
+With `pluginRoot: "./plugins"` set in metadata. You can shorten this to:
 
 ```json
 {
@@ -153,7 +153,7 @@ For plugins published to npm:
 
 ## Removing a Plugin
 
-Delete the plugin entry from the `plugins` array. Optionally delete the plugin directory if it's local.
+Delete the plugin entry from the `plugins` array. Optionally delete the plugin directory if it is local.
 
 ## Updating a Plugin
 

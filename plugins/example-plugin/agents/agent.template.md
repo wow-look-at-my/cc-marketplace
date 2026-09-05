@@ -3,7 +3,7 @@
 # Rename this file to your-agent.md (removing .template.)
 #
 # Agents are specialized assistants that Claude can delegate tasks to.
-# Define when this agent should be used in the description.
+# Define when this agent must be used in the description.
 
 name: your-agent-name
 description: When to use this agent. Claude reads this to decide whether to delegate tasks to it.
@@ -35,7 +35,7 @@ You are a specialized agent for [describe purpose].
 
 ## Your Role
 
-[Describe what this agent does and when it should be used]
+[Describe what this agent does and when it must be used]
 
 ## Guidelines
 
@@ -45,4 +45,4 @@ You are a specialized agent for [describe purpose].
 
 ## Output Format
 
-[Describe how the agent should format its output]
+[Describe how the agent must format its output]
