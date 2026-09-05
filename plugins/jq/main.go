@@ -21,6 +21,20 @@ type jqTools struct {
 	path string
 }
 
+// register binds the two handlers to a server constructed by the caller.
+func (j jqTools) register(server *mcp.Server) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "jq",
+		Description: "Run a jq expression against a JSON file or inline JSON string. Returns the filtered/transformed result as text. Cannot write to files.",
+	}, j.runJq)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "jq_read",
+		Description: "Read and pretty-print a JSON file. Returns formatted JSON content.",
+	}, j.readJson)
+}
+
+const jqMissingMsg = "jq is not installed. Install it with: apt install jq (Linux) or brew install jq (macOS)"
+
 type JqArgs struct {
 	Filter    string `json:"filter" jsonschema:"The jq filter expression to apply (e.g. '.name', '.[] | select(.age > 30)', 'keys')"`
 	File      string `json:"file,omitempty" jsonschema:"Path to a JSON file to read as input. Provide exactly one of file or input."`
@@ -35,7 +49,7 @@ type JqReadArgs struct {
 
 func (j jqTools) runJq(ctx context.Context, _ *mcp.CallToolRequest, args JqArgs) (*mcp.CallToolResult, any, error) {
 	if j.path == "" {
-		return errorResult("jq is not installed. Install it with: apt install jq (Linux) or brew install jq (macOS)"), nil, nil
+		return errorResult(jqMissingMsg), nil, nil
 	}
 
 	hasFile := args.File != ""
@@ -94,7 +108,7 @@ func (j jqTools) runJq(ctx context.Context, _ *mcp.CallToolRequest, args JqArgs)
 
 func (j jqTools) readJson(ctx context.Context, _ *mcp.CallToolRequest, args JqReadArgs) (*mcp.CallToolResult, any, error) {
 	if j.path == "" {
-		return errorResult("jq is not installed. Install it with: apt install jq (Linux) or brew install jq (macOS)"), nil, nil
+		return errorResult(jqMissingMsg), nil, nil
 	}
 
 	data, err := os.ReadFile(args.File)
@@ -145,15 +159,7 @@ func newServer(tools jqTools) *mcp.Server {
 		Version: "1.0.0",
 	}, nil)
 
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jq",
-		Description: "Run a jq expression against a JSON file or inline JSON string. Returns the filtered/transformed result as text. Cannot write to files.",
-	}, tools.runJq)
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jq_read",
-		Description: "Read and pretty-print a JSON file. Returns formatted JSON content.",
-	}, tools.readJson)
+	tools.register(server)
 
 	return server
 }

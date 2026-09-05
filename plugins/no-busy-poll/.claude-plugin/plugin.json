@@ -1,7 +1,7 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "no-busy-poll",
-	"description": "Refuses to end a turn that is the latest in a run of several turns which each made the exact same tool call, closely spaced in time, with nothing else different in between. Catches a manual polling loop (re-checking a PR, a CI run, a status) that burns tokens for zero new signal instead of waiting for a real event or an actually-scheduled wakeup",
+	"description": "Stops a session burning tokens on status checks that cannot learn anything. Denies a read of a pull request or commit whose state this session already watched settle, or that it already read with no user message, wake event or push since -- keyed on the subject, so re-asking through a different tool is still a repeat. Also refuses to end a turn that is the latest in a run of identical, closely-spaced turns",
 	"author": {
 		"name": "mhaynie"
 	},
@@ -9,6 +9,17 @@
 	"hooks": {
 		"Stop": [
 			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-busy-poll"
+					}
+				]
+			}
+		],
+		"PreToolUse": [
+			{
+				"matcher": "*",
 				"hooks": [
 					{
 						"type": "command",

@@ -13,9 +13,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -127,7 +127,7 @@ var vcsExclusions = []string{".git", ".svn", ".hg", ".bzr", ".jj", ".sl"}
 // number params (tE, 2.1.116:cli.js:286087-286094).
 var numericStringRe = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
-var grepOutputModes = []string{modeContent, modeFilenamesWithMatches, modeFilenames, modeCount}
+var grepOutputModes = set.Of[string](modeContent, modeFilenamesWithMatches, modeFilenames, modeCount)
 
 type grepArgs struct {
 	pattern    string
@@ -242,7 +242,7 @@ func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rpcError) {
 			case "glob":
 				a.globPat = s
 			default: // output_mode
-				if !slices.Contains(grepOutputModes, s) {
+				if !grepOutputModes.Contains(s) {
 					return invalid(`%s output_mode must be one of "content", "filenames_with_matches", "filenames", "count"`, grepToolName)
 				}
 				a.mode = s
