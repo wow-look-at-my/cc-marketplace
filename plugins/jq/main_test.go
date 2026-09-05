@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -15,11 +19,101 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	path, err := exec.LookPath("jq")
-	if err == nil {
-		jqPath = path
+	path, err := ensureJq()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "jq bootstrap failed: %v\n", err)
+		os.Exit(1)
 	}
+	jqPath = path
 	os.Exit(m.Run())
+}
+
+// bootstrapJqVersion pins the jq the suite fetches when the machine has
+// none. jq is MIT licensed.
+const bootstrapJqVersion = "1.7.1"
+
+// ensureJq returns a jq to test against, fetching a pinned one when the
+// machine has none.
+//
+// Letting jqPath stay empty instead turns every tool call into "jq is not
+// installed", which is a valid answer the server really gives -- so the
+// suite does not error, it just asserts that answer against tests written
+// for a working jq, and reports a runner without jq as a bug in this
+// plugin. The runner image is not this suite's contract to depend on; the
+// sibling grep and glob plugins bootstrap a pinned ripgrep for the same
+// reason.
+func ensureJq() (string, error) {
+	if path, err := exec.LookPath("jq"); err == nil {
+		return path, nil
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	dir := filepath.Join(base, "cc-jq-plugin", "jq-"+bootstrapJqVersion)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	bin := filepath.Join(dir, "jq")
+	if _, err := os.Stat(bin); err == nil {
+		return bin, nil
+	}
+	asset, err := jqReleaseAsset()
+	if err != nil {
+		return "", err
+	}
+	url := "https://github.com/jqlang/jq/releases/download/jq-" + bootstrapJqVersion + "/" + asset
+	if err := downloadExecutable(url, bin); err != nil {
+		return "", err
+	}
+	return bin, nil
+}
+
+// jqReleaseAsset names the single-file binary for this platform. jq ships
+// one executable per platform rather than an archive, so there is nothing
+// to unpack.
+func jqReleaseAsset() (string, error) {
+	switch runtime.GOOS + "/" + runtime.GOARCH {
+	case "linux/amd64":
+		return "jq-linux-amd64", nil
+	case "linux/arm64":
+		return "jq-linux-arm64", nil
+	case "darwin/amd64":
+		return "jq-macos-amd64", nil
+	case "darwin/arm64":
+		return "jq-macos-arm64", nil
+	}
+	return "", fmt.Errorf("no pinned jq for %s/%s; install jq to run these tests", runtime.GOOS, runtime.GOARCH)
+}
+
+func downloadExecutable(url, dest string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET %s: %s", url, resp.Status)
+	}
+	// Written beside the destination and renamed, so a download killed part
+	// way through never leaves a truncated binary that later runs treat as
+	// a cache hit.
+	tmp, err := os.CreateTemp(filepath.Dir(dest), "jq-download-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := io.Copy(tmp, resp.Body); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), dest)
 }
 
 func connect(t *testing.T) *mcp.ClientSession {
