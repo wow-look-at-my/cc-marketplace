@@ -32,7 +32,7 @@ Naming the things is better than counting them anyway: the reader learns what th
 
 ## What makes it a count
 
-Two halves, and the second is what keeps this usable. The **frame** says the sentence is talking about what is here: a possessive (`this repo's`), a having verb (`it ships`, `there are`, `the plugin registers`), or a deictic pointing into the page (`the rules below`). The **quantity** is a cardinal governing a plural noun. Both together is an inventory the next commit falsifies.
+Two halves. The second is what keeps this usable. The **frame** says the sentence is talking about what is here: a possessive (`this repo's`), a having verb (`it ships`, `there are`, `the plugin registers`), or a deictic pointing into the page (`the rules below`). The **quantity** is a cardinal governing a plural noun. Both together is an inventory the next commit falsifies.
 
 A quantity with no frame is ordinary technical prose and passes: `pre-2.1.205 clients`, `ten diagnostics per file`, `the rule fired under five selectors`. So does a measurement inside a frame — `20 seconds`, `500 lines`, `40000 characters`, `3 attempts` are limits and sizes, still true after somebody adds a plugin.
 

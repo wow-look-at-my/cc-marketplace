@@ -6,11 +6,11 @@ description: Read before writing or editing a Dockerfile, Containerfile, dockerf
 
 Notes to self. Every line here was checked against the current Dockerfile reference (moby/buildkit `frontend/dockerfile/docs/reference.md`) and docs.docker.com's building best practices. Where my instincts and the docs disagree, **the docs win** - they always have, every single time this has come up.
 
-## The reference is vendored here - read it, don't recall it
+## The reference is vendored here - read it, do not recall it
 
 `reference/dockerfile.md` in this skill's folder is the **complete upstream Dockerfile reference**, verbatim, pinned to a commit named in its header (`reference/NOTICE.md` records the source and the Apache-2.0 license).
 
-The rest of this file is only the short list of things I get wrong. It is not a substitute for the reference, and it does not cover every instruction or flag.
+The rest of this file is only the short list of things I get wrong. It is not a substitute for the reference. It does not cover every instruction or flag.
 
 **Grep the reference before stating any specific fact** - a flag name, what a flag defaults to, which instruction accepts what, precedence between two instructions, whether a feature exists at all. Recalling one of those from training data is exactly how the errors below got written in the first place:
 
@@ -24,9 +24,9 @@ Every instruction has its own `## NAME` heading: `FROM`, `RUN`, `CMD`, `LABEL`, 
 
 ## Read this first
 
-**Start every Dockerfile with `# syntax=docker/dockerfile:1`.** Line 1, before anything, including comments. It makes BuildKit pull the latest stable frontend instead of the one bundled with the local engine. Without it, half of what follows silently doesn't exist. Parser directives must be at the very top - once any comment, blank line, or instruction is processed, BuildKit stops looking, and a later `# syntax=` line is just a comment.
+**Start every Dockerfile with `# syntax=docker/dockerfile:1`.** Line 1, before anything, including comments. It makes BuildKit pull the latest stable frontend instead of the one bundled with the local engine. Without it, half of what follows silently does not exist. Parser directives must be at the very top - once any comment, blank line, or instruction is processed, BuildKit stops looking, and a later `# syntax=` line is just a comment.
 
-Second directive worth knowing: `# check=error=true` turns build-check warnings into failures (pin the syntax version if you use it, or a future check will break the build). `# check=skip=JSONArgsRecommended,StageNameCasing` skips named checks; check names are Pascal case and case-sensitive. `docker build --check .` runs the checks without building.
+Second directive worth knowing: `# check=error=true` turns build-check warnings into failures (pin the syntax version if you use it, or a future check will break the build). `# check=skip=JSONArgsRecommended,StageNameCasing` skips named checks. Check names are Pascal case and case-sensitive. `docker build --check .` runs the checks without building.
 
 ## ADD - the one I get wrong every time
 
@@ -48,18 +48,18 @@ The docs explicitly prefer `ADD` over hand-rolled `wget`/`curl` + `tar`: it prod
 
 Other `ADD` facts I under-use:
 
-- `--checksum=sha256:<hash>` verifies an HTTP source; for a Git source the checksum is the commit SHA (full or a prefix). Use it.
+- `--checksum=sha256:<hash>` verifies an HTTP source. For a Git source the checksum is the commit SHA (full or a prefix). Use it.
 - Git repositories are first-class sources: `ADD git@github.com:moby/buildkit.git#v0.14.1:docs /buildkit-docs` - the fragment is `#<ref>:<subdir>`. `.git` is stripped unless `--keep-git-dir=true`. SSH sources need `docker build --ssh default`.
 - Remote URL files land with mode `0600`. `ADD` itself has no auth flag - use the `HTTP_AUTH_HEADER_<host>` / `HTTP_AUTH_TOKEN_<host>` build secrets, or fall back to `RUN curl` inside the container.
-- Trailing slash on the destination is significant: `ADD x.txt /abs` writes a *file* named `/abs`; `ADD x.txt /abs/` writes `/abs/x.txt`.
+- Trailing slash on the destination is significant: `ADD x.txt /abs` writes a *file* named `/abs`. `ADD x.txt /abs/` writes `/abs/x.txt`.
 - Also supports `--chmod`, `--chown`, `--link`, `--exclude` (same semantics as `COPY`).
 
 ## COPY
 
 - `COPY --from=` takes a **stage name, a named build context, or an image reference**. `COPY --from=nginx:latest /etc/nginx/nginx.conf /nginx.conf` is legal and useful. Source paths in `--from` always resolve from the filesystem root of that stage/image.
-- **`--link` is recommended by default.** It puts the copied files on their own layer that doesn't get invalidated when earlier layers change, which is exactly what makes `COPY --from` in multi-stage builds cache well. Only skip it when the destination path contains a symlink that must be followed (with `--link`, the destination path is always plain directories).
+- **`--link` is recommended by default.** It puts the copied files on their own layer that does not get invalidated when earlier layers change, which is exactly what makes `COPY --from` in multi-stage builds cache well. Only skip it when the destination path contains a symlink that must be followed (with `--link`. The destination path is always plain directories).
 - `--chmod` accepts **symbolic notation** since v1.14, not just octal: `COPY --chmod=u=rwX,go=rX . /app/` (capital `X` = executable only if a directory or already executable). `--chmod`/`--chown` are unsupported for Windows containers.
-- `--parents` (v1.20) preserves source directory structure; `./x/./y/*.txt` pivots on the `./` marker like rsync's `--relative`. `**` matches any number of path components.
+- `--parents` (v1.20) preserves source directory structure. `./x/./y/*.txt` pivots on the `./` marker like rsync's `--relative`. `**` matches any number of path components.
 - `--exclude=<pattern>` (v1.19), repeatable.
 - Wildcards use Go `filepath.Match` rules. Escape brackets Go-style: `arr[[]0].txt`.
 - Heredoc source creates files inline - no `RUN echo > file` needed:
@@ -70,7 +70,7 @@ hello world
 EOF
 ```
 
-Quote the delimiter (`<<-"EOT"`) to stop build-time variable expansion; use `<<-` to strip leading tabs.
+Quote the delimiter (`<<-"EOT"`) to stop build-time variable expansion. Use `<<-` to strip leading tabs.
 
 ## ADD vs COPY, decided
 
@@ -83,11 +83,11 @@ RUN --mount=type=bind,source=requirements.txt,target=/tmp/requirements.txt \
     pip install --requirement /tmp/requirements.txt
 ```
 
-The docs say bind mounts are more efficient than `COPY` for this, and the file leaves no trace in the image.
+The docs say bind mounts are more efficient than `COPY` for this. The file leaves no trace in the image.
 
 ## RUN and its flags
 
-Shell form and exec form; shell form is normal for `RUN`. Options:
+Shell form and exec form. Shell form is normal for `RUN`. Options:
 
 | Flag | Since | Notes |
 |---|---|---|
@@ -107,7 +107,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get --no-install-recommends install -y gcc
 ```
 
-`sharing=locked` because apt needs exclusive access (`shared` is the default; `private` forks a new mount per concurrent writer). Do **not** also `rm -rf /var/lib/apt/lists/*` in this shape - that fights the cache mount. The `rm -rf` cleanup belongs to the *non*-cache-mount style. Cache contents are never guaranteed; the build must work with an empty cache.
+`sharing=locked` because apt needs exclusive access (`shared` is the default. `private` forks a new mount per concurrent writer). Do **not** also `rm -rf /var/lib/apt/lists/*` in this shape - that fights the cache mount. The `rm -rf` cleanup belongs to the *non*-cache-mount style. Cache contents are never guaranteed. The build must work with an empty cache.
 
 Secrets - never `ARG` a token:
 
@@ -116,7 +116,7 @@ RUN --mount=type=secret,id=API_KEY,env=API_KEY some-command --token-from-env $AP
 RUN --mount=type=secret,id=aws,target=/root/.aws/credentials aws s3 cp s3://... ...
 ```
 
-`env=` (mounts as an env var instead of a file) is v1.10+. `required=true` errors when the secret is missing. Default file mode `0400`, default path `/run/secrets/<id>`. Secret *contents* are not part of the cache key - changing a secret does not bust the cache; add a throwaway `ARG CACHEBUST` if a rebuild is needed.
+`env=` (mounts as an env var instead of a file) is v1.10+. `required=true` errors when the secret is missing. Default file mode `0400`, default path `/run/secrets/<id>`. Secret *contents* are not part of the cache key - changing a secret does not bust the cache. Add a throwaway `ARG CACHEBUST` if a rebuild is needed.
 
 `RUN` cache is never invalidated by the outside world. `RUN apk add curl` a week later still returns the cached layer. Bust it with `--no-cache`, `--no-cache-filter <stage>`, `docker builder prune`, or by changing an earlier layer.
 
@@ -130,13 +130,13 @@ RUN <<EOT bash
 EOT
 ```
 
-If the heredoc has a shebang, that interpreter is used.
+If the heredoc has a shebang. That interpreter is used.
 
 Pipes: `/bin/sh -c` only checks the exit code of the last stage, so `RUN a | b` succeeds when `a` fails. Prefix `set -o pipefail &&`, and on Debian's `dash` use exec form with bash explicitly.
 
 ## ENTRYPOINT and CMD
 
-Use **exec form (JSON array, double quotes only)** for both. Shell form wraps the command in `/bin/sh -c`, so the process isn't PID 1, gets no `SIGTERM` from `docker stop`, and takes ~10s plus a SIGKILL to die. The `JSONArgsRecommended` build check flags this.
+Use **exec form (JSON array, double quotes only)** for both. Shell form wraps the command in `/bin/sh -c`. The process is not PID 1, gets no `SIGTERM` from `docker stop`, and takes ~10s plus a SIGKILL to die. The `JSONArgsRecommended` build check flags this.
 
 Shell-form `ENTRYPOINT` **ignores `CMD` and any `docker run` arguments entirely.** The interaction table:
 
@@ -160,29 +160,29 @@ Need shell features (globs, pipes, `&&`) at runtime? Write an entrypoint script 
 - `ENV` persists into the final image *and* into the layer it was set on - a later `RUN unset X` does not scrub it. Set-use-unset within one `RUN` instead, or use `ARG`.
 - Automatic platform args exist in global scope and need re-declaring per stage: `TARGETPLATFORM`, `TARGETOS`, `TARGETARCH`, `TARGETVARIANT`, `BUILDPLATFORM`, `BUILDOS`, `BUILDARCH`, `BUILDVARIANT`.
 - Proxy args (`HTTP_PROXY`, `NO_PROXY`, `ALL_PROXY`, lower-case variants, ...) are predefined, excluded from `docker history`, and cache-exempt unless explicitly re-declared with `ARG`.
-- Bash-style modifiers work in the builder: `${VAR:-default}`, `${VAR-default}`, `${VAR:+alt}`, `${VAR+alt}`. Pattern operators (`${var#pat}`, `${var/a/b}`) are **pre-release only** (`docker/dockerfile-upstream:master`) - don't reach for them.
+- Bash-style modifiers work in the builder: `${VAR:-default}`, `${VAR-default}`, `${VAR:+alt}`, `${VAR+alt}`. Pattern operators (`${var#pat}`, `${var/a/b}`) are **pre-release only** (`docker/dockerfile-upstream:master`) - do not reach for them.
 - Substitution happens only in `ADD`, `COPY`, `ENV`, `EXPOSE`, `FROM`, `LABEL`, `STOPSIGNAL`, `USER`, `VOLUME`, `WORKDIR`, and `ONBUILD` wrapping one of those. In `RUN`/`CMD`/`ENTRYPOINT` the *shell* does it - which means exec form does no substitution at all. `RUN ["echo", "$HOME"]` prints the literal string.
 
 ## Everything else worth not getting wrong
 
 - **`MAINTAINER` is deprecated.** Use `LABEL org.opencontainers.image.authors="..."`.
 - `EXPOSE` publishes nothing. It is documentation plus a target for `docker run -P`. `EXPOSE 80/udp` needs its own line alongside `EXPOSE 80/tcp`. IP addresses and host-port mappings in `EXPOSE` are invalid and will become an error.
-- `WORKDIR` should always be absolute; relative paths stack onto the previous `WORKDIR`, and a base image may set one you didn't expect (`WorkdirRelativePath` check). It creates the directory if missing.
-- `VOLUME`: the old lore "changes to a volume path after `VOLUME` are discarded" is **legacy-builder behavior**. Under BuildKit the changes are kept. Still can't specify a host path - that's runtime-only.
-- `USER`: give an explicit UID/GID if it matters (allocation order isn't stable across rebuilds). `useradd --no-log-init` avoids the sparse-file disk-exhaustion bug for large UIDs. Avoid `sudo`; use `gosu` if root-then-drop is needed.
-- `HEALTHCHECK` options: `--interval` (30s), `--timeout` (30s), `--start-period` (0s), `--start-interval` (5s, needs Engine 25.0+), `--retries` (3). One per Dockerfile; `HEALTHCHECK NONE` disables an inherited one. Exit 0 healthy, 1 unhealthy, 2 reserved.
+- `WORKDIR` must always be absolute. Relative paths stack onto the previous `WORKDIR`, and a base image may set one you did not expect (`WorkdirRelativePath` check). It creates the directory if missing.
+- `VOLUME`: the old lore "changes to a volume path after `VOLUME` are discarded" is **legacy-builder behavior**. Under BuildKit the changes are kept. Still cannot specify a host path - that is runtime-only.
+- `USER`: give an explicit UID/GID if it matters (allocation order is not stable across rebuilds). `useradd --no-log-init` avoids the sparse-file disk-exhaustion bug for large UIDs. Avoid `sudo`. Use `gosu` if root-then-drop is needed.
+- `HEALTHCHECK` options: `--interval` (30s), `--timeout` (30s), `--start-period` (0s), `--start-interval` (5s, needs Engine 25.0+), `--retries` (3). One per Dockerfile. `HEALTHCHECK NONE` disables an inherited one. Exit 0 healthy, 1 unhealthy, 2 reserved.
 - `STOPSIGNAL` affects `docker stop` only, not Ctrl+C (which sends SIGINT directly).
-- `LABEL`: combining labels into one instruction stopped mattering after Docker 1.10. Use double quotes - single quotes suppress interpolation. Labels from a stage that is only referenced via `COPY --from`/`RUN --mount=from=` are **not** inherited; only the final `FROM` chain contributes.
-- `ONBUILD` can't chain (`ONBUILD ONBUILD`) and can't trigger `FROM`/`MAINTAINER`. Since v1.11 it may carry `COPY --from`/`RUN --mount=from=`.
+- `LABEL`: combining labels into one instruction stopped mattering after Docker 1.10. Use double quotes - single quotes suppress interpolation. Labels from a stage that is only referenced via `COPY --from`/`RUN --mount=from=` are **not** inherited. Only the final `FROM` chain contributes.
+- `ONBUILD` cannot chain (`ONBUILD ONBUILD`) and cannot trigger `FROM`/`MAINTAINER`. Since v1.11 it may carry `COPY --from`/`RUN --mount=from=`.
 - `SHELL` must be JSON form. Linux default `["/bin/sh","-c"]`, Windows `["cmd","/S","/C"]`.
 - Windows: `# escape=\`` ` as the first line, because `\` is the path separator.
 - Multi-stage: BuildKit only builds stages the `--target` actually depends on (the legacy builder built everything up to the target). `FROM <earlier-stage>` to branch.
-- Pin base images with a tag **and** a digest (`FROM alpine:3.21@sha256:...`) when supply chain matters. `docker build --pull` refreshes the base image; `docker build --no-cache` re-executes layers. They are different flags for different jobs and compose fine together.
+- Pin base images with a tag **and** a digest (`FROM alpine:3.21@sha256:...`) when supply chain matters. `docker build --pull` refreshes the base image. `docker build --no-cache` re-executes layers. They are different flags for different jobs and compose fine together.
 - `ADD`/`COPY` cache checksums come from file metadata but **ignore `mtime`**. Every other instruction is cached on the instruction string alone.
 - `SOURCE_DATE_EPOCH` participates in `WORKDIR` cache validity - a per-commit value breaks the cache from that point on.
-- `.dockerignore` keeps the context small; the `CopyIgnoredFile` check catches copying something the ignore file excluded.
-- Sort multi-line package lists alphanumerically; combine `apt-get update && apt-get install` in one `RUN` (separate `RUN`s produce a stale-index cache bug). `--no-install-recommends` always. Official Debian/Ubuntu images already run `apt-get clean`, so don't add it.
+- `.dockerignore` keeps the context small. The `CopyIgnoredFile` check catches copying something the ignore file excluded.
+- Sort multi-line package lists alphanumerically. Combine `apt-get update && apt-get install` in one `RUN` (separate `RUN`s produce a stale-index cache bug). `--no-install-recommends` always. Official Debian/Ubuntu images already run `apt-get clean`, so do not add it.
 
-## Before saying it's done
+## Before saying it is done
 
 Run `docker build --check .` if a daemon is available. It catches stage-name casing, `FROM ... as` casing, JSON args, legacy key/value, undefined vars, undeclared `ARG` in `FROM`, secrets in `ARG`/`ENV`, duplicate/reserved stage names, redundant `--platform=$TARGETPLATFORM`, empty continuation lines, and more - cheaply, and without guessing.

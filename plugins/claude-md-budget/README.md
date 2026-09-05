@@ -2,7 +2,7 @@
 
 Keeps `CLAUDE.md` and `@`-imported snippets inside the character budget every request pays for.
 
-Claude Code loads every instruction file **verbatim** into the prompt, and nothing truncates them — the only hard cap skips a file over 4 MiB entirely. So an oversized `CLAUDE.md` isn't cut off, it's billed in full on every request for the life of the session. The CLI does warn, but only in the terminal UI: never on the web surface, and never to the model.
+Claude Code loads every instruction file **verbatim** into the prompt, and nothing truncates them — the only hard cap skips a file over 4 MiB entirely. So an oversized `CLAUDE.md` is not cut off. It is billed in full on every request for the life of the session. The CLI does warn, but only in the terminal UI: never on the web surface, and never to the model.
 
 | Hook | When | What it does |
 |---|---|---|
@@ -18,13 +18,13 @@ Claude Code loads every instruction file **verbatim** into the prompt, and nothi
 
 Characters, not bytes — so `wc -c` overstates any file with non-ASCII text.
 
-The three are independent, and each report says which one fired. A file that is only unwrapped is reported as a width problem and told to wrap; it is never described as being at the budget wall, and it is never handed the extraction advice, because it has nothing to extract. A guard that overstates the finding gets skimmed on the run where the number is real.
+The three are independent, and each report says which one fired. A file that is only unwrapped is reported as a width problem and told to wrap. It is never described as being at the budget wall. It is never handed the extraction advice, because it has nothing to extract. A guard that overstates the finding gets skimmed on the run where the number is real.
 
 ## Why it watches files, not tool calls
 
 `tool_input.file_path` exists only for `Write`, `Edit` and `MultiEdit`. A `CLAUDE.md` rewritten through Bash — a heredoc, `sed -i`, `tee`, a formatter — names no path, so a check keyed on that field measures nothing and the Stop gate gets an empty list. That is not hypothetical: it is how a session edited an over-budget `CLAUDE.md` a dozen times while the guard said nothing.
 
-So the sweep diffs a size+mtime snapshot of the candidate files after every tool call. Watching the files is the only version of this that can't be walked around by choosing a different tool.
+So the sweep diffs a size+mtime snapshot of the candidate files after every tool call. Watching the files is the only version of this that cannot be walked around by choosing a different tool.
 
 ## Why a plugin and not a config hook
 
@@ -32,7 +32,7 @@ Config is installed once, when an environment is built, so a container whose sna
 
 ## The Stop gate can insist, but never wedge
 
-It fires once per `(file, content)`. A file left exactly as the gate found it never blocks twice — that's what makes a hard block safe. But a file this session touches and *still* leaves broken is a new violation and blocks again, as is a second file. Blocking once per session was the other half of what made the original guard ignorable: one nag bought silence for everything after it.
+It fires once per `(file, content)`. A file left exactly as the gate found it never blocks twice — that is what makes a hard block safe. But a file this session touches and *still* leaves broken is a new violation and blocks again, as is a second file. Blocking once per session was the other half of what made the original guard ignorable: one nag bought silence for everything after it.
 
 `stop_hook_active` is honored, and every error path fails open.
 

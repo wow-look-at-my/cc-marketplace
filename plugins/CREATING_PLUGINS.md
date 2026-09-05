@@ -132,7 +132,7 @@ See `example-plugin/.mcp.template.json` for a full example.
 
 ### Build Script (`justfile`)
 
-If your plugin needs custom steps before or after the build, create a `justfile` with only the recipes you need. Only include `prebuild` and/or `postbuild` if they do real work — don't add a justfile at all if neither is needed.
+If your plugin needs custom steps before or after the build, create a `justfile` with only the recipes you need. Only include `prebuild` and/or `postbuild` if they do real work — do not add a justfile at all if neither is needed.
 
 ```just
 [private]
@@ -171,7 +171,7 @@ When you push to any branch, CI will:
 5. Update `marketplace.json` with the new version
 6. Smoke-test the published marketplace by driving real Claude Code to `claude plugin marketplace add` + `install` + `update` **every** plugin (the `smoke-test` job in `release.yml`). Because Claude installs all plugins into a single shared npm prefix, one unreachable tarball fails the run — this guards against a plugin's published artifact going missing (e.g. a stale registry URL).
 
-**You don't need to manually edit marketplace.json** - CI handles it automatically.
+**You do not need to manually edit marketplace.json** - CI handles it automatically.
 
 ## Build & Release Process
 

@@ -14,9 +14,9 @@ if (a.behavior === "deny") { ...; return a; }
 let y = QdE(t, i, l, n, c)   // -> executePermissionRequestHooks
 ```
 
-`QdE` is the only caller of `executePermissionRequestHooks`, and everything it produces is tagged `decideLocation: "ask-path"`. So a `PermissionRequest` hook gets a vote **only when the permission engine has already landed on "ask"**.
+`QdE` is the only caller of `executePermissionRequestHooks`. Everything it produces is tagged `decideLocation: "ask-path"`. So a `PermissionRequest` hook gets a vote **only when the permission engine has already landed on "ask"**.
 
-Anything that resolves the call earlier silences it. `defaultMode: "auto"` is exactly that: the auto-mode classifier answers "allow" before the ask path is reached. For as long as `PermissionRequest` was this plugin's only registration, every deny rule in `rules.xml` was dead under that mode — `python3 -c "print(1)"` ran with no prompt, while feeding the binary a synthetic `PermissionRequest` payload for the same command returned a correct deny. The rules were right; nothing ever asked them.
+Anything that resolves the call earlier silences it. `defaultMode: "auto"` is exactly that: the auto-mode classifier answers "allow" before the ask path is reached. For as long as `PermissionRequest` was this plugin's only registration, every deny rule in `rules.xml` was dead under that mode — `python3 -c "print(1)"` ran with no prompt, while feeding the binary a synthetic `PermissionRequest` payload for the same command returned a correct deny. The rules were right. Nothing ever asked them.
 
 ## PreToolUse fires unconditionally
 
@@ -44,7 +44,7 @@ The CLI rejects a payload whose `hookEventName` does not match the event it disp
   "decision":{"behavior":"deny","message":"..."}}}
 ```
 
-`outputDecision` branches on the event for this reason. The stdin payloads are otherwise near-identical (`tool_name`, `tool_input`, `session_id`, `cwd`, `permission_mode`, …); `PreToolUse` adds `tool_use_id`, `PermissionRequest` adds `permission_suggestions`. Neither is read here.
+`outputDecision` branches on the event for this reason. The stdin payloads are otherwise near-identical (`tool_name`, `tool_input`, `session_id`, `cwd`, `permission_mode`, …). `PreToolUse` adds `tool_use_id`, `PermissionRequest` adds `permission_suggestions`. Neither is read here.
 
 ## Both can run for one call
 

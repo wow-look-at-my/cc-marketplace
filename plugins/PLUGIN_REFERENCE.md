@@ -144,7 +144,7 @@ Located in `agents/` directory. Each `.md` file defines a subagent.
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
 | `name` | Yes | string | Unique identifier (lowercase, hyphens) |
-| `description` | Yes | string | When Claude should use this agent |
+| `description` | Yes | string | When Claude must use this agent |
 | `tools` | No | string\|array | Available tools (inherits all if omitted) |
 | `disallowedTools` | No | string\|array | Tools to remove from available set |
 | `model` | No | string | `sonnet`, `opus`, `haiku`, or `inherit` |

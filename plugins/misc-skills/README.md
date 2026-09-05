@@ -14,7 +14,7 @@ Runs a full improvement pass: read the code end to end, find everything worth fi
 
 The final report separates what was fixed, what was found and deliberately left, what was read and found healthy, and what was not covered — so two models' passes over the same repo can actually be compared.
 
-Manual only (`disable-model-invocation: true`). It kicks off a large sweep, so it runs when you ask for it and never on its own.
+Manual only (`disable-model-invocation: true`). It kicks off a large sweep. It runs when you ask for it and never on its own.
 
 ```
 /misc-skills:new_model_pass                 # whole repo

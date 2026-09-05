@@ -22,7 +22,7 @@ only two:
 
 ## The way out
 
-Either settle it yourself -- from the code, the docs, or a sensible default -- and say what you assumed; or call `AskUserQuestion` with your recommendation first and labelled, each option describing what it costs and what it buys, and every open question batched into one call.
+Either settle it yourself -- from the code, the docs, or a sensible default -- and say what you assumed. Or call `AskUserQuestion` with your recommendation first and labelled, each option describing what it costs and what it buys, and every open question batched into one call.
 
 A turn that called `AskUserQuestion` may end however it likes. Prose beside a rendered card is commentary, not an offloaded decision. The check is per turn: a call in an earlier turn does not license a prose question now.
 
@@ -32,7 +32,7 @@ A dismissed or unanswered card is not a ban on asking. Ask again, better.
 
 A bare `?` is not enough on its own. Nullable types (`Int?`, `raw_args?`) and query strings (`.../compare/a...b?expand=1`) carry one and ask nothing, so links are stripped first and a question mark counts only when it ends its line or its sentence opens with an interrogative cue.
 
-Fenced code, indented code and blockquotes are exempt, so a question can be quoted or documented. Inline backticks are not.
+Fenced code, indented code and blockquotes are exempt. A question can be quoted or documented. Inline backticks are not.
 
 Reporting what you did and stopping is always allowed. What is banned is closing by inviting the user to decide.
 

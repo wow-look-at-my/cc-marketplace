@@ -16,7 +16,7 @@ put them in the commit message, where narrating a change belongs.
 
 ## What it looks for
 
-A comment fails if its referent is gone (the flag, the test, the old spelling it names is not in the tree) or its audience is the reviewer (it defends the change instead of telling the next editor what breaks). Delete the sentence and ask what the next editor now gets wrong; no answer means it was narration.
+A comment fails if its referent is gone (the flag, the test, the old spelling it names is not in the tree) or its audience is the reviewer (it defends the change instead of telling the next editor what breaks). Delete the sentence and ask what the next editor now gets wrong. No answer means it was narration.
 
 Three checks run, weakest first:
 
@@ -28,7 +28,7 @@ Three checks run, weakest first:
 
 ## What it leaves alone
 
-Code (only comment text is read, so a phrase inside a string literal is data), fenced and indented blocks in a document, inline backtick spans, a file whose extension it does not know, and everything a write does not add -- a tombstone already in a file never blocks an unrelated edit to it.
+Code (only comment text is read, so a phrase inside a string literal is data), fenced and indented blocks in a document, inline backtick spans, a file whose extension it does not know. Everything a write does not add -- a tombstone already in a file never blocks an unrelated edit to it.
 
 ## Configuration
 

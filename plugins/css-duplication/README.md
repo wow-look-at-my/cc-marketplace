@@ -11,18 +11,18 @@ A finding is a set of rules with an identical (normalized) body in the same at-r
 - **two or more copies** of a body with two or more declarations, or
 - **three or more copies** of a single-declaration body.
 
-Findings are ranked by copies × declarations, so the strongest one comes first. Not reported, because it is normal: duplication across different `@media` / `@supports` contexts, `@keyframes` `from`/`to`, and vendor-prefixed pairs.
+Findings are ranked by copies × declarations. The strongest one comes first. Not reported, because it is normal: duplication across different `@media` / `@supports` contexts, `@keyframes` `from`/`to`, and vendor-prefixed pairs.
 
 Preprocessor sources (`.scss`, `.less`) are deliberately ignored — nesting changes what a repeated body means.
 
 ## How it runs
 
-A language server, registered by `.lsp.json` and started automatically for `.css` files. One warning per duplicated rule, anchored to the selector; the first copy spells out the shared body and the other selectors carrying it, the rest point back at it. Diagnostics refresh on open/change/save and clear themselves the moment the block is hoisted, so nothing has to be dismissed. Served both ways over stdio JSON-RPC — pushed via `textDocument/publishDiagnostics` and pulled via `textDocument/diagnostic`.
+A language server, registered by `.lsp.json` and started automatically for `.css` files. One warning per duplicated rule, anchored to the selector. The first copy spells out the shared body and the other selectors carrying it, the rest point back at it. Diagnostics refresh on open/change/save and clear themselves the moment the block is hoisted. Nothing has to be dismissed. Served both ways over stdio JSON-RPC — pushed via `textDocument/publishDiagnostics` and pulled via `textDocument/diagnostic`.
 
 Two things worth knowing before installing:
 
 - Only one LSP server can claim `.css` — if another plugin already registers one, whichever loads first wins and the other never starts.
-- The binary is built from this directory and launched from `${CLAUDE_PLUGIN_ROOT}`, so nothing needs to be on `PATH`.
+- The binary is built from this directory and launched from `${CLAUDE_PLUGIN_ROOT}`. Nothing needs to be on `PATH`.
 
 ## Installation
 

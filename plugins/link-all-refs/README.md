@@ -15,7 +15,7 @@ Do not stop here. This message names things the user cannot click:
 
 ## Write the link
 
-`[text](url)` is correct on both surfaces. The web client renders it as a link, and the terminal renders it as a real clickable hyperlink -- Claude Code passes markdown links through the terminal's OSC 8 escape when the terminal advertises support.
+`[text](url)` is correct on both surfaces. The web client renders it as a link. The terminal renders it as a real clickable hyperlink -- Claude Code passes markdown links through the terminal's OSC 8 escape when the terminal advertises support.
 
 ```
 [owner/repo#42](https://github.com/owner/repo/pull/42)

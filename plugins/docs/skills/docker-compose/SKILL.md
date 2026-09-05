@@ -6,7 +6,7 @@ description: Read before writing or editing a compose.yaml, compose.yml, docker-
 
 Notes to self. Checked against the current Compose Specification pages on docs.docker.com (`content/reference/compose-file/**`) and the Compose manuals. Where my instincts and the docs disagree, **the docs win**.
 
-## The reference is vendored here - read it, don't recall it
+## The reference is vendored here - read it, do not recall it
 
 This skill's `reference/` folder holds the **complete upstream Compose file reference**, verbatim, pinned to a commit named in each file's header (`reference/NOTICE.md` records the source and the Apache-2.0 license).
 
@@ -31,30 +31,30 @@ grep -rn "gpus" reference/                               # a field, wherever it 
 | `interpolation.md` | `${VAR}` syntax and its defaults |
 | `profiles.md`, `version-and-name.md` | profiles, and the `name:` top-level element |
 
-A line reading `> Version-gated feature: "..."` marks a field that needs a recent Compose; the reference page linked in the header gives the minimum version.
+A line reading `> Version-gated feature: "..."` marks a field that needs a recent Compose. The reference page linked in the header gives the minimum version.
 
 ## The three reflexes to unlearn immediately
 
-1. **Do not write `version:`.** The top-level `version` property is *obsolete*. Compose always validates against the newest schema regardless of it, and emits a warning telling you it's obsolete. `version: "3.8"` at the top of a file is a tell that the output came from 2019 training data. Delete it from files being edited too.
-2. **The file is `compose.yaml`.** That's the preferred name, then `compose.yml`. `docker-compose.yaml` / `docker-compose.yml` are supported for backward compatibility only, and `compose.yaml` wins if both exist. When creating a new file, create `compose.yaml`. When editing an existing `docker-compose.yml`, leave the name alone - renaming is not the task.
-3. **The command is `docker compose`, two words.** `docker-compose` is Compose v1 (Python, 2014). Compose v2 (Go, 2020) ignores `version:` entirely; **Compose v5 (2025)** is functionally identical to v2 and adds an official Go SDK - the jump from 2 to 5 exists to avoid colliding with the old "file format v2/v3" names. Compose file format 1 (no `services:` key) does not run at all on v2/v5.
+1. **Do not write `version:`.** The top-level `version` property is *obsolete*. Compose always validates against the newest schema regardless of it, and emits a warning telling you it is obsolete. `version: "3.8"` at the top of a file is a tell that the output came from 2019 training data. Delete it from files being edited too.
+2. **The file is `compose.yaml`.** That is the preferred name, then `compose.yml`. `docker-compose.yaml` / `docker-compose.yml` are supported for backward compatibility only, and `compose.yaml` wins if both exist. When creating a new file, create `compose.yaml`. When editing an existing `docker-compose.yml`, leave the name alone - renaming is not the task.
+3. **The command is `docker compose`, two words.** `docker-compose` is Compose v1 (Python, 2014). Compose v2 (Go, 2020) ignores `version:` entirely. **Compose v5 (2025)** is functionally identical to v2 and adds an official Go SDK - the jump from 2 to 5 exists to avoid colliding with the old "file format v2/v3" names. Compose file format 1 (no `services:` key) does not run at all on v2/v5.
 
 ## `docker compose restart` does not apply file changes. Ever.
 
 The loop to never run again: edit `compose.yaml`, run `docker compose restart`, watch the container come back with the *old* config, and be baffled. The reference says it outright:
 
-> If you make changes to your `compose.yml` configuration, these changes are not
+> If you make changes to your `compose.yml` configuration. These changes are not
 > reflected after running this command. For example, changes to environment variables
 > (which are added after a container is built, but before the container's command is
 > executed) are not updated after restarting.
 
 `restart` bounces the **existing** containers. Container config is fixed at creation time, so anything the file changes - `environment`, `ports`, `volumes`, `command`, `image` - requires a **new container**, not a restarted one. Same trap with `stop`+`start`: `stop` explicitly "stops running containers without removing them," and `start` starts "existing containers." Neither reads the file.
 
-**After editing `compose.yaml`, the command is `docker compose up -d`.** Per the `up` reference, when a service's configuration or image changed after its container was created, `up` picks up the change by stopping and recreating the container (preserving mounted volumes). So plain `up -d` is usually enough, and it only touches services that actually changed.
+**After editing `compose.yaml`. The command is `docker compose up -d`.** Per the `up` reference, when a service's configuration or image changed after its container was created, `up` picks up the change by stopping and recreating the container (preserving mounted volumes). So plain `up -d` is usually enough, and it only touches services that actually changed.
 
 - `--force-recreate` recreates even when config and image are unchanged. Use it when recreation must happen regardless (or when unsure - it is never *wrong*, only broader).
 - `--no-deps` restricts the blast radius to the named service.
-- Changed the Dockerfile rather than the Compose file? Rebuild first: `docker compose build web && docker compose up --no-deps -d web`. `up` alone won't rebuild an image whose source changed.
+- Changed the Dockerfile rather than the Compose file? Rebuild first: `docker compose build web && docker compose up --no-deps -d web`. `up` alone will not rebuild an image whose source changed.
 - `--no-recreate` is the opposite request - keep existing containers, ignore changes.
 
 Legitimate uses for `restart` are narrow: bouncing a process that has wedged, or re-reading a config file the app itself loads from a mounted volume. Neither involves having edited `compose.yaml`. If the compose file changed, `restart` is the wrong verb.
@@ -89,13 +89,13 @@ For one-shot setup work there is now a better tool than a fake dependency servic
 
 ## Networking: stop adding `links`
 
-Services on a shared network reach each other **by service name**, on any port. `links` is not required for that and doesn't override network configuration. `expose` is also usually unnecessary - ports a container listens on are reachable from the same network whether or not `expose` is declared (and any `EXPOSE` in the image already covers it).
+Services on a shared network reach each other **by service name**, on any port. `links` is not required for that and does not override network configuration. `expose` is also usually unnecessary - ports a container listens on are reachable from the same network whether or not `expose` is declared (and any `EXPOSE` in the image already covers it).
 
 - No `networks:` anywhere means every service joins an implicit `default` network. That is a real network, not "no network." To genuinely detach, `network_mode: none`.
 - `network_mode` and `networks` are mutually exclusive - Compose rejects a file with both.
 - `ports` must not be combined with `network_mode: host` (runtime error).
 - Customize the implicit network by declaring `networks: {default: {name: a_network}}`.
-- Per-network service options: `aliases`, `ipv4_address`/`ipv6_address` (needs matching `ipam` subnets), `interface_name`, `mac_address`, `link_local_ips`, `driver_opts`, `priority`, `gw_priority`. **`priority` picks the network for a service-level `mac_address`; `gw_priority` picks the default gateway.** They are different keys and neither controls `ethN` naming.
+- Per-network service options: `aliases`, `ipv4_address`/`ipv6_address` (needs matching `ipam` subnets), `interface_name`, `mac_address`, `link_local_ips`, `driver_opts`, `priority`, `gw_priority`. **`priority` picks the network for a service-level `mac_address`. `gw_priority` picks the default gateway.** They are different keys and neither controls `ethN` naming.
 
 ## `ports`
 
@@ -141,25 +141,25 @@ Not a bind-mount hack, not a wrapper entrypoint - these exist as first-class key
 
 Three different mechanisms, routinely confused:
 
-- **Multiple `-f` files / `compose.override.yaml`** - merged. Mappings merge, sequences **append**. Exceptions: `command`, `entrypoint`, and `healthcheck.test` are *replaced*, not appended. `ports`/`volumes`/`secrets`/`configs` merge by unique key (`target` for the last three; `{ip, target, published, protocol}` for ports).
-- **`!reset` / `!override` YAML tags** - `ports: !reset []` clears an inherited value; `ports: !override [...]` replaces instead of appending. Without `!override`, both the base and the override ports end up published.
-- **`extends`** - pulls one service definition into another (`{file:, service:}`). It does **not** import the referenced service's `volumes`/`networks`/`depends_on` targets; those must be declared locally. No circular references. Unsupported with `docker stack deploy`.
-- **`include:`** - top-level, pulls in whole Compose applications, each loaded with its own project directory so relative paths resolve against *their* file. Evaluated after the main files are merged; name conflicts warn, they don't merge. Recursive. Long form takes `path` (string or list), `project_directory`, `env_file`.
+- **Multiple `-f` files / `compose.override.yaml`** - merged. Mappings merge, sequences **append**. Exceptions: `command`, `entrypoint`, and `healthcheck.test` are *replaced*, not appended. `ports`/`volumes`/`secrets`/`configs` merge by unique key (`target` for the last three. `{ip, target, published, protocol}` for ports).
+- **`!reset` / `!override` YAML tags** - `ports: !reset []` clears an inherited value. `ports: !override [...]` replaces instead of appending. Without `!override`, both the base and the override ports end up published.
+- **`extends`** - pulls one service definition into another (`{file:, service:}`). It does **not** import the referenced service's `volumes`/`networks`/`depends_on` targets. Those must be declared locally. No circular references. Unsupported with `docker stack deploy`.
+- **`include:`** - top-level, pulls in whole Compose applications, each loaded with its own project directory so relative paths resolve against *their* file. Evaluated after the main files are merged. Name conflicts warn. They do not merge. Recursive. Long form takes `path` (string or list), `project_directory`, `env_file`.
 
 ## Variables
 
 - `${VAR}`, `${VAR:-default}`, `${VAR-default}`, `${VAR:?err}`, `${VAR?err}`, `${VAR:+alt}`, `${VAR+alt}`, and nesting (`${A:-${B:-x}}`). Nothing else - `${VAR/foo/bar}` is not supported.
-- `$$` is a literal `$`. Needed whenever a value contains a shell variable the container should expand: `command: /bin/sh -c 'echo "hello $$HOSTNAME"'`.
-- Interpolation applies to **values, not keys**. For `labels`/`environment`, that means the `- "KEY=value"` list form interpolates a variable in the key position and the `KEY: value` map form does not.
+- `$$` is a literal `$`. Needed whenever a value contains a shell variable the container must expand: `command: /bin/sh -c 'echo "hello $$HOSTNAME"'`.
+- Interpolation applies to **values, not keys**. For `labels`/`environment`. That means the `- "KEY=value"` list form interpolates a variable in the key position and the `KEY: value` map form does not.
 - Unresolved and undefaulted -> warning + empty string, not an error. Use `:?` when it must be set.
-- Anchors/aliases (`&x` / `*x`) resolve **before** interpolation, so variables can't name anchors. YAML merge (`<<:`) works on mappings only, never sequences - which is why `environment` must use the `KEY: value` map form when merging fragments.
-- `x-` prefixed keys are extension fields and are legal anywhere user keys aren't expected; the usual pattern is `x-common: &common` at top level.
+- Anchors/aliases (`&x` / `*x`) resolve **before** interpolation, so variables cannot name anchors. YAML merge (`<<:`) works on mappings only, never sequences - which is why `environment` must use the `KEY: value` map form when merging fragments.
+- `x-` prefixed keys are extension fields and are legal anywhere user keys are not expected. The usual pattern is `x-common: &common` at top level.
 
 ## Fields that solve problems I try to solve manually
 
-- **`command` does not run in a shell.** Unlike Dockerfile `CMD`, it isn't wrapped by the image's `SHELL`. Anything relying on expansion needs an explicit `/bin/sh -c '...'`. List form = exec form.
-- **`healthcheck.test`**: as a list, the first element must be `NONE`, `CMD`, or `CMD-SHELL`. As a bare string, it's implicitly `CMD-SHELL`. `disable: true` (or `test: ["NONE"]`) kills an inherited healthcheck. `interval`/`timeout`/`start_period`/ `start_interval` take duration strings (`1m30s`).
-- **`secrets`** top-level source is `file:` or `environment:` (`environment` is Compose-only, not `docker stack deploy`). Mounted read-only at `/run/secrets/<name>`. `uid`/`gid`/`mode` are **silently ignored** for `file:` secrets (they're bind-mounted underneath).
+- **`command` does not run in a shell.** Unlike Dockerfile `CMD`. It is not wrapped by the image's `SHELL`. Anything relying on expansion needs an explicit `/bin/sh -c '...'`. List form = exec form.
+- **`healthcheck.test`**: as a list. The first element must be `NONE`, `CMD`, or `CMD-SHELL`. As a bare string. It is implicitly `CMD-SHELL`. `disable: true` (or `test: ["NONE"]`) kills an inherited healthcheck. `interval`/`timeout`/`start_period`/ `start_interval` take duration strings (`1m30s`).
+- **`secrets`** top-level source is `file:` or `environment:` (`environment` is Compose-only, not `docker stack deploy`). Mounted read-only at `/run/secrets/<name>`. `uid`/`gid`/`mode` are **silently ignored** for `file:` secrets (they are bind-mounted underneath).
 - **`configs`** top-level source is `file:`, `environment:`, `content:` (inline, and interpolated - handy for generating a config from env), or `external: true`.
 - **`env_file`** entries may be mappings: `{path: ./x.env, required: false}` and `{format: raw}` (no interpolation, `$` and quotes passed through). `environment:` always wins over `env_file`, even for empty values. In `.env` files, inline comments on unquoted values need a preceding space.
 - **`pull_policy`**: `always`, `never`, `missing` (default), `build`, `daily`, `weekly`, `every_<duration>` (e.g. `every_12h`). `latest` is always pulled even under `missing`.
@@ -167,12 +167,12 @@ Three different mechanisms, routinely confused:
 - **`profiles`**: services without a profile always run. A service named explicitly on the CLI activates its own profile. `links`/`extends`/`service:x` references do *not* auto-enable a profiled service - they error.
 - **`gpus: all`** (or a list of `{driver, count}`) instead of the old `deploy.resources.reservations.devices` incantation.
 - **`models:`** top level + `models:` per service - Docker Model Runner integration. Compose injects `<MODEL_KEY>_URL` (uppercased, `-`->`_`) or the names given by `endpoint_var`/`model_var`.
-- **`provider:`** - hands a service's lifecycle to an external binary (`{type:, options:}`); dependents get `<SERVICE>_<VAR>` env vars back.
+- **`provider:`** - hands a service's lifecycle to an external binary (`{type:, options:}`). Dependents get `<SERVICE>_<VAR>` env vars back.
 - **`use_api_socket: true`** mounts the engine socket + credentials for containers that need to push/pull.
 - **`attach: false`** stops Compose collecting that service's logs.
-- **`label_file`** loads labels from a file, like `env_file`; `labels:` wins on conflict.
-- **`init: true`** for signal forwarding / zombie reaping when the image's PID 1 can't.
-- `container_name` **prevents scaling** past one container. Don't set it on anything that might be scaled.
+- **`label_file`** loads labels from a file, like `env_file`. `labels:` wins on conflict.
+- **`init: true`** for signal forwarding / zombie reaping when the image's PID 1 cannot.
+- `container_name` **prevents scaling** past one container. Do not set it on anything that might be scaled.
 
 ## Volumes
 
@@ -198,15 +198,15 @@ volumes:
 - `dockerfile:` is resolved **relative to the context**, not the Compose file - so `{context: backend, dockerfile: ../backend.Dockerfile}` refers to a file next to the Compose file. `dockerfile` and `dockerfile_inline` are mutually exclusive.
 - `target:` picks a multi-stage stage. `tags:` adds tags beyond `image:`.
 - `additional_contexts` accepts paths, Git URLs, `docker-image://ref`, and `service:<name>` to build on another service's image.
-- `secrets` here maps a top-level secret to a Dockerfile `RUN --mount=type=secret,id=<target>`; `ssh: [default]` forwards the agent.
+- `secrets` here maps a top-level secret to a Dockerfile `RUN --mount=type=secret,id=<target>`. `ssh: [default]` forwards the agent.
 - `platforms`, `cache_from`/`cache_to`, `provenance`, `sbom`, `entitlements`, `no_cache`, `pull`, `network` (incl. `none`).
 - With both `build` and `image` and no `pull_policy`, Compose tries to pull first and builds only if the pull fails. Push skips services with no `image:`.
 
 ## Misc facts I get wrong
 
 - Booleans in `environment:` must be quoted (`SHOW: "true"`) or the YAML parser turns them into `True`/`False`.
-- A single-key `environment` entry with no value (`USER_INPUT:`) passes the host value through, and unsets the variable if the host doesn't have it.
-- `deploy:` is an optional spec; it's ignored rather than invalid when unsupported. Non-Swarm resource limits also exist as flat service keys (`cpus`, `mem_limit`, `mem_reservation`, `pids_limit`, `shm_size`, `ulimits`) and must stay consistent with their `deploy.resources` counterparts if both are set.
-- The `com.docker.compose` label prefix is reserved; using it is a runtime error. Compose always sets `com.docker.compose.project` and `com.docker.compose.service`.
-- `stop_grace_period` defaults to 10s before SIGKILL; `stop_signal` changes the signal.
+- A single-key `environment` entry with no value (`USER_INPUT:`) passes the host value through, and unsets the variable if the host does not have it.
+- `deploy:` is an optional spec. It is ignored rather than invalid when unsupported. Non-Swarm resource limits also exist as flat service keys (`cpus`, `mem_limit`, `mem_reservation`, `pids_limit`, `shm_size`, `ulimits`) and must stay consistent with their `deploy.resources` counterparts if both are set.
+- The `com.docker.compose` label prefix is reserved. Using it is a runtime error. Compose always sets `com.docker.compose.project` and `com.docker.compose.service`.
+- `stop_grace_period` defaults to 10s before SIGKILL. `stop_signal` changes the signal.
 - Project name comes from top-level `name:`, is exposed as `COMPOSE_PROJECT_NAME`, and can be overridden per-invocation.

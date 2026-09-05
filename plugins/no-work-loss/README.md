@@ -2,8 +2,8 @@
 
 Keeps you in charge of the working tree. Two refusals, one parse of the command:
 
-- **Destruction** — a command that would destroy content existing only in the working tree. Committed history survives in the reflog; a modified or untracked file does not survive anything.
-- **Provenance** — a change to file content that skips Write, Edit or NotebookEdit. Bash runs things; it does not author files.
+- **Destruction** — a command that would destroy content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything.
+- **Provenance** — a change to file content that skips Write, Edit or NotebookEdit. Bash runs things. It does not author files.
 
 ## Installation
 
@@ -48,7 +48,7 @@ run: git stash push -u -m "pre-reset" && git reset --hard origin/master
 
 ## What it routes back to the edit tools
 
-A change to file content under the working tree goes through Write, Edit or NotebookEdit. Refused whatever the repository's state, and the message names the path it stopped:
+A change to file content under the working tree goes through Write, Edit or NotebookEdit. Refused whatever the repository's state. The message names the path it stopped:
 
 | Route | Examples |
 |---|---|

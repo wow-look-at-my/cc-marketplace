@@ -19,7 +19,7 @@ Needs Node 18 or later on `PATH`, or `COMMON_CHECKS_NODE` set to a Node binary.
 | any `action.yml` | `yaml-comment-block`, `no-tests-in-yaml` |
 | any `*.md` | `ste-lint` |
 
-Every diagnostic is an error, because every one of them fails the merge gate. The heuristic findings of `ste-lint` never fail CI, so this plugin does not report them. Those are passive voice, noun clusters and word choice.
+Every diagnostic is an error, because every one of them fails the merge gate. The heuristic findings of `ste-lint` never fail CI. This plugin does not report them. Those are passive voice, noun clusters and word choice.
 
 ## Where the rules live
 

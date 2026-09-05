@@ -18,9 +18,9 @@ The model sees a `Glob` tool with two parameters:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `pattern` | Yes | Glob pattern, e.g. `**/*.js` or `src/**/*.ts` |
-| `path` | No | Directory to search; defaults to the project directory |
+| `path` | No | Directory to search. Defaults to the project directory |
 
-Results come back oldest-first by modification time. `.gitignore` is NOT respected and dotfiles ARE listed (like the builtin; set `CLAUDE_CODE_GLOB_NO_IGNORE=0` / `CLAUDE_CODE_GLOB_HIDDEN=0` to change).
+Results come back oldest-first by modification time. `.gitignore` is NOT respected and dotfiles ARE listed (like the builtin. Set `CLAUDE_CODE_GLOB_NO_IGNORE=0` / `CLAUDE_CODE_GLOB_HIDDEN=0` to change).
 
 One improvement over the builtin: an invalid glob returns ripgrep's actual error message instead of a silent "No files found".
 
