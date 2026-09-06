@@ -1,6 +1,6 @@
 # no-tombstones
 
-Strips a tombstone comment out of a write. A tombstone is prose about a state the code is no longer in, or an argument aimed at the reviewer. When the tombstone sits alone on one comment-only line, that line is deleted and the write proceeds; only a finding that cannot be cleanly excised still gets the write refused.
+Strips a tombstone comment out of a write. A tombstone is prose about a state the code is no longer in, or an argument aimed at the reviewer. When the tombstone sits alone on one comment-only line, that line is deleted and the write proceeds. Only a finding that cannot be cleanly excised still gets the write refused.
 
 A clean strip looks like this, reported once in `additionalContext`:
 
