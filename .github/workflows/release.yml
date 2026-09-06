@@ -6,7 +6,8 @@ on:
     branches: ["**"]
 
 # Per-ref again. Repository-wide serialised every branch behind one run, and GitHub cancels the older PENDING run when a third arrives -- a cancelled run reads as a failed build on all-builds. The tag race is serialised on the tag itself, in the build job below.
-concurrency: {group: release-${{ github.ref }}}
+concurrency:
+  group: release-${{ github.ref }}
 
 jobs:
   prepare:
