@@ -56,7 +56,8 @@ func parseSegments(command, cwd string) (segs []segment, blockers []string, ok b
 	if err != nil {
 		return nil, nil, false
 	}
-	w := &walker{}
+	unsafe, abort := unsafeVarNames(f.Stmts)
+	w := &walker{vars: varTable{}, unsafeVars: unsafe, varsDisabled: abort}
 	base := cwd
 	w.stmts(f.Stmts, &base)
 	return w.segs, w.blockers, true
@@ -68,6 +69,26 @@ type walker struct {
 	depth       int
 	scriptDepth int
 	piped       bool
+	// vars holds every variable this hook has proven holds one static value,
+	// built up in execution order as the walk reaches each safe assignment.
+	// unsafeVars names what must never enter it; varsDisabled turns the
+	// whole feature off when some command in the tree could mutate a
+	// variable this scan cannot see through.
+	vars         varTable
+	unsafeVars   map[string]bool
+	varsDisabled bool
+}
+
+// resolve renders a word, substituting a variable this hook has proven safe.
+// Resolution is confined to the top-level parse: a script pulled in through
+// an alias, a `sh -c` string, or a sourced file is different source text
+// with its own variable scope, so scriptDepth > 0 falls back to the plain
+// reading with no substitution.
+func (w *walker) resolve(wd *syntax.Word) word {
+	if w.scriptDepth == 0 && !w.varsDisabled && len(w.vars) > 0 {
+		return resolveWord(wd, w.vars)
+	}
+	return wordText(wd)
 }
 
 func (w *walker) full() bool { return len(w.segs) >= maxSegments }
@@ -101,7 +122,7 @@ func (w *walker) stmt(st *syntax.Stmt, cwd *string) {
 			stdin = true
 			continue // input, not a target this command writes
 		}
-		rs = append(rs, redirTarget{op: r.Op, file: wordText(r.Word)})
+		rs = append(rs, redirTarget{op: r.Op, file: w.resolve(r.Word)})
 	}
 	w.command(st.Cmd, cwd, rs, stdin)
 }
@@ -202,6 +223,11 @@ func (w *walker) isolated(sts []*syntax.Stmt, cwd string) {
 
 func (w *walker) call(c *syntax.CallExpr, cwd *string, rs []redirTarget, stdin bool) {
 	relocated := false
+	// A pure assignment statement -- no command word of its own -- persists
+	// in the current shell, which is the only shape this hook trusts enough
+	// to remember. `VAR=val cmd` is a temporary override scoped to cmd, and
+	// is left exactly as unresolved as it always was.
+	pureAssign := len(c.Args) == 0
 	for _, a := range c.Assigns {
 		if a == nil {
 			continue
@@ -212,11 +238,17 @@ func (w *walker) call(c *syntax.CallExpr, cwd *string, rs []redirTarget, stdin b
 		if a.Value != nil {
 			w.scanSubst(a.Value, *cwd)
 		}
+		if pureAssign && w.scriptDepth == 0 && !w.varsDisabled &&
+			a.Name != nil && a.Value != nil && !w.unsafeVars[a.Name.Value] {
+			if v := w.resolve(a.Value); v.static {
+				w.vars[a.Name.Value] = v
+			}
+		}
 	}
 	argv := make([]word, 0, len(c.Args))
 	for _, wd := range c.Args {
 		w.scanSubst(wd, *cwd)
-		argv = append(argv, wordText(wd))
+		argv = append(argv, w.resolve(wd))
 	}
 	if len(argv) == 0 {
 		w.bare(rs, *cwd)

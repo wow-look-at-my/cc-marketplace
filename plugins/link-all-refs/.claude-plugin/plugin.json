@@ -1,18 +1,19 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "link-all-refs",
-	"description": "Refuses to end a turn whose closing message names a pull request number, a commit SHA, a branch, or a GitHub URL without a markdown link to it. Strips the message's markdown links and reports what is left, so a link given earlier earns no credit",
+	"description": "Renders a pull request number, a commit SHA, a branch, or a GitHub URL as a markdown link while the message streams, so the reader can click it. Writes the link itself rather than refusing a stop, so there is no round trip and nothing to loop on. A reference whose target cannot be shown to exist is left as plain text rather than given a dead link",
 	"author": {
 		"name": "mhaynie"
 	},
-	"keywords": ["link", "markdown", "pull-request", "commit", "sha", "branch", "url", "stop", "hook", "enforcement"],
+	"keywords": ["link", "markdown", "pull-request", "commit", "sha", "branch", "url", "messagedisplay", "hook"],
 	"hooks": {
-		"Stop": [
+		"MessageDisplay": [
 			{
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/link-all-refs"
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/link-all-refs",
+						"timeout": 10
 					}
 				]
 			}

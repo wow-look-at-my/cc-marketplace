@@ -52,10 +52,13 @@ func judge(f *finding, cache *repoCache) string {
 	}
 	// An operand that is not statically known makes the blast radius unknown,
 	// which is the case this plugin exists to refuse rather than guess at.
+	// The remedy is the one this finding already carries -- an rm and a `>`
+	// truncation are not fixed the same way -- never a fixed line that fits
+	// neither.
 	for _, p := range f.paths {
 		if !p.static {
-			return fmt.Sprintf("blocked: %s targets a path this hook cannot resolve (%q), so what it would delete is unknown."+
-				"\nrun: git add -A && git commit -m wip   # or name the paths literally", f.label, p.text)
+			return fmt.Sprintf("blocked: %s targets a path this hook cannot resolve (%s), so what it would delete is unknown."+
+				"\nrun: %s", f.label, describeUnresolved(p), f.rewrite)
 		}
 	}
 
@@ -140,6 +143,17 @@ func lossReason(f *finding, tracked, untracked, ignored []string) string {
 	}
 	return fmt.Sprintf("blocked: %s would lose %s %s (%s).\nrun: %s",
 		f.label, strings.Join(parts, " + "), noun, sample(names, 3), f.rewrite)
+}
+
+// describeUnresolved names an unresolved word for a denial message. A word
+// built purely from an expansion -- `$OUT` and nothing else -- carries no
+// literal text at all, and quoting that as "" reads as a path rather than
+// as what it is: nothing this hook could read.
+func describeUnresolved(p word) string {
+	if p.text == "" {
+		return "an unresolved expansion"
+	}
+	return fmt.Sprintf("%q", p.text)
 }
 
 func sample(names []string, n int) string {
