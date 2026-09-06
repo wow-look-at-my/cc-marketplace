@@ -24,7 +24,11 @@ Every failure path allows the call: an unparseable payload, an unparseable `tool
 
 That plumbing used to live here, in Go, and identically again in `no-counts-in-docs`. The same payload parse, the same Write/Edit/MultiEdit shapes, the same splice back into `tool_input`. A write shape added to one and not the other is a guard that silently stops seeing half the writes.
 
-**`hook.sh` exists for one reason: to fail OPEN.** A PreToolUse hook blocks the tool on any non-zero exit. Naming the binary straight in `plugin.json` turns one that cannot answer into a guard that refuses every write. The binary carries its verdict in the JSON it prints, and exits 0 whatever it decides. A non-zero exit therefore means it never ran. The launcher probes for the binary AND swallows a non-zero exit. Probing alone is not enough. An installed binary too old to know the `hook` subcommand exits 1. The `exec` form handed that straight to the tool as a refusal, and it shipped. `SLOPFMT` names another path, which is how a test drives a stub. `NO_TOMBSTONES_MAX_COMMENT_LINES` still sets the volume cap, passed through as `--max-comment-lines`.
+**The plugin SHIPS the binary it runs. It never looks on PATH.** `build/` carries slopfmt itself, fetched by `.github/scripts/vendor-slopfmt.sh` at build time. `hook.sh` holds no probe and swallows nothing.
+
+A bare `slopfmt` word let the plugin and the binary ship on separate tracks with nothing checking they agreed. A plugin naming a subcommand its installed binary predated exited 1, and every write in the session was then refused. Swallowing that exit code was the second wrong answer. It turned a loud break into a guard that installs, reports success and does nothing.
+
+**The fetch is a GATE, not a download.** It checks the APE prologue, then runs the real hook contract on a comment built to violate the rule, and requires a verdict. A binary that runs and finds nothing there fails the build. `SLOPFMT_URL` points the fetch elsewhere, which is how the red controls run. `NO_TOMBSTONES_MAX_COMMENT_LINES` still sets the volume cap, passed through as `--max-comment-lines`.
 
 - **Launcher**: `plugins/no-tombstones/hook.sh` -- the probe, the cap and the exec. This is the whole plugin
 - **Rule and plumbing**: `wow-look-at-my/slopfmt`. Package `tombstones` holds the tell table, the comment scanner, the referent probe and the strip. `cmd/hook.go` holds the payload, the write shapes, the strip-or-deny decision and the response, and both are tested there
