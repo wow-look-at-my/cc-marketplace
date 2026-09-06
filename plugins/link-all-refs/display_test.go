@@ -61,11 +61,6 @@ func TestAReferenceIsRenderedAsALink(t *testing.T) {
 			"[wow-look-at-my/go-toolchain#376](https://github.com/wow-look-at-my/go-toolchain/issues/376) landed.",
 		},
 		{
-			"bare number takes the checkout's repo",
-			"PR #376 is green.",
-			"PR [#376](https://github.com/o/r/issues/376) is green.",
-		},
-		{
 			"a commit in this repository",
 			"re-pushed as 6884dd2.",
 			"re-pushed as [6884dd2](https://github.com/o/r/commit/6884dd2).",
@@ -98,10 +93,9 @@ func TestAReferenceWithNoPageIsLeftAlone(t *testing.T) {
 	}{
 		{"a branch that was never pushed", "working on claude/never-pushed now."},
 		{"a commit this repository does not have", "master is at e3665a4689bb now."},
-		{"a bare number with no repository to resolve against", "PR #376 is green."},
 		{"a branch with no repository to resolve against", "pushed claude/pushed to origin."},
 	}
-	res := []Resolver{live(), live(), bare(), bare()}
+	res := []Resolver{live(), live(), bare()}
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			out, changed := RewriteDelta(tc.text, false, res[i])
@@ -121,9 +115,25 @@ func TestASlugResolvesWithoutACheckout(t *testing.T) {
 // request when it is one, and /pull/N on a plain issue is a 404. Nothing here
 // knows which it is, so it must use the spelling that is right for both.
 func TestNumbersUseTheSpellingThatWorksForBoth(t *testing.T) {
-	got := rewrite(t, "#42", live())
+	got := rewrite(t, "o/r#42", live())
 	assert.Contains(t, got, "/issues/42")
 	assert.NotContains(t, got, "/pull/42")
+}
+
+// A bare #N is never linked. It cannot be checked before rendering, the
+// repository it would resolve against is a guess in a multi-checkout session,
+// and it is the shape an ordinary numbered list uses. Guessing produces a link
+// to a real but unrelated issue, which the reader cannot tell is wrong.
+func TestABareNumberIsNeverLinked(t *testing.T) {
+	cases := []string{
+		"PR #376 is green.",
+		"- **#7** the sweep is still open",
+		"#1 blocked, then #2 landed.",
+	}
+	for _, text := range cases {
+		out, changed := RewriteDelta(text, false, live())
+		assert.False(t, changed, "expected no rewrite of %q, got %q", text, out)
+	}
 }
 
 func TestTextThatIsAlreadyLinkedIsNotRewrittenAgain(t *testing.T) {
@@ -163,19 +173,19 @@ func TestFenceStateCarriesAcrossFlushes(t *testing.T) {
 }
 
 func TestEveryOccurrenceIsRewritten(t *testing.T) {
-	got := rewrite(t, "#1 blocked #1 then #2 landed.", live())
+	got := rewrite(t, "o/r#1 blocked o/r#1 then o/r#2 landed.", live())
 	assert.Equal(t, 3, strings.Count(got, "]("), "expected three links in %q", got)
 }
 
 func TestRunEmitsTheDisplayContentEnvelope(t *testing.T) {
-	in := `{"hook_event_name":"MessageDisplay","message_id":"m1","index":0,"final":true,"delta":"PR #376 is green."}`
+	in := `{"hook_event_name":"MessageDisplay","message_id":"m1","index":0,"final":true,"delta":"PR o/r#376 is green."}`
 	out := run(strings.NewReader(in), live())
 	require.NotEmpty(t, out)
 
 	var got Output
 	require.NoError(t, json.Unmarshal([]byte(out), &got))
 	assert.Equal(t, "MessageDisplay", got.HookSpecificOutput.HookEventName)
-	assert.Equal(t, "PR [#376](https://github.com/o/r/issues/376) is green.", got.HookSpecificOutput.DisplayContent)
+	assert.Equal(t, "PR [o/r#376](https://github.com/o/r/issues/376) is green.", got.HookSpecificOutput.DisplayContent)
 }
 
 // Printing nothing leaves the CLI showing the original delta, which is the only
@@ -184,8 +194,8 @@ func TestEverySurpriseRendersTheOriginal(t *testing.T) {
 	cases := map[string]string{
 		"not json":        "not json",
 		"empty":           "",
-		"another event":   `{"hook_event_name":"Stop","delta":"PR #376"}`,
-		"no event name":   `{"delta":"PR #376"}`,
+		"another event":   `{"hook_event_name":"Stop","delta":"PR o/r#376"}`,
+		"no event name":   `{"delta":"PR o/r#376"}`,
 		"nothing to link": `{"hook_event_name":"MessageDisplay","delta":"the suite is green."}`,
 		"empty delta":     `{"hook_event_name":"MessageDisplay","delta":""}`,
 	}
@@ -198,6 +208,6 @@ func TestEverySurpriseRendersTheOriginal(t *testing.T) {
 
 func TestTheHookCanBeTurnedOff(t *testing.T) {
 	t.Setenv("CC_LINK_ALL_REFS", "0")
-	in := `{"hook_event_name":"MessageDisplay","delta":"PR #376 is green."}`
+	in := `{"hook_event_name":"MessageDisplay","delta":"PR o/r#376 is green."}`
 	assert.Empty(t, run(strings.NewReader(in), live()))
 }

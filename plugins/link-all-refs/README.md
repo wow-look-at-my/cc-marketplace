@@ -27,6 +27,7 @@ A link is a demand to stop reading and move your hand, and you pay that before y
 - a branch is linked once it is on the remote — a branch that was never pushed has no compare page
 - a commit is linked once the object is in the repository
 - `owner/repo#42` needs no checkout at all, because it names its own repository
+- a bare `#42` is **never** linked — nothing can check it, the repository it would resolve against is a guess, and it is the shape an ordinary numbered list uses. Guessing there points you at a real but unrelated issue, which is worse than a dead link because you cannot tell
 
 ## How it decides
 

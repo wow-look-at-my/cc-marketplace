@@ -67,15 +67,20 @@ func refURL(ref Ref, res Resolver) (string, bool) {
 
 	case "an issue or pull request number":
 		owner, name, number := splitNumber(ref.Text)
-		if number == "" {
-			return "", false
-		}
 		repo := Repo{Owner: owner, Name: name}
-		if !repo.valid() {
-			var ok bool
-			if repo, ok = res.Repo(); !ok {
-				return "", false
-			}
+		// A BARE #N is never linked. Every other kind can be checked before it
+		// is rendered -- a branch against refs/remotes/origin, a commit against
+		// the object database, a slug carries its own repository, a URL is
+		// self-evidently real. A bare #N cannot be, and the repository it would
+		// be resolved against is a guess: a session with eleven checkouts has
+		// one working directory. It is also the shape an ordinary numbered list
+		// uses, so "#7" in a status message is usually not a reference at all.
+		//
+		// Guessing there does not produce a dead link, which the reader would
+		// notice. It produces a link to a real, unrelated issue, which they
+		// would not.
+		if !repo.valid() || number == "" {
+			return "", false
 		}
 		// /issues/N, never /pull/N: GitHub redirects an issue number to the
 		// pull request when it is one, and /pull/N on a plain issue is a 404.
