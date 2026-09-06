@@ -1,8 +1,25 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { fileKind, findings } from "./checks.ts";
+import { ADAPTED, fileKind, findings } from "./checks.ts";
 
 const WORKFLOW = ".github/workflows/ci.yml";
+
+// The build writes this beside the modules it fetched. Reading it here is what
+// makes coverage a property of the manifest rather than of this file.
+const PLAN: { plan: { name: string; files: string[] }[] } = JSON.parse(
+  readFileSync(new URL("../vendor/plan.json", import.meta.url), "utf8"),
+);
+
+test("every check whose modules the build fetched has an adapter", () => {
+  const vendored = PLAN.plan.filter((entry) => entry.files.length > 0).map((entry) => entry.name).sort();
+  assert.deepEqual(
+    [...ADAPTED].sort(),
+    vendored,
+    "the manifest and the adapters disagree. A check upstream vendors modules for and nothing here calls " +
+      "reports nothing, and an adapter for a check upstream dropped runs code no build refreshes.",
+  );
+});
 
 function checks(path: string, content: string): string[] {
   return findings(path, content).map((finding) => finding.check);

@@ -12,11 +12,12 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { GitHubClient, type Client } from "../vendor-docker-docs/github.ts";
 import {
-  PLAN,
+  MANIFEST_PATH,
   UPSTREAM_REPO,
   assertPlanCoversCheckSet,
   notice,
   parseCheckSet,
+  parseManifest,
   stampHeader,
   upstreamRef,
   vendorPath,
@@ -33,17 +34,22 @@ export interface Written {
 export async function vendor(client: Client, ref: string): Promise<{ commit: string; files: Written[] }> {
   const commit = await client.resolve({ repo: UPSTREAM_REPO, ref });
 
+  const plan = parseManifest(await client.get(UPSTREAM_REPO, commit, MANIFEST_PATH));
   const composite = await client.get(UPSTREAM_REPO, commit, "common-checks/action.yml");
-  assertPlanCoversCheckSet(PLAN, parseCheckSet(composite));
+  assertPlanCoversCheckSet(plan, parseCheckSet(composite));
 
   const files: Written[] = [];
-  for (const entry of PLAN) {
+  for (const entry of plan) {
     for (const path of entry.files) {
       const body = await client.get(UPSTREAM_REPO, commit, `${entry.name}/${path}`);
       files.push({ path: vendorPath(entry.name, path), content: stampHeader(commit, `${entry.name}/${path}`, body) });
     }
   }
-  files.push({ path: "NOTICE.md", content: notice(commit, PLAN) });
+  files.push({ path: "NOTICE.md", content: notice(commit, plan) });
+  // The plan lands beside the modules so the plugin's own tests can hold their
+  // adapters against it. A vendored module nothing calls is silent
+  // non-coverage, and the composite's `uses:` list cannot show it.
+  files.push({ path: "plan.json", content: `${JSON.stringify({ commit, plan }, null, 2)}\n` });
   return { commit, files };
 }
 
