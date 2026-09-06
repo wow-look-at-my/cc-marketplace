@@ -16,6 +16,12 @@ import (
 type Ref struct {
 	Kind string
 	Text string
+	// Backticked is true when the token sits inside a single pair of inline
+	// backticks. The rewrite must then keep the backticks INSIDE the link text
+	// (`` [`text`](url) ``, not `` `[text](url)` ``) -- markdown does not render a
+	// link that opens inside a code span and closes outside it, and the reader is
+	// left with the raw brackets instead of a clickable link.
+	Backticked bool
 }
 
 // A markdown link, with an optional title. Both halves go, anchor included:
@@ -119,10 +125,11 @@ func candidates(text string) []Located {
 			if slices.ContainsFunc(out, func(o Located) bool { return loc[0] < o.End && o.Start < loc[1] }) {
 				continue
 			}
+			start, end, backticked := backtickWrapped(text, loc[0], loc[1])
 			out = append(out, Located{
-				Ref:   Ref{Kind: m.kind, Text: token},
-				Start: loc[0],
-				End:   loc[1],
+				Ref:   Ref{Kind: m.kind, Text: token, Backticked: backticked},
+				Start: start,
+				End:   end,
 			})
 		}
 	}
@@ -160,6 +167,26 @@ func continuesToken(text string, i, dir int) bool {
 		return next >= 0 && next < len(text) && isAlnum(text[next])
 	}
 	return isAlnum(b) || b == '_' || b == '/' || b == '-'
+}
+
+// backtickWrapped reports whether the match at [start,end) sits inside one pair
+// of inline backticks, and returns the widened range that swallows them.
+//
+// A double backtick (``x``) is the escape a code span uses to hold a literal
+// backtick, not a wrap around this token, so only a LONE backtick on each side
+// counts. Widening the range here is what lets the caller drop the original
+// backticks and put fresh ones inside the link text instead.
+func backtickWrapped(text string, start, end int) (int, int, bool) {
+	if start == 0 || end >= len(text) || text[start-1] != '`' || text[end] != '`' {
+		return start, end, false
+	}
+	if start >= 2 && text[start-2] == '`' {
+		return start, end, false
+	}
+	if end+1 < len(text) && text[end+1] == '`' {
+		return start, end, false
+	}
+	return start - 1, end + 1, true
 }
 
 func isAlnum(b byte) bool {
