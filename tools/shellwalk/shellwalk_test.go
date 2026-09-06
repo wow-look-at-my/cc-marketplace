@@ -37,6 +37,26 @@ func TestAWordKeepsItsTextAndSaysWhenItIsNotTheWholeStory(t *testing.T) {
 	assert.Equal(t, "/x", w.Text, "the literal parts are still readable")
 }
 
+// `command -v X Y` prints where X and Y live. Reading Y as an operand of X is
+// what made `apt-get install zstd sqlite3; command -v zstd sqlite3` come back
+// as "zstd writes sqlite3".
+func TestACommandLookupRunsNothing(t *testing.T) {
+	for _, spelling := range []string{
+		`command -v zstd sqlite3`,
+		`command -V rg`,
+		`command -pv jq`,
+	} {
+		assert.Empty(t, program(t, spelling), spelling)
+	}
+}
+
+// The negative control: without a lookup flag, `command` is the wrapper it
+// always was and the program behind it still resolves.
+func TestCommandWithoutALookupFlagStillResolvesTheProgram(t *testing.T) {
+	assert.Equal(t, "sed", program(t, `command sed -i f`))
+	assert.Equal(t, "sed", program(t, `command -p sed -i f`))
+}
+
 func TestASpellingResolvesToTheProgramItNames(t *testing.T) {
 	for _, spelling := range []string{`sed -i f`, `\sed -i f`, `/usr/bin/sed -i f`, `"sed" -i f`} {
 		assert.Equal(t, "sed", program(t, spelling), spelling)

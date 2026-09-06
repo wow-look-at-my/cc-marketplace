@@ -1,6 +1,10 @@
 ## No Counts In Docs Plugin
 
-The no-counts-in-docs plugin lives at `plugins/no-counts-in-docs/`. The refusal is `permissionDecision: "deny"` with the offending phrase. The line it sits on, and the shape to write instead.
+The no-counts-in-docs plugin lives at `plugins/no-counts-in-docs/`. **It repairs rather than refuses.** The cardinal is cut out of the write. The write then goes through with `hookSpecificOutput.updatedInput`. `additionalContext` names each phrase it changed and the shape to write instead. There is no `permissionDecision` at all. The normal permission flow still decides the repaired write.
+
+That is the standing rule in this marketplace. A guard that already knows the answer must not spend a round trip asking for it. A count is wrong because the number is there. Deleting the number is therefore the complete fix. It needs no judgement. `there are three sections` becomes `there are sections`, which stays true after the next commit. The old refusal cost a round trip per number. It also taught sessions to delete whole passages rather than reword them.
+
+`StripCounts` cuts back to front, so an earlier span's offsets stay valid. `prose` carries each line's byte offset, so a phrase found on a line can be cut out of the document itself. The whole `tool_input` is carried through as a map. A key this plugin does not read therefore survives the rewrite.
 
 The owner's ruling was that maintaining a count in a markdown file is not the kind of work worth doing at all. This is the same rule go-toolchain's own analyzer enforces on Go comments ("a number in a comment is a count of what exists today, and the edit that adds an item leaves it wrong"), applied to the documents the analyzer never reads.
 
@@ -20,9 +24,9 @@ Two filters then run inside the frame. **`measureNouns`** excuses a measurement:
 
 **Only the text the write ADDS is judged** -- `content` for Write, `new_string` for Edit, every edit's `new_string` for MultiEdit. A count already sitting in a file therefore never blocks an unrelated edit to it.
 
-Every failure path allows the call: an unparseable payload, an unparseable `tool_input`, a non-markdown path. A tool that does not write files, and any `hook_event_name` other than `PreToolUse`. The matcher is `*` and the tool name is filtered in Go. The registration does not depend on matcher-regex semantics.
+Every failure path lets the write through unchanged: an unparseable payload, an unparseable `tool_input`, a non-markdown path. A tool that does not write files, and any `hook_event_name` other than `PreToolUse`. The matcher is `*` and the tool name is filtered in Go. The registration does not depend on matcher-regex semantics.
 
-- **Hook binary**: `plugins/no-counts-in-docs/hook.go` -- the PreToolUse payload, the three write shapes, the allow/deny decision, and the refusal text
-- **Detection**: `plugins/no-counts-in-docs/counts.go` -- the cardinal-plus-plural pattern, the measure and stop-word filters, the fenced/indented/comment/frontmatter skip, inline-code blanking, and the markdown path test
-- **Tests**: `plugins/no-counts-in-docs/counts_test.go`, `hook_test.go` . A count in every form actually blocks, and a measurement and ordinary prose do not. Each exemption holds, and prose after a closed fence is judged again. Every write shape is covered, with the same text in a non-markdown file as its negative control
+- **Hook binary**: `plugins/no-counts-in-docs/hook.go` -- the PreToolUse payload, the write shapes, `repair`, and the notice
+- **Detection**: `plugins/no-counts-in-docs/counts.go` -- the cardinal-plus-plural pattern, the measure and stop-word filters, the fenced/indented/comment/frontmatter skip, inline-code blanking, `StripCounts`, and the markdown path test
+- **Tests**: `plugins/no-counts-in-docs/counts_test.go`, `hook_test.go` . A count in every form is cut out, and a measurement and ordinary prose are left alone. Each exemption holds, and prose after a closed fence is judged again. Every write shape is covered, with the same text in a non-markdown file as its negative control. A fenced block comes back untouched, and the keys this hook does not read survive the rewrite
 - **Plugin config**: `plugins/no-counts-in-docs/.claude-plugin/plugin.json` -- one PreToolUse hook registration on matcher `*`
