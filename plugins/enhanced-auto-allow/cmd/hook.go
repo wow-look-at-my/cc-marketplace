@@ -155,6 +155,14 @@ func main() {
 }
 
 func evaluateCommand(command string) (string, string) {
+	return evaluateCommandWith(command, rules)
+}
+
+// evaluateCommandWith takes the rule set as a value. A test that wants its own
+// rules passes them here, so nothing has to swap the package-level `rules` and
+// put it back. go-toolchain runs a package's quick tests in parallel, and a
+// test that mutates a global loses to whichever sibling restores it.
+func evaluateCommandWith(command string, rules Rules) (string, string) {
 	// Process rules outrank command rules, and are answered by walking the parse
 	// tree, so they still see a command the allow path below refuses to read --
 	// a `$(...)`, a subshell, anything with a redirect.
@@ -188,7 +196,7 @@ func evaluateCommand(command string) (string, string) {
 		{rules.Ask, "ask"},
 	} {
 		for _, args := range commands {
-			if decision, msg := evaluateArgs(args, section.nodes); decision == "allow" || decision == "deny" {
+			if decision, msg := evaluateArgs(args, section.nodes, rules.Allow); decision == "allow" || decision == "deny" {
 				// The section supplies the verdict, not the rule.
 				return section.behavior, msg
 			}
@@ -197,7 +205,7 @@ func evaluateCommand(command string) (string, string) {
 
 	allAllowed := true
 	for _, args := range commands {
-		decision, msg := evaluateArgs(args, rules.Allow)
+		decision, msg := evaluateArgs(args, rules.Allow, rules.Allow)
 		if decision == "deny" {
 			return "deny", msg
 		}
@@ -215,7 +223,11 @@ func evaluateCommand(command string) (string, string) {
 	return "", ""
 }
 
-func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
+// `allow` is the top-level allow set, carried down for the exec-flag recursion
+// below: a command run through `find -exec` has to clear the same bar the
+// command itself does. It travels as an argument so no path here reads the
+// package-level rules, which a test cannot replace safely.
+func evaluateArgs(args []string, nodes, allow []CommandNode) (string, string) {
 	if len(args) == 0 || len(nodes) == 0 {
 		return "", ""
 	}
@@ -230,7 +242,7 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 			continue
 		}
 
-		decision, msg := evaluateOneNode(node, args, remaining)
+		decision, msg := evaluateOneNode(node, args, remaining, allow)
 		if decision == "deny" {
 			return "deny", msg
 		}
@@ -245,7 +257,7 @@ func evaluateArgs(args []string, nodes []CommandNode) (string, string) {
 	return "", ""
 }
 
-func evaluateOneNode(node CommandNode, args []string, remaining []string) (string, string) {
+func evaluateOneNode(node CommandNode, args []string, remaining []string, allow []CommandNode) (string, string) {
 	// If helpAlwaysAllowed, any subcommand chain ending in --help/-h is allowed
 	if node.HelpAlwaysAllowed && hasAnyFlag(remaining, []string{"--help", "-h"}) {
 		return "allow", ""
@@ -315,7 +327,7 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 
 	// If there are subcommands, recurse
 	if len(node.Subcommands) > 0 && len(subcommandArgs) > 0 {
-		decision, msg := evaluateArgs(subcommandArgs, node.Subcommands)
+		decision, msg := evaluateArgs(subcommandArgs, node.Subcommands, allow)
 		if decision != "" {
 			return decision, msg
 		}
@@ -335,7 +347,7 @@ func evaluateOneNode(node CommandNode, args []string, remaining []string) (strin
 	if len(node.ExecFlags) > 0 {
 		subCmds := extractExecSubCommands(remaining, node.ExecFlags)
 		for _, subCmd := range subCmds {
-			decision, msg := evaluateArgs(subCmd, rules.Allow)
+			decision, msg := evaluateArgs(subCmd, allow, allow)
 			if decision == "deny" {
 				return "deny", msg
 			}

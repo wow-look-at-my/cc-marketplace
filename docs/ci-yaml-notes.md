@@ -25,7 +25,7 @@ Builds the language server, cooks the plugin the way a release does, then runs `
 
 Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
 
-The prompt asks for a read-back after the edit: diagnostics drain into an attachment on the NEXT turn. A prompt that ends at the edit can finish before delivery.
+Diagnostics drain into an attachment on the NEXT turn, so the prompt has to force a turn after the edit. Asking for a read-back of the edited file does not. The model already knows what it wrote, and one that answered "no re-read was needed" made this job red. So the prompt asks for a line the model cannot know. That line is a nonce written to `ticket.txt` at run time. The run step fails when the answer omits the nonce, which names the declined read rather than blaming the server.
 
 `--model sonnet` is deliberate on both jobs. Each asserts the behavior of a hook or a server, which no model tier changes, and each runs on every push.
 
