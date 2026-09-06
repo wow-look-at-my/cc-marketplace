@@ -52,6 +52,14 @@ func ask(t *testing.T, cwd, command string) string {
 
 func askTool(t *testing.T, tool, cwd string, input map[string]any) string {
 	t.Helper()
+	reason, _ := askToolNotices(t, tool, cwd, input)
+	return reason
+}
+
+// askToolNotices is askTool plus the preservation notices, for the tests that
+// need to see what a preserve-and-allow verdict actually said.
+func askToolNotices(t *testing.T, tool, cwd string, input map[string]any) (string, []string) {
+	t.Helper()
 	raw, err := json.Marshal(map[string]any{
 		"hook_event_name": "PreToolUse",
 		"tool_name":       tool,
@@ -60,6 +68,23 @@ func askTool(t *testing.T, tool, cwd string, input map[string]any) string {
 	})
 	require.NoError(t, err)
 	return decide(raw)
+}
+
+// askNotices is ask plus the preservation notices.
+func askNotices(t *testing.T, cwd, command string) (string, []string) {
+	t.Helper()
+	return askToolNotices(t, "Bash", cwd, map[string]any{"command": command})
+}
+
+// preserved asserts a command was allowed because its at-risk content was
+// committed into a preservation ref rather than lost, and returns the notice
+// text for the caller to inspect further.
+func preserved(t *testing.T, cwd, command string) string {
+	t.Helper()
+	reason, notices := askNotices(t, cwd, command)
+	require.Empty(t, reason, "expected ALLOW (preserved) for %q, got denial: %s", command, reason)
+	require.NotEmpty(t, notices, "expected a preservation notice for %q", command)
+	return strings.Join(notices, "\n")
 }
 
 // fill substitutes the two directories into a case's command. Named tokens
@@ -81,6 +106,13 @@ func writeFile(t *testing.T, path, content string) {
 // half they mean instead of asserting on the merged verdict.
 func lossOnly(t *testing.T, cwd, command string) string {
 	t.Helper()
+	reason, _ := evaluateLoss(command, cwd)
+	return reason
+}
+
+// lossOnlyNotices is lossOnly plus the preservation notices.
+func lossOnlyNotices(t *testing.T, cwd, command string) (string, []string) {
+	t.Helper()
 	return evaluateLoss(command, cwd)
 }
 
@@ -93,7 +125,8 @@ func decideWithEvent(t *testing.T, event, tool, cwd, command string) string {
 		"tool_input":      map[string]any{"command": command},
 	})
 	require.NoError(t, err)
-	return decide(raw)
+	reason, _ := decide(raw)
+	return reason
 }
 
 // captureStdout and the payload assertion live in hookio_test.go.

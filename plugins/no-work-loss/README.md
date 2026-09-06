@@ -1,9 +1,9 @@
 # no-work-loss
 
-Keeps you in charge of the working tree. Two refusals, one parse of the command:
+Keeps you in charge of the working tree. Two rules, one parse of the command:
 
-- **Destruction** — a command that will destroy content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything.
-- **Provenance** — a change to file content that skips Write, Edit or NotebookEdit. Bash runs things. It does not author files.
+- **Destruction** — a command that would destroy content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything, so this content is committed into a dedicated ref and pushed to origin first, then the command is allowed.
+- **Provenance** — a change to file content that skips Write, Edit or NotebookEdit. Bash runs things. It does not author files. This one still refuses.
 
 ## Installation
 
@@ -12,19 +12,26 @@ Keeps you in charge of the working tree. Two refusals, one parse of the command:
 /plugin install no-work-loss
 ```
 
-## What it blocks
+## What it preserves, then allows
 
-Refused when the repository actually has something to lose:
+The content is committed to `refs/no-work-loss/<timestamp>`, pushed to origin, and the command proceeds. A push failure still allows — the local ref already holds it:
 
-| Command | Refused when |
+| Command | Preserved when |
 |---|---|
-| `git reset --hard` / `--merge` / `--keep` | tracked files are modified |
-| `git checkout <ref>` / `git switch <branch>` | tracked files are modified |
-| `git checkout -- <path>` / `git restore` | tracked files are modified |
+| `git checkout <ref>` / `git switch <branch>` (no pathspec) | tracked files are modified |
 | `git clean -fd` (`-fdx` adds ignored files) | untracked files exist |
-| `git stash drop` / `git stash clear` | the stash is non-empty |
-| `git rebase` / `merge` / `cherry-pick` / `revert` | the tree is dirty |
-| `rm`, `mv`, `tee`, `truncate -s 0`, `> file` | the target is modified or untracked |
+| `git merge` / `git pull` | the tree is dirty |
+| `rm`, `git rm`, `mv` (within the tree), `git submodule --force` | the target is modified or untracked |
+
+```
+preserved: rm would have lost 1 untracked file (scratch.txt), so it was committed to
+refs/no-work-loss/20260906T153012.000000001 (a1b2c3d4e5f6) and pushed to origin
+before being allowed to proceed.
+```
+
+## What it still refuses
+
+A command that is also a provenance route — `git reset --hard`, `git restore`, `git checkout -- <path>`, `git rebase`/`cherry-pick`/`revert`/`am`, `tee`, `truncate -s 0`, `> file` — refuses regardless of preservation, since writing tracked content from Bash is authored change no edit tool made. `git stash drop`/`clear` also refuses: a stash entry is not preserved.
 
 Ref-destroying commands are judged on whether the commits survive somewhere else, not on the verb:
 
@@ -37,13 +44,13 @@ Ref-destroying commands are judged on whether the commits survive somewhere else
 | `reflog expire` / `delete` | a commit is reachable only through the reflog |
 | `worktree remove --force` | that worktree has uncommitted changes |
 
-`push --mirror` is the one exception refused outright: it rewrites every ref at once, so there is no bounded set of commits to check.
+`push --mirror` is refused outright: it rewrites every ref at once, so there is no bounded set of commits to check. A ref under `refs/no-work-loss/` is refused the other way — always, never conditionally — since it is the only copy of what it holds.
 
-Every denial names the counts, the files, and the command to run instead:
+A denial that is not preserved names the counts, the files, and the command to run instead:
 
 ```
-blocked: git reset --hard would lose 3 modified + 1 untracked file (src/a.go, src/b.go, +2 more).
-run: git stash push -u -m "pre-reset" && git reset --hard origin/master
+blocked: git reset --hard writes into /repo, which is inside the working tree.
+Use Edit to change an existing file, or Write to create one.
 ```
 
 ## What it routes back to the edit tools

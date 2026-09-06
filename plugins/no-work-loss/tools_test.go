@@ -148,5 +148,7 @@ func TestOtherEventsAndToolsAreIgnored(t *testing.T) {
 			"%s is not this hook's event", event)
 	}
 	assert.Empty(t, ask(t, root, ""), "an empty command decides nothing")
-	assert.Empty(t, decide([]byte("not json")))
+	unparseable, notices := decide([]byte("not json"))
+	assert.Empty(t, unparseable)
+	assert.Empty(t, notices, "an unparseable payload preserves nothing, so it announces nothing")
 }

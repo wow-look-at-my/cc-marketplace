@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Where the two halves disagree. Each case names both verdicts, because the
@@ -33,16 +34,20 @@ func TestRedirectOntoANewFileIsStillAuthoring(t *testing.T) {
 	allowed(t, dir, "git status > /dev/null 2>&1")
 }
 
-// The destruction half's message wins where both object, because losing unsaved
-// edits is the more urgent fact and its message names the stash that saves them.
-func TestTheDestructionMessageWinsWhenBothHalvesObject(t *testing.T) {
+// The destruction half no longer blocks a redirect over dirty content -- it
+// preserves the tracked edit into a ref first, so what surfaces is the
+// provenance half's own objection: writing a tracked file from Bash is
+// authored content no edit tool produced, preserved or not.
+func TestProvenanceMessageSurfacesOnceDestructionPreserves(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
-	reason := denied(t, dir, "echo x > tracked.go")
-	assert.Contains(t, reason, "would lose")
 
-	// And the alternative it names must itself survive the other half: `>> file`
-	// spares the content but is still a write outside the edit tools.
-	assert.NotContains(t, reason, ">> tracked.go")
+	lossReason, notices := lossOnlyNotices(t, dir, "echo x > tracked.go")
+	assert.Empty(t, lossReason)
+	require.NotEmpty(t, notices)
+	assert.Contains(t, notices[0], "refs/no-work-loss/")
+
+	reason := denied(t, dir, "echo x > tracked.go")
+	assert.Contains(t, reason, "tracked.go")
 	assert.Contains(t, reason, "Edit")
 }
