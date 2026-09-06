@@ -1,11 +1,9 @@
 // refs.go finds the references a message hands the reader with nothing to
-// click: an issue or PR number, a commit SHA, a branch slug, a bare GitHub
-// URL.
+// click: an issue or PR number, a commit SHA, a branch slug, a bare GitHub URL.
 //
-// The test is one step: remove every markdown link from the message, then look
-// at what is left. Anything a matcher finds after that was never linked. There
-// is no credit for a link given earlier in the message or in an earlier turn --
-// the reader is looking at THIS text.
+// Each match carries the byte range it occupies, because the caller rewrites
+// the reference in place rather than reporting it. Text that is already a link
+// is blanked first, so a correct reference is never rewritten twice.
 package main
 
 import (
@@ -14,12 +12,10 @@ import (
 	"strings"
 )
 
-// Ref is one unlinked reference: what it is, the token itself, and the line it
-// sits on so the refusal can quote it back.
+// Ref is one unlinked reference: what it is, and the token itself.
 type Ref struct {
 	Kind string
 	Text string
-	Line string
 }
 
 // A markdown link, with an optional title. Both halves go, anchor included:
@@ -43,41 +39,74 @@ var (
 	// heuristic separates it from a repository slug by looks alone. A bare
 	// `owner/repo` with no number is therefore NOT matched -- the `#N` form
 	// is, which is how a repository gets named in practice.
-	branchRe = regexp.MustCompile(`(?i)(?:claude|feature|feat|fix|bugfix|hotfix|release|chore|refactor|wip|renovate|dependabot)/[A-Za-z0-9._/-]+`)
+	// The last character may not be a '.' or a '/': git forbids a ref that ends
+	// in either, so a trailing one belongs to the sentence rather than the
+	// branch. Without that the match swallows the full stop in
+	// `pushed claude/thing.` and the rendered link 404s.
+	branchRe = regexp.MustCompile(`(?i)(?:claude|feature|feat|fix|bugfix|hotfix|release|chore|refactor|wip|renovate|dependabot)/[A-Za-z0-9._/-]*[A-Za-z0-9_-]`)
 	// A GitHub URL that survived link removal is a URL the reader must select
 	// and paste.
 	urlRe = regexp.MustCompile(`https?://(?:www\.)?github\.com/[^\s)\]<>"']+`)
 )
 
-// FindUnlinked returns every reference in text that carries no link. Order
-// follows the message; each distinct token is reported once.
-func FindUnlinked(text string) []Ref {
-	stripped := stripLinks(assertedText(text))
-	var refs []Ref
-	for _, m := range candidates(stripped) {
-		if slices.ContainsFunc(refs, func(r Ref) bool { return r.Text == m.Text }) {
-			continue
+// Located is one unlinked reference with the byte range it occupies, so a
+// caller can splice a link in over it.
+type Located struct {
+	Ref
+	Start int
+	End   int
+}
+
+// FindUnlinkedInLine returns every unlinked reference in one line of prose,
+// with offsets into that same line. Every token is reported, including a repeat:
+// the caller rewrites each occurrence, rather than naming the token once.
+//
+// Text that is already a link is blanked first. Without that, the branch matcher
+// fires on the `claude/x` inside `[claude/x](url)` and the URL matcher fires on
+// the target, so the rewrite nests a link inside a link.
+//
+// BLANKED, not stripped: each link becomes an equal run of spaces. A replacement
+// that changes the length moves every offset after it, and a moved offset
+// splices the next link into the middle of a word.
+func FindUnlinkedInLine(line string) []Located {
+	return candidates(blankLinks(line))
+}
+
+// blankLinks replaces every markdown link, autolink and character reference
+// with spaces, preserving the length of the text exactly.
+func blankLinks(text string) string {
+	b := []byte(text)
+	for _, re := range []*regexp.Regexp{mdLinkRe, autoLinkRe, charRefRe} {
+		for _, loc := range re.FindAllStringIndex(text, -1) {
+			for i := loc[0]; i < loc[1]; i++ {
+				b[i] = ' '
+			}
 		}
-		refs = append(refs, m)
 	}
-	return refs
+	return string(b)
 }
 
 // candidates runs every matcher over the text and keeps the hits that survive
-// their kind's own validation and a boundary check.
-func candidates(text string) []Ref {
+// their kind's own validation and a boundary check. Each hit carries the byte
+// range it occupies, so a caller can splice over it.
+//
+// Overlaps are dropped: a bare GitHub URL contains a slug that also matches the
+// branch matcher, and rewriting both would nest one link inside another.
+func candidates(text string) []Located {
 	type matcher struct {
 		kind  string
 		re    *regexp.Regexp
 		valid func(string) bool
 	}
+	// URL first: it is the longest match, and claiming its span here is what
+	// stops the branch matcher from firing inside it.
 	matchers := []matcher{
+		{"a bare GitHub URL", urlRe, nil},
 		{"an issue or pull request number", numberRe, nil},
 		{"a commit SHA", shaRe, validSHA},
 		{"a branch", branchRe, validBranch},
-		{"a bare GitHub URL", urlRe, nil},
 	}
-	var out []Ref
+	var out []Located
 	for _, m := range matchers {
 		for _, loc := range m.re.FindAllStringIndex(text, -1) {
 			token := text[loc[0]:loc[1]]
@@ -87,9 +116,17 @@ func candidates(text string) []Ref {
 			if m.valid != nil && !m.valid(token) {
 				continue
 			}
-			out = append(out, Ref{Kind: m.kind, Text: token, Line: lineAt(text, loc[0])})
+			if slices.ContainsFunc(out, func(o Located) bool { return loc[0] < o.End && o.Start < loc[1] }) {
+				continue
+			}
+			out = append(out, Located{
+				Ref:   Ref{Kind: m.kind, Text: token},
+				Start: loc[0],
+				End:   loc[1],
+			})
 		}
 	}
+	slices.SortStableFunc(out, func(a, b Located) int { return a.Start - b.Start })
 	return out
 }
 
@@ -98,23 +135,35 @@ func candidates(text string) []Ref {
 // underscore or a slash is part of something else -- a filename, an identifier,
 // a URL path -- and naming it would be a false alarm.
 func boundedToken(text string, start, end int) bool {
-	if start > 0 && isTokenByte(text[start-1]) {
+	if start > 0 && continuesToken(text, start-1, -1) {
 		return false
 	}
-	if end < len(text) && isTokenByte(text[end]) {
+	if end < len(text) && continuesToken(text, end, +1) {
 		return false
 	}
 	return true
 }
 
-func isTokenByte(b byte) bool {
-	switch {
-	case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9':
-		return true
-	case b == '_', b == '/', b == '-', b == '.':
-		return true
+// continuesToken reports whether the byte at i extends the match into a longer
+// word, reading away from it in direction dir.
+//
+// A '.' is the whole subtlety. It joins a filename to its extension, so
+// `6884dd2abc.log` must not be reported as a commit -- but it is also how a
+// sentence ends, and treating every trailing '.' as part of the token made
+// every reference that ENDS a sentence invisible to this guard. So a '.' counts
+// only when an alphanumeric follows it in the same direction. `6884dd2.` at the
+// end of a sentence is a commit; `6884dd2abc.log` is a filename.
+func continuesToken(text string, i, dir int) bool {
+	b := text[i]
+	if b == '.' {
+		next := i + dir
+		return next >= 0 && next < len(text) && isAlnum(text[next])
 	}
-	return false
+	return isAlnum(b) || b == '_' || b == '/' || b == '-'
+}
+
+func isAlnum(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
 }
 
 // validSHA requires both a digit and a hex letter, which is what separates a
@@ -140,50 +189,10 @@ func validBranch(token string) bool {
 	return i > 0 && i < len(token)-1
 }
 
-// stripLinks removes markdown links and autolinks. A `&#N;` character
-// reference goes too: it is XML, not an issue number, and the two are
-// indistinguishable to the matcher.
-func stripLinks(text string) string {
-	text = mdLinkRe.ReplaceAllString(text, " ")
-	text = autoLinkRe.ReplaceAllString(text, " ")
-	return charRefRe.ReplaceAllString(text, " ")
-}
-
+// charRefRe is a `&#N;` character reference. It is XML, not an issue number,
+// and the two are indistinguishable to the matcher, so it is blanked alongside
+// the links.
 var charRefRe = regexp.MustCompile(`&#x?[0-9a-fA-F]{1,7};`)
-
-// assertedText drops what a message QUOTES rather than states: fenced code,
-// indented code, and blockquotes. Writing this rule down means writing its
-// examples down, and a guard that cannot survive its own documentation is a
-// guard someone turns off.
-//
-// Inline backticks are NOT exempt. A SHA in backticks is the exact thing this
-// plugin exists to catch.
-func assertedText(text string) string {
-	var out []string
-	fence := ""
-	for _, line := range strings.Split(text, "\n") {
-		if marker := fenceMarker(line); marker != "" {
-			if fence == "" {
-				fence = marker
-			} else if marker == fence {
-				fence = ""
-			}
-			continue
-		}
-		if fence != "" {
-			continue
-		}
-		trimmed := strings.TrimLeft(line, " \t")
-		if strings.HasPrefix(trimmed, ">") {
-			continue
-		}
-		if strings.HasPrefix(line, "    ") && trimmed != "" {
-			continue
-		}
-		out = append(out, line)
-	}
-	return strings.Join(out, "\n")
-}
 
 // fenceMarker returns "`" or "~" when a line opens or closes a code fence.
 func fenceMarker(line string) string {
@@ -194,21 +203,4 @@ func fenceMarker(line string) string {
 		}
 	}
 	return ""
-}
-
-// lineAt returns the line containing byte offset i, collapsed to one line and
-// bounded so a refusal quotes a readable fragment rather than a paragraph.
-func lineAt(text string, i int) string {
-	start := strings.LastIndexByte(text[:i], '\n') + 1
-	end := strings.IndexByte(text[i:], '\n')
-	if end < 0 {
-		end = len(text)
-	} else {
-		end += i
-	}
-	line := strings.Join(strings.Fields(text[start:end]), " ")
-	if len(line) > 160 {
-		line = line[:157] + "..."
-	}
-	return line
 }
