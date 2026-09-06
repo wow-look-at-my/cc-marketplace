@@ -20,15 +20,14 @@ That run is also what caught the one false positive the unit tests had not: `tha
 
 Every failure path allows the call: an unparseable payload, an unparseable `tool_input`, an unjudged path. A tool that does not write files, and any `hook_event_name` other than `PreToolUse`. The matcher is `*` and the tool name is filtered in Go. The registration does not depend on matcher-regex semantics.
 
-**The rule is not here. It is slopfmt's.** This hook pipes each text a write adds through `slopfmt fix --only tombstones --json` and splices the answer back into the payload. It holds no tell table, no comment scanner and no referent probe of its own. CI, an editor and this hook all shell out to the same binary, so none of them can drift from the others. `SLOPFMT` names another path, which is how the tests drive a stub instead.
+**The rule is slopfmt's, and so is the plumbing.** `slopfmt hook --only tombstones` reads the PreToolUse payload on stdin and writes the response on stdout. It strips what it can, denies what it cannot, and holds no tell table, comment scanner or referent probe here. CI, an editor and this hook all shell out to the same binary, so none of them can drift from the others.
 
-A missing binary, a timeout and an unreadable answer all let the write through unchanged. A guard that refuses a write because its tool is absent is worse than no guard.
+That plumbing used to live here, in Go, and identically again in `no-counts-in-docs`. The same payload parse, the same Write/Edit/MultiEdit shapes, the same splice back into `tool_input`. A write shape added to one and not the other is a guard that silently stops seeing half the writes.
 
-What stays here is the plumbing. Which writes are worth a subprocess, how the answer is spliced back, the notice, and the refusal.
+**`hook.sh` exists for one reason: to fail OPEN.** A PreToolUse hook blocks the tool on any non-zero exit. Naming `slopfmt` straight in `plugin.json` therefore turns a missing binary into a guard that refuses every write in the session rather than none. The launcher probes for the binary and exits 0 when it is absent. `SLOPFMT` names another path, which is how a test drives a stub. `NO_TOMBSTONES_MAX_COMMENT_LINES` still sets the volume cap, passed through as `--max-comment-lines`.
 
-- **Hook binary**: `plugins/no-tombstones/hook.go` -- the PreToolUse payload, the per-unit call into slopfmt, the strip-or-deny decision, the `updatedInput` write-back, and the deny reason with its truncation notice. This is the whole plugin
-- **Detection**: `wow-look-at-my/slopfmt`, package `tombstones`. The tell table, the comment scanner, the referent probe and the strip live there
-- **Tests**: `plugins/no-tombstones/plumbing_test.go`. The suite drives a stub in place of the binary, because the rule is tested where it lives. Covered here is every write shape, a kept finding refusing the write, and every path that lets a write through
+- **Launcher**: `plugins/no-tombstones/hook.sh` -- the probe, the cap and the exec. This is the whole plugin
+- **Rule and plumbing**: `wow-look-at-my/slopfmt`. Package `tombstones` holds the tell table, the comment scanner, the referent probe and the strip. `cmd/hook.go` holds the payload, the write shapes, the strip-or-deny decision and the response, and both are tested there
 - **Plugin config**: `plugins/no-tombstones/.claude-plugin/plugin.json` -- one PreToolUse hook registration on matcher `*`
 
 Keep the two in sync if either changes.
