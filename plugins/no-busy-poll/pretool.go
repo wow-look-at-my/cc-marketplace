@@ -75,10 +75,19 @@ func readSinceLastSignal(recs []record) map[string]bool {
 		}
 	}
 
+	// A result arrives after the call it answers, so the errors are collected
+	// first and the reads judged against them.
+	failed := map[string]bool{}
+	for _, r := range recs[start:] {
+		for _, id := range r.failed {
+			failed[id] = true
+		}
+	}
+
 	out := map[string]bool{}
 	for _, r := range recs[start:] {
 		for _, c := range r.calls {
-			if !isStatusRead(c) {
+			if !isStatusRead(c) || failed[c.id] {
 				continue
 			}
 			for _, s := range subjectsIn(strings.ToLower(callText(c))) {

@@ -115,6 +115,58 @@ func TestADifferentPullRequestIsStillReadable(t *testing.T) {
 	assert.Empty(t, reason, "one pull request merging says nothing about another")
 }
 
+// callWithID is an assistant record whose tool_use carries an id, so a result
+// can be tied back to it.
+func callWithID(id, command string) string {
+	b, _ := json.Marshal(map[string]any{
+		"type": "assistant", "timestamp": "2026-09-05T01:00:00Z",
+		"message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{"type": "tool_use", "id": id, "name": "Bash",
+				"input": map[string]string{"command": command}},
+		}},
+	})
+	return string(b)
+}
+
+// resultFor is a call's answer. failed says whether it came back an error,
+// which is the whole distinction this pair of tests turns on.
+func resultFor(id, text string, failed bool) string {
+	block := map[string]any{"type": "tool_result", "tool_use_id": id, "content": text}
+	if failed {
+		block["is_error"] = true
+	}
+	b, _ := json.Marshal(map[string]any{
+		"type": "user", "timestamp": "2026-09-05T01:00:01Z",
+		"message": map[string]any{"role": "user", "content": []any{block}},
+	})
+	return string(b)
+}
+
+func TestAReadThatErroredIsNotARead(t *testing.T) {
+	const sha = "4f7cea8b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60"
+	tr := stageTranscript(t,
+		callWithID("t1", "gh wait-ci --sha "+sha+" --timeout 15m"),
+		resultFor("t1", "ERROR: unknown flag: --timeout", true),
+	)
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
+		bashInput("gh wait-ci --sha "+sha)))
+
+	assert.Empty(t, reason, "a call that errored returned no state, so this is the first read")
+}
+
+func TestAReadThatAnsweredIsARead(t *testing.T) {
+	const sha = "4f7cea8b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60"
+	tr := stageTranscript(t,
+		callWithID("t1", "gh wait-ci --sha "+sha),
+		resultFor("t1", "Progress: 3/8 still running", false),
+	)
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
+		bashInput("gh wait-ci checks --sha "+sha)))
+
+	require.NotEmpty(t, reason, "a read that answered is the repeat this guard exists for")
+	assert.Contains(t, reason, "4f7cea8")
+}
+
 func TestAGreenCommitIsNeverReadAgain(t *testing.T) {
 	tr := stageTranscript(t,
 		bashCall("gh wait-ci --sha c274ad3c1a9c7bc156d706dc6062b2ab298417c0"),

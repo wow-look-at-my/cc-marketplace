@@ -11,7 +11,10 @@ import (
 )
 
 // toolCall is one tool_use block: the tool it names and the input it carries.
+// id ties it to its result, so a call that came back an error is not counted
+// as a read.
 type toolCall struct {
+	id    string
 	name  string
 	input json.RawMessage
 }
@@ -23,7 +26,11 @@ type record struct {
 	newPrompt bool
 	wake      bool
 	calls     []toolCall
-	raw       string
+	// failed names the tool_use ids whose result came back an error. A call
+	// that errored returned no state, so re-asking is the FIRST read of that
+	// subject rather than a repeat of one.
+	failed []string
+	raw    string
 }
 
 // wakeMarkers are the envelopes the harness delivers when something really
@@ -68,12 +75,20 @@ func parseRecords(path string) []record {
 		switch rec.Type {
 		case "user":
 			r.newPrompt = isNewPrompt(rec.Message.Content)
+			var blocks []rawBlock
+			if json.Unmarshal(rec.Message.Content, &blocks) == nil {
+				for _, b := range blocks {
+					if b.Type == "tool_result" && b.IsError && b.ToolUseID != "" {
+						r.failed = append(r.failed, b.ToolUseID)
+					}
+				}
+			}
 		case "assistant":
 			var blocks []rawBlock
 			if json.Unmarshal(rec.Message.Content, &blocks) == nil {
 				for _, b := range blocks {
 					if b.Type == "tool_use" {
-						r.calls = append(r.calls, toolCall{name: b.Name, input: b.Input})
+						r.calls = append(r.calls, toolCall{id: b.ID, name: b.Name, input: b.Input})
 					}
 				}
 			}
