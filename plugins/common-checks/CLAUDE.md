@@ -18,7 +18,9 @@ A placement needs the file to be readable and the replaced string to appear in i
 
 **A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
 
-It clears itself. Every write re-reads each recorded file from disk, and drops the ones that now pass, so the repair needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
+It clears itself. Every write re-reads each recorded file from disk and drops the ones whose finding is gone. The repair therefore needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
+
+**An entry names the FINDINGS, never the file alone.** The earlier sweep asked whether the whole file passed. A file carries findings no write here introduced, and a hard-wrapped document carries one per paragraph. The entry then never cleared. Every later write in the session was refused against a file nothing was able to clean. That is a wedge whose only way out is deleting the entry by hand, which is what happened. So `record` stores each finding's identity, and `sweep` drops the entry once none of them is on disk any more. A different finding the file already had holds nothing.
 
 Every failure path allows the write: an unparseable payload, an unjudged path, a tool that does not write. **A missing Node allows it too, in `launcher.sh`.** A non-zero exit from a PreToolUse hook blocks the tool. The server's `exit 127` there refuses every write in the session rather than none.
 
