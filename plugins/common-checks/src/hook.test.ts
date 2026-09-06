@@ -193,7 +193,6 @@ test("a wrap beside a real violation leaves only the real violation", () => {
   assert.doesNotMatch(reason, /Join it back up/);
 });
 
-<<<<<<< HEAD
 // The incident this placement exists for: an Edit whose fragment sits inside a
 // fenced block. Judged alone the fragment shows no fence, so its lines read as
 // a hand-wrapped paragraph and the repair flattened a diagram into one line.
@@ -260,8 +259,6 @@ test("a fenced fragment is not refused for its punctuation", () => {
   assert.equal(decision.reason, "");
 });
 
-=======
->>>>>>> origin/master
 test("blockingFindings reports the check by name", () => {
   const found = blockingFindings(
     "Write",

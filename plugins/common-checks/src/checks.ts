@@ -249,22 +249,13 @@ function collapseRuns(name: string, entries: string[]): string[] {
  * code block, a table, a heading and a quotation are all left exactly as they
  * are. The JOIN is applied to the RAW lines, so the file keeps its own text.
  */
-<<<<<<< HEAD
+/** 0-based index of every line that gets folded into the one before it. */
 export function continuationLines(content: string): Set<number> {
   const view = steLint.stripQuotedSpans(steLint.stripCode(content)).split("\n");
-=======
-export function unwrapParagraphs(content: string): string {
-  const crlf = content.includes("\r\n");
-  const raw = content.split("\n").map((line) => line.replace(/\r$/, ""));
-  const view = steLint.stripQuotedSpans(steLint.stripCode(content)).split("\n");
-
-  // 0-based index of every line that gets folded into the one before it.
->>>>>>> origin/master
   const continuation = new Set<number>();
   for (const block of blocks(view)) {
     for (let i = 1; i < block.starts.length; i++) continuation.add(block.starts[i].line - 1);
   }
-<<<<<<< HEAD
   return continuation;
 }
 
@@ -272,8 +263,6 @@ export function unwrapParagraphs(content: string): string {
   const crlf = content.includes("\r\n");
   const raw = content.split("\n").map((line) => line.replace(/\r$/, ""));
   const continuation = continuationLines(content);
-=======
->>>>>>> origin/master
   if (continuation.size === 0) return content;
 
   const out: string[] = [];

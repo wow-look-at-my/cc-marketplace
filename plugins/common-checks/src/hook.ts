@@ -115,7 +115,6 @@ export function relativePath(filePath: string, cwd: string): string {
  * so does one whose text was already unwrapped.
  */
 export function repairInput(toolName: string, input: ToolInput): ToolInput | undefined {
-<<<<<<< HEAD
   const queue = unitsOf(toolName, input);
   if (queue.length === 0) return undefined;
   const repaired: ToolInput = { ...input };
@@ -124,13 +123,6 @@ export function repairInput(toolName: string, input: ToolInput): ToolInput | und
     const unit = queue.shift();
     if (unit === undefined) return text;
     const next = repairText(unit);
-=======
-  if (!WRITE_TOOLS.has(toolName)) return undefined;
-  const repaired: ToolInput = { ...input };
-  let changed = false;
-  const fix = (text: string): string => {
-    const next = unwrapParagraphs(text);
->>>>>>> origin/master
     if (next !== text) changed = true;
     return next;
   };
