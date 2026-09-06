@@ -43,11 +43,15 @@ export function fileKind(relativePath: string): FileKind {
 // document and the structural checks produce one or two. The client injects
 // only the first handful, so a voluminous check must never crowd out a
 // structural one.
-const ORDER = ["no-all-builds-job", "yaml-comment-block", "no-tests-in-yaml", "ste-lint"];
+// This doubles as the coverage claim: every check named here has an adapter
+// below, and `checks.test.ts` holds it against the manifest the build vendored
+// from. A check whose modules are fetched but which nothing calls would
+// otherwise ship as silent non-coverage.
+export const ADAPTED = ["no-all-builds-job", "yaml-comment-block", "no-tests-in-yaml", "ste-lint"];
 
 function rank(check: string): number {
-  const index = ORDER.indexOf(check);
-  return index === -1 ? ORDER.length : index;
+  const index = ADAPTED.indexOf(check);
+  return index === -1 ? ADAPTED.length : index;
 }
 
 /** 1-based line of the first source line matching `pattern`, or `fallback`. */
