@@ -47,20 +47,17 @@ func loadEmbeddedTests(t *testing.T) []struct{ Command, Expected string } {
 }
 
 func TestEvaluateCommands(t *testing.T) {
-	loadTestRules(t)
+	shipped := loadTestRules(t)
 	for _, tt := range loadEmbeddedTests(t) {
 		t.Run(tt.Command, func(t *testing.T) {
-			decision, _ := evaluateCommand(tt.Command)
+			decision, _ := evaluateCommandWith(tt.Command, shipped)
 			assert.Equal(t, tt.Expected, decision, "evaluateCommand(%q)", tt.Command)
 		})
 	}
 }
 
 func TestDuplicateEntriesMerged(t *testing.T) {
-	saved := rules
-	defer func() { rules = saved }()
-
-	rules = Rules{
+	rules := Rules{
 		Allow: []CommandNode{
 			{
 				Name:        "mycmd",
@@ -79,21 +76,18 @@ func TestDuplicateEntriesMerged(t *testing.T) {
 		},
 	}
 
-	decision, _ := evaluateCommand("mycmd sub1")
+	decision, _ := evaluateCommandWith("mycmd sub1", rules)
 	assert.Equal(t, "allow", decision, "mycmd sub1 should match first entry")
 
-	decision, _ = evaluateCommand("mycmd sub2")
+	decision, _ = evaluateCommandWith("mycmd sub2", rules)
 	assert.Equal(t, "allow", decision, "mycmd sub2 should match second entry")
 
-	decision, _ = evaluateCommand("mycmd sub3")
+	decision, _ = evaluateCommandWith("mycmd sub3", rules)
 	assert.Equal(t, "", decision, "mycmd sub3 should passthrough (no match)")
 }
 
 func TestDuplicateEntriesDenyWins(t *testing.T) {
-	saved := rules
-	defer func() { rules = saved }()
-
-	rules = Rules{
+	rules := Rules{
 		Allow: []CommandNode{
 			{
 				Name: "mycmd",
@@ -110,7 +104,7 @@ func TestDuplicateEntriesDenyWins(t *testing.T) {
 		},
 	}
 
-	decision, msg := evaluateCommand("mycmd ok")
+	decision, msg := evaluateCommandWith("mycmd ok", rules)
 	assert.Equal(t, "deny", decision, "deny should win over allow for duplicate entries")
 	assert.Equal(t, "blocked", msg)
 }
@@ -351,14 +345,17 @@ func getRepoRoot(t *testing.T) string {
 	return repoRoot
 }
 
-func loadTestRules(t *testing.T) {
+// loadTestRules returns the shipped rule set. It hands back a value rather
+// than installing it, so a parallel sibling cannot replace it mid-test.
+func loadTestRules(t *testing.T) Rules {
 	t.Helper()
 	repoRoot := getRepoRoot(t)
 	rulesPath := filepath.Join(repoRoot, "plugins/enhanced-auto-allow/rules.xml")
 	data, err := os.ReadFile(rulesPath)
 	require.Nil(t, err, "Failed to read rules.xml")
-	rules, err = loadXMLRules(data)
+	loaded, err := loadXMLRules(data)
 	require.NoError(t, err, "Failed to parse rules.xml")
+	return loaded
 }
 
 // A malformed byte disables EVERY rule: loadXMLRules failing makes the hook

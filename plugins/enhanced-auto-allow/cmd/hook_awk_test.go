@@ -7,7 +7,7 @@ import (
 )
 
 func TestAwkAllowed(t *testing.T) {
-	loadTestRules(t)
+	rules := loadTestRules(t)
 	tests := []struct {
 		name    string
 		command string
@@ -35,14 +35,14 @@ func TestAwkAllowed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision, _ := evaluateCommand(tt.command)
+			decision, _ := evaluateCommandWith(tt.command, rules)
 			assert.Equal(t, "allow", decision, "evaluateCommand(%q)", tt.command)
 		})
 	}
 }
 
 func TestAwkDangerousPassthrough(t *testing.T) {
-	loadTestRules(t)
+	rules := loadTestRules(t)
 	tests := []struct {
 		name    string
 		command string
@@ -68,20 +68,18 @@ func TestAwkDangerousPassthrough(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision, _ := evaluateCommand(tt.command)
+			decision, _ := evaluateCommandWith(tt.command, rules)
 			assert.Equal(t, "", decision, "evaluateCommand(%q) should passthrough", tt.command)
 		})
 	}
 }
 
 func TestAwkPipeChain(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand("cat /etc/hosts | awk '{print $2}' | sort -u")
+	decision, _ := evaluateCommandWith("cat /etc/hosts | awk '{print $2}' | sort -u", loadTestRules(t))
 	assert.Equal(t, "allow", decision, "cat|awk|sort pipeline should be allowed")
 }
 
 func TestAwkPipeChainWithSystem(t *testing.T) {
-	loadTestRules(t)
-	decision, _ := evaluateCommand(`cat /etc/hosts | awk 'BEGIN{system("id")}'`)
+	decision, _ := evaluateCommandWith(`cat /etc/hosts | awk 'BEGIN{system("id")}'`, loadTestRules(t))
 	assert.Equal(t, "", decision, "pipeline with awk using system() should passthrough")
 }
