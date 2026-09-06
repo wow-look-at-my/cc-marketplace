@@ -8,6 +8,8 @@ The hook judges only the text a write ADDS. A violation already in the file ther
 
 **It filters nothing else.** `findings()` already returns only what fails CI, so a second list of enforced checks is a list that drifts from the first. An earlier draft kept one and left ste-lint out of it. The file documenting that choice then failed ste-lint in CI.
 
+**A hard wrap is REPAIRED, never refused.** The wrap rule is the one check here whose repair needs no judgement. The lines to join are the ones the check itself names. The text reads the same afterwards. So `unwrapParagraphs` joins them. The hook then emits `hookSpecificOutput.updatedInput` with `suppressOutput`, which is the standing rule in this marketplace. A guard that already knows the answer must not spend a round trip asking for it. The repair reads the same stripped view the linter reads. A fence, a table, a heading and a quotation all keep their own line breaks. The JOIN lands on the raw lines, so the file keeps its own text. A `fixable` finding therefore never reaches the refusal, and never holds a file in the ledger. What the repair cannot reach still denies.
+
 **A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
 
 It clears itself. Every write re-reads each recorded file from disk, and drops the ones that now pass, so the repair needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
@@ -96,7 +98,9 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 
 ### Files
 
-- **Adapters**: `plugins/common-checks/src/checks.ts` -- file kind, the per-check calls into `vendor/`, the `no-all-builds-job` anchor, the ste-lint bucket wording, the wrapped-paragraph collapse, and the ranking
+- **Adapters**: `plugins/common-checks/src/checks.ts` -- file kind, the per-check calls into `vendor/`, the `no-all-builds-job` anchor, the ste-lint bucket wording, and the ranking. Also the wrapped-paragraph collapse, the `fixable` tag, and `unwrapParagraphs`
+- **Hook**: `plugins/common-checks/src/hook.ts` -- the PreToolUse payload, the added text per write shape, `repairInput`, the ledger sweep, and the two output shapes
+- **Tests**: `src/hook.test.ts` covers the refusal and every fail-open path. Also the wrap repair on each write shape, a fence keeping its line breaks, and a wrap beside a real violation
 - Document sync is full, because a finding is a property of the whole document
 - **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else
 - **Launcher**: `plugins/common-checks/launcher.sh` -- staged into `server/` as `common-checks-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own. The directory is `server/` and not `build/` because `release-plugin` requires every file under `build/` to be a fat APE, and this plugin ships no Go
