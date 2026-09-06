@@ -295,6 +295,102 @@ def rewrite_docker_compose_restart:
     then rewrite_docker_compose_restart_call
     else . end);
 
+# ---------------------------------------------------------------------------
+# Rule: every GitHub Actions read goes through `gh wait-ci`. The `gh` shim
+# refuses `gh run`, `gh workflow` and `gh pr checks` at run time, so each of
+# these spellings is a guaranteed failure that costs a whole tool call. The
+# forms below carry the same meaning on both sides, so the rewrite cannot
+# change what the command asks:
+#
+#   gh run view <id> --log-failed  ->  gh wait-ci log <id> --failed
+#   gh run view <id> --log         ->  gh wait-ci log <id>
+#   gh run view <id>               ->  gh wait-ci view <id>
+#   gh run watch <id>              ->  gh wait-ci <id>
+#   gh run rerun <id> [--failed]   ->  gh wait-ci rerun <id> [--failed]
+#   gh run list [flags]            ->  gh wait-ci runs [flags]
+#   gh pr checks [flags]           ->  gh wait-ci checks [flags]
+#
+# A form OUTSIDE that table is deliberately left alone rather than guessed
+# at. The shim already refuses it with the full mapping, so a wrong guess
+# would replace a precise message with a command that asks a different
+# question.
+#
+# Two guards keep it narrow. The run id must be a static run of digits, so
+# `gh run view "$ID"` is passed through untouched (the same fail-open posture
+# the rest of the hook takes on expansions). A trailing POSITIONAL after
+# `list`/`checks` blocks the rewrite, because `gh pr checks 42` names a pull
+# request and `gh wait-ci checks` reads the current branch -- a different
+# question. Remaining FLAGS are preserved verbatim, so `-R owner/repo` and
+# `--json` survive.
+#
+# Re-firing is impossible by construction: every output has `wait-ci` in the
+# subcommand slot, which matches none of the arms.
+# ---------------------------------------------------------------------------
+
+def is_run_id: (word_literal // "") | test("^[0-9]+$");
+
+# No remaining word is a POSITIONAL. A dash word is a flag, and a bare word
+# directly after a dash word is that flag's value (`--branch main`), so both
+# are fine. A bare word anywhere else is a positional, which names a
+# different subject than the rewrite would ask about, and blocks the rewrite.
+# A `--flag=value` form consumes its own value, so the word after it is a
+# positional again. A word carrying an expansion reads as a positional too,
+# which is the same fail-open posture the rest of the hook takes.
+def only_flags_and_values:
+  . as $ws
+  | all(range(0; ($ws | length));
+        . as $i
+        | (($ws[$i] | word_literal) // "") as $w
+        | if ($w | startswith("-")) then true
+          elif $i == 0 then false
+          else (($ws[$i - 1] | word_literal) // "") as $prev
+               | ($prev | startswith("-")) and (($prev | contains("=")) | not)
+          end);
+
+def without_flag($name):
+  map(select((word_literal // "") != $name));
+
+def has_flag($name):
+  any(.[]; (word_literal // "") == $name);
+
+def gh_wait_ci($words; $rest):
+  .Args = ([lit_word("gh"), lit_word("wait-ci")] + $words + $rest);
+
+def rewrite_gh_actions_read_call:
+  (.Args? // []) as $a
+  | if (($a | length) >= 3) and (($a[0] | word_literal) == "gh")
+    then
+      (($a[1] | word_literal)) as $group
+      | (($a[2] | word_literal)) as $verb
+      | ($a[4:]) as $tail
+      | if $group == "run" and $verb == "view"
+           and (($a | length) >= 4) and ($a[3] | is_run_id)
+        then
+          if ($tail | has_flag("--log-failed"))
+          then gh_wait_ci([lit_word("log"), $a[3], lit_word("--failed")];
+                          $tail | without_flag("--log-failed"))
+          elif ($tail | has_flag("--log"))
+          then gh_wait_ci([lit_word("log"), $a[3]]; $tail | without_flag("--log"))
+          else gh_wait_ci([lit_word("view"), $a[3]]; $tail)
+          end
+        elif $group == "run" and $verb == "watch"
+             and (($a | length) >= 4) and ($a[3] | is_run_id)
+        then gh_wait_ci([$a[3]]; $tail)
+        elif $group == "run" and $verb == "rerun"
+             and (($a | length) >= 4) and ($a[3] | is_run_id)
+        then gh_wait_ci([lit_word("rerun"), $a[3]]; $tail)
+        elif $group == "run" and $verb == "list" and ($a[3:] | only_flags_and_values)
+        then gh_wait_ci([lit_word("runs")]; $a[3:])
+        elif $group == "pr" and $verb == "checks" and ($a[3:] | only_flags_and_values)
+        then gh_wait_ci([lit_word("checks")]; $a[3:])
+        else . end
+    else . end;
+
+def rewrite_gh_actions_read:
+  walk(if (type == "object") and (.Type? == "CallExpr")
+    then rewrite_gh_actions_read_call
+    else . end);
+
 # GNU sleep duration in seconds; null when unparseable. Deliberately strict:
 # plain decimals with an optional s/m/h/d suffix. Scientific notation,
 # signs, inf/infinity, and junk all yield null (=> capped to `sleep 3`).
@@ -914,6 +1010,7 @@ def apply_step($name; f):
 def pass_once:
   apply_step("devnull"; scrub_devnull)
   | apply_step("docker_compose_restart"; rewrite_docker_compose_restart)
+  | apply_step("gh_wait_ci"; rewrite_gh_actions_read)
   | apply_step("rm_recycle"; rewrite_rm)
   | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]) | strip_trailing_sed_n)))
   | apply_step("or_true"; on_last_stmt(strip_or_true))
