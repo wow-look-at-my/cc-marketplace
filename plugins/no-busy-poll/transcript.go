@@ -28,11 +28,16 @@ type rawRecord struct {
 	} `json:"message"`
 }
 
-// rawBlock is one block inside a message's content array.
+// rawBlock is one block inside a message's content array. ID/ToolUseID/IsError
+// tie a call to its result, which is how a read that ERRORED is told apart
+// from one that answered: only the second taught the session anything.
 type rawBlock struct {
-	Type  string          `json:"type"`
-	Name  string          `json:"name,omitempty"`
-	Input json.RawMessage `json:"input,omitempty"`
+	Type      string          `json:"type"`
+	Name      string          `json:"name,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	ToolUseID string          `json:"tool_use_id,omitempty"`
+	IsError   bool            `json:"is_error,omitempty"`
 }
 
 // call is one tool_use block, kept as both a canonical form for comparing
