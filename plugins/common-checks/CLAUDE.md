@@ -16,13 +16,13 @@ The checks are TypeScript. The server is TypeScript too. `esbuild` bundles it in
 
 `common-checks/checks.json` is the manifest, published beside the composite in [wow-look-at-my/actions](https://github.com/wow-look-at-my/actions). It names every check the composite runs and, for each, the modules that carry its rules. `.github/scripts/vendor-common-checks/` resolves the upstream branch to one commit, reads the manifest, and fetches exactly the modules it names.
 
-A list maintained on this side can only ever describe what upstream looked like when somebody last looked. The manifest replaced one for that reason: a rule that moves into a new module is now fetched with no edit here, and the `uses:` list could never have shown that move at all.
+A list maintained on this side describes only what upstream looked like when somebody last read it. The manifest replaced one for that reason. A rule that moves into a new module now arrives with no edit here. The `uses:` list can never show that move at all.
 
 **Three assertions run on every build, and each catches a different drift.**
 
-- The manifest against the composite's `uses:` list. A check added upstream that the manifest does not name fails the build, and so does a manifest entry for a check the composite no longer runs. Both sides are upstream, so this catches a step added without a manifest entry.
-- The manifest against this plugin's adapters. The vendor step writes the parsed plan to `vendor/plan.json`, and `src/checks.test.ts` holds `ADAPTED` against it. A check whose modules are fetched and which nothing calls fails here. Vendoring alone would otherwise leave the plugin quietly enforcing four fifths of the gate while every surface reported success.
-- The plan's own shape. A module path under the wrong check, an entry with no name, and a manifest that is empty or unparseable each fail rather than vendoring a subset.
+- The manifest against the composite's `uses:` list. A check the composite runs and the manifest does not name fails the build. So does a manifest entry for a check the composite dropped. Both sides are upstream, so this catches a step added without a manifest entry.
+- The manifest against this plugin's adapters. The vendor step writes the parsed plan to `vendor/plan.json`, and `src/checks.test.ts` holds `ADAPTED` against it. A check whose modules are fetched and which nothing calls fails here. Vendoring alone leaves the plugin quietly enforcing four fifths of the gate while every surface reports success.
+- The plan's own shape. A module path under the wrong check fails. So does an entry with no name. So does a manifest that is empty or unparseable. Each of them fails rather than vendoring a subset.
 
 An entry may declare `modules: []` plus a `reason`. The reason is required rather than optional, because the assertion cannot tell a decision from an omission. Two checks use it, for the two different reasons a check reports nothing.
 
@@ -89,7 +89,7 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 - **Fetching**: `.github/scripts/vendor-common-checks/plan.ts` holds the manifest parser, the drift assertion and the provenance header. `main.ts` holds the network and disk half, plus `--commit`. The GitHub client is shared with the `docs` plugin's fetcher rather than written twice
 - **Tests**: `src/checks.test.ts` fires each check on the right line, with a clean control beside it. It also covers the file-kind boundaries, the ranking, the wrapped-paragraph collapse, and a heuristic-only finding staying unreported
 - **Tests**: `src/lsp.test.ts` covers the handshake, publish and clear, pull and push agreeing, and the cap's overflow note. It also covers path resolution with and without a root, and the framing edge cases. It asserts the explicit `null` shutdown result on the RAW JSON keys
-- **Tests**: `vendor.test.ts` drives a fake client that never touches the network. A check added upstream and a check dropped upstream each fail the build by name, a module added to the manifest is fetched with no edit here, and every malformed manifest is rejected rather than vendoring a subset
+- **Tests**: `vendor.test.ts` drives a fake client that never touches the network. A check added upstream and a check dropped upstream each fail the build by name. A module added to the manifest is fetched with no edit here, and every malformed manifest is rejected rather than vendoring a subset
 - **Registration**: `plugins/common-checks/.lsp.json`
 
 Adding a check upstream is meant to break this build. The failure names the check and the ways out. List its modules in `common-checks/checks.json` and write the adapter here, or give the entry no modules and say why no open file can violate it. Do not silence it by deleting an assertion. The assertions are the feature.
