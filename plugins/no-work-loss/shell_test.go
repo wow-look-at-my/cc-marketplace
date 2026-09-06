@@ -58,10 +58,19 @@ func TestDeniesThroughMoreWrappers(t *testing.T) {
 		"ionice -c 3 git reset --hard",
 		"env -u FOO git reset --hard",
 		"sudo -u root git reset --hard",
-		"echo x | xargs -n 1 git checkout",
 	} {
 		require.NotEmpty(t, ask(t, dir, c), "expected DENY for %q", c)
 	}
+
+	// The loop above already preserved that edit onto the branch, so this needs
+	// its own dirty tree.
+	writeAt(t, dir, "tracked.go", "package a\n// edited again\n")
+
+	// A bare `git checkout` with no ref or pathspec at all -- xargs supplies
+	// no operand here, since the piped word never reaches the argv this hook
+	// reads -- names no provenance route, so it is preserved and allowed
+	// like any other bare checkout on a dirty tree.
+	preserved(t, dir, "echo x | xargs -n 1 git checkout")
 }
 
 // A cd only carries where the shell itself carries it. These pin the

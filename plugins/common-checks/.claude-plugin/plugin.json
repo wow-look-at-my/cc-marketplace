@@ -5,6 +5,19 @@
     "name": "wow-look-at-my"
   },
   "keywords": ["lsp", "ci", "github-actions", "lint", "common-checks"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/server/common-checks-lsp --hook"
+          }
+        ]
+      }
+    ]
+  },
   "mh": {
     "include_in_marketplace": true
   }
