@@ -6,7 +6,13 @@ on:
     branches: ["**"]
 
 # Repository-wide, not per-ref: every branch force-pushes the same `<plugin>#latest` tag, so two refs releasing at once race on it and one dies.
-concurrency: {group: release}
+# Per ref. One shared group keeps at most one run PENDING, and a newer run
+# entering it cancels the older pending one. A branch whose release queues
+# behind master is therefore cancelled the moment anything else pushes, and
+# required-builds-manager counts a cancelled run as a failed build. Two
+# branches releasing at once can still both compute the same next number, and
+# the loser's push fails loudly, which is a rare red rather than a routine one.
+concurrency: {group: 'release-${{ github.ref }}'}
 
 jobs:
   prepare:
