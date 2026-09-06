@@ -21,14 +21,16 @@ type toolInput struct {
 
 const useTheTools = "Use Edit to change an existing file, or Write to create one."
 
-// decide returns the denial reason, or "" to stay out of the way.
-func decide(raw []byte) string {
+// decide returns the denial reason, or "" to stay out of the way. notices
+// carries a preservation message earned by an allowed command; it is only
+// ever non-empty alongside an empty reason.
+func decide(raw []byte) (reason string, notices []string) {
 	var in hookInput
 	if json.Unmarshal(raw, &in) != nil {
-		return ""
+		return "", nil
 	}
 	if in.HookEventName != "PreToolUse" {
-		return ""
+		return "", nil
 	}
 	var ti toolInput
 	if len(in.ToolInput) > 0 {
@@ -40,18 +42,26 @@ func decide(raw []byte) string {
 		// Destruction is asked first. Where both halves object -- `> tracked.go`
 		// over a file with unsaved edits -- losing the edits is the more urgent
 		// fact, and its message names the stash that saves them.
-		if reason := evaluateLoss(ti.Command, in.Cwd); reason != "" {
-			return reason
+		reason, notices = evaluateLoss(ti.Command, in.Cwd)
+		if reason != "" {
+			return reason, nil
 		}
-		return evaluateWrites(ti.Command, in.Cwd)
+		// The provenance half can still deny a command the destruction half
+		// just preserved and allowed -- `> tracked.go` is both a truncation
+		// and a write outside the edit tools. A denied command never runs, so
+		// a notice claiming it was "allowed to proceed" would be false.
+		if writeReason := evaluateWrites(ti.Command, in.Cwd); writeReason != "" {
+			return writeReason, nil
+		}
+		return "", notices
 	case isEditTool(in.ToolName):
-		return editToolReason(in.ToolName, ti, in.Cwd)
+		return editToolReason(in.ToolName, ti, in.Cwd), nil
 	case isAgentTool(in.ToolName):
-		return agentReason(in.ToolName, ti)
+		return agentReason(in.ToolName, ti), nil
 	case in.ToolName == "Skill":
-		return skillReason(ti.Skill)
+		return skillReason(ti.Skill), nil
 	default:
-		return mcpReason(in.ToolName)
+		return mcpReason(in.ToolName), nil
 	}
 }
 

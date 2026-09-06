@@ -24,13 +24,14 @@ Cost: prefilter is a substring scan for `git`/`rm`/`mv`/`>`/`tee`/`truncate` and
 - **Prefilter**: `plugins/no-work-loss/prefilter.go` -- the cheap needle scan, and the destructive-verb markers used once parsing has failed
 - **Segmentation**: `plugins/no-work-loss/segment.go` -- AST walk, cwd tracking, wrapper stripping, word staticness
 - The two keep their own segmentation and their own postures. `shellwords.go` is what remains: the adapters plus path resolution, which is this plugin's alone.
+- **Variable resolution**: `plugins/no-work-loss/varenv.go` -- resolves a `$NAME`/`${NAME}` word to a literal ONLY when the whole command assigns that name exactly once, from a static value, outside every construct that can run zero or more than one time (a loop, a conditional, a subshell, a pipeline, a background job) -- and never at all when a command that can mutate a variable invisibly (`read`, `eval`, `set`, `export`, `declare`, `local`, `typeset`, `mapfile`, `readarray`, `getopts`, `unset`) appears anywhere. Confined to the top-level parse: an alias body, a `sh -c` string, and a sourced file are different source text with their own scope, so `scriptDepth > 0` gets none of it. This is what lets `V=2.1.263; OUT="...$V.js"; > "$OUT"` resolve instead of denying on an unresolvable path -- the existing repo-scoping then decides it on the merits, same as any other command.
 - **Git verbs**: `plugins/no-work-loss/gitverb.go` -- global-option skipping, flag unbundling, per-verb hazard classification and rewrites
 - **Non-git deletion**: `plugins/no-work-loss/fsverb.go` -- `rm`, `mv` destinations, `tee`, `truncate -s 0`, truncating redirects
 - **Repository state**: `plugins/no-work-loss/repo.go` -- probing with timeouts and caching, `-z` status parsing, path containment
-- **Decision**: `plugins/no-work-loss/decide.go` -- orchestration, the judge, and the denial text
+- **Decision**: `plugins/no-work-loss/decide.go` -- orchestration, the judge, and the denial text. An unresolved-path denial carries the FINDING'S own remedy (`rm` and a truncating `>` are not fixed the same way), and names an all-expansion word as "an unresolved expansion" rather than quoting the empty string it collapsed to.
 - **Aliases**: `plugins/no-work-loss/alias.go` -- alias table, `!shell` expansion, the builtin-verb skip list
 - **Reachability**: `plugins/no-work-loss/reach.go` -- containment, fast-forward, pushed-ness, reflog orphans, worktree probing
-- **Tests**: `guard_test.go` (the deny/allow matrix against real repos), `refverbs_test.go` (unconditional denies + their safe spellings), `shell_test.go` (compound forms, wrappers, cd scoping), `hookio_test.go` (the raw JSON keys of the deny payload)
+- **Tests**: `guard_test.go` (the deny/allow matrix against real repos), `varenv_test.go` (variable resolution: the reported incident, reassignment/loop/conditional/`read` poisoning, prefix-assignment scoping, and the remedy/wording fixes), `refverbs_test.go` (unconditional denies + their safe spellings), `shell_test.go` (compound forms, wrappers, cd scoping), `hookio_test.go` (the raw JSON keys of the deny payload)
 - **Depth**: `plugins/no-work-loss/docs/decision-model.md`
 
 ## The provenance half: every change to file content goes through Write, Edit or NotebookEdit

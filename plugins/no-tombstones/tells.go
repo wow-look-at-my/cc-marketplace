@@ -22,6 +22,13 @@ type Hit struct {
 	Tell   string // the rule that fired, for the refusal to name
 	Phrase string // the matched words
 	Line   string // the line they sit on
+
+	// Strippable is true when Line is exactly one physical source line whose
+	// deletion removes nothing but this comment: no code, no sibling comment.
+	// LineNo is that line's 0-based index in the write's own text; it is
+	// meaningless unless Strippable is true.
+	Strippable bool
+	LineNo     int
 }
 
 // tell is one recognisable shape. Name is what the refusal prints.
@@ -118,13 +125,17 @@ func FindTombstones(blocks []Block, maxLines int) []Hit {
 	seen := set.New[string]()
 	for _, b := range blocks {
 		if maxLines > 0 && b.Lines > maxLines {
+			// A judgement that the whole block is too long, not a span to
+			// excise: Strippable stays false, so this hit can never be
+			// stripped, only denied.
 			hits = append(hits, Hit{
 				Tell:   "a comment block of " + itoa(b.Lines) + " lines",
 				Phrase: firstLine(b.Text),
 				Line:   firstLine(b.Text),
+				LineNo: -1,
 			})
 		}
-		for _, line := range strings.Split(b.Text, "\n") {
+		for li, line := range strings.Split(b.Text, "\n") {
 			for _, t := range tells {
 				at := t.re.FindStringIndex(line)
 				if at == nil {
@@ -139,11 +150,48 @@ func FindTombstones(blocks []Block, maxLines int) []Hit {
 					continue
 				}
 				seen.Add(key)
-				hits = append(hits, Hit{Tell: t.name, Phrase: phrase, Line: strings.TrimSpace(line)})
+				h := Hit{Tell: t.name, Phrase: phrase, Line: strings.TrimSpace(line), LineNo: -1}
+				lineNo, pure := linePurity(b, li)
+				h.Strippable, h.LineNo = pure, lineNo
+				hits = append(hits, h)
 			}
 		}
 	}
 	return hits
+}
+
+// linePurity looks up block-relative line index li in b's parallel arrays. It
+// reports -1/false when the arrays carry no entry there, which is always true
+// for a document paragraph: prose shares a line with other prose in a way a
+// comment never shares a line with code, so a document line is never offered
+// for stripping.
+func linePurity(b Block, li int) (lineNo int, pure bool) {
+	if li < len(b.lineNos) && li < len(b.pure) {
+		return b.lineNos[li], b.pure[li]
+	}
+	return -1, false
+}
+
+// hitForName builds the Hit for a dead referent: the comment line that names
+// it, with the same strip metadata a wording-based tell gets.
+func hitForName(blocks []Block, name string) Hit {
+	for _, b := range blocks {
+		lines := strings.Split(b.Text, "\n")
+		for li, line := range lines {
+			if !strings.Contains(line, name) {
+				continue
+			}
+			lineNo, pure := linePurity(b, li)
+			return Hit{
+				Tell:       "a name nothing in the repository defines",
+				Phrase:     name,
+				Line:       strings.TrimSpace(line),
+				Strippable: pure,
+				LineNo:     lineNo,
+			}
+		}
+	}
+	return Hit{Tell: "a name nothing in the repository defines", Phrase: name, Line: name, LineNo: -1}
 }
 
 func firstLine(s string) string {

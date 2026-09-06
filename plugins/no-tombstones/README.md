@@ -1,17 +1,21 @@
 # no-tombstones
 
-Refuses a write that adds a tombstone comment. A tombstone is prose about a state the code is no longer in, or an argument aimed at the reviewer.
+Strips a tombstone comment out of a write. A tombstone is prose about a state the code is no longer in, or an argument aimed at the reviewer. When the tombstone sits alone on one comment-only line, that line is deleted and the write proceeds; only a finding that cannot be cleanly excised still gets the write refused.
+
+A clean strip looks like this, reported once in `additionalContext`:
+
+```
+no-tombstones: removed 1 tombstone line(s) from internal/darwin/syscall.go before writing:
+  // all of them are emulated now
+```
+
+A finding that cannot be cleanly excised is refused instead:
 
 ```
 blocked: this write adds a tombstone comment to internal/darwin/syscall.go.
 
-  a date: "2026-09-02"
+  a comment block of 20 lines: "// 2026-09-02: the macOS metadata wave"
       // 2026-09-02: the macOS metadata wave
-  a then-and-now contrast: "emulated now"
-      // all of them are emulated now
-
-The refused lines are appended to /repo/.git/TOMBSTONES. Nothing is lost:
-put them in the commit message, where narrating a change belongs.
 ```
 
 ## What it looks for
@@ -29,6 +33,16 @@ Three checks run, weakest first:
 ## What it leaves alone
 
 Code (only comment text is read, so a phrase inside a string literal is data), fenced and indented blocks in a document, inline backtick spans, a file whose extension it does not know. Everything a write does not add -- a tombstone already in a file never blocks an unrelated edit to it.
+
+## What still gets refused instead of stripped
+
+A finding is stripped only when it is the entire content of one raw source line. Three cases never qualify, so they still deny:
+
+| Case | Why |
+|---|---|
+| The volume cap | a judgement that a whole block is too long, not a span to excise |
+| A document sentence | a paragraph line commonly holds several sentences; deleting it risks a keeper |
+| A tombstone sharing a line with code | a trailing `// comment`, or a block comment's open/close line carrying code |
 
 ## Configuration
 
