@@ -16,9 +16,17 @@ import (
 )
 
 // Block is one run of comment lines, or one paragraph of a document.
+//
+// lineNos and pure describe each line of Text against the ORIGINAL source: an
+// absolute line number, and whether deleting that exact source line removes
+// nothing besides this comment. Both are nil for a document paragraph, since
+// prose shares a line with other prose in a way a comment never shares a line
+// with code -- stripping there is never attempted.
 type Block struct {
-	Text  string
-	Lines int
+	Text    string
+	Lines   int
+	lineNos []int
+	pure    []bool
 }
 
 // style says how a language spells a comment. A language with no block form
@@ -98,29 +106,47 @@ func IsDocument(path string) bool {
 	return false
 }
 
+// piece is one comment, possibly spanning several physical lines. firstPure
+// and lastPure describe its FIRST and LAST physical source line: is
+// everything on that raw line, outside this comment's own span, whitespace.
+// An interior line of a multi-line piece needs no such flag -- the scanner
+// hands the whole raw line to the comment by construction, so it is pure by
+// definition.
+type piece struct {
+	line      int
+	text      string
+	firstPure bool
+	lastPure  bool
+}
+
 // commentBlocks walks src and collects each comment, merging a run of adjacent
 // line comments into one block so the volume cap sees the essay rather than its
 // individual lines.
 func commentBlocks(src string, st style) []Block {
-	type piece struct {
-		line int
-		text string
-	}
 	var pieces []piece
 
 	lines := strings.Split(src, "\n")
 	inBlock := false
 	var block []string
 	blockStart := 0
+	blockFirstPure := false
 
 	for n, line := range lines {
 		rest := line
+		piecesThisLine := 0
 		if inBlock {
 			if i := strings.Index(rest, st.blockClose); i >= 0 {
 				block = append(block, rest[:i])
-				pieces = append(pieces, piece{blockStart, strings.Join(block, "\n")})
+				after := rest[i+len(st.blockClose):]
+				pieces = append(pieces, piece{
+					line:      blockStart,
+					text:      strings.Join(block, "\n"),
+					firstPure: blockFirstPure,
+					lastPure:  strings.TrimSpace(after) == "",
+				})
+				piecesThisLine++
 				block, inBlock = nil, false
-				rest = rest[i+len(st.blockClose):]
+				rest = after
 			} else {
 				block = append(block, rest)
 				continue
@@ -131,38 +157,86 @@ func commentBlocks(src string, st style) []Block {
 			if at < 0 {
 				break
 			}
+			// A second comment sharing this raw line makes the line's
+			// purity ambiguous: deleting it could take a sibling comment,
+			// or code, with it. Only the first marker found on a line can
+			// ever be judged pure.
+			firstOnLine := piecesThisLine == 0
 			if kind == markerBlock {
 				open := rest[at+len(st.blockOpen):]
 				if i := strings.Index(open, st.blockClose); i >= 0 {
-					pieces = append(pieces, piece{n, open[:i]})
+					pieces = append(pieces, piece{
+						line:      n,
+						text:      open[:i],
+						firstPure: firstOnLine && strings.TrimSpace(rest[:at]) == "",
+						lastPure:  strings.TrimSpace(open[i+len(st.blockClose):]) == "",
+					})
+					piecesThisLine++
 					rest = open[i+len(st.blockClose):]
 					continue
 				}
 				inBlock, blockStart, block = true, n, []string{open}
+				blockFirstPure = firstOnLine && strings.TrimSpace(rest[:at]) == ""
 			} else {
-				pieces = append(pieces, piece{n, rest[at:]})
+				pieces = append(pieces, piece{
+					line:      n,
+					text:      rest[at:],
+					firstPure: firstOnLine && strings.TrimSpace(rest[:at]) == "",
+					lastPure:  true, // a line comment always runs to end of line
+				})
+				piecesThisLine++
 			}
 			break
 		}
 	}
 	if inBlock {
-		pieces = append(pieces, piece{blockStart, strings.Join(block, "\n")})
+		pieces = append(pieces, piece{
+			line:      blockStart,
+			text:      strings.Join(block, "\n"),
+			firstPure: blockFirstPure,
+			lastPure:  false, // never closed: the file ended mid-comment
+		})
 	}
 
 	var out []Block
 	for i := 0; i < len(pieces); {
 		j := i
 		text := []string{pieces[i].text}
+		lineNos, pure := pieceLines(pieces[i])
 		height := strings.Count(pieces[i].text, "\n") + 1
 		for j+1 < len(pieces) && pieces[j+1].line == pieces[j].line+1 {
 			j++
 			text = append(text, pieces[j].text)
+			l, p := pieceLines(pieces[j])
+			lineNos = append(lineNos, l...)
+			pure = append(pure, p...)
 			height += strings.Count(pieces[j].text, "\n") + 1
 		}
-		out = append(out, Block{Text: strings.Join(text, "\n"), Lines: height})
+		out = append(out, Block{Text: strings.Join(text, "\n"), Lines: height, lineNos: lineNos, pure: pure})
 		i = j + 1
 	}
 	return out
+}
+
+// pieceLines expands one piece into the per-physical-line arrays a Block
+// carries: the source line number and the purity of each line of its text.
+func pieceLines(p piece) (lineNos []int, pure []bool) {
+	n := strings.Count(p.text, "\n") + 1
+	lineNos = make([]int, n)
+	pure = make([]bool, n)
+	for i := range lineNos {
+		lineNos[i] = p.line + i
+	}
+	if n == 1 {
+		pure[0] = p.firstPure && p.lastPure
+		return lineNos, pure
+	}
+	pure[0] = p.firstPure
+	for i := 1; i < n-1; i++ {
+		pure[i] = true // fully inside the comment; nothing else can share it
+	}
+	pure[n-1] = p.lastPure
+	return lineNos, pure
 }
 
 const (

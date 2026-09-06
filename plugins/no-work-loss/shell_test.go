@@ -77,8 +77,11 @@ func TestCdScopeFollowsTheShell(t *testing.T) {
 	assert.Empty(t, lossOnly(t, clean, "(cd "+dir+" && git status) && git reset --hard"),
 		"the cd was contained in the subshell, so the reset ran in the clean repo")
 
-	// A cd in a sequence does.
-	assert.NotEmpty(t, lossOnly(t, clean, "cd "+dir+" && git reset --hard"))
+	// A cd in a sequence does: the reset ran against the dirty repo, so the
+	// destruction half now preserves its tracked edit rather than seeing a
+	// clean tree and staying silent.
+	_, notices := lossOnlyNotices(t, clean, "cd "+dir+" && git reset --hard")
+	assert.NotEmpty(t, notices)
 }
 
 func TestRelativeAndAbsoluteCdBothResolve(t *testing.T) {

@@ -264,6 +264,9 @@ func classifyGit(seg segment) *finding {
 			return nil
 		}
 		remote, dst, src := parsePushSpec(g.operands)
+		if isProtectedRef(dst) {
+			return protectedRefFinding(g.dir, "git push "+dst)
+		}
 		label, rewrite := "git push --force", shellJoin(replaceFlag(seg.argv, []string{"-f", "--force"}, "--force-with-lease"))+
 			"   # refuses if the remote moved since you last fetched"
 		if deleting {
@@ -360,6 +363,9 @@ func classifyGit(seg segment) *finding {
 		ref := lastOperand(g.operands)
 		if ref == "" {
 			return nil
+		}
+		if isProtectedRef(ref) {
+			return protectedRefFinding(g.dir, "git update-ref -d "+ref)
 		}
 		return &finding{
 			label: "git update-ref -d " + ref, dir: g.dir,

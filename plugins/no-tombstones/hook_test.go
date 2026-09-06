@@ -36,11 +36,36 @@ func decision(t *testing.T, out string) (string, string) {
 	return res.HookSpecificOutput.PermissionDecision, res.HookSpecificOutput.PermissionDecisionReason
 }
 
-// Each write shape carries the same tombstone, and each is paired with the same
-// text in a file this plugin does not judge, so a deny cannot come from
-// somewhere else.
-func TestEveryWriteShapeIsJudged(t *testing.T) {
+// strippedWrite is the decoded shape of an allow-with-updatedInput response.
+type strippedWrite struct {
+	toolInput map[string]any
+	context   string
+}
+
+// stripResult decodes out as a strip response, or returns nil when out is not
+// one (an empty allow, or a deny).
+func stripResult(t *testing.T, out string) *strippedWrite {
+	t.Helper()
+	if out == "" {
+		return nil
+	}
+	var res response
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	if len(res.HookSpecificOutput.UpdatedInput) == 0 {
+		return nil
+	}
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(res.HookSpecificOutput.UpdatedInput, &m))
+	return &strippedWrite{toolInput: m, context: res.HookSpecificOutput.AdditionalContext}
+}
+
+// Each write shape carries the same tombstone on its own comment-only line, so
+// each must be stripped and allowed rather than denied, and each is paired
+// with the same text in a file this plugin does not judge, so a strip cannot
+// come from somewhere else.
+func TestEveryWriteShapeStripsTheTombstoneLine(t *testing.T) {
 	const tomb = "// the old flag was removed here\nfunc f() {}"
+	const clean = "func f() {}"
 	shapes := map[string]map[string]any{
 		"Write": {"file_path": "/repo/a.go", "content": tomb},
 		"Edit":  {"file_path": "/repo/a.go", "new_string": tomb},
@@ -48,11 +73,20 @@ func TestEveryWriteShapeIsJudged(t *testing.T) {
 			{"new_string": "func g() {}"}, {"new_string": tomb},
 		}},
 	}
+	fields := map[string]string{"Write": "content", "Edit": "new_string"}
 	for tool, input := range shapes {
 		t.Run(tool, func(t *testing.T) {
-			verdict, reason := decision(t, run(strings.NewReader(payload(t, "PreToolUse", tool, input))))
-			assert.Equal(t, "deny", verdict)
-			assert.Contains(t, reason, "a former state")
+			s := stripResult(t, run(strings.NewReader(payload(t, "PreToolUse", tool, input))))
+			require.NotNil(t, s, "a comment-only tombstone line must be stripped, not denied")
+			assert.Contains(t, s.context, "the old flag was removed here")
+			if field, ok := fields[tool]; ok {
+				assert.Equal(t, clean, s.toolInput[field])
+			} else {
+				edits := s.toolInput["edits"].([]any)
+				require.Len(t, edits, 2)
+				assert.Equal(t, "func g() {}", edits[0].(map[string]any)["new_string"], "an edit with no finding must be untouched")
+				assert.Equal(t, clean, edits[1].(map[string]any)["new_string"])
+			}
 
 			control := map[string]any{}
 			for k, v := range input {
@@ -65,15 +99,68 @@ func TestEveryWriteShapeIsJudged(t *testing.T) {
 	}
 }
 
+// A trailing comment on a code line shares its raw source line with real code,
+// so deleting the line would delete the code too. This is the negative
+// control the corruption precedent warns about: no clean line boundary means
+// no strip, deny instead.
+func TestATrailingCommentOnACodeLineIsDeniedNotStripped(t *testing.T) {
+	verdict, reason := decision(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
+		map[string]any{"file_path": "/repo/a.go", "content": "doStuff() // the old flag was removed here"}))))
+	assert.Equal(t, "deny", verdict)
+	assert.Contains(t, reason, "a former state")
+}
+
+// MultiEdit's edits are independent units: stripping one edit's tombstone
+// line must never touch a sibling edit's text, and every other field on the
+// stripped edit (old_string, replace_all) must survive untouched.
+func TestMultiEditStripsOnlyTheOffendingEditsOwnLine(t *testing.T) {
+	input := map[string]any{
+		"file_path": "/repo/a.go",
+		"edits": []map[string]any{
+			{"old_string": "a", "new_string": "func clean() {}"},
+			{"old_string": "b", "new_string": "// the old flag was removed here\nfunc g() {}", "replace_all": true},
+		},
+	}
+	s := stripResult(t, run(strings.NewReader(payload(t, "PreToolUse", "MultiEdit", input))))
+	require.NotNil(t, s)
+	edits := s.toolInput["edits"].([]any)
+	require.Len(t, edits, 2)
+	first := edits[0].(map[string]any)
+	assert.Equal(t, "func clean() {}", first["new_string"], "an edit with no finding must be untouched")
+	second := edits[1].(map[string]any)
+	assert.Equal(t, "func g() {}", second["new_string"])
+	assert.Equal(t, "b", second["old_string"], "fields besides new_string must survive the strip")
+	assert.Equal(t, true, second["replace_all"])
+}
+
+// An interior line of a multi-line block comment is entirely comment content
+// by construction, so it strips cleanly and leaves its neighbors alone. The
+// closing line is a different physical line: when code shares it with the
+// `*/`, that line is not a clean boundary and the write is denied instead.
+func TestBlockCommentInteriorLineStripsButASharedClosingLineDenies(t *testing.T) {
+	s := stripResult(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
+		map[string]any{"file_path": "/repo/a.go",
+			"content": "/* keep this\nthe old dispatch spine is replaced\nkeep this too */\nfunc f() {}"}))))
+	require.NotNil(t, s)
+	assert.Equal(t, "/* keep this\nkeep this too */\nfunc f() {}", s.toolInput["content"])
+
+	verdict, _ := decision(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
+		map[string]any{"file_path": "/repo/a.go",
+			"content": "/* keep this\nthe old dispatch spine is replaced */ doStuff();"}))))
+	assert.Equal(t, "deny", verdict)
+}
+
 // A truncated list must say it is truncated, or the next write fixes what it
-// was shown and is refused again for what it was not.
+// was shown and is refused again for what it was not. A document forces the
+// deny path (see TestADocumentNeverStrips), which is what keeps this list
+// long enough to truncate.
 func TestATruncatedFindingListSaysSo(t *testing.T) {
 	var lines []string
 	for i := range 9 {
-		lines = append(lines, "// finding "+itoa(i)+": this used to be a flag, previously")
+		lines = append(lines, "sentence "+itoa(i)+" instead of the old spelling.")
 	}
 	_, reason := decision(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
-		map[string]any{"file_path": "/repo/a.go", "content": strings.Join(lines, "\n")}))))
+		map[string]any{"file_path": "/repo/notes.md", "content": strings.Join(lines, "\n")}))))
 	assert.Contains(t, reason, "more, not listed")
 }
 
@@ -98,6 +185,17 @@ func TestADocumentIsJudgedWithoutTheVolumeCap(t *testing.T) {
 	assert.Equal(t, "deny", verdict)
 }
 
+// A document line is a paragraph, not a sentence: the org's own no-hard-wrap
+// convention puts several sentences on one raw line, so a document finding is
+// never stripped even when the whole raw line, taken alone, would look pure.
+func TestADocumentNeverStrips(t *testing.T) {
+	out := run(strings.NewReader(payload(t, "PreToolUse", "Write",
+		map[string]any{"file_path": "/repo/notes.md", "content": "The apetest path previously skipped this."})))
+	require.Nil(t, stripResult(t, out), "a document finding must deny, never strip")
+	verdict, _ := decision(t, out)
+	assert.Equal(t, "deny", verdict)
+}
+
 func TestTheVolumeCapIsTunable(t *testing.T) {
 	var lines []string
 	for range 20 {
@@ -113,24 +211,22 @@ func TestTheVolumeCapIsTunable(t *testing.T) {
 	assert.Empty(t, run(strings.NewReader(in)))
 }
 
-// The refused lines are appended rather than dropped: the history is real and
-// belongs in the commit message, so a deny that destroyed it would be argued
-// with rather than obeyed.
-func TestRefusedLinesAreRelocatedIntoTheGitDirectory(t *testing.T) {
+// A comment-only line is stripped straight out, not relocated anywhere:
+// nothing else records what was removed besides the one-time notice in the
+// same response, and git history already holds anything worth keeping.
+func TestAStrippedLineIsDeletedNotRelocated(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", "-q", root).Run())
 	file := filepath.Join(root, "a.go")
 
-	verdict, reason := decision(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
-		map[string]any{"file_path": file, "content": "// the old flag was removed here"}))))
-	require.Equal(t, "deny", verdict)
+	s := stripResult(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
+		map[string]any{"file_path": file, "content": "// the old flag was removed here\nfunc f() {}"}))))
+	require.NotNil(t, s)
+	assert.Equal(t, "func f() {}", s.toolInput["content"])
+	assert.Contains(t, s.context, "the old flag was removed here")
 
-	ledgerPath := filepath.Join(root, ".git", "TOMBSTONES")
-	assert.Contains(t, reason, ledgerPath)
-	body, err := os.ReadFile(ledgerPath)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), "the old flag was removed here")
-	assert.Contains(t, string(body), file)
+	_, err := os.Stat(filepath.Join(root, ".git", "TOMBSTONES"))
+	assert.True(t, os.IsNotExist(err), "no ledger file must be written")
 }
 
 // stubRipgrep puts an `rg` on PATH that answers the one question this plugin
@@ -155,8 +251,9 @@ func stubRipgrep(t *testing.T) {
 }
 
 // A name the repository does not define is the tier no rewording defeats: this
-// sentence carries no tell at all, only a referent that is gone.
-func TestANameNothingDefinesIsRefused(t *testing.T) {
+// sentence carries no tell at all, only a referent that is gone. It sits on
+// its own comment line, so it is stripped rather than denied.
+func TestADeadReferentNameIsStrippedNotDenied(t *testing.T) {
 	stubRipgrep(t)
 	root := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", "-q", root).Run())
@@ -164,10 +261,11 @@ func TestANameNothingDefinesIsRefused(t *testing.T) {
 		[]byte("package p\n\nfunc TestDarwinStatfsToLinux() {}\n"), 0o600))
 	file := filepath.Join(root, "a.go")
 
-	verdict, reason := decision(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
+	s := stripResult(t, run(strings.NewReader(payload(t, "PreToolUse", "Write",
 		map[string]any{"file_path": file, "content": "// see TestDarwinMntFlagsToLinux for the pin\nfunc f() {}"}))))
-	assert.Equal(t, "deny", verdict)
-	assert.Contains(t, reason, "TestDarwinMntFlagsToLinux")
+	require.NotNil(t, s)
+	assert.Equal(t, "func f() {}", s.toolInput["content"])
+	assert.Contains(t, s.context, "TestDarwinMntFlagsToLinux")
 
 	out := run(strings.NewReader(payload(t, "PreToolUse", "Write",
 		map[string]any{"file_path": file, "content": "// see TestDarwinStatfsToLinux for the pin\nfunc f() {}"})))
@@ -282,5 +380,4 @@ func TestEveryFailurePathAllowsTheCall(t *testing.T) {
 
 func TestRepoRootReportsNothingOutsideAWorkingTree(t *testing.T) {
 	assert.Empty(t, RepoRoot(filepath.Join(t.TempDir(), "a.go")))
-	assert.Empty(t, Relocate(filepath.Join(t.TempDir(), "a.go"), []Hit{{Line: "x"}}))
 }
