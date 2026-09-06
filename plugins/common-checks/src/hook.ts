@@ -15,12 +15,63 @@
 
 import { fileKind, findings, unwrapParagraphs, type Finding } from "./checks.ts";
 import { diskContent, forget, outstanding, record } from "./ledger.ts";
+import { place, repairWithin, type Placement } from "./placement.ts";
 
 interface ToolInput {
   file_path?: unknown;
   content?: unknown;
+  old_string?: unknown;
   new_string?: unknown;
   edits?: unknown;
+}
+
+/**
+ * One piece of text a write adds, with where it lands in the file.
+ *
+ * A `content` unit is the whole file already, so it needs no placement. An
+ * edit's fragment gets one when the file can be read and the string it replaces
+ * appears exactly once. Without a placement the fragment is judged alone, which
+ * is what this hook did before and is still the safe answer.
+ */
+interface Unit {
+  text: string;
+  placement?: Placement;
+}
+
+function unitsOf(toolName: string, input: ToolInput): Unit[] {
+  if (!WRITE_TOOLS.has(toolName)) return [];
+  const filePath = typeof input.file_path === "string" ? input.file_path : "";
+  const units: Unit[] = [];
+  if (typeof input.content === "string") units.push({ text: input.content });
+  if (typeof input.new_string === "string") {
+    const old = typeof input.old_string === "string" ? input.old_string : "";
+    units.push({ text: input.new_string, placement: place(filePath, old, input.new_string) });
+  }
+  if (Array.isArray(input.edits)) {
+    for (const edit of input.edits) {
+      const next = (edit as { new_string?: unknown } | null)?.new_string;
+      if (typeof next !== "string") continue;
+      const old = (edit as { old_string?: unknown } | null)?.old_string;
+      units.push({
+        text: next,
+        placement: place(filePath, typeof old === "string" ? old : "", next),
+      });
+    }
+  }
+  return units;
+}
+
+/** The findings this unit is answerable for. */
+function findingsFor(rel: string, unit: Unit): Finding[] {
+  if (unit.placement === undefined) return findings(rel, unit.text);
+  const { full, start, end } = unit.placement;
+  return findings(rel, full).filter((f) => f.startLine - 1 >= start && f.startLine - 1 <= end);
+}
+
+/** This unit's text with its wraps joined, unchanged when it has none. */
+function repairText(unit: Unit): string {
+  if (unit.placement === undefined) return unwrapParagraphs(unit.text);
+  return repairWithin(unit.placement) ?? unit.text;
 }
 
 interface HookPayload {
@@ -64,11 +115,14 @@ export function relativePath(filePath: string, cwd: string): string {
  * so does one whose text was already unwrapped.
  */
 export function repairInput(toolName: string, input: ToolInput): ToolInput | undefined {
-  if (!WRITE_TOOLS.has(toolName)) return undefined;
+  const queue = unitsOf(toolName, input);
+  if (queue.length === 0) return undefined;
   const repaired: ToolInput = { ...input };
   let changed = false;
   const fix = (text: string): string => {
-    const next = unwrapParagraphs(text);
+    const unit = queue.shift();
+    if (unit === undefined) return text;
+    const next = repairText(unit);
     if (next !== text) changed = true;
     return next;
   };
@@ -87,9 +141,11 @@ export function repairInput(toolName: string, input: ToolInput): ToolInput | und
 /**
  * Findings that should refuse this write, or [] to stay out of the way.
  *
- * A fragment is checked as if it were the file: a comment run is a comment
- * run wherever it sits, and judging the fragment is what keeps an existing
- * violation elsewhere in the file from blocking an unrelated edit.
+ * A fragment is checked in the file it lands in, and only the findings on the
+ * lines it adds are its own. That keeps an existing violation elsewhere from
+ * blocking an unrelated edit, while a fence, a table or a list the fragment
+ * sits inside still counts. A fragment that cannot be placed is checked on its
+ * own, as it always was.
  */
 export function blockingFindings(
   toolName: string,
@@ -102,8 +158,8 @@ export function blockingFindings(
   if (fileKind(rel) === "other") return [];
 
   const found: Finding[] = [];
-  for (const text of addedText(toolName, input)) {
-    found.push(...findings(rel, text));
+  for (const unit of unitsOf(toolName, input)) {
+    found.push(...findingsFor(rel, unit));
   }
   // A wrap is repaired rather than reported, so it is never a refusal. What
   // survives here is what the repair cannot reach.

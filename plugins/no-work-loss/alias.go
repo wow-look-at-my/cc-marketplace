@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"github.com/wow-look-at-my/go-containers/set"
+	"strings"
+)
 
 // An alias can put a destructive verb behind a harmless-looking name, so a
 // classifier that only reads the words as typed is one `git nuke` away from
@@ -48,7 +51,7 @@ func (a *aliasResolver) expand(seg segment, depth int) []segment {
 		return nil
 	}
 	g, ok := parseGit(seg.argv, seg.cwd, seg.relocated)
-	if !ok || g.verb == "" || gitBuiltins[g.verb] {
+	if !ok || g.verb == "" || gitBuiltins.Contains(g.verb) {
 		return nil
 	}
 	value, found := a.table(g.dir)[g.verb]
@@ -95,21 +98,19 @@ func argsAfterVerb(argv []word, verb string) []word {
 // Verbs git resolves itself. Listed only to skip a config read on the common
 // path -- a name missing from here costs one `git config` call, never a wrong
 // verdict.
-var gitBuiltins = map[string]bool{
-	"add": true, "am": true, "annotate": true, "apply": true, "archive": true,
-	"bisect": true, "blame": true, "branch": true, "bundle": true, "cat-file": true,
-	"check-ignore": true, "checkout": true, "checkout-index": true, "cherry": true,
-	"cherry-pick": true, "clean": true, "clone": true, "commit": true, "config": true,
-	"count-objects": true, "describe": true, "diff": true, "diff-tree": true,
-	"difftool": true, "fetch": true, "filter-branch": true, "for-each-ref": true,
-	"format-patch": true, "fsck": true, "gc": true, "grep": true, "help": true,
-	"init": true, "log": true, "ls-files": true, "ls-remote": true, "ls-tree": true,
-	"merge": true, "merge-base": true, "mergetool": true, "mv": true, "notes": true,
-	"pull": true, "push": true, "range-diff": true, "rebase": true, "reflog": true,
-	"remote": true, "repack": true, "replace": true, "reset": true, "restore": true,
-	"rev-list": true, "rev-parse": true, "revert": true, "rm": true, "shortlog": true,
-	"show": true, "show-ref": true, "sparse-checkout": true, "stash": true,
-	"status": true, "submodule": true, "switch": true, "symbolic-ref": true,
-	"tag": true, "update-index": true, "update-ref": true, "var": true,
-	"verify-commit": true, "version": true, "whatchanged": true, "worktree": true,
-}
+var gitBuiltins = set.Of[string]("add", "am", "annotate", "apply", "archive",
+	"bisect", "blame", "branch", "bundle", "cat-file",
+	"check-ignore", "checkout", "checkout-index", "cherry",
+	"cherry-pick", "clean", "clone", "commit", "config",
+	"count-objects", "describe", "diff", "diff-tree",
+	"difftool", "fetch", "filter-branch", "for-each-ref",
+	"format-patch", "fsck", "gc", "grep", "help",
+	"init", "log", "ls-files", "ls-remote", "ls-tree",
+	"merge", "merge-base", "mergetool", "mv", "notes",
+	"pull", "push", "range-diff", "rebase", "reflog",
+	"remote", "repack", "replace", "reset", "restore",
+	"rev-list", "rev-parse", "revert", "rm", "shortlog",
+	"show", "show-ref", "sparse-checkout", "stash",
+	"status", "submodule", "switch", "symbolic-ref",
+	"tag", "update-index", "update-ref", "var",
+	"verify-commit", "version", "whatchanged", "worktree")

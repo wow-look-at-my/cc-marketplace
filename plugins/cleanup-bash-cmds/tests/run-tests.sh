@@ -735,6 +735,74 @@ check_rewrite "docker compose text used as arguments is not rewritten" \
 	'grep docker compose restart' \
 	'grep docker compose restart'
 
+# --- GitHub Actions reads go through gh wait-ci ---
+
+check_rewrite "gh run view --log-failed becomes a wait-ci log read" \
+	'gh run view 34000890670 --log-failed' \
+	'gh wait-ci log 34000890670 --failed'
+
+check_rewrite "gh run view --log becomes a wait-ci log read" \
+	'gh run view 34000890670 --log' \
+	'gh wait-ci log 34000890670'
+
+check_rewrite "gh run view becomes a wait-ci view" \
+	'gh run view 34000890670' \
+	'gh wait-ci view 34000890670'
+
+check_rewrite "gh run watch becomes a bare wait-ci" \
+	'gh run watch 123' \
+	'gh wait-ci 123'
+
+check_rewrite "gh run rerun keeps its flag" \
+	'gh run rerun 123 --failed' \
+	'gh wait-ci rerun 123 --failed'
+
+check_rewrite "gh run list becomes wait-ci runs" \
+	'gh run list' \
+	'gh wait-ci runs'
+
+check_rewrite "gh pr checks becomes wait-ci checks" \
+	'gh pr checks' \
+	'gh wait-ci checks'
+
+# A flag VALUE is not a positional. Without that distinction the guard below
+# refuses every filtered listing, which is most of them.
+check_rewrite "gh run list keeps its flags and their values" \
+	'gh run list --branch main --workflow ci.yml' \
+	'gh wait-ci runs --branch main --workflow ci.yml'
+
+check_rewrite "gh run view keeps a trailing repo flag" \
+	'gh run view 999 --log-failed -R o/r' \
+	'gh wait-ci log 999 --failed -R o/r'
+
+check_rewrite "gh run list is rewritten mid-chain too" \
+	'cd /repo && gh run list' \
+	'cd /repo && gh wait-ci runs'
+
+# A POSITIONAL names a different subject: `gh pr checks 42` asks after one
+# pull request and `gh wait-ci checks` reads the current branch. The shim
+# refuses this spelling with the full mapping, which beats a wrong guess.
+check_rewrite "gh pr checks with a pull request number is left alone" \
+	'gh pr checks 42' \
+	'gh pr checks 42'
+
+# Not statically known, so the run id cannot be carried across.
+check_rewrite "gh run view with an expanded run id is left alone" \
+	'gh run view "$ID" --log-failed' \
+	'gh run view "$ID" --log-failed'
+
+check_rewrite "an already-correct wait-ci call is never re-rewritten" \
+	'gh wait-ci log 123 --failed' \
+	'gh wait-ci log 123 --failed'
+
+check_rewrite "non-Actions gh work is untouched" \
+	'gh pr list --repo o/r --json number' \
+	'gh pr list --repo o/r --json number'
+
+check_rewrite "a gh release download is untouched" \
+	'gh release download v1 --repo o/r' \
+	'gh release download v1 --repo o/r'
+
 # --- Sleep cap: every sleep, everywhere, capped at 3 seconds ---
 
 check_rewrite "sleep over-cap integer capped" 'sleep 30' 'sleep 3'

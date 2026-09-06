@@ -13,15 +13,20 @@ package main
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// Hit is a count found in a document: the phrase itself and the line holding it.
+// Hit is a count found in a document: the phrase itself, the line holding it,
+// and the byte span the phrase occupies in the document. The span is what lets
+// the cardinal be cut out in place instead of the write being refused.
 type Hit struct {
 	Phrase string
 	Line   string
+	Start  int
+	End    int
 }
 
 // numberWords are the cardinals spelled out. "One" is deliberately absent: in
@@ -94,7 +99,7 @@ var gapStopWords = set.Of[string](
 func FindCounts(doc string) []Hit {
 	var hits []Hit
 	for _, line := range prose(doc) {
-		text := blankInlineCode(line)
+		text := blankInlineCode(line.text)
 		seen := set.New[string]()
 		for _, frame := range frames {
 			for _, at := range frame.FindAllStringSubmatchIndex(text, -1) {
@@ -104,11 +109,55 @@ func FindCounts(doc string) []Hit {
 					continue
 				}
 				seen.Add(phrase)
-				hits = append(hits, Hit{Phrase: phrase, Line: strings.TrimSpace(line)})
+				hits = append(hits, Hit{
+					Phrase: phrase,
+					Line:   strings.TrimSpace(line.text),
+					Start:  line.offset + start,
+					End:    line.offset + end,
+				})
 			}
 		}
 	}
 	return hits
+}
+
+// cardinal matches the number this plugin cuts out: the digits or the spelled
+// word at the head of a quantity, plus the space that separates it from the
+// noun it counts.
+var cardinal = regexp.MustCompile(`(?i)^(?:\d{1,4}|` + numberWords + `)\s+`)
+
+// StripCounts removes the cardinal from every inventory count in doc and
+// returns the repaired text with the hits it acted on.
+//
+// The repair is the whole point of this plugin now. A count is wrong because
+// the number is there, so deleting the number is the complete fix, and it
+// needs no judgement: "there are three sections" becomes "there are sections",
+// which stays true after the next commit. A guard that already knows the answer
+// must not spend a round trip asking the model for it.
+//
+// Hits are cut back to front, so an earlier span's offsets stay valid.
+func StripCounts(doc string) (string, []Hit) {
+	hits := FindCounts(doc)
+	if len(hits) == 0 {
+		return doc, nil
+	}
+	ordered := append([]Hit(nil), hits...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Start > ordered[j].Start })
+
+	out := doc
+	var cut []Hit
+	for _, hit := range ordered {
+		if hit.Start < 0 || hit.End > len(out) {
+			continue
+		}
+		n := cardinal.FindString(out[hit.Start:hit.End])
+		if n == "" {
+			continue
+		}
+		out = out[:hit.Start] + out[hit.Start+len(n):]
+		cut = append(cut, hit)
+	}
+	return out, cut
 }
 
 // continuesANumber reports that the character in front of a match makes it the
@@ -146,10 +195,23 @@ var (
 	inlineCode      = regexp.MustCompile("`[^`]*`")
 )
 
+// proseLine is one line of the document's own voice, with the byte offset it
+// begins at, so a phrase found on it can be cut out of the document itself.
+type proseLine struct {
+	text   string
+	offset int
+}
+
 // prose returns the lines of doc that carry the document's own voice.
-func prose(doc string) []string {
+func prose(doc string) []proseLine {
 	lines := strings.Split(doc, "\n")
-	var out []string
+	offsets := make([]int, len(lines))
+	at := 0
+	for i, line := range lines {
+		offsets[i] = at
+		at += len(line) + 1
+	}
+	var out []proseLine
 	inFence, inComment := false, false
 	start := 0
 	if len(lines) > 0 && frontmatterLine.MatchString(lines[0]) {
@@ -160,7 +222,8 @@ func prose(doc string) []string {
 			}
 		}
 	}
-	for _, line := range lines[start:] {
+	for i := start; i < len(lines); i++ {
+		line := lines[i]
 		switch {
 		case fenceLine.MatchString(line):
 			inFence = !inFence
@@ -176,7 +239,7 @@ func prose(doc string) []string {
 		case strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t"):
 			continue // indented code
 		}
-		out = append(out, line)
+		out = append(out, proseLine{text: line, offset: offsets[i]})
 	}
 	return out
 }
