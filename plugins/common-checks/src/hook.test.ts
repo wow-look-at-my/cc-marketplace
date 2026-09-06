@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { addedText, blockingFindings, decide, relativePath, repairInput } from "./hook.ts";
 
@@ -188,6 +191,72 @@ test("a wrap beside a real violation leaves only the real violation", () => {
   );
   assert.match(reason, /contractions/);
   assert.doesNotMatch(reason, /Join it back up/);
+});
+
+// The incident this placement exists for: an Edit whose fragment sits inside a
+// fenced block. Judged alone the fragment shows no fence, so its lines read as
+// a hand-wrapped paragraph and the repair flattened a diagram into one line.
+test("an edit inside a fenced block keeps its line breaks", () => {
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  const file = join(dir, "spec.md");
+  const before = "Input: ls -la\nFlow:  Shell then Parser then Command";
+  writeFileSync(file, `# Title\n\nOne line, one paragraph.\n\n\`\`\`\n${before}\n\`\`\`\n`, "utf8");
+
+  const after = "Input: ls -la\nFlow:  Shell then Parser then external execution";
+  const decision = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      cwd: dir,
+      tool_input: { file_path: file, old_string: before, new_string: after },
+    }),
+  );
+  assert.equal(decision.reason, "");
+  assert.equal(decision.updatedInput, undefined);
+});
+
+// The control: the same two lines as prose in the same file are still joined,
+// so placement did not simply switch the repair off.
+test("an edit outside a fence is still repaired", () => {
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  const file = join(dir, "spec.md");
+  const before = "A paragraph the author wrapped\nacross two lines by hand.";
+  writeFileSync(file, `# Title\n\n${before}\n`, "utf8");
+
+  const after = "A paragraph the author rewrapped\nacross two lines by hand.";
+  const decision = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      cwd: dir,
+      tool_input: { file_path: file, old_string: before, new_string: after },
+    }),
+  );
+  assert.equal(decision.reason, "");
+  assert.equal(
+    decision.updatedInput?.new_string,
+    "A paragraph the author rewrapped across two lines by hand.",
+  );
+});
+
+// A semicolon inside a fenced block is code, not the document's own prose. The
+// fragment alone shows no fence, and the refusal that followed is what taught a
+// session to delete code blocks out of a spec.
+test("a fenced fragment is not refused for its punctuation", () => {
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  const file = join(dir, "spec.md");
+  const before = "const a = 1;";
+  writeFileSync(file, `# Title\n\n\`\`\`go\n${before}\n\`\`\`\n`, "utf8");
+
+  const decision = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      cwd: dir,
+      tool_input: { file_path: file, old_string: before, new_string: "const a = 2;" },
+    }),
+  );
+  assert.equal(decision.reason, "");
 });
 
 test("blockingFindings reports the check by name", () => {

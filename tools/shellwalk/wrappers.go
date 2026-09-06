@@ -48,7 +48,20 @@ func StripWrappers(argv []Word) []Word {
 			for len(argv) > 0 && strings.Contains(argv[0].Text, "=") && !strings.HasPrefix(argv[0].Text, "-") {
 				argv = argv[1:]
 			}
-		case "command", "builtin", "exec", "nohup", "setsid", "stdbuf", "time", "script", "watch":
+		case "command":
+			// `command -v X` and `command -V X` are LOOKUPS: they print where
+			// X lives and run nothing at all. Peeling the flag the way the
+			// other wrappers do leaves `X` in program position, so a caller
+			// reads `command -v zstd sqlite3` as zstd running against a file
+			// named sqlite3. Nothing runs, so nothing is returned.
+			argv = argv[1:]
+			for len(argv) > 0 && strings.HasPrefix(argv[0].Text, "-") {
+				if isLookupFlag(argv[0].Text) {
+					return nil
+				}
+				argv = argv[1:]
+			}
+		case "builtin", "exec", "nohup", "setsid", "stdbuf", "time", "script", "watch":
 			argv = argv[1:]
 			for len(argv) > 0 && strings.HasPrefix(argv[0].Text, "-") {
 				argv = argv[1:]
@@ -121,6 +134,18 @@ func DropN(argv []Word, n int) []Word {
 		return nil
 	}
 	return argv[n:]
+}
+
+// isLookupFlag reports whether a `command` flag asks where a program lives
+// rather than asking for it to run. Short flags bundle, so `-pv` counts too.
+func isLookupFlag(flag string) bool {
+	if !strings.HasPrefix(flag, "-") || flag == "-" {
+		return false
+	}
+	if strings.HasPrefix(flag, "--") {
+		return false
+	}
+	return strings.ContainsAny(flag[1:], "vV")
 }
 
 var envValueFlags = set.Of[string]("-u", "--unset", "-C", "--chdir")

@@ -1,5 +1,5 @@
-// Command no-counts-in-docs is a Claude Code PreToolUse hook that refuses a
-// write introducing a count into a markdown document.
+// Command no-counts-in-docs is a Claude Code PreToolUse hook that cuts a count
+// out of a write to a markdown document, then lets the write through.
 //
 // A count is a claim about how many things exist at the moment it was typed.
 // The edit that adds an item leaves it wrong, and nothing in the repository
@@ -37,13 +37,14 @@ type toolInput struct {
 	} `json:"edits"`
 }
 
-// response is the deny payload. An allow is the empty output: this hook has no
-// business granting permission, only refusing.
+// response is the repair payload: the same write with the numbers cut out, and
+// one line naming what went. There is no permissionDecision, so the normal
+// permission flow still runs on the repaired write.
 type response struct {
 	HookSpecificOutput struct {
-		HookEventName            string `json:"hookEventName"`
-		PermissionDecision       string `json:"permissionDecision"`
-		PermissionDecisionReason string `json:"permissionDecisionReason"`
+		HookEventName     string         `json:"hookEventName"`
+		UpdatedInput      map[string]any `json:"updatedInput"`
+		AdditionalContext string         `json:"additionalContext"`
 	} `json:"hookSpecificOutput"`
 }
 
@@ -55,8 +56,8 @@ func main() {
 }
 
 // run reads a hook payload from r and returns the JSON to print, or "" to let
-// the call through. Every failure path returns "": a guard that blocks because
-// it could not parse its own input is worse than no guard.
+// the call through unchanged. Every failure path returns "": a guard that
+// mangles a write it could not parse is worse than no guard.
 func run(r io.Reader) string {
 	data, _ := io.ReadAll(r)
 	var in HookInput
@@ -76,27 +77,51 @@ func run(r io.Reader) string {
 	if !IsMarkdown(ti.FilePath) {
 		return ""
 	}
-	hits := FindCounts(added(ti))
+	var raw map[string]any
+	if json.Unmarshal(in.ToolInput, &raw) != nil {
+		return ""
+	}
+	hits := repair(raw)
 	if len(hits) == 0 {
 		return ""
 	}
-	return deny(reason(ti.FilePath, hits))
+	return mutate(raw, ti.FilePath, hits)
 }
 
-// added joins the text this write puts into the file.
-func added(ti toolInput) string {
-	parts := []string{ti.Content, ti.NewString}
-	for _, e := range ti.Edits {
-		parts = append(parts, e.NewString)
+// repair strips the counts out of every text this write puts into the file,
+// editing raw in place, and returns the hits it acted on. Unknown keys survive
+// because the whole payload is carried through as it arrived.
+func repair(raw map[string]any) []Hit {
+	var hits []Hit
+	fix := func(m map[string]any, key string) {
+		text, ok := m[key].(string)
+		if !ok {
+			return
+		}
+		next, cut := StripCounts(text)
+		if len(cut) == 0 {
+			return
+		}
+		m[key] = next
+		hits = append(hits, cut...)
 	}
-	return strings.Join(parts, "\n")
+	fix(raw, "content")
+	fix(raw, "new_string")
+	if edits, ok := raw["edits"].([]any); ok {
+		for _, e := range edits {
+			if m, ok := e.(map[string]any); ok {
+				fix(m, "new_string")
+			}
+		}
+	}
+	return hits
 }
 
-func deny(why string) string {
+func mutate(input map[string]any, path string, hits []Hit) string {
 	var res response
 	res.HookSpecificOutput.HookEventName = "PreToolUse"
-	res.HookSpecificOutput.PermissionDecision = "deny"
-	res.HookSpecificOutput.PermissionDecisionReason = why
+	res.HookSpecificOutput.UpdatedInput = input
+	res.HookSpecificOutput.AdditionalContext = notice(path, hits)
 	out, err := json.Marshal(res)
 	if err != nil {
 		return ""
@@ -104,21 +129,20 @@ func deny(why string) string {
 	return string(out)
 }
 
-// reason is what the model is told. It quotes each count with the line it sits
-// on and says what to write instead, because a refusal that does not say what
-// to write costs a round trip to find out.
-func reason(path string, hits []Hit) string {
+// notice is what the model is told after the fact. The write went through, so
+// this names the numbers that were cut and why, rather than asking for a retry.
+func notice(path string, hits []Hit) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "blocked: this write states a count in %s.\n\n", path)
+	fmt.Fprintf(&b, "no-counts-in-docs removed a count from this write to %s:\n", path)
 	for _, hit := range hits[:min(len(hits), 6)] {
-		fmt.Fprintf(&b, "  %q\n      %s\n", hit.Phrase, hit.Line)
+		fmt.Fprintf(&b, "  %q\n", hit.Phrase)
 	}
 	b.WriteString(remedy)
 	return b.String()
 }
 
-// remedy is the standing half of the refusal: why a count rots, and the shape
-// to write instead.
+// remedy is the standing half of the notice: why a count rots, and the shape to
+// write instead.
 const remedy = `
 A count is true only until somebody adds or removes an item, and nothing in the
 repository corrects it when they do -- the reader keeps trusting a number that
@@ -126,4 +150,5 @@ has quietly gone wrong. Describe what is there and let the reader count:
 "every plugin this repo installs", not "this repo's 15 plugins"; "the rules
 below", not "the four rules below".
 
-Rewrite the text without the count, then write the file.`
+The number is already gone from the text that was written. Read the sentence
+back if it now needs rewording.`
