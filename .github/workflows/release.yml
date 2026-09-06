@@ -6,7 +6,7 @@ on:
     branches: ["**"]
 
 # Repository-wide, not per-ref: every branch force-pushes the same `<plugin>#latest` tag, so two refs releasing at once race on it and one dies.
-concurrency: group: release
+concurrency: {group: release}
 
 jobs:
   prepare:
