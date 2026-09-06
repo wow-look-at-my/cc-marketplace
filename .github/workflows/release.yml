@@ -5,8 +5,8 @@ on:
     # Every branch, no tag: this workflow pushes a plugin/*/v* tag per release, which must not re-enter it.
     branches: ["**"]
 
-# Repository-wide, not per-ref: every branch force-pushes the same `<plugin>#latest` tag, so two refs releasing at once race on it and one dies.
-concurrency: {group: release}
+# Per-ref again. Repository-wide serialised every branch behind one run, and GitHub cancels the older PENDING run when a third arrives -- a cancelled run reads as a failed build on all-builds. The tag race is serialised on the tag itself, in the build job below.
+concurrency: {group: release-${{ github.ref }}}
 
 jobs:
   prepare:
@@ -136,6 +136,10 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
+    # The shared resource is one moving tag, `<plugin>#latest`, which every branch force-pushes. Keying the group to the plugin serialises exactly that, so two branches releasing different plugins still run at once.
+    concurrency:
+      group: release-tag-${{ matrix.plugin }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
