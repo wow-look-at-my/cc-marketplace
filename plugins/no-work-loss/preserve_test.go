@@ -72,7 +72,7 @@ func TestPreservesUntrackedFileContentBeforeRm(t *testing.T) {
 
 // A tracked edit is preserved on top of HEAD, so the commit carries HEAD's
 // content for everything else and the CURRENT content for the at-risk path --
-// and it never touches the user's own index or working tree to get there.
+// and it never writes the user's working tree to get there.
 func TestPreservesModifiedTrackedFileOnTopOfHead(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir) // rewrites tracked.go to "package a\n// edited\n"
@@ -90,13 +90,15 @@ func TestPreservesModifiedTrackedFileOnTopOfHead(t *testing.T) {
 	content := gitOutput(t, dir, "show", refs[0]+":tracked.go")
 	assert.Equal(t, "package a\n// edited", content)
 
-	// The real index and working tree are untouched: tracked.go still shows
-	// as an unstaged modification, and nothing is staged. (gitOutput trims
-	// the whole result, which would eat the porcelain code's own leading
-	// space, so this checks the code and the name rather than the exact
-	// two-column prefix.)
-	status := gitOutput(t, dir, "status", "--porcelain")
-	assert.Contains(t, status, "M tracked.go")
+	// The working tree still holds the edit byte for byte -- the hook analyses
+	// the command and never writes a file.
+	onDisk, err := os.ReadFile(filepath.Join(dir, "tracked.go"))
+	require.NoError(t, err)
+	assert.Equal(t, "package a\n// edited\n", string(onDisk))
+
+	// The edit is committed now, so the tree reads clean rather than showing a
+	// staged revert of the content that was just preserved.
+	assert.Empty(t, gitOutput(t, dir, "status", "--porcelain"))
 	assert.Empty(t, gitOutput(t, dir, "diff", "--cached", "--name-only"))
 }
 
@@ -135,7 +137,7 @@ func TestPreservesAndPushesToOrigin(t *testing.T) {
 	untrack(t, dir, "scratch.txt")
 
 	notice := preserved(t, dir, "rm scratch.txt")
-	assert.Contains(t, notice, "pushed to origin")
+	assert.Contains(t, notice, "and pushed")
 
 	refs := listPreservationRefs(t, dir)
 	require.Len(t, refs, 1)
@@ -154,11 +156,11 @@ func TestPreservesLocallyWhenPushFails(t *testing.T) {
 	untrack(t, dir, "scratch.txt")
 
 	notice := preserved(t, dir, "rm scratch.txt")
-	assert.Contains(t, notice, "push to origin failed")
+	assert.Contains(t, notice, "The push failed")
 	assert.Contains(t, notice, "committed to master")
 
 	refs := listPreservationRefs(t, dir)
-	require.Len(t, refs, 1, "the local ref must survive even though the push failed")
+	require.Len(t, refs, 1, "the commit must survive on the branch even though the push failed")
 }
 
 // ---------------------------------------------------------------------------

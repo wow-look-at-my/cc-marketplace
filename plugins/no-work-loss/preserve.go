@@ -101,6 +101,14 @@ func preserveAtRiskPaths(root string, paths []string) (res *preserveResult, ok b
 		// it. That is not durable preservation, so this must not read as one.
 		return nil, false
 	}
+	// The branch moved under the real index, which still holds the old tree
+	// for these paths. Left alone, `git status` reports a STAGED REVERT of the
+	// content just preserved, and the next `git commit` takes it. Only the
+	// preserved paths are refreshed, so other staged work is untouched and the
+	// working tree is never written.
+	resetArgs := append([]string{"reset", "-q", commit, "--"}, paths...)
+	runGit(root, resetArgs...)
+
 	res = &preserveResult{ref: branchName(root), commit: commit}
 	if _, stderr, err := runGitEnvTimeout(root, preservePushTimeout, nil, "push", "origin", "HEAD"); err != nil {
 		res.pushErr = strings.TrimSpace(stderr)
