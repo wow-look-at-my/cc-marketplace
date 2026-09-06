@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"strings"
 )
 
 type hookInput struct {
@@ -46,8 +47,16 @@ func main() {
 		// decision to emit and no reason to attach to it.
 		return
 	}
-	if reason := decide(raw); reason != "" {
+	reason, notices := decide(raw)
+	if reason != "" {
 		emitDeny(reason)
+		return
+	}
+	// A preservation notice is the one case this hook writes something for an
+	// allowed command: it moved content into a ref, and that must never
+	// happen silently.
+	if len(notices) > 0 {
+		emitNotice(notices)
 	}
 }
 
@@ -56,16 +65,16 @@ func main() {
 // while checking `ls` must not wedge a session -- the opposite posture from
 // evaluateWrites, and deliberately so: one half refuses what it cannot verify,
 // the other only refuses what it can see is dangerous.
-func evaluateLoss(command, cwd string) (reason string) {
+func evaluateLoss(command, cwd string) (reason string, notices []string) {
 	// Cheap byte scan first: the overwhelming majority of Bash calls name no verb
 	// that can delete anything, and those must not pay for a parse or a
 	// subprocess.
 	if command == "" || !mayDestroy(command) {
-		return ""
+		return "", nil
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			reason = ""
+			reason, notices = "", nil
 			if verb, ok := destructiveKeyword(command); ok {
 				reason = internalErrorReason(verb)
 			}
@@ -79,6 +88,27 @@ func emitDeny(reason string) {
 	resp.HookSpecificOutput.HookEventName = "PreToolUse"
 	resp.HookSpecificOutput.PermissionDecision = "deny"
 	resp.HookSpecificOutput.PermissionDecisionReason = reason
+	out, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	os.Stdout.Write(out)
+}
+
+// preToolUseNotice carries no permissionDecision at all -- a preservation
+// leaves the normal permission flow exactly as untouched as every other
+// allowed command, and only adds the one line saying where the content went.
+type preToolUseNotice struct {
+	HookSpecificOutput struct {
+		HookEventName string `json:"hookEventName"`
+	} `json:"hookSpecificOutput"`
+	SystemMessage string `json:"systemMessage"`
+}
+
+func emitNotice(notices []string) {
+	var resp preToolUseNotice
+	resp.HookSpecificOutput.HookEventName = "PreToolUse"
+	resp.SystemMessage = strings.Join(notices, "\n")
 	out, err := json.Marshal(resp)
 	if err != nil {
 		return

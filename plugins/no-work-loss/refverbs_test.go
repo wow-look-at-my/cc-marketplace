@@ -256,8 +256,13 @@ func TestAllowsTheSafeSpellingsOfThoseVerbs(t *testing.T) {
 func TestSubmoduleAndCheckoutIndexForceForms(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
-	denied(t, dir, "git submodule deinit -f vendor/lib")
-	denied(t, dir, "git submodule update --force")
+	// submodule names no provenance route, so the destruction half's own
+	// preserve-and-allow is the whole story for these two.
+	preserved(t, dir, "git submodule deinit -f vendor/lib")
+	preserved(t, dir, "git submodule update --force")
+	// checkout-index IS a provenance route (gitroutes.go's plumbingVerbs) --
+	// it points the index at an object with no tool call in sight -- so it
+	// stays denied regardless of preservation.
 	denied(t, dir, "git checkout-index -f -a")
 
 	allowed(t, dir, "git submodule update --init")
