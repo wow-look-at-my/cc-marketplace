@@ -105,6 +105,7 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 - **Adapters**: `plugins/common-checks/src/checks.ts` -- file kind, the per-check calls into `vendor/`, the `no-all-builds-job` anchor, the ste-lint bucket wording, the wrapped-paragraph collapse, and the ranking
 - **Hook**: `plugins/common-checks/src/hook.ts` -- the PreToolUse payload, the units a write adds, the ledger sweep, and the refusal
 - **Placement**: `plugins/common-checks/src/placement.ts` -- `place` pins an edit to its line span in the file on disk
+- **Local scan**: `plugins/common-checks/src/scan-repo.ts` -- `npx tsx plugins/common-checks/src/scan-repo.ts .` reports every hard ste-lint finding in the repository. CI lints only what a push changed, so a file nothing touches keeps its findings until somebody edits it. This finds them first
 - **Tests**: `src/hook.test.ts` covers the refusal and every fail-open path. Then the placement cases, against a real file on disk. An edit inside a fence is not refused for its line breaks. The same edit is not refused for its punctuation. The control edit outside a fence is still refused for its wrap
 - Document sync is full, because a finding is a property of the whole document
 - **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else

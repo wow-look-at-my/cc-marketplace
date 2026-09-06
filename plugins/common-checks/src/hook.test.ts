@@ -232,6 +232,20 @@ test("a fenced fragment is not refused for its punctuation", () => {
   assert.equal(reason, "");
 });
 
+// A line break in YAML is syntax, not a wrap. This repair joined a two-line
+// `concurrency:` block into one line and GitHub rejected the whole workflow
+// before a job started.
+test("a workflow file is never rewrapped", () => {
+  const decision = decide(
+    payload({
+      old_string: "concurrency:\n  group: release-x",
+      new_string: "concurrency:\n  group: release",
+    }),
+  );
+  assert.equal(decision.reason, "");
+  assert.equal(decision.updatedInput, undefined);
+});
+
 test("blockingFindings reports the check by name", () => {
   const found = blockingFindings(
     "Write",
