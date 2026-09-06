@@ -22,6 +22,8 @@ A commit SHA needs both a digit and an a-f letter. A `&#N;` character reference 
 
 Text that is already a link is **blanked** before matching -- each link becomes an equal run of spaces. Blanking rather than stripping, because a replacement that changes the length moves every offset after it. A moved offset splices the next link into the middle of a word.
 
+**A token inside a lone pair of backticks swallows them into its own range.** Splicing a link over just the bare token leaves the backticks straddling it (`` `[x](url)` ``), which markdown does not render as a link at all. `backtickWrapped` widens the match to include a single backtick on each side, and `Linkify` puts fresh backticks back INSIDE the brackets (`` [`x`](url) ``). A double backtick is the escape a code span uses for a literal backtick, not a wrap, so it is left alone.
+
 A bare `owner/repo` has the same shape as a directory path, and nothing separates `go/core` from a repository slug by looks alone. The `owner/repo#N` form IS matched, because the number carries it. That is the deliberate boundary of the check, not an oversight to fix by guessing.
 
 A commit SHA needs both a digit and an a-f letter. A `&#N;` character reference is stripped before matching, so this org's `&#0;` is not read as an issue number.
