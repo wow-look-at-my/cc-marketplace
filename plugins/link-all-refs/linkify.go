@@ -55,7 +55,14 @@ func Linkify(ref Ref, res Resolver) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return "[" + ref.Text + "](" + url + ")", true
+	text := ref.Text
+	if ref.Backticked {
+		// The caller's Located range already swallowed the original backticks,
+		// so putting them back here (inside the brackets) is what keeps the code
+		// span and the link the same span, instead of one nested in the other.
+		text = "`" + text + "`"
+	}
+	return "[" + text + "](" + url + ")", true
 }
 
 func refURL(ref Ref, res Resolver) (string, bool) {
