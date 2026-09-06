@@ -12,12 +12,70 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 )
+
+// slopfmtBinary is the tool that owns the rule. This plugin holds no copy of
+// it: CI, the editor and this hook all shell out to the same binary, so none of
+// them can drift from the others. SLOPFMT names another path.
+var slopfmtBinary = envOr("SLOPFMT", "slopfmt")
+
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
+// Hit is one count slopfmt cut, as this hook reports it back to the model.
+type Hit struct {
+	Phrase string
+	Line   string
+}
+
+// IsMarkdown reports whether a path names a document this plugin governs. The
+// RULE lives in slopfmt. This only decides which writes are worth a subprocess.
+func IsMarkdown(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}
+
+// countsRepair is what `slopfmt counts --json` answers with.
+type countsRepair struct {
+	Text    string   `json:"text"`
+	Changed bool     `json:"changed"`
+	Removed []string `json:"removed"`
+	Lines   []string `json:"lines"`
+}
+
+// strip runs the text through slopfmt. A missing binary, a timeout and an
+// unreadable answer all return the text unchanged: a guard that mangles a write
+// because its tool is absent is worse than no guard.
+func strip(text string) (countsRepair, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	command := exec.CommandContext(ctx, slopfmtBinary, "counts", "--json")
+	command.Stdin = strings.NewReader(text)
+	var out bytes.Buffer
+	command.Stdout = &out
+	if err := command.Run(); err != nil {
+		return countsRepair{}, false
+	}
+	var repair countsRepair
+	if json.Unmarshal(out.Bytes(), &repair) != nil {
+		return countsRepair{}, false
+	}
+	return repair, repair.Changed
+}
 
 // HookInput is the subset of the PreToolUse payload this plugin reads.
 type HookInput struct {
@@ -98,12 +156,18 @@ func repair(raw map[string]any) []Hit {
 		if !ok {
 			return
 		}
-		next, cut := StripCounts(text)
-		if len(cut) == 0 {
+		result, changed := strip(text)
+		if !changed {
 			return
 		}
-		m[key] = next
-		hits = append(hits, cut...)
+		m[key] = result.Text
+		for i, phrase := range result.Removed {
+			line := ""
+			if i < len(result.Lines) {
+				line = result.Lines[i]
+			}
+			hits = append(hits, Hit{Phrase: phrase, Line: line})
+		}
 	}
 	fix(raw, "content")
 	fix(raw, "new_string")
