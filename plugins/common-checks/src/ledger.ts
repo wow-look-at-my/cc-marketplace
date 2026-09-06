@@ -32,11 +32,19 @@ function entryName(filePath: string): string {
   return createHash("sha256").update(filePath).digest("hex").slice(0, 32);
 }
 
-export function record(sessionId: string, filePath: string): void {
+/** A recorded file, and what put it there. */
+export interface Entry {
+  path: string;
+  /** The identity of each finding the refused write introduced. */
+  ids: string[];
+}
+
+export function record(sessionId: string, filePath: string, ids: string[]): void {
   const dir = ledgerDir(sessionId);
   if (dir === undefined) return;
+  const entry: Entry = { path: filePath, ids };
   try {
-    writeFileSync(join(dir, entryName(filePath)), filePath, "utf8");
+    writeFileSync(join(dir, entryName(filePath)), JSON.stringify(entry), "utf8");
   } catch {
     // A ledger that cannot be written leaves the guard exactly as strong as
     // it was without one.
@@ -53,22 +61,36 @@ export function forget(sessionId: string, filePath: string): void {
   }
 }
 
-/** Every path the ledger still holds. */
-export function outstanding(sessionId: string): string[] {
+/** Every entry the ledger still holds. */
+export function outstanding(sessionId: string): Entry[] {
   const dir = ledgerDir(sessionId);
   if (dir === undefined) return [];
   try {
     return readdirSync(dir)
-      .map((name) => {
-        try {
-          return readFileSync(join(dir, name), "utf8");
-        } catch {
-          return "";
-        }
-      })
-      .filter((path) => path !== "" && existsSync(path));
+      .map((name) => read(join(dir, name)))
+      .filter((entry): entry is Entry => entry !== undefined && existsSync(entry.path));
   } catch {
     return [];
+  }
+}
+
+/** One entry off disk. An unreadable or malformed one is no entry at all. */
+function read(file: string): Entry | undefined {
+  let raw: string;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+  if (raw === "") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const { path, ids } = parsed as Record<string, unknown>;
+    if (typeof path !== "string" || path === "") return undefined;
+    return { path, ids: Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : [] };
+  } catch {
+    return undefined;
   }
 }
 
