@@ -30,7 +30,13 @@ type record struct {
 	// that errored returned no state, so re-asking is the FIRST read of that
 	// subject rather than a repeat of one.
 	failed []string
-	raw    string
+	// answered names every tool_use id a result has arrived for, error or
+	// not. A call with NO result carries no state either: it is in flight, or
+	// its result is not on disk yet when the next call's hook reads the
+	// transcript. Counting one as a read refuses the retry of a call that
+	// just failed.
+	answered []string
+	raw      string
 }
 
 // wakeMarkers are the envelopes the harness delivers when something really
@@ -86,7 +92,11 @@ func parseRecords(path string) []record {
 			var blocks []rawBlock
 			if json.Unmarshal(rec.Message.Content, &blocks) == nil {
 				for _, b := range blocks {
-					if b.Type == "tool_result" && b.IsError && b.ToolUseID != "" {
+					if b.Type != "tool_result" || b.ToolUseID == "" {
+						continue
+					}
+					r.answered = append(r.answered, b.ToolUseID)
+					if b.IsError {
 						r.failed = append(r.failed, b.ToolUseID)
 					}
 				}
