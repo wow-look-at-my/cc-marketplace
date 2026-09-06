@@ -14,6 +14,10 @@ import (
 // it the answer is unknown, and unknown denies.
 const gitTimeout = 3 * time.Second
 
+// A push reaches the network, which routine status checks never do. It gets
+// more room, but still bounded: a hung push must not hang the whole hook.
+const preservePushTimeout = 8 * time.Second
+
 var (
 	errUnknownDir  = errors.New("target directory is not statically known")
 	errNoRemoteRef = errors.New("no remote-tracking ref locally, so what the remote holds is unknown -- git fetch first")
@@ -141,7 +145,16 @@ func parseStatusZ(out string) (tracked, untracked, ignored []string) {
 }
 
 func runGit(dir string, args ...string) (stdout, stderr string, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	return runGitEnvTimeout(dir, gitTimeout, nil, args...)
+}
+
+// runGitEnvTimeout is runGit with two extras a preservation commit needs and
+// an ordinary status probe never does: a bounded set of extra environment
+// variables (GIT_INDEX_FILE, to build a commit through a throwaway index
+// instead of the user's own), and a timeout of the caller's choosing (a push
+// reaches the network, so it gets more than the 3-second status budget).
+func runGitEnvTimeout(dir string, timeout time.Duration, extraEnv []string, args ...string) (stdout, stderr string, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	full := append([]string{"-C", dir}, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
@@ -149,7 +162,8 @@ func runGit(dir string, args ...string) (stdout, stderr string, err error) {
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
 	// Never let a hook prompt for credentials or open an editor.
-	cmd.Env = append(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0", "GIT_PAGER=cat")
+	env := append(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0", "GIT_PAGER=cat")
+	cmd.Env = append(env, extraEnv...)
 	err = cmd.Run()
 	if ctx.Err() != nil {
 		err = ctx.Err()
