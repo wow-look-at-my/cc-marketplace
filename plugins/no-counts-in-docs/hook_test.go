@@ -28,12 +28,11 @@ func stub(t *testing.T, body string) {
 	swap(t, path)
 }
 
-// swap points the hook at path for one test.
+// swap points the hook at path for one test. t.Setenv keeps the test off the
+// parallel path, so no sibling sees this binary.
 func swap(t *testing.T, path string) {
 	t.Helper()
-	previous := slopfmtBinary
-	slopfmtBinary = path
-	t.Cleanup(func() { slopfmtBinary = previous })
+	t.Setenv("SLOPFMT", path)
 }
 
 // ask runs the hook over a payload and returns its stdout.

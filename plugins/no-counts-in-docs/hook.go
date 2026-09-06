@@ -23,10 +23,13 @@ import (
 	"time"
 )
 
-// slopfmtBinary is the tool that owns the rule. This plugin holds no copy of
+// slopfmtPath names the tool that owns the rule. This plugin holds no copy of
 // it: CI, the editor and this hook all shell out to the same binary, so none of
 // them can drift from the others. SLOPFMT names another path.
-var slopfmtBinary = envOr("SLOPFMT", "slopfmt")
+//
+// It reads the environment per call rather than once. A package-level variable
+// is shared state, and the tests that point it elsewhere run in parallel.
+func slopfmtPath() string { return envOr("SLOPFMT", "slopfmt") }
 
 func envOr(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
@@ -61,7 +64,7 @@ func strip(text string) (countsRepair, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	command := exec.CommandContext(ctx, slopfmtBinary, "fix", "--only", "counts", "--json")
+	command := exec.CommandContext(ctx, slopfmtPath(), "fix", "--only", "counts", "--json")
 	command.Stdin = strings.NewReader(text)
 	var out bytes.Buffer
 	command.Stdout = &out
