@@ -11,6 +11,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"strings"
 )
 
@@ -75,10 +76,19 @@ func readSinceLastSignal(recs []record) map[string]bool {
 		}
 	}
 
+	// A result arrives after the call it answers, so the errors are collected
+	// first and the reads judged against them.
+	failed := set.New[string]()
+	for _, r := range recs[start:] {
+		for _, id := range r.failed {
+			failed.Add(id)
+		}
+	}
+
 	out := map[string]bool{}
 	for _, r := range recs[start:] {
 		for _, c := range r.calls {
-			if !isStatusRead(c) {
+			if !isStatusRead(c) || failed.Contains(c.id) {
 				continue
 			}
 			for _, s := range subjectsIn(strings.ToLower(callText(c))) {

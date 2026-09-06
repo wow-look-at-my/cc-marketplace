@@ -90,8 +90,9 @@ func analyzeWrites(command, cwd string) string {
 	for _, b := range blockers {
 		return "blocked: the command runs " + b + ". " + useTheTools
 	}
+	aliases := newAliasResolver()
 	for _, seg := range segs {
-		for _, w := range classify(seg, roots) {
+		for _, w := range classify(seg, roots, aliases, 0) {
 			if reason := judgeWrite(w, roots); reason != "" {
 				return reason
 			}

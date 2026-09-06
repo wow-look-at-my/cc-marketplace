@@ -56,8 +56,8 @@ func parseSegments(command, cwd string) (segs []segment, blockers []string, ok b
 	if err != nil {
 		return nil, nil, false
 	}
-	unsafe, abort := unsafeVarNames(f.Stmts)
-	w := &walker{vars: varTable{}, unsafeVars: unsafe, varsDisabled: abort}
+	unsafe, multi, abort := unsafeVarNames(f.Stmts)
+	w := &walker{vars: varTable{}, unsafeVars: unsafe, multiVars: multi, varsDisabled: abort, scopeOK: true}
 	base := cwd
 	w.stmts(f.Stmts, &base)
 	return w.segs, w.blockers, true
@@ -76,19 +76,40 @@ type walker struct {
 	// variable this scan cannot see through.
 	vars         varTable
 	unsafeVars   map[string]bool
+	multiVars    map[string]bool
 	varsDisabled bool
+	// scopeOK marks a scope whose whole program text this walk has read, which
+	// is what makes "assigned exactly once" a fact rather than a guess. The
+	// top-level command qualifies, and so does a script file run as a NEW
+	// shell: its variables are its own. A sourced file, an alias body and a
+	// `sh -c` string all borrow the caller's scope, so they get none of it.
+	scopeOK bool
 }
 
 // resolve renders a word, substituting a variable this hook has proven safe.
-// Resolution is confined to the top-level parse: a script pulled in through
-// an alias, a `sh -c` string, or a sourced file is different source text
-// with its own variable scope, so scriptDepth > 0 falls back to the plain
-// reading with no substitution.
 func (w *walker) resolve(wd *syntax.Word) word {
-	if w.scriptDepth == 0 && !w.varsDisabled && len(w.vars) > 0 {
+	if w.scopeOK && !w.varsDisabled && len(w.vars) > 0 {
 		return resolveWord(wd, w.vars)
 	}
 	return wordText(wd)
+}
+
+// enterScope swaps in the variable scope of a script the walk is about to
+// follow as a fresh shell, binding $0 to the file it was read from. It
+// returns the function that restores the caller's scope.
+func (w *walker) enterScope(stmts []*syntax.Stmt, self string) func() {
+	prev, prevUnsafe, prevMulti := w.vars, w.unsafeVars, w.multiVars
+	prevDisabled, prevOK := w.varsDisabled, w.scopeOK
+	unsafe, multi, abort := unsafeVarNames(stmts)
+	w.vars, w.unsafeVars, w.multiVars = varTable{}, unsafe, multi
+	w.varsDisabled, w.scopeOK = abort, true
+	if self != "" {
+		w.vars["0"] = word{text: self, static: true}
+	}
+	return func() {
+		w.vars, w.unsafeVars, w.multiVars = prev, prevUnsafe, prevMulti
+		w.varsDisabled, w.scopeOK = prevDisabled, prevOK
+	}
 }
 
 func (w *walker) full() bool { return len(w.segs) >= maxSegments }
@@ -238,10 +259,22 @@ func (w *walker) call(c *syntax.CallExpr, cwd *string, rs []redirTarget, stdin b
 		if a.Value != nil {
 			w.scanSubst(a.Value, *cwd)
 		}
-		if pureAssign && w.scriptDepth == 0 && !w.varsDisabled &&
-			a.Name != nil && a.Value != nil && !w.unsafeVars[a.Name.Value] {
-			if v := w.resolve(a.Value); v.static {
-				w.vars[a.Name.Value] = v
+		if pureAssign && w.scopeOK && !w.varsDisabled && a.Name != nil && a.Value != nil {
+			switch {
+			case w.multiVars[a.Name.Value]:
+				// Two assignments, so no one reading can be pinned at all.
+			case !w.unsafeVars[a.Name.Value]:
+				if v := w.resolve(a.Value); v.static {
+					w.vars[a.Name.Value] = v
+				} else if v, ok := mktempPath(a.Value); ok {
+					w.vars[a.Name.Value] = v
+				}
+			default:
+				// Assigned once, where it might not run: the value is unknown,
+				// but a mktemp path's directory is the same either way.
+				if v, ok := mktempPath(a.Value); ok {
+					w.vars[a.Name.Value] = v
+				}
 			}
 		}
 	}
@@ -291,7 +324,7 @@ func (w *walker) expand(name string, eff []word, cwd string) bool {
 		// otherwise read as an unknown program.
 		for _, a := range eff[1:] {
 			if i := strings.Index(a.text, "="); i > 0 {
-				w.script(a.text[i+1:], cwd, "an alias definition")
+				w.script(a.text[i+1:], cwd, "an alias definition", "")
 			}
 		}
 		return true
@@ -299,7 +332,7 @@ func (w *walker) expand(name string, eff []word, cwd string) bool {
 		return w.shellCall(eff, cwd)
 	case name == "source" || name == ".":
 		if len(eff) > 1 {
-			w.scriptFile(eff[1], cwd)
+			w.scriptFile(eff[1], cwd, false)
 		}
 		return true
 	case name == "find":
@@ -309,7 +342,7 @@ func (w *walker) expand(name string, eff []word, cwd string) bool {
 	// `./deploy.sh` names a file rather than a program on PATH. When its shebang
 	// says shell, its text is readable and gets the same treatment.
 	if strings.Contains(eff[0].text, "/") && eff[0].static && hasShellShebang(abs(cwd, eff[0].text)) {
-		w.scriptFile(eff[0], cwd)
+		w.scriptFile(eff[0], cwd, true)
 		return true
 	}
 	return false
@@ -331,13 +364,13 @@ func (w *walker) shellCall(eff []word, cwd string) bool {
 				w.blockers = append(w.blockers, "a shell -c script assembled from an expansion, whose writes cannot be resolved")
 				return true
 			}
-			w.script(eff[i+1].text, cwd, "a shell -c script")
+			w.script(eff[i+1].text, cwd, "a shell -c script", "")
 			return true
 		}
 		if strings.HasPrefix(t, "-") {
 			continue
 		}
-		w.scriptFile(eff[i], cwd)
+		w.scriptFile(eff[i], cwd, true)
 		return true
 	}
 	// A bare `bash` reads its script from stdin, which is not in the text.
@@ -358,7 +391,9 @@ func shellNoExec(eff []word) bool {
 // script parses shell source found inside the command and folds its segments
 // into the same walk, so a write two levels down is judged like a write at top
 // level.
-func (w *walker) script(src, cwd, what string) {
+// self names the file a fresh shell was started from, and is empty for text
+// that runs in the caller's own scope.
+func (w *walker) script(src, cwd, what, self string) {
 	if w.scriptDepth >= maxScriptDepth {
 		w.blockers = append(w.blockers, what+", nested deeper than this hook will follow")
 		return
@@ -369,6 +404,13 @@ func (w *walker) script(src, cwd, what string) {
 		return
 	}
 	w.scriptDepth++
+	if self != "" {
+		defer w.enterScope(f.Stmts, self)()
+	} else {
+		prev := w.scopeOK
+		w.scopeOK = false
+		defer func() { w.scopeOK = prev }()
+	}
 	w.isolated(f.Stmts, cwd)
 	w.scriptDepth--
 }
@@ -376,7 +418,9 @@ func (w *walker) script(src, cwd, what string) {
 // scriptFile follows a shell script on disk. A script that does not exist writes
 // nothing, so it is left alone; one that exists and cannot be read or parsed is
 // the write-elsewhere-then-run bypass and denies.
-func (w *walker) scriptFile(f word, cwd string) {
+// fresh marks a script started as a new shell, whose variables are entirely
+// its own text; a sourced file shares the caller's scope and passes false.
+func (w *walker) scriptFile(f word, cwd string, fresh bool) {
 	if !f.static {
 		w.blockers = append(w.blockers, "a script path built from an expansion, whose writes cannot be resolved")
 		return
@@ -399,7 +443,11 @@ func (w *walker) scriptFile(f word, cwd string) {
 		w.blockers = append(w.blockers, "the script "+f.text+", which cannot be read")
 		return
 	}
-	w.script(string(src), cwd, "the script "+f.text)
+	self := ""
+	if fresh {
+		self = path
+	}
+	w.script(string(src), cwd, "the script "+f.text, self)
 }
 
 // findExec lifts the utility out of `find ... -exec <argv> ;` and walks it as a

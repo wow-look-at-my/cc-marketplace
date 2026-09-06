@@ -32,6 +32,8 @@ Branch navigation is untouched: `checkout -b`, `switch -c`, and a bare ref switc
 
 `update-ref -d` deletes and introduces no content. It stays with the destruction half, which already asks whether the commits it drops survive elsewhere.
 
+A git verb with no write route of its own is tried against `git config`'s own alias table before it is accepted as harmless. That is the same `aliasResolver` the destruction half uses. `git nuke` for `reset --hard` writes what the spelled-out verb writes. This half must see through it. The destruction side does resolve the alias, so without that a command escapes here while the direct spelling still refuses.
+
 A pipeline is judged stage by stage, so `curl ... | tar -xz` is caught at the tar.
 
 **Indirection this hook follows** rather than gives up on: `sh -c '...'` and an alias definition are shell source and are parsed. A shell script file is read from disk and parsed (a script that does not exist writes nothing and is left alone, one that exists and cannot be read or parsed denies). `./script.sh` is followed when its shebang names a shell. `find -exec`/`-execdir` has its utility lifted out and walked as a call of its own (`-execdir` runs in a directory the text does not name, so its paths are unresolvable). `xargs`, `env`, `sudo`, `timeout`, `nice` and the rest are stripped with their value-taking flags understood. A function body is walked, and a background `&` changes nothing -- the writes it performs are the same writes.

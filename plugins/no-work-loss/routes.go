@@ -31,7 +31,7 @@ type write struct {
 // this hook does not sandbox the programs it starts -- a build, a test run or a
 // generator writes what it writes. What it does close is every route where the
 // command text itself performs or directs the write.
-func classify(seg segment, roots []string) []write {
+func classify(seg segment, roots []string, aliases *aliasResolver, depth int) []write {
 	out := redirectWrites(seg)
 	if len(seg.argv) == 0 {
 		return out
@@ -43,7 +43,19 @@ func classify(seg segment, roots []string) []write {
 		return out
 	}
 	if w, ok := gitWrites(seg, name, rest); ok {
-		return append(out, w...)
+		if len(w) > 0 {
+			return append(out, w...)
+		}
+		// A verb with no write route of its own may still be an alias for
+		// one -- `git nuke` for `reset --hard` is exactly the destruction
+		// half's own motivating case, and provenance must see through the
+		// same aliases or a hidden write route goes untested rather than
+		// merely unnamed. expand is a no-op for a real git builtin (git
+		// refuses to let an alias shadow one) and for an unconfigured name.
+		for _, expanded := range aliases.expand(seg, depth) {
+			out = append(out, classify(expanded, roots, aliases, depth+1)...)
+		}
+		return out
 	}
 	if w, ok := remoteWrites(seg, name, rest); ok {
 		return append(out, w...)

@@ -26,6 +26,9 @@ func TestIntegratingPreservesAndAllowsWithUncommittedWork(t *testing.T) {
 	modify(t, dir)
 
 	preserved(t, dir, "git merge origin/master")
+	// The line above COMMITTED the edit, so the tree is clean again. Re-dirty
+	// it, or the second spelling has nothing left to preserve.
+	writeAt(t, dir, "tracked.go", "package a\n// edited again\n")
 	preserved(t, dir, "git pull origin master")
 }
 
@@ -41,13 +44,17 @@ func TestApplyingAPatchIsStillRefused(t *testing.T) {
 // A staged change counts as outstanding too: the index is not a commit. It is
 // preserved the same way an unstaged one is.
 func TestMergeAndPullPreserveOverAStagedChange(t *testing.T) {
-	dir := newRepo(t)
-	modify(t, dir)
-	stage(t, dir)
-
-	preserved(t, dir, "git merge feature")
-	preserved(t, dir, "git pull origin master")
-	preserved(t, dir, "git pull --rebase")
+	// Each spelling gets its own repository. Preservation COMMITS the staged
+	// change, so a second call in the same tree finds nothing left at risk and
+	// is allowed without preserving anything.
+	for _, cmd := range []string{"git merge feature", "git pull origin master", "git pull --rebase"} {
+		t.Run(cmd, func(t *testing.T) {
+			dir := newRepo(t)
+			modify(t, dir)
+			stage(t, dir)
+			preserved(t, dir, cmd)
+		})
+	}
 }
 
 // An untracked scratch file is not something a merge can overwrite: git refuses

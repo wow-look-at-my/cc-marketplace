@@ -6,6 +6,18 @@ Content that exists only in the working tree -- modified but uncommitted, or unt
 
 Everything else is subordinate to that. Committed work is reachable from the reflog for weeks, so a command that only rewrites committed history is not this plugin's problem.
 
+## Preserve, then allow
+
+The invariant is about the content, not about the command. The ordinary dirty-tree case is the tracked, untracked and ignored hazard below. The hook satisfies the invariant there directly instead of refusing. It commits the at-risk paths into a dedicated `refs/no-work-loss/<timestamp>.<seq>` ref. The commit goes through a throwaway `GIT_INDEX_FILE`, so the user's own index and working tree stay untouched. The hook then allows the command. `git read-tree HEAD` seeds that temp index with the last committed tree. It is skipped when no HEAD exists yet, and the commit then gets no parent. `git add --force` stages the paths a denial would have named, and `git commit-tree` builds the commit. A best-effort `git push origin <commit>:<ref>` gets the content off the machine. A push failure still allows, because the local ref satisfies the invariant on its own. The line that reports this says the push failed and where the content sits instead.
+
+Once that commit exists, the destructive command is safe by construction -- there is nothing left to refuse. The case that still denies is the commit itself failing. Preservation that did not happen must never read as success. A failed `git add`, `write-tree`, `commit-tree` or `update-ref` therefore falls back to the ordinary denial below.
+
+Two hazard classes are deliberately excluded from this and still deny outright: a stash entry, and anything ref-destroying (the whole "reachability, not refusal" family below). Both ask a different question than "is there uncommitted work". Folding a stash pop or a synthesized ref into the same machinery is not worth the complexity here. `preserve_test.go`'s negative controls pin this as a stated boundary, not an oversight to fix later.
+
+A preservation ref is the ONLY copy of what it holds. So it gets the opposite treatment from every other ref-destroying command. `git update-ref -d`, and a force-pushing or deleting `git push` that names one under `refs/no-work-loss/`, are refused unconditionally. That skips the "does it exist somewhere else" question entirely, because the ref itself contains the content and the answer is wrongly yes. `git branch -D` cannot reach this prefix at all: a branch name always resolves under `refs/heads/`.
+
+Destruction and provenance are separate halves. See the provenance section in the top-level CLAUDE.md. A command a provenance rule denies for its own reasons still ends up denied after preservation: `git reset --hard`, `tee`, `truncate`, a truncating redirect. The preservation commit is then a harmless, redundant local artifact, and its notice is never surfaced, because the command never proceeded.
+
 ## The incident this was built for
 
 ```sh

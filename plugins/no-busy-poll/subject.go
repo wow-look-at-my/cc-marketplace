@@ -49,6 +49,31 @@ var statusReadCommands = []string{
 	"git ls-remote",
 }
 
+// contentSubcommands read a run's OUTPUT rather than its state: a log, a
+// search of one, the errors GitHub extracted, the artifacts, the job list.
+//
+// None of them is the poll this guard exists to stop. A finished run's log
+// does not change, and reading one is not asking the question again -- it is
+// how the failure gets diagnosed. Counting them refused the second of two red
+// jobs on one commit as a repeat of the first, which is the guard standing
+// between a session and the fix it was told to make.
+var contentSubcommands = set.Of(
+	"log", "grep", "annotations", "artifacts", "jobs", "workflows",
+)
+
+// afterWaitCI is the subcommand word following `gh wait-ci`, lowercased, or
+// "" when the command names none.
+func afterWaitCI(lower string, at int) string {
+	rest := strings.TrimSpace(lower[at+len("gh wait-ci"):])
+	for _, f := range strings.Fields(rest) {
+		if strings.HasPrefix(f, "-") {
+			continue
+		}
+		return f
+	}
+	return ""
+}
+
 var (
 	reSlugNum   = regexp.MustCompile(`([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#(\d+)`)
 	reOwner     = regexp.MustCompile(`"owner"\s*:\s*"([^"]+)"`)
@@ -92,6 +117,10 @@ func namesAStatusCommand(cmd string) bool {
 			}
 			at := i + j
 			if reStatement.MatchString(lower[:at]) {
+				if want == "gh wait-ci" && contentSubcommands.Contains(afterWaitCI(lower, at)) {
+					i = at + len(want)
+					continue
+				}
 				return true
 			}
 			i = at + len(want)
