@@ -10,7 +10,7 @@ The hook judges only the text a write ADDS. A violation already in the file ther
 
 **A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
 
-It clears itself. Every write re-reads each recorded file from disk, and drops the ones that now pass, so the repair needs no announcement. Editing the bad file is always allowed, or it could never be fixed. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
+It clears itself. Every write re-reads each recorded file from disk, and drops the ones that now pass, so the repair needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
 
 Every failure path allows the write: an unparseable payload, an unjudged path, a tool that does not write. **A missing Node allows it too, in `launcher.sh`.** A non-zero exit from a PreToolUse hook blocks the tool. The server's `exit 127` there refuses every write in the session rather than none.
 
