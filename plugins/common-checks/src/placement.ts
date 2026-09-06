@@ -46,12 +46,6 @@ export function place(
   const after = disk.slice(at + oldString.length);
   const start = before.split("\n").length - 1;
   const end = start + newString.split("\n").length - 1;
-<<<<<<< HEAD
-  const newline = after.indexOf("\n");
-  const suffix = newline === -1 ? after.length : newline;
-  return { full: before + newString + after, before: disk, start, end, prefix, suffix };
-=======
   return { full: before + newString + after, start, end };
->>>>>>> origin/master
 }
 
