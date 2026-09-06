@@ -8,7 +8,7 @@ Or its AUDIENCE is the reviewer: it defends the change instead of telling the ne
 
 - It is a plain `[]tell`, so extending the plugin is adding a row. Order inside the table decides which tell a sentence is REPORTED as when several match, so the specific rules sit above the general ones.
 - **The volume cap** (`FindTombstones`, default 14 lines, `NO_TOMBSTONES_MAX_COMMENT_LINES`) is the tier no rewording defeats. A tombstone is surplus text, so an essay whose every individual sentence reads as true and current still fails here. It governs SOURCE only -- a long paragraph in a document is ordinary writing, and applying it there will make every page unwritable.
-- **The dead referent** (`referents.go`) catches the tombstone with no tell at all: "see `TestDarwinStatfsToLinux` for the pin", written beside the change that deleted that test. Precision lives entirely in `isCandidate`: an all-caps name is never eligible. A name under 8 characters is not eligible either, being too likely to be a word.
+- **The dead referent** catches the tombstone with no tell at all: "see `TestDarwinStatfsToLinux` for the pin", written beside the change that deleted that test. Precision lives entirely in `isCandidate`: an all-caps name is never eligible. A name under 8 characters is not eligible either, being too likely to be a word.
 
 **A strippable finding is deleted outright, not relocated.** git history already holds anything worth keeping, so there is no ledger. The response's `additionalContext` names the removed line once. That is the only record. `Strippable` on a `Hit` means the line is BOTH the one raw source line the finding sits on AND that line's only content. No code and no sibling comment shares it. `Block` carries the parallel `lineNos`/`pure` arrays a comment scanner fills in for exactly this. A document's are left nil. A document hit is therefore never offered for stripping (see below). Deleting only ever removes whole lines from the write's own text (`content`, `new_string`, or one MultiEdit entry's `new_string`), never a mid-line span. A trailing `// tombstone` on a code line computes `pure=false`. So does a block comment's opening or closing line that shares code with `/*` or `*/`. Both fall through to deny instead of guessing at a splice.
 
@@ -20,11 +20,15 @@ That run is also what caught the one false positive the unit tests had not: `tha
 
 Every failure path allows the call: an unparseable payload, an unparseable `tool_input`, an unjudged path. A tool that does not write files, and any `hook_event_name` other than `PreToolUse`. The matcher is `*` and the tool name is filtered in Go. The registration does not depend on matcher-regex semantics.
 
-- **Hook binary**: `plugins/no-tombstones/hook.go` -- the PreToolUse payload, the per-unit scan (one per Write/Edit/MultiEdit-entry text), the strip-or-deny decision, the `updatedInput` write-back, and the deny reason with its truncation notice
-- **Detection**: `plugins/no-tombstones/tells.go` -- the tell table, the shared-order rule, the volume cap, and per-line-per-tell dedupe. `linePurity` and `hitForName` turn a match into a `Hit` with its strip metadata
-- **Extraction**: `plugins/no-tombstones/comments.go` -- the per-language comment scanner (now tracking each line's source position and whether deleting it is clean), block merging, and the document prose walker
-- **Referents**: `plugins/no-tombstones/referents.go` -- identifier eligibility, the bounded ripgrep probe, and the working-tree walk
-- **Tests**: `plugins/no-tombstones/tells_test.go` (the release-note block split into the sentences that must be refused, each by a NAMED tell. The sentences that must survive), `hook_test.go` (every write shape stripping its own comment-only line, the trailing-comment and block-comment-edge negative controls that must still deny, MultiEdit touching only its own offending edit, the volume cap and document paths always denying, the dead-referent tier stripping rather than denying, and every fail-open path)
+**The rule is not here. It is slopfmt's.** This hook pipes each text a write adds through `slopfmt fix --only tombstones --json` and splices the answer back into the payload. It holds no tell table, no comment scanner and no referent probe of its own. CI, an editor and this hook all shell out to the same binary, so none of them can drift from the others. `SLOPFMT` names another path, which is how the tests drive a stub instead.
+
+A missing binary, a timeout and an unreadable answer all let the write through unchanged. A guard that refuses a write because its tool is absent is worse than no guard.
+
+What stays here is the plumbing. Which writes are worth a subprocess, how the answer is spliced back, the notice, and the refusal.
+
+- **Hook binary**: `plugins/no-tombstones/hook.go` -- the PreToolUse payload, the per-unit call into slopfmt, the strip-or-deny decision, the `updatedInput` write-back, and the deny reason with its truncation notice. This is the whole plugin
+- **Detection**: `wow-look-at-my/slopfmt`, package `tombstones`. The tell table, the comment scanner, the referent probe and the strip live there
+- **Tests**: `plugins/no-tombstones/plumbing_test.go`. The suite drives a stub in place of the binary, because the rule is tested where it lives. Covered here is every write shape, a kept finding refusing the write, and every path that lets a write through
 - **Plugin config**: `plugins/no-tombstones/.claude-plugin/plugin.json` -- one PreToolUse hook registration on matcher `*`
 
 Keep the two in sync if either changes.
