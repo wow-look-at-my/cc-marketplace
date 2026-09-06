@@ -258,6 +258,37 @@ func TestAUserPromptReopensTheSubject(t *testing.T) {
 	assert.Empty(t, reason, "the user asking is always a reason to look")
 }
 
+func TestReadingALogIsNotReadingAState(t *testing.T) {
+	// Two jobs failed on one commit. Reading the second one's log is new
+	// information, and refusing it leaves the session unable to diagnose the
+	// failure it was woken for.
+	tr := stageTranscript(t,
+		bashCall("gh wait-ci --sha 9b348b7"),
+		toolResult(`{"sha":"9b348b7","conclusion":"failure"}`),
+	)
+	for _, cmd := range []string{
+		"gh wait-ci log 34025531391 --job 101465702969",
+		"gh wait-ci grep --sha 9b348b7 'panic'",
+		"gh wait-ci annotations 34025531391",
+		"gh wait-ci jobs 34025531391",
+	} {
+		reason := denyReasonOf(t, preToolPayload(t, tr, "Bash", bashInput(cmd)))
+		assert.Empty(t, reason, "reading output is how a failure gets fixed: %s", cmd)
+	}
+}
+
+func TestReadingTheStateAgainIsStillARepeat(t *testing.T) {
+	// The negative control for the case above. `watch` and `runs` answer the
+	// question the log does not, and asking twice learns nothing.
+	tr := stageTranscript(t,
+		bashCall("gh wait-ci --sha 9b348b7"),
+		toolResult(`{"sha":"9b348b7","conclusion":"failure"}`),
+	)
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
+		bashInput("gh wait-ci watch --sha 9b348b7")))
+	assert.NotEmpty(t, reason, "the state answers the same either time")
+}
+
 func TestAMidTurnInterjectionReopensTheSubject(t *testing.T) {
 	tr := stageTranscript(t,
 		bashCall("gh pr view 87 --repo wow-look-at-my/grok-build"),
