@@ -1,6 +1,20 @@
 ## Common Checks Plugin
 
-The common-checks plugin lives at `plugins/common-checks/`. It is one **language server**. It reports every violation that fails the org's `common-checks` CI gate, on the line that violation sits on, while the file is open.
+The common-checks plugin lives at `plugins/common-checks/`. It is one **language server** plus one **PreToolUse hook**, sharing `checks.ts`. The server reports every violation that fails the org's `common-checks` CI gate, on the line it sits on, while the file is open. The hook refuses a write that introduces one.
+
+**Both exist because a diagnostic is advice and a write is a decision.** A session put a three-line YAML comment above a trigger. That failed `yaml-comment-block` and took a pull request red. The same three lines went into a second repository an hour later. The server was adapting that exact rule the whole time. A finding nobody reads stops nothing.
+
+The hook judges only the text a write ADDS. A violation already in the file therefore never blocks an unrelated edit to it. A fragment is checked as if it were the file, because a comment run is a comment run wherever it sits.
+
+**It filters nothing else.** `findings()` already returns only what fails CI, so a second list of enforced checks is a list that drifts from the first. An earlier draft kept one and left ste-lint out of it. The file documenting that choice then failed ste-lint in CI.
+
+**A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
+
+It clears itself. Every write re-reads each recorded file from disk, and drops the ones that now pass, so the repair needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
+
+Every failure path allows the write: an unparseable payload, an unjudged path, a tool that does not write. **A missing Node allows it too, in `launcher.sh`.** A non-zero exit from a PreToolUse hook blocks the tool. The server's `exit 127` there refuses every write in the session rather than none.
+
+One bundle serves both. `server.ts` dispatches on `--hook`, so neither half can drift from the other or from CI.
 
 It takes its shape from `css-duplication`, for the same reason. A finding that tracks the file's state disappears when the code is fixed. A hook shouts once per edit, whether or not the finding is still true.
 

@@ -104,7 +104,7 @@ func TestDeniesResetHardOnDirtyTree(t *testing.T) {
 	assert.Empty(t, lossReason)
 	require.NotEmpty(t, notices)
 	assert.Contains(t, notices[0], "1 modified")
-	assert.Contains(t, notices[0], "refs/no-work-loss/")
+	assert.Contains(t, notices[0], "committed to master")
 
 	r := denied(t, dir, "git reset --hard origin/master")
 	assert.Contains(t, r, "git reset")
@@ -121,7 +121,7 @@ func TestPreservesAndAllowsCheckoutOnDirtyTree(t *testing.T) {
 	modify(t, dir)
 	notice := preserved(t, dir, "git checkout master")
 	assert.Contains(t, notice, "git checkout")
-	assert.Contains(t, notice, "refs/no-work-loss/")
+	assert.Contains(t, notice, "committed to master")
 }
 
 // The motivating incident: the dangerous command is the second one, and the
@@ -132,11 +132,18 @@ func TestDeniesTheTwoCommandIncidentShape(t *testing.T) {
 	denied(t, dir, "git checkout master && git reset --hard origin/master")
 }
 
-func TestDeniesResetHardReachedByCd(t *testing.T) {
+// The provenance half is scoped to the session's own guarded roots (the
+// initial cwd and CLAUDE_PROJECT_DIR) -- see tree.go's guardedRoots -- and a
+// `cd` into an unrelated repository never enters that scope. The destruction
+// half has no such scoping: it protects any repository the command reaches,
+// so it is the only thing standing between the dirty tree and the reset here,
+// and it now preserves the edit rather than refusing the whole command.
+func TestPreservesAndAllowsResetHardReachedByCdOutsideGuardedRoots(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	elsewhere := t.TempDir()
-	denied(t, elsewhere, "cd "+dir+" && git reset --hard")
+	notice := preserved(t, elsewhere, "cd "+dir+" && git reset --hard")
+	assert.Contains(t, notice, "git reset --hard")
 }
 
 // `clean` is not a provenance route (routes.go names no such verb), so it is
@@ -347,12 +354,15 @@ func TestDeniesUnparseableCommandNamingADestructiveVerb(t *testing.T) {
 // Every spelling of the same destructive flag set reaches the same verdict:
 // preserved and allowed, since `clean` names no provenance route.
 func TestFlagVariantsAllReachTheSamePreservedVerdict(t *testing.T) {
-	dir := newRepo(t)
-	untrack(t, dir, "scratch.txt")
+	// Every spelling is judged from the same starting state, so each gets its
+	// own repository: preservation commits the scratch file, and a shared tree
+	// would leave the later spellings nothing to preserve.
 	for _, c := range []string{
 		"git clean -f -d -x", "git clean -fdx", "git clean -xdf",
 		"git clean --force --recurse-directories",
 	} {
+		dir := newRepo(t)
+		untrack(t, dir, "scratch.txt")
 		preserved(t, dir, c)
 	}
 }
@@ -423,9 +433,16 @@ func TestDeniesForceRefspec(t *testing.T) {
 func TestRebaseFamilyBlockedDirtyButRecoveryVerbsAllowed(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
+	// A denial on the provenance side still lets the destruction side preserve
+	// first, so even the denied verbs leave the tree clean behind them.
 	denied(t, dir, "git rebase master")
+	writeAt(t, dir, "tracked.go", "package a\n// edited twice\n")
 	preserved(t, dir, "git merge feature")
+	// Each preservation commits the edit, so every later verb that must see a
+	// dirty tree gets a fresh one.
+	writeAt(t, dir, "tracked.go", "package a\n// edited again\n")
 	preserved(t, dir, "git pull origin master")
+	writeAt(t, dir, "tracked.go", "package a\n// edited once more\n")
 	denied(t, dir, "git cherry-pick abc123")
 	allowed(t, dir, "git rebase --abort")
 	allowed(t, dir, "git merge --abort")
@@ -471,6 +488,9 @@ func TestPreservesAndAllowsRmDirectoryContainingUncommittedWork(t *testing.T) {
 	dir := newRepo(t)
 	untrack(t, dir, "internal/config/env.go")
 	preserved(t, dir, "rm -rf internal")
+	// Preservation committed that file, so the second spelling needs its own
+	// at-risk content rather than the first one's.
+	untrack(t, dir, "internal/config/other.go")
 	preserved(t, dir, "rm -rf .")
 }
 
@@ -493,7 +513,9 @@ func TestIgnoresNonBashToolsAndOtherEvents(t *testing.T) {
 
 	assert.Empty(t, decideWithEvent(t, "PreToolUse", "Read", dir, "git reset --hard"))
 	assert.Empty(t, decideWithEvent(t, "PostToolUse", "Bash", dir, "git reset --hard"))
-	assert.Empty(t, decide([]byte("not json at all")))
+	unparseable, notices := decide([]byte("not json at all"))
+	assert.Empty(t, unparseable)
+	assert.Empty(t, notices, "an unparseable payload preserves nothing, so it announces nothing")
 }
 
 func TestAllowsDestructiveCommandsOutsideAnyRepository(t *testing.T) {

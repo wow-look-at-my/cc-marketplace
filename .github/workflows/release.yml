@@ -27,6 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: wow-look-at-my/actions@common-checks#latest
+
       - uses: ./.github/actions/setup-marketplace-build
 
       # tsconfig.json covers .github/scripts; nothing ran it, so it had drifted to failing on every file.

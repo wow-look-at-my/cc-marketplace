@@ -259,6 +259,8 @@ func TestSubmoduleAndCheckoutIndexForceForms(t *testing.T) {
 	// submodule names no provenance route, so the destruction half's own
 	// preserve-and-allow is the whole story for these two.
 	preserved(t, dir, "git submodule deinit -f vendor/lib")
+	// The line above committed that edit, so the next one needs a fresh one.
+	writeAt(t, dir, "tracked.go", "package a\n// edited again\n")
 	preserved(t, dir, "git submodule update --force")
 	// checkout-index IS a provenance route (gitroutes.go's plumbingVerbs) --
 	// it points the index at an object with no tool call in sight -- so it
