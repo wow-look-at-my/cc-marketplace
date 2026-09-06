@@ -12,7 +12,7 @@ The owner's ruling was that maintaining a count in a markdown file is not the ki
 
 That plumbing used to live here, in Go, and identically again in `no-tombstones`. The same payload parse, the same Write/Edit/MultiEdit shapes, the same splice back into `tool_input`. A write shape added to one and not the other is a guard that silently stops seeing half the writes.
 
-**`hook.sh` exists for one reason: to fail OPEN.** A PreToolUse hook blocks the tool on any non-zero exit. Naming `slopfmt` straight in `plugin.json` therefore turns a missing binary into a guard that refuses every write in the session rather than none. The launcher probes for the binary and exits 0 when it is absent. `SLOPFMT` names another path, which is how a test drives a stub.
+**`hook.sh` exists for one reason: to fail OPEN.** A PreToolUse hook blocks the tool on any non-zero exit. Naming the binary straight in `plugin.json` turns one that cannot answer into a guard that refuses every write. The binary carries its verdict in the JSON it prints, and exits 0 whatever it decides. A non-zero exit therefore means it never ran. The launcher probes for the binary AND swallows a non-zero exit. Probing alone is not enough. An installed binary too old to know the `hook` subcommand exits 1. The `exec` form handed that straight to the tool as a refusal, and it shipped. `SLOPFMT` names another path, which is how a test drives a stub.
 
 The rule slopfmt applies is described below, because a reader of this plugin needs to know what it asks for. `wow-look-at-my/slopfmt` is where it lives and where it is tested.
 
