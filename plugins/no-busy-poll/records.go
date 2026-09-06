@@ -42,6 +42,14 @@ var wakeMarkers = []string{
 	"<event source=",
 }
 
+// interjectionMarker is how a message the user types MID-TURN reaches the
+// transcript: not as a record of its own, but folded into the content of the
+// tool_result that happened to come back next. Its blocks are therefore all
+// tool_result, which is exactly the shape isNewPrompt reads as "no prompt
+// here". The user telling a session its pull request is red then counted as
+// nothing, and the next read of that pull request was refused as a repeat.
+const interjectionMarker = "the user sent a new message while you were working"
+
 // parseRecords reads the tail of the transcript at path. An unreadable or
 // empty transcript returns nil, which allows every call: a guard that blocks
 // because it could not read a file is worse than no guard.
@@ -74,7 +82,7 @@ func parseRecords(path string) []record {
 		}
 		switch rec.Type {
 		case "user":
-			r.newPrompt = isNewPrompt(rec.Message.Content)
+			r.newPrompt = isNewPrompt(rec.Message.Content) || strings.Contains(lower, interjectionMarker)
 			var blocks []rawBlock
 			if json.Unmarshal(rec.Message.Content, &blocks) == nil {
 				for _, b := range blocks {

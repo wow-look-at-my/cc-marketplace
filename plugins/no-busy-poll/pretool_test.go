@@ -258,6 +258,30 @@ func TestAUserPromptReopensTheSubject(t *testing.T) {
 	assert.Empty(t, reason, "the user asking is always a reason to look")
 }
 
+func TestAMidTurnInterjectionReopensTheSubject(t *testing.T) {
+	tr := stageTranscript(t,
+		bashCall("gh pr view 87 --repo wow-look-at-my/grok-build"),
+		toolResult(`{"pr":"wow-look-at-my/grok-build#87","state":"open"}`),
+		toolResult("ok\n\nThe user sent a new message while you were working:\nCI is failed on #87"),
+	)
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
+		bashInput("gh pr checks 87 --repo wow-look-at-my/grok-build")))
+
+	assert.Empty(t, reason, "a message typed mid-turn is the same message, and the user asking is always a reason to look")
+}
+
+func TestAnOrdinaryToolResultStillSettlesTheSubject(t *testing.T) {
+	tr := stageTranscript(t,
+		bashCall("gh pr view 87 --repo wow-look-at-my/grok-build"),
+		toolResult(`{"pr":"wow-look-at-my/grok-build#87","state":"merged"}`),
+		toolResult("ok"),
+	)
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
+		bashInput("gh pr checks 87 --repo wow-look-at-my/grok-build")))
+
+	assert.NotEmpty(t, reason, "without the marker a tool_result is not a message, and a merged pull request stays settled")
+}
+
 func TestAPushReopensTheSubject(t *testing.T) {
 	tr := stageTranscript(t,
 		bashCall("gh pr view 87 --repo wow-look-at-my/grok-build"),
