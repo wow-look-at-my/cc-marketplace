@@ -2,7 +2,7 @@
 
 Keeps you in charge of the working tree. Two rules, one parse of the command:
 
-- **Destruction** — a command that would destroy content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything, so this content is committed into a dedicated ref and pushed to origin first, then the command is allowed.
+- **Destruction** — a command that would destroy content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything. So the hook commits that content into a dedicated ref, pushes it to origin, and then allows the command.
 - **Provenance** — a change to file content that skips Write, Edit or NotebookEdit. Bash runs things. It does not author files. This one still refuses.
 
 ## Installation
@@ -31,7 +31,7 @@ before being allowed to proceed.
 
 ## What it still refuses
 
-A command that is also a provenance route — `git reset --hard`, `git restore`, `git checkout -- <path>`, `git rebase`/`cherry-pick`/`revert`/`am`, `tee`, `truncate -s 0`, `> file` — refuses regardless of preservation, since writing tracked content from Bash is authored change no edit tool made. `git stash drop`/`clear` also refuses: a stash entry is not preserved.
+Some commands are also provenance routes: `git reset --hard`, `git restore`, `git checkout -- <path>`, `git rebase`, `git cherry-pick`, `git revert`, `git am`, `tee`, `truncate -s 0`, `> file`. Each refuses whatever preservation did, because writing tracked content from Bash is authored change no edit tool made. `git stash drop`/`clear` also refuses: a stash entry is not preserved.
 
 Ref-destroying commands are judged on whether the commits survive somewhere else, not on the verb:
 
