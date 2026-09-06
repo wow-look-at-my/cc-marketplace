@@ -38,7 +38,6 @@ func envOr(name, fallback string) string {
 // Hit is one count slopfmt cut, as this hook reports it back to the model.
 type Hit struct {
 	Phrase string
-	Line   string
 }
 
 // IsMarkdown reports whether a path names a document this plugin governs. The
@@ -48,12 +47,11 @@ func IsMarkdown(path string) bool {
 	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
 }
 
-// countsRepair is what `slopfmt counts --json` answers with.
+// countsRepair is what `slopfmt fix --only counts --json` answers with.
 type countsRepair struct {
 	Text    string   `json:"text"`
 	Changed bool     `json:"changed"`
 	Removed []string `json:"removed"`
-	Lines   []string `json:"lines"`
 }
 
 // strip runs the text through slopfmt. A missing binary, a timeout and an
@@ -63,7 +61,7 @@ func strip(text string) (countsRepair, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	command := exec.CommandContext(ctx, slopfmtBinary, "counts", "--json")
+	command := exec.CommandContext(ctx, slopfmtBinary, "fix", "--only", "counts", "--json")
 	command.Stdin = strings.NewReader(text)
 	var out bytes.Buffer
 	command.Stdout = &out
@@ -161,12 +159,8 @@ func repair(raw map[string]any) []Hit {
 			return
 		}
 		m[key] = result.Text
-		for i, phrase := range result.Removed {
-			line := ""
-			if i < len(result.Lines) {
-				line = result.Lines[i]
-			}
-			hits = append(hits, Hit{Phrase: phrase, Line: line})
+		for _, phrase := range result.Removed {
+			hits = append(hits, Hit{Phrase: phrase})
 		}
 	}
 	fix(raw, "content")

@@ -21,15 +21,66 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
-
-	"github.com/wow-look-at-my/go-containers/set"
+	"time"
 )
+
+// slopfmtBinary is the tool that owns the rule. This plugin holds no copy of
+// it: CI, the editor and this hook all shell out to the same binary, so none of
+// them can drift from the others. SLOPFMT names another path.
+var slopfmtBinary = envOr("SLOPFMT", "slopfmt")
+
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
+// Hit is a tombstone slopfmt reported and no deletion resolved.
+type Hit struct {
+	Tell   string `json:"tell"`
+	Phrase string `json:"phrase"`
+	Line   string `json:"line"`
+}
+
+// repair is what `slopfmt fix --only tombstones --json` answers with.
+type repair struct {
+	Text    string   `json:"text"`
+	Changed bool     `json:"changed"`
+	Removed []string `json:"removed"`
+	Kept    []Hit    `json:"kept"`
+}
+
+// scan puts the text a write adds to slopfmt. A missing binary, a timeout and
+// an unreadable answer all report nothing, because a guard that refuses a write
+// when its tool is absent is worse than no guard.
+func scan(path, text string, maxLines int) (repair, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	command := exec.CommandContext(ctx, slopfmtBinary,
+		"fix", "--only", "tombstones", "--json",
+		"--path", path, "--max-comment-lines", strconv.Itoa(maxLines))
+	command.Stdin = strings.NewReader(text)
+	var out bytes.Buffer
+	command.Stdout = &out
+	// A finding exits non-zero, so the answer is read before the exit code.
+	_ = command.Run()
+	var answer repair
+	if json.Unmarshal(out.Bytes(), &answer) != nil {
+		return repair{}, false
+	}
+	return answer, true
+}
 
 // HookInput is the subset of the PreToolUse payload this plugin reads.
 type HookInput struct {
@@ -140,86 +191,42 @@ func run(r io.Reader) string {
 		return ""
 	}
 
-	limit := maxCommentLines()
-	isDoc := IsDocument(ti.FilePath)
-	if isDoc {
-		limit = 0
-	}
-
-	var scans []scanned
-	var allHits []Hit
+	var removed []string
+	var kept []Hit
+	seen := map[string]bool{}
 	for _, u := range writeUnits(in.ToolName, ti, raw) {
-		blocks := AddedBlocks(ti.FilePath, u.text)
-		if len(blocks) == 0 {
+		answer, ok := scan(ti.FilePath, u.text, maxCommentLines())
+		if !ok {
 			continue
 		}
-		hits := FindTombstones(blocks, limit)
-		for _, name := range DeadReferents(ti.FilePath, u.text, blocks) {
-			hits = append(hits, hitForName(blocks, name))
-		}
-		if len(hits) == 0 {
-			continue
-		}
-		if isDoc {
-			// A document line is a paragraph, not a sentence: the org's own
-			// no-hard-wrap convention means several sentences often share
-			// one raw line, so deleting the line can take a keeper with it.
-			// Never guess at the sentence boundary; always send this back.
-			for i := range hits {
-				hits[i].Strippable = false
+		kept = append(kept, answer.Kept...)
+		for _, line := range answer.Removed {
+			if !seen[line] {
+				seen[line] = true
+				removed = append(removed, line)
 			}
 		}
-		scans = append(scans, scanned{u: u, hits: hits})
-		allHits = append(allHits, hits...)
+		if answer.Changed {
+			u.apply(answer.Text)
+		}
 	}
-	if len(allHits) == 0 {
+	// A finding no deletion resolved refuses the whole write, because a strip
+	// that guesses at a span corrupts the file worse than a round trip does.
+	if len(kept) > 0 {
+		return deny(reason(ti.FilePath, kept))
+	}
+	if len(removed) == 0 {
 		return ""
 	}
-
-	for _, h := range allHits {
-		if !h.Strippable {
-			return deny(reason(ti.FilePath, allHits))
-		}
-	}
-	return strip(ti.FilePath, raw, scans, allHits)
+	return strip(ti.FilePath, raw, removed)
 }
 
-// scanned pairs a unit with the hits found in its own text.
-type scanned struct {
-	u    unit
-	hits []Hit
-}
-
-// strip deletes every hit's source line from its own unit and returns the
-// allow-with-updatedInput response. It is reached only once every hit in
-// scans has already been proven strippable.
-func strip(path string, raw map[string]any, scans []scanned, hits []Hit) string {
-	var removed []string
-	seen := set.New[string]()
-	for _, s := range scans {
-		drop := set.New[int]()
-		for _, h := range s.hits {
-			drop.Add(h.LineNo)
-		}
-		lines := strings.Split(s.u.text, "\n")
-		var kept []string
-		for i, line := range lines {
-			if drop.Contains(i) {
-				trimmed := strings.TrimSpace(line)
-				if !seen.Contains(trimmed) {
-					seen.Add(trimmed)
-					removed = append(removed, trimmed)
-				}
-				continue
-			}
-			kept = append(kept, line)
-		}
-		s.u.apply(strings.Join(kept, "\n"))
-	}
-
+// strip returns the allow-with-updatedInput response. Every unit's text has
+// already been replaced with what slopfmt handed back.
+func strip(path string, raw map[string]any, removed []string) string {
 	updated, err := json.Marshal(raw)
 	if err != nil {
-		return deny(reason(path, hits))
+		return ""
 	}
 	var res response
 	res.HookSpecificOutput.HookEventName = "PreToolUse"
@@ -227,7 +234,7 @@ func strip(path string, raw map[string]any, scans []scanned, hits []Hit) string 
 	res.HookSpecificOutput.AdditionalContext = stripNotice(path, removed)
 	out, err := json.Marshal(res)
 	if err != nil {
-		return deny(reason(path, hits))
+		return ""
 	}
 	return string(out)
 }
