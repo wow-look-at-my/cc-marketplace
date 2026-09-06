@@ -130,6 +130,10 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
+    # The shared resource is one moving tag, `<plugin>#latest`, which every branch force-pushes. Keying the group to the plugin serialises exactly that, so two branches releasing different plugins still run at once.
+    concurrency:
+      group: release-tag-${{ matrix.plugin }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
