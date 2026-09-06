@@ -16,5 +16,13 @@ for candidate in "${COMMON_CHECKS_NODE:-}" node nodejs; do
 	fi
 done
 
+# A non-zero exit from a PreToolUse hook blocks the tool, so a missing Node there would refuse every write in the session rather than none.
+for arg in "$@"; do
+	if [ "$arg" = "--hook" ]; then
+		echo "common-checks: no node on PATH, so writes are not being checked." >&2
+		exit 0
+	fi
+done
+
 echo "common-checks: no node on PATH, so the language server cannot start. Install Node 18 or later, or set COMMON_CHECKS_NODE to its path." >&2
 exit 127

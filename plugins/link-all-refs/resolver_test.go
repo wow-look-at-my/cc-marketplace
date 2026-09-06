@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,19 @@ func newRepo(t *testing.T) (dir string, head string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x"), 0o644))
 	run(dir, "add", "f.txt")
 	run(dir, "commit", "-m", "one")
+
+	// A commit's hash is effectively random, and the detector only reads a
+	// token as a SHA when it carries BOTH a digit and an a-f letter -- that
+	// pair is what stops an ordinary word or a bare number being linked. A
+	// seven-character prefix of a random hash has no a-f letter about six
+	// times in a hundred, and CI duly failed on one. Amending until the
+	// prefix qualifies makes the fixture state the property the test needs
+	// rather than hope for it.
+	for i := 0; !shaLike(shortHead(t, dir)); i++ {
+		require.Less(t, i, 200, "no commit hash with a digit and an a-f letter in 200 amends")
+		run(dir, "commit", "--amend", "-m", fmt.Sprintf("one %d", i))
+	}
+
 	run(dir, "remote", "add", "origin", origin)
 	run(dir, "push", "-u", "origin", "master")
 	// origin/HEAD is what names the default branch, and a push does not set it.
@@ -49,11 +63,33 @@ func newRepo(t *testing.T) (dir string, head string) {
 	// of a GitHub repository is what this resolver is written against.
 	run(dir, "remote", "set-url", "origin", "https://github.com/o/r.git")
 
+	return dir, shortHead(t, dir)
+}
+
+// shortHead is the seven-character prefix of the checkout's HEAD.
+func shortHead(t *testing.T, dir string) string {
+	t.Helper()
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	cmd.Dir = dir
 	raw, err := cmd.Output()
 	require.NoError(t, err)
-	return dir, string(raw[:7])
+	require.GreaterOrEqual(t, len(raw), 7)
+	return string(raw[:7])
+}
+
+// shaLike reports whether the detector will read s as a commit hash: it wants
+// a digit and an a-f letter, which is what separates a hash from a word.
+func shaLike(s string) bool {
+	var digit, hexAZ bool
+	for _, c := range s {
+		switch {
+		case c >= '0' && c <= '9':
+			digit = true
+		case c >= 'a' && c <= 'f':
+			hexAZ = true
+		}
+	}
+	return digit && hexAZ
 }
 
 func TestGitResolverReadsTheCheckout(t *testing.T) {

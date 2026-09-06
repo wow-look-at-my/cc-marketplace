@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/wow-look-at-my/go-containers/set"
@@ -30,10 +32,20 @@ var varMutatingCommands = set.Of[string](
 // run zero times or more than once, or bound by a for-loop. abort reports a
 // varMutatingCommands hit anywhere in the tree, which disables resolution
 // for the whole command regardless of what unsafe names.
-func unsafeVarNames(stmts []*syntax.Stmt) (unsafe map[string]bool, abort bool) {
+// multiply names every variable assigned more than once, which is a weaker
+// condition than unsafe: a name assigned once inside an `if` holds one value
+// or none, never two. That is enough for a resolution claiming only the
+// DIRECTORY a value sits in, and not enough for one claiming the value.
+func unsafeVarNames(stmts []*syntax.Stmt) (unsafe, multiply map[string]bool, abort bool) {
 	c := &varScan{counts: map[string]int{}, unsafe: map[string]bool{}}
 	c.stmts(stmts, false)
-	return c.unsafe, c.abort
+	multiply = map[string]bool{}
+	for name, n := range c.counts {
+		if n > 1 {
+			multiply[name] = true
+		}
+	}
+	return c.unsafe, multiply, c.abort
 }
 
 type varScan struct {
@@ -188,6 +200,106 @@ func (c *varScan) scanPart(p syntax.WordPart) {
 	}
 }
 
+// tempRoots names the directories a temp file is created under. A path under
+// one of them is outside every guarded root by construction.
+var tempRoots = []string{"/tmp", "/var/tmp"}
+
+// mktempPath resolves `$(mktemp ...)` to a path in the temp directory. The
+// exact basename is chosen by mktemp at run time and nothing here can know
+// it, but the DIRECTORY is what decides whether a write lands in the working
+// tree, and mktemp with no template or a temp-rooted one cannot leave the
+// temp directory. A template naming any other directory resolves to nothing,
+// because `mktemp ./buildXXXX` really does write beside the source.
+func mktempPath(wd *syntax.Word) (word, bool) {
+	sub, ok := soleCmdSubst(wd)
+	if !ok || len(sub.Stmts) != 1 || sub.Stmts[0] == nil {
+		return word{}, false
+	}
+	call, ok := sub.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) == 0 || len(call.Assigns) > 0 {
+		return word{}, false
+	}
+	argv := make([]word, 0, len(call.Args))
+	for _, a := range call.Args {
+		argv = append(argv, wordText(a))
+	}
+	if eff := stripWrappers(argv); len(eff) == 0 || commandName(eff[0].text) != "mktemp" {
+		return word{}, false
+	}
+	for i, a := range call.Args {
+		if i == 0 || strings.HasPrefix(argv[i].text, "-") {
+			continue
+		}
+		if !underTempRoot(a) {
+			return word{}, false
+		}
+	}
+	return word{text: filepath.Join(os.TempDir(), "mktemp-created-file"), static: true}, true
+}
+
+// underTempRoot reports whether a template names a path inside the temp
+// directory. It reads the word's own leading text rather than the resolved
+// one, because the common spelling is `"${TMPDIR:-/tmp}/fooXXXX"` and that
+// resolves to nothing. os.TempDir reads the same variable with the same
+// default, so the hook and the command agree on where it points.
+func underTempRoot(wd *syntax.Word) bool {
+	if wd == nil || len(wd.Parts) == 0 {
+		return false
+	}
+	parts := wd.Parts
+	if q, ok := parts[0].(*syntax.DblQuoted); ok && len(q.Parts) > 0 {
+		parts = q.Parts
+	}
+	var head string
+	switch x := parts[0].(type) {
+	case *syntax.Lit:
+		head = x.Value
+	case *syntax.SglQuoted:
+		head = x.Value
+	case *syntax.ParamExp:
+		// `${TMPDIR:-/tmp}` is the ordinary spelling, and its default has to
+		// be temp-rooted too or the fallback leaves the temp directory.
+		if x.Param == nil || x.Param.Value != "TMPDIR" ||
+			(x.Exp != nil && !underTempRoot(x.Exp.Word)) {
+			return false
+		}
+		// A following part must start the next path segment; `${TMPDIR}x`
+		// names a sibling of the temp directory, not something inside it.
+		if len(parts) > 1 {
+			lit, ok := parts[1].(*syntax.Lit)
+			if !ok || !strings.HasPrefix(lit.Value, "/") {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+	for _, r := range tempRoots {
+		if head == r || strings.HasPrefix(head, r+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// soleCmdSubst unwraps a word whose entire content is one command
+// substitution, quoted or not.
+func soleCmdSubst(wd *syntax.Word) (*syntax.CmdSubst, bool) {
+	if wd == nil || len(wd.Parts) != 1 {
+		return nil, false
+	}
+	part := wd.Parts[0]
+	if q, ok := part.(*syntax.DblQuoted); ok {
+		if len(q.Parts) != 1 {
+			return nil, false
+		}
+		part = q.Parts[0]
+	}
+	sub, ok := part.(*syntax.CmdSubst)
+	return sub, ok
+}
+
 // resolveWord renders a word the same way wordText does, except a plain
 // $NAME or ${NAME} reference is replaced with vars[NAME] when present.
 // Anything vars does not cover -- an absent name, an operator, an index, a
@@ -245,10 +357,29 @@ func simpleVar(x *syntax.ParamExp, vars varTable) (word, bool) {
 	if x == nil || x.Param == nil {
 		return word{}, false
 	}
+	// ${BASH_SOURCE[0]} names the file the running script was read from, which
+	// is the one path the walk already knows when it follows a script. Element
+	// 0 is the only element that means that, so any other index is refused
+	// with every other operator below.
+	if x.Param.Value == "BASH_SOURCE" && isIndexZero(x.Index) &&
+		!x.Excl && !x.Length && !x.Width && x.Slice == nil && x.Repl == nil && x.Names == 0 && x.Exp == nil {
+		v, ok := vars["0"]
+		return v, ok
+	}
 	if x.Excl || x.Length || x.Width || x.Index != nil || x.Slice != nil ||
 		x.Repl != nil || x.Names != 0 || x.Exp != nil {
 		return word{}, false
 	}
 	v, ok := vars[x.Param.Value]
 	return v, ok
+}
+
+// isIndexZero reports whether an array index is the literal 0.
+func isIndexZero(idx syntax.ArithmExpr) bool {
+	w, ok := idx.(*syntax.Word)
+	if !ok || len(w.Parts) != 1 {
+		return false
+	}
+	lit, ok := w.Parts[0].(*syntax.Lit)
+	return ok && lit.Value == "0"
 }
