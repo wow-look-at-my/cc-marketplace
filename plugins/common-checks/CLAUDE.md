@@ -12,13 +12,19 @@ Reuse of the real check code is the point. A Go reimplementation of five checker
 
 The checks are TypeScript. The server is TypeScript too. `esbuild` bundles it into one file. A `/bin/sh` launcher finds Node and starts it. The cost is a Node runtime that the other plugins do not need. The launcher states a missing Node out loud on stderr, because a language server that fails to start reports nothing either way. The only thing a message changes is whether `--debug lsp` explains the silence.
 
-### Sync is enforced on the SET of checks, not only on their code
+### Upstream names its own checks. Nothing here keeps a copy of that list.
 
-`.github/scripts/vendor-common-checks/` resolves the upstream branch to one commit. It fetches `common-checks/action.yml` and reads the `uses:` list out of it. The build fails when that list and the plugin's `PLAN` disagree in either direction. Two cases fail: a check added upstream that nothing here covers, and an entry here for a check that upstream no longer runs.
+`common-checks/checks.json` is the manifest, published beside the composite in [wow-look-at-my/actions](https://github.com/wow-look-at-my/actions). It names every check the composite runs and, for each, the modules that carry its rules. `.github/scripts/vendor-common-checks/` resolves the upstream branch to one commit, reads the manifest, and fetches exactly the modules it names.
 
-Vendoring the modules alone leaves the plugin quietly enforcing four fifths of the gate. That is the failure this assertion prevents.
+A list maintained on this side describes only what upstream looked like when somebody last read it. The manifest replaced one for that reason. A rule that moves into a new module now arrives with no edit here. The `uses:` list can never show that move at all.
 
-An entry may declare `files: []` plus the reason. Such an entry is required rather than optional, because the assertion cannot tell a decision from an omission. Two checks use it, for the two different reasons a check reports nothing.
+**Three assertions run on every build, and each catches a different drift.**
+
+- The manifest against the composite's `uses:` list. A check the composite runs and the manifest does not name fails the build. So does a manifest entry for a check the composite dropped. Both sides are upstream, so this catches a step added without a manifest entry.
+- The manifest against this plugin's adapters. The vendor step writes the parsed plan to `vendor/plan.json`, and `src/checks.test.ts` holds `ADAPTED` against it. A check whose modules are fetched and which nothing calls fails here. Vendoring alone leaves the plugin quietly enforcing four fifths of the gate while every surface reports success.
+- The plan's own shape. A module path under the wrong check fails. So does an entry with no name. So does a manifest that is empty or unparseable. Each of them fails rather than vendoring a subset.
+
+An entry may declare `modules: []` plus a `reason`. The reason is required rather than optional, because the assertion cannot tell a decision from an omission. Two checks use it, for the two different reasons a check reports nothing.
 
 `run-once` has no rule an open file can break. It claims the workflow run for one job.
 
@@ -26,11 +32,11 @@ An entry may declare `files: []` plus the reason. Such an entry is required rath
 
 The vendor step runs from the plugin's `justfile` `prebuild` recipe on every CI build. A fetch failure fails the build, which matches the `docs` plugin's Docker reference. Packaging a silently stale checker is the outcome this arrangement exists to avoid. `COMMON_CHECKS_REF` points the fetch at a branch, for a build against a check that has not merged yet.
 
-**The `prepare` job resolves the upstream commit. That resolution is load-bearing twice over.** It runs the same plan assertion, so a check added upstream fails the run before any plugin builds. It also feeds the plugin's cache key. Nothing under `plugins/common-checks/` changes when a rule changes upstream, so without it a cached build serves check code that CI no longer runs.
+**The `prepare` job resolves the upstream commit. That resolution is load-bearing twice over.** It runs the same manifest assertion, so a check added upstream fails the run before any plugin builds. It also feeds the plugin's cache key. Nothing under `plugins/common-checks/` changes when a rule changes upstream, so without it a cached build serves check code that CI no longer runs.
 
 **`vendor/` is gitignored. That is the design rather than an oversight.** A copy of the checks in the tree is a second source of truth. It goes stale in silence, and nothing marks the moment it stops matching CI. It also puts prose the repository does not author in front of every check that reads the repository. The build fetches the modules and bundles them. Nothing is committed. Nothing can drift.
 
-The whole directory is replaced on each fetch rather than merged. A file the plan stopped producing then goes away. It does not linger as a module nothing imports and nothing refreshes.
+The whole directory is replaced on each fetch rather than merged. A file the manifest stopped naming then goes away. It does not linger as a module nothing imports and nothing refreshes.
 
 ### What `src/checks.ts` adds
 
@@ -80,10 +86,10 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 - Document sync is full, because a finding is a property of the whole document
 - **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else
 - **Launcher**: `plugins/common-checks/launcher.sh` -- staged into `server/` as `common-checks-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own. The directory is `server/` and not `build/` because `release-plugin` requires every file under `build/` to be a fat APE, and this plugin ships no Go
-- **Fetching**: `.github/scripts/vendor-common-checks/plan.ts` holds the plan, the drift assertion and the provenance header. `main.ts` holds the network and disk half, plus `--commit`. The GitHub client is shared with the `docs` plugin's fetcher rather than written twice
+- **Fetching**: `.github/scripts/vendor-common-checks/plan.ts` holds the manifest parser, the drift assertion and the provenance header. `main.ts` holds the network and disk half, plus `--commit`. The GitHub client is shared with the `docs` plugin's fetcher rather than written twice
 - **Tests**: `src/checks.test.ts` fires each check on the right line, with a clean control beside it. It also covers the file-kind boundaries, the ranking, the wrapped-paragraph collapse, and a heuristic-only finding staying unreported
 - **Tests**: `src/lsp.test.ts` covers the handshake, publish and clear, pull and push agreeing, and the cap's overflow note. It also covers path resolution with and without a root, and the framing edge cases. It asserts the explicit `null` shutdown result on the RAW JSON keys
-- **Tests**: the two suites under `.github/scripts/vendor-common-checks/` drive a fake client that never touches the network. A check added upstream and a check dropped upstream each fail the build by name
+- **Tests**: `vendor.test.ts` drives a fake client that never touches the network. A check added upstream and a check dropped upstream each fail the build by name. A module added to the manifest is fetched with no edit here, and every malformed manifest is rejected rather than vendoring a subset
 - **Registration**: `plugins/common-checks/.lsp.json`
 
-Adding a check upstream is meant to break this build. The failure names the check and the ways out. Vendor its module and write the adapter, or add the entry with no files and say why no open file can violate it. Do not silence it by deleting the assertion. The assertion is the feature.
+Adding a check upstream is meant to break this build. The failure names the check and the ways out. List its modules in `common-checks/checks.json` and write the adapter here, or give the entry no modules and say why no open file can violate it. Do not silence it by deleting an assertion. The assertions are the feature.

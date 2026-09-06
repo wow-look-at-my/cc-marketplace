@@ -44,4 +44,6 @@ user like any other write.
 - **MCP tools**: add an `<mcpServer name="...">` block. No `plugin.json` change is needed -- the `*` matcher already routes every tool through the binary.
 - **Other non-Bash tools**: add to the tool name allowlist in `cmd/hook.go`.
 
+`evaluateCommandWith` takes the rule set as a value, and `evaluateArgs` carries the top-level allow list down for the exec-flag recursion. Nothing below `evaluateCommand` reads the package-level `rules`. The reason is that go-toolchain runs a package's quick tests in parallel. A test that swapped that global lost to whichever sibling restored it first, which surfaced as a rule that failed to match. A test passes its own rules instead.
+
 Every rule change wants a `<test cmd="..." expect="allow|deny|ask|"/>` beside it (an empty `expect` means passthrough). The tests are embedded in `rules.xml` itself and run by `go-toolchain`, so a rule and its proof cannot drift apart.

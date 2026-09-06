@@ -20,31 +20,59 @@ export interface CheckPlan {
   why?: string;
 }
 
-// One entry per step common-checks runs. A step with no files is an explicit
-// statement that nothing in an open file can violate it -- never an omission,
-// because the assertion below cannot tell an omission from a decision.
-export const PLAN: CheckPlan[] = [
-  {
-    name: "run-once",
-    files: [],
-    why: "it claims the workflow run for one job. There is no rule a file can break.",
-  },
-  { name: "no-all-builds-job", files: ["src/detect.ts"] },
-  { name: "yaml-comment-block", files: ["src/scan.ts"] },
-  { name: "no-tests-in-yaml", files: ["src/scan.ts"] },
-  {
-    name: "push-excludes-tags",
-    files: [],
-    why:
-      "its rule is an inline script inside a composite action, which nothing can import. " +
-      "Converting it to a node action to expose one eight-line rule cost 642 lines against 34, " +
-      "386 of them a lockfile, on an action every repository in the org runs.",
-  },
-  {
-    name: "ste-lint",
-    files: ["src/lint.ts", "src/blocks.ts", "src/ste100-banned-words.ts", "src/guard.ts"],
-  },
-];
+/** The manifest common-checks publishes beside its composite. */
+export const MANIFEST_PATH = "common-checks/checks.json";
+
+/**
+ * The plan, read from upstream's own manifest rather than kept here.
+ *
+ * A list maintained on this side can only ever describe what upstream looked
+ * like when somebody last looked. It stays green while a rule moves to a module
+ * nothing vendors, which is the one drift the `uses:` list cannot show. The
+ * manifest names the modules, so the plugin's coverage is upstream's statement
+ * about itself.
+ *
+ * Paths are repo-relative there and check-relative here, so the prefix is
+ * checked rather than trimmed blindly: a path under the wrong check is a
+ * manifest error, not a file to vendor somewhere surprising.
+ */
+export function parseManifest(source: string): CheckPlan[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(source);
+  } catch (error) {
+    throw new Error(`${MANIFEST_PATH} is not valid JSON: ${(error as Error).message}`);
+  }
+  const checks = (data as {checks?: unknown}).checks;
+  if (!Array.isArray(checks) || checks.length === 0) {
+    throw new Error(`${MANIFEST_PATH} names no checks. It must carry a non-empty "checks" array.`);
+  }
+  return checks.map((raw, index) => {
+    const entry = raw as {name?: unknown; modules?: unknown; reason?: unknown};
+    const name = entry.name;
+    if (typeof name !== "string" || name === "") {
+      throw new Error(`${MANIFEST_PATH} check ${index} has no name.`);
+    }
+    const modules = entry.modules;
+    if (!Array.isArray(modules)) {
+      throw new Error(`${MANIFEST_PATH} check ${name} has no modules array. Use [] plus a reason when nothing importable carries its rule.`);
+    }
+    const files = modules.map((module) => {
+      if (typeof module !== "string") {
+        throw new Error(`${MANIFEST_PATH} check ${name} lists a module that is not a path.`);
+      }
+      const prefix = `${name}/`;
+      if (!module.startsWith(prefix)) {
+        throw new Error(`${MANIFEST_PATH} check ${name} lists ${module}, which is not under ${prefix}.`);
+      }
+      return module.slice(prefix.length);
+    });
+    if (files.length === 0 && typeof entry.reason !== "string") {
+      throw new Error(`${MANIFEST_PATH} check ${name} vendors nothing and gives no reason. A silent omission and a decision look the same without one.`);
+    }
+    return files.length === 0 ? {name, files, why: entry.reason as string} : {name, files};
+  });
+}
 
 /**
  * Every action this repository's own common-checks composite runs, in the order
@@ -80,16 +108,16 @@ export function assertPlanCoversCheckSet(plan: CheckPlan[], checkSet: string[]):
   const problems: string[] = [];
   if (missing.length > 0) {
     problems.push(
-      `common-checks now runs ${missing.join(", ")}, which this plugin does not cover. ` +
-        "Add an entry to PLAN naming the module to vendor, write the adapter that turns its " +
-        "findings into diagnostics, or add the entry with no files and say why nothing in an " +
-        "open file can violate it.",
+      `common-checks now runs ${missing.join(", ")}, which ${MANIFEST_PATH} does not name. ` +
+        "Add an entry there listing the modules that carry its rule, then write the adapter that " +
+        "turns its findings into diagnostics. An entry with no modules needs a reason saying why " +
+        "nothing in an open file can violate it.",
     );
   }
   if (stale.length > 0) {
     problems.push(
-      `PLAN still names ${stale.join(", ")}, which common-checks no longer runs. ` +
-        "Drop the entry, its vendored files and its adapter.",
+      `${MANIFEST_PATH} still names ${stale.join(", ")}, which common-checks no longer runs. ` +
+        "Drop the entry there, and drop its adapter here.",
     );
   }
   throw new Error(`the plugin and common-checks have drifted:\n  ${problems.join("\n  ")}`);

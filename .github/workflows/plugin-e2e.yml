@@ -108,10 +108,13 @@ jobs:
               ".footer a { color: #2f81f7; text-decoration: none; }\n" +
               ".badge { border-radius: 999px; }\n");
 
+            // Diagnostics drain into an attachment on the NEXT turn, so the prompt must force one; a read-back of the edited file is declinable, and a model that answered "no re-read was needed" is what made this job red
+            const nonce: string = require("crypto").randomUUID();
+            fs.writeFileSync(path.join(work, "ticket.txt"), `${nonce}\n`);
+
             // --model sonnet: this asserts a SERVER's behavior, unaffected by model tier, and runs on every push
             const res = await exec.getExecOutput("claude", [
-              // the read-back is load-bearing: diagnostics drain into an attachment on the NEXT turn, so a prompt ending at the edit can finish before delivery -- measured flaky without it
-              "-p", "Add a rule to style.css for selector .nav a with color #2f81f7 and no text-decoration. After making the edit, read style.css back and tell me how many lines it now has.",
+              "-p", "Add a rule to style.css for selector .nav a with color #2f81f7 and no text-decoration. After making that edit, read ticket.txt and tell me the exact line it contains.",
               "--model", "sonnet",
               "--plugin-dir", pluginDir,
               "--allowedTools", "Read,Edit,Write",
@@ -121,6 +124,9 @@ jobs:
             ], { cwd: work, ignoreReturnCode: true });
             core.info(`claude exited ${res.exitCode}`);
             core.info(res.stdout.slice(0, 2000));
+
+            // Without the nonce in the answer the run never took a second turn, and the assertion below would blame the server for a prompt the model declined
+            if (!res.stdout.includes(nonce)) core.setFailed(`the run never read ticket.txt, so no turn followed the edit (expected ${nonce} in the answer)`);
 
       - name: Assert the server started, delivered diagnostics, and shut down clean
         env:
