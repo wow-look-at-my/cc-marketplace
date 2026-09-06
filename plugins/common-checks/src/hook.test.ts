@@ -259,6 +259,56 @@ test("a fenced fragment is not refused for its punctuation", () => {
   assert.equal(decision.reason, "");
 });
 
+// An edit anchors on text the file already has, so a `new_string` that repeats
+// any of it puts those lines in the span. The sentence below breaks the word
+// cap and no edit here wrote it. Reporting it refused the write AND recorded
+// the file, and that record never cleared: the finding naming it was one no
+// edit could remove, so every later write in the session was refused too.
+test("a finding the file already carried is not the write's own", () => {
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  const file = join(dir, "notes.md");
+  const long =
+    "Every GitHub Actions read goes through the extension this config installs, " +
+    "and the raw paths are denied outright, so a session without it cannot read CI at all.";
+  writeFileSync(file, `# Title\n\n${long}\n`, "utf8");
+
+  // The anchor carries the long sentence, so the span covers it.
+  const decision = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      cwd: dir,
+      tool_input: {
+        file_path: file,
+        old_string: long,
+        new_string: `A short line.\n\n${long}`,
+      },
+    }),
+  );
+  assert.equal(decision.reason, "");
+});
+
+// The same sentence written a SECOND time is text this write really adds, so
+// subtracting what the file carried must not swallow it.
+test("a second copy of an existing violation is still refused", () => {
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  const file = join(dir, "notes.md");
+  const long =
+    "Every GitHub Actions read goes through the extension this config installs, " +
+    "and the raw paths are denied outright, so a session without it cannot read CI at all.";
+  writeFileSync(file, `# Title\n\n${long}\n`, "utf8");
+
+  const decision = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      cwd: dir,
+      tool_input: { file_path: file, old_string: long, new_string: `${long}\n\n${long}` },
+    }),
+  );
+  assert.notEqual(decision.reason, "");
+});
+
 // A line break in YAML is syntax, not a wrap. This repair joined a two-line
 // `concurrency:` block into one line and GitHub rejected the whole workflow
 // before a job started.

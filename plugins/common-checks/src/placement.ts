@@ -18,6 +18,8 @@ import { diskContent } from "./ledger.ts";
 export interface Placement {
   /** The whole file as this write leaves it. */
   full: string;
+  /** The whole file as it was before this write. */
+  before: string;
   /** 0-based index of the first line the new text lands on. */
   start: number;
   /** 0-based index of the last line it lands on. */
@@ -55,7 +57,7 @@ export function place(
   const end = start + newString.split("\n").length - 1;
   const newline = after.indexOf("\n");
   const suffix = newline === -1 ? after.length : newline;
-  return { full: before + newString + after, start, end, prefix, suffix };
+  return { full: before + newString + after, before: disk, start, end, prefix, suffix };
 }
 
 /**
