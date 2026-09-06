@@ -10,13 +10,17 @@ The hook judges only the text a write ADDS. A violation already in the file ther
 
 A placement needs the file to be readable and the replaced string to appear in it exactly once. When it cannot be pinned down, the fragment is judged alone, which is what this hook always did.
 
+**The span alone is not enough, and the gap wedged a whole session.** An edit anchors on text the file already has. A `new_string` that repeats any of it puts those lines inside the span. A sentence the write never touched is then reported as its own. That refusal records the file, and the record never clears. `sweep` drops an entry only once the whole file passes, and the finding naming it is one no edit here introduced. Every later write in the session is then refused against a file nothing can repair. So `findingsFor` subtracts what the file carried BEFORE the edit. A finding is matched by check and message rather than by line, because every line below an edit moves. Each pre-edit finding cancels one match, so a second copy of a sentence the file already breaks is still the write's own.
+
 **It filters nothing else.** `findings()` already returns only what fails CI, so a second list of enforced checks is a list that drifts from the first. An earlier draft kept one and left ste-lint out of it. The file documenting that choice then failed ste-lint in CI.
 
 **A hard wrap is refused, like every other finding.** The hook once repaired it instead. It joined the lines and let the write through on `updatedInput`. That was reverted at the operator's request. A different tool is being built for the job. Placement is what survives from that change. Judging a fragment in its own file is what stops a fenced block reading as prose. That half was never about the repair.
 
 **A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
 
-It clears itself. Every write re-reads each recorded file from disk, and drops the ones that now pass, so the repair needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
+It clears itself. Every write re-reads each recorded file from disk and drops the ones whose finding is gone. The repair therefore needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
+
+**An entry names the FINDINGS, never the file alone.** The earlier sweep asked whether the whole file passed. A file carries findings no write here introduced, and a hard-wrapped document carries one per paragraph. The entry then never cleared. Every later write in the session was refused against a file nothing was able to clean. That is a wedge whose only way out is deleting the entry by hand, which is what happened. So `record` stores each finding's identity, and `sweep` drops the entry once none of them is on disk any more. A different finding the file already had holds nothing.
 
 Every failure path allows the write: an unparseable payload, an unjudged path, a tool that does not write. **A missing Node allows it too, in `launcher.sh`.** A non-zero exit from a PreToolUse hook blocks the tool. The server's `exit 127` there refuses every write in the session rather than none.
 

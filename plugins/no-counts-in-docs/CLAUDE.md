@@ -8,6 +8,14 @@ That is the standing rule in this marketplace. A guard that already knows the an
 
 The owner's ruling was that maintaining a count in a markdown file is not the kind of work worth doing at all. This is the same rule go-toolchain's own analyzer enforces on Go comments ("a number in a comment is a count of what exists today, and the edit that adds an item leaves it wrong"), applied to the documents the analyzer never reads.
 
+**The rule is slopfmt's, and so is the plumbing.** `slopfmt hook --only counts` reads the PreToolUse payload on stdin and writes the response on stdout. `updatedInput` carries the repaired payload and `additionalContext` names what went. CI, an editor and this hook all shell out to the same binary, so none of them can drift from the others.
+
+That plumbing used to live here, in Go, and identically again in `no-tombstones`. The same payload parse, the same Write/Edit/MultiEdit shapes, the same splice back into `tool_input`. A write shape added to one and not the other is a guard that silently stops seeing half the writes.
+
+**`hook.sh` exists for one reason: to fail OPEN.** A PreToolUse hook blocks the tool on any non-zero exit. Naming `slopfmt` straight in `plugin.json` therefore turns a missing binary into a guard that refuses every write in the session rather than none. The launcher probes for the binary and exits 0 when it is absent. `SLOPFMT` names another path, which is how a test drives a stub.
+
+The rule slopfmt applies is described below, because a reader of this plugin needs to know what it asks for. `wow-look-at-my/slopfmt` is where it lives and where it is tested.
+
 **A count needs a FRAME as well as a QUANTITY. The frame is the whole precision story.** The first draft matched a quantity alone. A PreToolUse deny that broad makes every existing doc unwritable, which is how a guard earns the reputation that uninstalls it. So a quantity only counts when a frame says the sentence is talking about what is HERE:
 
 - **`possessiveFrame`** -- a determiner claiming the things belong here (`this repo's 15 plugins`, `the payload's four steps`).
@@ -24,9 +32,8 @@ Two filters then run inside the frame. **`measureNouns`** excuses a measurement:
 
 **Only the text the write ADDS is judged** -- `content` for Write, `new_string` for Edit, every edit's `new_string` for MultiEdit. A count already sitting in a file therefore never blocks an unrelated edit to it.
 
-Every failure path lets the write through unchanged: an unparseable payload, an unparseable `tool_input`, a non-markdown path. A tool that does not write files, and any `hook_event_name` other than `PreToolUse`. The matcher is `*` and the tool name is filtered in Go. The registration does not depend on matcher-regex semantics.
+Every failure path lets the write through unchanged: an unparseable payload, an unparseable `tool_input`, a non-markdown path. A tool that does not write files, and any `hook_event_name` other than `PreToolUse`. The matcher is `*` and the tool name is filtered inside slopfmt. The registration does not depend on matcher-regex semantics.
 
-- **Hook binary**: `plugins/no-counts-in-docs/hook.go` -- the PreToolUse payload, the write shapes, `repair`, and the notice
-- **Detection**: `plugins/no-counts-in-docs/counts.go` -- the cardinal-plus-plural pattern, the measure and stop-word filters, the fenced/indented/comment/frontmatter skip, inline-code blanking, `StripCounts`, and the markdown path test
-- **Tests**: `plugins/no-counts-in-docs/counts_test.go`, `hook_test.go` . A count in every form is cut out, and a measurement and ordinary prose are left alone. Each exemption holds, and prose after a closed fence is judged again. Every write shape is covered, with the same text in a non-markdown file as its negative control. A fenced block comes back untouched, and the keys this hook does not read survive the rewrite
+- **Launcher**: `plugins/no-counts-in-docs/hook.sh` -- the probe and the exec. This is the whole plugin
+- **Rule and plumbing**: `wow-look-at-my/slopfmt`. Package `counts` holds the pattern, the filters and `Strip`. `cmd/hook.go` holds the payload, the write shapes and the response, and both are tested there
 - **Plugin config**: `plugins/no-counts-in-docs/.claude-plugin/plugin.json` -- one PreToolUse hook registration on matcher `*`
