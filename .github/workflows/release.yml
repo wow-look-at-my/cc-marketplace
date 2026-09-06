@@ -5,8 +5,8 @@ on:
     # Every branch, no tag: this workflow pushes a plugin/*/v* tag per release, which must not re-enter it.
     branches: ["**"]
 
-concurrency:
-  group: release-${{ github.ref }}
+# Repository-wide, not per-ref: every branch force-pushes the same `<plugin>#latest` tag, so two refs releasing at once race on it and one dies.
+concurrency: group: release
 
 jobs:
   prepare:
