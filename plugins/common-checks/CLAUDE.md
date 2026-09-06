@@ -1,6 +1,14 @@
 ## Common Checks Plugin
 
-The common-checks plugin lives at `plugins/common-checks/`. It is one **language server**. It reports every violation that fails the org's `common-checks` CI gate, on the line that violation sits on, while the file is open.
+The common-checks plugin lives at `plugins/common-checks/`. It is one **language server** plus one **PreToolUse hook**, sharing `checks.ts`. The server reports every violation that fails the org's `common-checks` CI gate, on the line it sits on, while the file is open. The hook refuses a write that introduces one.
+
+**Both exist because a diagnostic is advice and a write is a decision.** A session put a three-line YAML comment above a trigger, failed `yaml-comment-block` in CI, took a pull request red, fixed it in one repo, and wrote the same three lines into another repo an hour later -- while this plugin's server was already adapting that exact rule. A finding nobody reads stops nothing.
+
+The hook judges only the text a write ADDS, so a violation already in the file never blocks an unrelated edit to it, and only the checks whose repair is a mechanical edit of that text (`BLOCKING` in `hook.ts`: `yaml-comment-block`, `no-tests-in-yaml`). ste-lint is deliberately excluded -- its findings are prose judgements over a whole document, and refusing a write over one would block ordinary writing. A fragment is checked as if it were the file, because a comment run is a comment run wherever it sits.
+
+Every failure path allows the write: an unparseable payload, a non-workflow path, a tool that does not write. **A missing Node allows it too, in `launcher.sh`** -- a non-zero exit from a PreToolUse hook blocks the tool, so the server's `exit 127` would refuse every write in the session rather than none.
+
+One bundle serves both. `server.ts` dispatches on `--hook`, so neither half can drift from the other or from CI.
 
 It takes its shape from `css-duplication`, for the same reason. A finding that tracks the file's state disappears when the code is fixed. A hook shouts once per edit, whether or not the finding is still true.
 
