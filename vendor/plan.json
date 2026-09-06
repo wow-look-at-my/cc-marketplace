@@ -1,0 +1,42 @@
+{
+	"commit": "12ed15fbedef8760afd3875ea419aeae44ca6ffa",
+	"plan": [
+		{
+			"files": [],
+			"name": "run-once",
+			"why": "it claims the workflow run for one job. There is no rule a file can break."
+		},
+		{
+			"files": [
+				"src/detect.ts"
+			],
+			"name": "no-all-builds-job"
+		},
+		{
+			"files": [
+				"src/scan.ts"
+			],
+			"name": "yaml-comment-block"
+		},
+		{
+			"files": [
+				"src/scan.ts"
+			],
+			"name": "no-tests-in-yaml"
+		},
+		{
+			"files": [],
+			"name": "push-excludes-tags",
+			"why": "its rule is an inline script inside a composite action, which nothing can import. Converting it to a node action to expose one eight-line rule cost 642 lines against 34, 386 of them a lockfile, on an action every repository in the org runs."
+		},
+		{
+			"files": [
+				"src/lint.ts",
+				"src/blocks.ts",
+				"src/ste100-banned-words.ts",
+				"src/guard.ts"
+			],
+			"name": "ste-lint"
+		}
+	]
+}
