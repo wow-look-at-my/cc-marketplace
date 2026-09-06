@@ -1,9 +1,12 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -97,6 +100,50 @@ func TestUnresolvedPathDenialCarriesTheFindingsOwnRemedy(t *testing.T) {
 	truncateDenial := denied(t, dir, `echo x > "$TARGET"`)
 	assert.Contains(t, truncateDenial, "commit the file first")
 	assert.NotContains(t, truncateDenial, "commit -m wip")
+}
+
+// The self-update shape: a script re-execs a copy of itself under a temp
+// path and deletes that copy. mktemp fixes the DIRECTORY even when the exact
+// name is chosen at run time, and a temp directory is outside every guarded
+// root, so nothing here can reach the working tree.
+func TestFollowsAScriptThatReExecsAMktempCopyOfItself(t *testing.T) {
+	dir := newRepo(t)
+	modify(t, dir)
+	script := filepath.Join(t.TempDir(), "self-update.sh")
+	require.NoError(t, os.WriteFile(script, []byte(`#!/bin/bash
+if [ -z "${STAGE2:-}" ]; then
+  _stage2="$(mktemp "${TMPDIR:-/tmp}/cc-self-update.XXXXXX")"
+  cp -- "${BASH_SOURCE[0]}" "$_stage2"
+  STAGE2=1 exec bash "$_stage2" "$@"
+fi
+rm -f "${BASH_SOURCE[0]}"
+`), 0o755))
+	allowed(t, dir, "bash "+script+" --check")
+}
+
+// The negative control on the same mechanism: mktemp told to build its file
+// inside the repository really does write there, so the directory it names
+// is what decides the verdict.
+func TestMktempWithARepoTemplateStaysGuarded(t *testing.T) {
+	dir := newRepo(t)
+	modify(t, dir)
+	script := filepath.Join(t.TempDir(), "build.sh")
+	require.NoError(t, os.WriteFile(script, []byte(`#!/bin/bash
+F="$(mktemp ./stageXXXXXX)"
+rm -f "$F"
+`), 0o755))
+	r := denied(t, dir, "bash "+script)
+	assert.Contains(t, r, "cannot resolve")
+}
+
+// A sourced file runs in the caller's scope, so its assignments say nothing
+// about what a name holds and resolution must stay off.
+func TestASourcedFileGetsNoVariableResolution(t *testing.T) {
+	dir := newRepo(t)
+	script := filepath.Join(t.TempDir(), "lib.sh")
+	require.NoError(t, os.WriteFile(script, []byte("V=x\nrm $V\n"), 0o644))
+	r := denied(t, dir, "source "+script)
+	assert.Contains(t, r, "cannot resolve")
 }
 
 // A word that resolves to no literal text at all must not be quoted as an

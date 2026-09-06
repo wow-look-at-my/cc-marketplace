@@ -18,7 +18,16 @@ func mayDestroy(command string) bool {
 	return false
 }
 
-var prefilterNeedles = []string{"git", "rm", "mv", ">", "tee", "truncate"}
+// A script's own text is invisible to a raw scan, and the walk follows one:
+// `bash cleanup.sh` names no verb here and deletes the tree once followed.
+// So the spellings that START a script parse too, and the parse is what sees
+// the verbs inside. An extensionless `./deploy` run by its shebang is the one
+// shape still missed here; the provenance half parses every command anyway,
+// so it keeps covering the write routes in such a script.
+var prefilterNeedles = []string{
+	"git", "rm", "mv", ">", "tee", "truncate",
+	"bash", "sh ", "zsh", "source", ".sh",
+}
 
 // destructiveKeyword reports whether raw text names something that can destroy
 // work, and what to call it. Only consulted when the parser has already failed
