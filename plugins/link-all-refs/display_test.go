@@ -172,6 +172,16 @@ func TestFenceStateCarriesAcrossFlushes(t *testing.T) {
 	assert.False(t, EndsInsideFence("intro\n```\ncode\n```\nafter"))
 }
 
+// A reference wrapped in inline backticks must render with the backticks
+// INSIDE the link text. Splicing the link over just the bare token instead
+// leaves the backticks straddling it (`` `[x](url)` ``), which markdown does
+// not render as a link at all -- the reader sees literal brackets.
+func TestABacktickWrappedReferenceKeepsTheBackticksInsideTheLink(t *testing.T) {
+	res := fakeResolver{repo: Repo{Owner: "wow-look-at-my", Name: "slopfmt"}, found: true, commits: []string{"c4f997e"}}
+	got := rewrite(t, "Resolved and pushed `c4f997e`.", res)
+	assert.Equal(t, "Resolved and pushed [`c4f997e`](https://github.com/wow-look-at-my/slopfmt/commit/c4f997e).", got)
+}
+
 func TestEveryOccurrenceIsRewritten(t *testing.T) {
 	got := rewrite(t, "o/r#1 blocked o/r#1 then o/r#2 landed.", live())
 	assert.Equal(t, 3, strings.Count(got, "]("), "expected three links in %q", got)

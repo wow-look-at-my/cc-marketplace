@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,8 @@ func TestEachKindIsMatched(t *testing.T) {
 			for _, r := range refs {
 				if r.Text == tc.want {
 					assert.Equal(t, tc.kind, r.Kind)
-					assert.Equal(t, tc.want, tc.text[r.Start:r.End], "offsets must select the token")
+					got := strings.Trim(tc.text[r.Start:r.End], "`")
+					assert.Equal(t, tc.want, got, "offsets must select the token")
 				}
 			}
 		})
@@ -149,4 +151,24 @@ func TestBlankLinksPreservesLength(t *testing.T) {
 
 func TestEmptyInput(t *testing.T) {
 	assert.Empty(t, FindUnlinkedInLine(""))
+}
+
+// A token inside a lone pair of backticks must have those backticks folded
+// into its range, so the rewrite can put them back INSIDE the link text
+// rather than leave them straddling it.
+func TestBacktickWrappedTokenSwallowsItsBackticks(t *testing.T) {
+	refs := FindUnlinkedInLine("Resolved and pushed `c4f997e`.")
+	require.Len(t, refs, 1)
+	assert.True(t, refs[0].Backticked)
+	assert.Equal(t, "`c4f997e`", "Resolved and pushed `c4f997e`."[refs[0].Start:refs[0].End])
+}
+
+// A double backtick is the escape a code span uses to hold a literal backtick,
+// not a wrap around this token -- widening across it would eat a backtick that
+// belongs to the reader's own markdown.
+func TestDoubleBacktickIsNotTreatedAsAWrap(t *testing.T) {
+	refs := FindUnlinkedInLine("re-pushed as ``6884dd2``.")
+	require.Len(t, refs, 1)
+	assert.False(t, refs[0].Backticked)
+	assert.Equal(t, "6884dd2", refs[0].Text)
 }
