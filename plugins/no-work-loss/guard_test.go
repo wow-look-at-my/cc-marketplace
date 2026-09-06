@@ -104,7 +104,7 @@ func TestDeniesResetHardOnDirtyTree(t *testing.T) {
 	assert.Empty(t, lossReason)
 	require.NotEmpty(t, notices)
 	assert.Contains(t, notices[0], "1 modified")
-	assert.Contains(t, notices[0], "refs/no-work-loss/")
+	assert.Contains(t, notices[0], "committed to master")
 
 	r := denied(t, dir, "git reset --hard origin/master")
 	assert.Contains(t, r, "git reset")
@@ -121,7 +121,7 @@ func TestPreservesAndAllowsCheckoutOnDirtyTree(t *testing.T) {
 	modify(t, dir)
 	notice := preserved(t, dir, "git checkout master")
 	assert.Contains(t, notice, "git checkout")
-	assert.Contains(t, notice, "refs/no-work-loss/")
+	assert.Contains(t, notice, "committed to master")
 }
 
 // The motivating incident: the dangerous command is the second one, and the

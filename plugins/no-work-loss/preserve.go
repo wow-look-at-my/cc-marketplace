@@ -3,23 +3,19 @@ package main
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
-	"sync/atomic"
-	"time"
 )
 
-// protectedRefPrefix names a ref this hook created to hold content a
-// destructive command was about to lose. It is the ONLY place that content
-// survives, so a command that would delete or overwrite it must never be
-// judged safe on the "it exists somewhere else" test the other ref-destroying
-// verbs use -- see gitverb.go's checks against this prefix.
+// protectedRefPrefix names a ref an EARLIER build of this hook created to hold
+// content a destructive command was about to lose. Preservation now commits to
+// the branch, so nothing creates one any more. The protection stays because a
+// repository can still carry one, and there it is the ONLY place that content
+// survives -- see gitverb.go's checks against this prefix.
 const protectedRefPrefix = "refs/no-work-loss/"
-
-var preserveRefSeq uint64
 
 // preserveResult is what a successful commit produced, for the notice the
 // caller shows once the destructive command is allowed to proceed.
+// ref names the branch the commit landed on.
 type preserveResult struct {
 	ref     string
 	commit  string
@@ -96,15 +92,17 @@ func preserveAtRiskPaths(root string, paths []string) (res *preserveResult, ok b
 		return nil, false
 	}
 
-	ref := protectedRefPrefix + preserveRefName()
-	if _, _, err := runGit(root, "update-ref", ref, commit); err != nil {
+	// The commit lands on the CURRENT BRANCH. A commit under a private ref
+	// prefix is invisible to every ordinary command, so nobody reviews it and
+	// the first session that notices the prefix deletes it. A commit on the
+	// branch is in the log, in the diff, and in the next push.
+	if _, _, err := runGit(root, "update-ref", "HEAD", commit); err != nil {
 		// The commit object exists but nothing names it, so git gc can reap
 		// it. That is not durable preservation, so this must not read as one.
 		return nil, false
 	}
-
-	res = &preserveResult{ref: ref, commit: commit}
-	if _, stderr, err := runGitEnvTimeout(root, preservePushTimeout, nil, "push", "origin", commit+":"+ref); err != nil {
+	res = &preserveResult{ref: branchName(root), commit: commit}
+	if _, stderr, err := runGitEnvTimeout(root, preservePushTimeout, nil, "push", "origin", "HEAD"); err != nil {
 		res.pushErr = strings.TrimSpace(stderr)
 		if res.pushErr == "" {
 			res.pushErr = err.Error()
@@ -120,25 +118,28 @@ func preserveMessage(paths []string) string {
 		len(paths), strings.Join(paths, "\n"))
 }
 
-// preserveRefName is nanosecond-timestamped and counter-suffixed: two
-// preservations in one invocation, or two invocations racing a coarse system
-// clock, must never collide and silently overwrite one another's ref.
-func preserveRefName() string {
-	ts := time.Now().UTC().Format("20060102T150405.000000000")
-	n := atomic.AddUint64(&preserveRefSeq, 1)
-	return ts + "." + strconv.FormatUint(n, 10)
+// branchName is the branch HEAD points at, for the notice. A detached HEAD
+// has no name, and saying so is better than printing an empty one.
+func branchName(root string) string {
+	out, _, err := runGit(root, "rev-parse", "--abbrev-ref", "HEAD")
+	name := strings.TrimSpace(out)
+	if err != nil || name == "" || name == "HEAD" {
+		return "a detached HEAD"
+	}
+	return name
 }
 
-// notice reports the preservation once, so a session never learns about it
-// only by noticing a strange ref later. label is the finding's own name for
-// the command that would have destroyed the content; summary is the same
+// notice reports the preservation once. The commit is on the branch, so it is
+// visible in the log without this -- but a commit the session did not write
+// itself must still be announced. label is the finding's own name for the
+// command that would have destroyed the content; summary is the same
 // tracked/untracked/ignored breakdown a denial would have shown.
 func (r *preserveResult) notice(label, summary string) string {
 	if r.pushed {
-		return fmt.Sprintf("preserved: %s would have lost %s, so it was committed to %s (%s) and pushed to origin before being allowed to proceed.",
+		return fmt.Sprintf("preserved: %s would have lost %s, so it was committed to %s (%s) and pushed before being allowed to proceed.",
 			label, summary, r.ref, shortSHA(r.commit))
 	}
-	return fmt.Sprintf("preserved: %s would have lost %s, so it was committed to %s (%s) before being allowed to proceed. The push to origin failed (%s) -- the content is safe in that local ref; push it yourself when you can.",
+	return fmt.Sprintf("preserved: %s would have lost %s, so it was committed to %s (%s) before being allowed to proceed. The push failed (%s) -- the commit is on your branch; push it when you can.",
 		label, summary, r.ref, shortSHA(r.commit), r.pushErr)
 }
 

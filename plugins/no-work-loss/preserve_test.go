@@ -22,14 +22,28 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// listPreservationRefs returns every ref this hook created in dir.
+// listPreservationRefs names the preservation commit this hook made in dir, or
+// nothing when it made none. Preservation commits to the CURRENT BRANCH, so
+// there is one place to look and the caller can use the name as an ordinary
+// rev. The subject line is what identifies it: a commit the hook wrote is the
+// tip, and any other tip means no preservation happened.
 func listPreservationRefs(t *testing.T, dir string) []string {
 	t.Helper()
-	out := gitOutput(t, dir, "for-each-ref", "--format=%(refname)", protectedRefPrefix+"*")
-	if out == "" {
+	out, err := exec.Command("git", "-C", dir, "log", "-1", "--pretty=%s").Output()
+	if err != nil || !strings.HasPrefix(strings.TrimSpace(string(out)), "no-work-loss:") {
 		return nil
 	}
-	return strings.Split(out, "\n")
+	return []string{"HEAD"}
+}
+
+// makeStrandedPreservationRef writes a ref under the retired prefix by hand.
+// Nothing creates one any more, and the protection against deleting one has to
+// keep working for a repository that still carries one from an older build.
+func makeStrandedPreservationRef(t *testing.T, dir string) string {
+	t.Helper()
+	ref := protectedRefPrefix + "20260101T000000.000000000.1"
+	git(t, dir, "update-ref", ref, gitOutput(t, dir, "rev-parse", "HEAD"))
+	return ref
 }
 
 // ---------------------------------------------------------------------------
@@ -45,7 +59,7 @@ func TestPreservesUntrackedFileContentBeforeRm(t *testing.T) {
 
 	notice := preserved(t, dir, "rm scratch.txt")
 	assert.Contains(t, notice, "scratch.txt")
-	assert.Contains(t, notice, protectedRefPrefix)
+	assert.Contains(t, notice, "committed to master")
 
 	refs := listPreservationRefs(t, dir)
 	require.Len(t, refs, 1)
@@ -141,7 +155,7 @@ func TestPreservesLocallyWhenPushFails(t *testing.T) {
 
 	notice := preserved(t, dir, "rm scratch.txt")
 	assert.Contains(t, notice, "push to origin failed")
-	assert.Contains(t, notice, protectedRefPrefix)
+	assert.Contains(t, notice, "committed to master")
 
 	refs := listPreservationRefs(t, dir)
 	require.Len(t, refs, 1, "the local ref must survive even though the push failed")
@@ -203,28 +217,20 @@ func TestPreserveNeverAttemptedForARefDestroyingCommand(t *testing.T) {
 // other ref-destroying command gets judged on.
 func TestDeniesDeletingAPreservationRef(t *testing.T) {
 	dir := newRepo(t)
-	untrack(t, dir, "scratch.txt")
-	preserved(t, dir, "rm scratch.txt")
-	refs := listPreservationRefs(t, dir)
-	require.Len(t, refs, 1)
-	ref := refs[0]
+	ref := makeStrandedPreservationRef(t, dir)
 
 	r := denied(t, dir, "git update-ref -d "+ref)
 	assert.Contains(t, r, "the only copy")
 
 	// Still there: the denial actually stopped it.
-	assert.Equal(t, refs, listPreservationRefs(t, dir))
+	assert.NotEmpty(t, gitOutput(t, dir, "rev-parse", ref))
 }
 
 // Same protection against a force push that deletes or overwrites the ref on
 // the remote -- the two other write shapes push can take.
 func TestDeniesForcePushDeletingOrOverwritingAPreservationRef(t *testing.T) {
 	dir := remoteRepo(t)
-	untrack(t, dir, "scratch.txt")
-	preserved(t, dir, "rm scratch.txt")
-	refs := listPreservationRefs(t, dir)
-	require.Len(t, refs, 1)
-	ref := refs[0]
+	ref := makeStrandedPreservationRef(t, dir)
 
 	r := denied(t, dir, "git push --delete origin "+ref)
 	assert.Contains(t, r, "the only copy")
@@ -239,14 +245,11 @@ func TestDeniesForcePushDeletingOrOverwritingAPreservationRef(t *testing.T) {
 // protection. This pins that boundary rather than assuming it.
 func TestBranchDeleteCannotNameAPreservationRef(t *testing.T) {
 	dir := newRepo(t)
-	untrack(t, dir, "scratch.txt")
-	preserved(t, dir, "rm scratch.txt")
-	refs := listPreservationRefs(t, dir)
-	require.Len(t, refs, 1)
+	ref := makeStrandedPreservationRef(t, dir)
 
 	// git itself refuses this as an invalid branch name, but this hook must
 	// not be the thing standing in the way -- it should reach the ordinary
 	// reachability path (a branch that never existed is allowed) rather than
 	// treating it as naming the protected ref.
-	allowed(t, dir, "git branch -D "+refs[0])
+	allowed(t, dir, "git branch -D "+ref)
 }

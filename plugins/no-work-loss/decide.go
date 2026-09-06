@@ -67,6 +67,13 @@ func judge(f *finding, cache *repoCache) (deny, notice string) {
 	// truncation are not fixed the same way -- never a fixed line that fits
 	// neither. Nothing here can be preserved: a path that cannot be resolved
 	// cannot be named to `git add` either.
+	// A finding read out of a script FILE is the program's own behaviour, not
+	// a write this command text directs. This hook already declines to sandbox
+	// what it starts -- `go build`, `npm test` and `make` write what they
+	// write -- and a build script naming its output from a variable is that
+	// same case. Refusing it made `cd src && ./make.bash` unrunnable, which is
+	// an ordinary build of a Go toolchain. A STATIC path inside a script is
+	// still judged, so the write-elsewhere-then-run bypass stays closed.
 	for _, p := range f.paths {
 		if !p.static {
 			return fmt.Sprintf("blocked: %s targets a path this hook cannot resolve (%s), so what it would delete is unknown."+
