@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { addedText, blockingFindings, decide, relativePath, repairInput } from "./hook.ts";
+import { addedText, blockingFindings, decide, relativePath } from "./hook.ts";
 
 const CWD = "/home/user/js-snippets";
 const WORKFLOW = `${CWD}/.github/workflows/deploy.yml`;
@@ -22,7 +22,7 @@ function payload(extra: Record<string, unknown>): string {
 // It failed common-checks in CI and took the whole pull request red, while
 // the language server was already adapting this very rule.
 test("the three-line comment that took a pull request red is refused", () => {
-  const { reason } = decide(
+  const reason = decide(
     payload({
       new_string: [
         "  # A preview is republished by pushing, so a branch whose last run predates a",
@@ -37,7 +37,7 @@ test("the three-line comment that took a pull request red is refused", () => {
 });
 
 test("one comment line above the same trigger is allowed", () => {
-  const { reason } = decide(
+  const reason = decide(
     payload({
       new_string: "  # Republish a preview without a commit that only triggers one.\n  workflow_dispatch:",
     }),
@@ -48,11 +48,11 @@ test("one comment line above the same trigger is allowed", () => {
 // Only the added text is judged, so a violation already in the file cannot
 // block an edit that has nothing to do with it.
 test("an unrelated edit is not blocked by the rest of the file", () => {
-  assert.equal(decide(payload({ new_string: "  timeout-minutes: 10" })).reason, "");
+  assert.equal(decide(payload({ new_string: "  timeout-minutes: 10" })), "");
 });
 
 test("a non-workflow file is not judged", () => {
-  const { reason } = decide(
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Write",
@@ -67,7 +67,7 @@ test("a non-workflow file is not judged", () => {
 });
 
 test("an action manifest is judged like a workflow", () => {
-  const { reason } = decide(
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Write",
@@ -92,7 +92,7 @@ test("every write shape contributes its added text", () => {
 });
 
 test("a MultiEdit is refused when any one of its edits violates", () => {
-  const { reason } = decide(
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "MultiEdit",
@@ -113,19 +113,19 @@ test("paths resolve relative to the working directory, and absolute ones survive
 
 // A guard that wedges a session on a surprise is worse than no guard.
 test("every unreadable or unrelated payload is allowed", () => {
-  assert.equal(decide("not json").reason, "");
-  assert.equal(decide(JSON.stringify({ hook_event_name: "Stop" })).reason, "");
-  assert.equal(decide(JSON.stringify({ hook_event_name: "PreToolUse" })).reason, "");
+  assert.equal(decide("not json"), "");
+  assert.equal(decide(JSON.stringify({ hook_event_name: "Stop" })), "");
+  assert.equal(decide(JSON.stringify({ hook_event_name: "PreToolUse" })), "");
   assert.equal(
-    decide(JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: {} })).reason,
+    decide(JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: {} })),
     "",
   );
 });
 
-// The whole point of the repair: a wrap is whitespace, the lines to join are
-// the ones the check already names, and a round trip over that buys nothing.
-test("a hard-wrapped paragraph is joined rather than refused", () => {
-  const decision = decide(
+// A hard wrap is a finding like any other again: the write is refused and the
+// model rewrites it.
+test("a hard-wrapped paragraph is refused", () => {
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Write",
@@ -136,15 +136,11 @@ test("a hard-wrapped paragraph is joined rather than refused", () => {
       },
     }),
   );
-  assert.equal(decision.reason, "");
-  assert.equal(
-    decision.updatedInput?.content,
-    "# Title\n\nA paragraph that the author wrapped across two lines by hand.\n",
-  );
+  assert.match(reason, /Join it back up/);
 });
 
-test("an already unwrapped document is passed through untouched", () => {
-  const decision = decide(
+test("an already unwrapped document is allowed", () => {
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Write",
@@ -155,55 +151,37 @@ test("an already unwrapped document is passed through untouched", () => {
       },
     }),
   );
-  assert.equal(decision.reason, "");
-  assert.equal(decision.updatedInput, undefined);
+  assert.equal(reason, "");
 });
 
-// A fence is not prose. Joining its lines changes what the code says.
-test("a fenced code block keeps its own line breaks", () => {
-  const content = "# Title\n\n```sh\nfirst\nsecond\n```\n";
-  assert.equal(repairInput("Write", { content }), undefined);
-});
-
-test("every edit of a MultiEdit is repaired", () => {
-  const repaired = repairInput("MultiEdit", {
-    edits: [{ new_string: "One line.\n" }, { new_string: "Wrapped over\ntwo lines.\n" }],
-  });
-  assert.deepEqual(repaired?.edits, [
-    { new_string: "One line.\n" },
-    { new_string: "Wrapped over two lines.\n" },
-  ]);
-});
-
-// A wrap is repaired, so it must never reach the refusal. What is left in the
-// same write still does.
-test("a wrap beside a real violation leaves only the real violation", () => {
-  const { reason } = decide(
+// A fence is not prose. Its line breaks are not a hard wrap, so a fenced block
+// is allowed on its own.
+test("a fenced code block is not read as a wrapped paragraph", () => {
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Write",
       cwd: CWD,
       tool_input: {
         file_path: `${CWD}/docs/thing.md`,
-        content: "A sentence that is wrapped\nby hand and that doesn't expand its contraction.\n",
+        content: "# Title\n\n```sh\nfirst\nsecond\n```\n",
       },
     }),
   );
-  assert.match(reason, /contractions/);
-  assert.doesNotMatch(reason, /Join it back up/);
+  assert.equal(reason, "");
 });
 
-// The incident this placement exists for: an Edit whose fragment sits inside a
+// The incident placement exists for: an Edit whose fragment sits inside a
 // fenced block. Judged alone the fragment shows no fence, so its lines read as
-// a hand-wrapped paragraph and the repair flattened a diagram into one line.
-test("an edit inside a fenced block keeps its line breaks", () => {
+// a hand-wrapped paragraph and the write was refused for prose it never wrote.
+test("an edit inside a fenced block is not refused for its line breaks", () => {
   const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
   const file = join(dir, "spec.md");
   const before = "Input: ls -la\nFlow:  Shell then Parser then Command";
   writeFileSync(file, `# Title\n\nOne line, one paragraph.\n\n\`\`\`\n${before}\n\`\`\`\n`, "utf8");
 
   const after = "Input: ls -la\nFlow:  Shell then Parser then external execution";
-  const decision = decide(
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Edit",
@@ -211,20 +189,19 @@ test("an edit inside a fenced block keeps its line breaks", () => {
       tool_input: { file_path: file, old_string: before, new_string: after },
     }),
   );
-  assert.equal(decision.reason, "");
-  assert.equal(decision.updatedInput, undefined);
+  assert.equal(reason, "");
 });
 
-// The control: the same two lines as prose in the same file are still joined,
-// so placement did not simply switch the repair off.
-test("an edit outside a fence is still repaired", () => {
+// The control: the same two lines as prose in the same file are still refused,
+// so placement did not simply switch the wrap check off.
+test("an edit outside a fence is still refused for its wrap", () => {
   const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
   const file = join(dir, "spec.md");
   const before = "A paragraph the author wrapped\nacross two lines by hand.";
   writeFileSync(file, `# Title\n\n${before}\n`, "utf8");
 
   const after = "A paragraph the author rewrapped\nacross two lines by hand.";
-  const decision = decide(
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Edit",
@@ -232,11 +209,7 @@ test("an edit outside a fence is still repaired", () => {
       tool_input: { file_path: file, old_string: before, new_string: after },
     }),
   );
-  assert.equal(decision.reason, "");
-  assert.equal(
-    decision.updatedInput?.new_string,
-    "A paragraph the author rewrapped across two lines by hand.",
-  );
+  assert.match(reason, /Join it back up/);
 });
 
 // A semicolon inside a fenced block is code, not the document's own prose. The
@@ -248,7 +221,7 @@ test("a fenced fragment is not refused for its punctuation", () => {
   const before = "const a = 1;";
   writeFileSync(file, `# Title\n\n\`\`\`go\n${before}\n\`\`\`\n`, "utf8");
 
-  const decision = decide(
+  const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Edit",
@@ -256,7 +229,7 @@ test("a fenced fragment is not refused for its punctuation", () => {
       tool_input: { file_path: file, old_string: before, new_string: "const a = 2;" },
     }),
   );
-  assert.equal(decision.reason, "");
+  assert.equal(reason, "");
 });
 
 test("blockingFindings reports the check by name", () => {

@@ -28,9 +28,9 @@ function write(cwd: string, name: string, body: string): string {
   return path;
 }
 
-/** The refusal alone: this file is about the ledger, not about repairs. */
+/** Named for the assertions below, which read the refusal and nothing else. */
 function reasonOf(raw: string): string {
-  return decide(raw).reason;
+  return decide(raw);
 }
 
 function payload(sessionId: string, cwd: string, filePath: string, text: string): string {

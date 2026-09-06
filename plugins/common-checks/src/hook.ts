@@ -13,9 +13,9 @@
 // left ste-lint out of it as "prose judgement", and the very file documenting
 // that choice then failed ste-lint in CI.
 
-import { fileKind, findings, unwrapParagraphs, type Finding } from "./checks.ts";
+import { fileKind, findings, type Finding } from "./checks.ts";
 import { diskContent, forget, outstanding, record } from "./ledger.ts";
-import { place, repairWithin, type Placement } from "./placement.ts";
+import { place, type Placement } from "./placement.ts";
 
 interface ToolInput {
   file_path?: unknown;
@@ -68,12 +68,6 @@ function findingsFor(rel: string, unit: Unit): Finding[] {
   return findings(rel, full).filter((f) => f.startLine - 1 >= start && f.startLine - 1 <= end);
 }
 
-/** This unit's text with its wraps joined, unchanged when it has none. */
-function repairText(unit: Unit): string {
-  if (unit.placement === undefined) return unwrapParagraphs(unit.text);
-  return repairWithin(unit.placement) ?? unit.text;
-}
-
 interface HookPayload {
   hook_event_name?: unknown;
   tool_name?: unknown;
@@ -108,37 +102,6 @@ export function relativePath(filePath: string, cwd: string): string {
 }
 
 /**
- * The same write with every hand-wrapped paragraph joined back up.
- *
- * Only the text the write adds is touched, which is the same rule the rest of
- * this file follows. A tool shape carrying no text comes back unchanged, and
- * so does one whose text was already unwrapped.
- */
-export function repairInput(toolName: string, input: ToolInput): ToolInput | undefined {
-  const queue = unitsOf(toolName, input);
-  if (queue.length === 0) return undefined;
-  const repaired: ToolInput = { ...input };
-  let changed = false;
-  const fix = (text: string): string => {
-    const unit = queue.shift();
-    if (unit === undefined) return text;
-    const next = repairText(unit);
-    if (next !== text) changed = true;
-    return next;
-  };
-  if (typeof input.content === "string") repaired.content = fix(input.content);
-  if (typeof input.new_string === "string") repaired.new_string = fix(input.new_string);
-  if (Array.isArray(input.edits)) {
-    repaired.edits = input.edits.map((edit) => {
-      const next = (edit as { new_string?: unknown } | null)?.new_string;
-      if (typeof next !== "string") return edit;
-      return { ...(edit as object), new_string: fix(next) };
-    });
-  }
-  return changed ? repaired : undefined;
-}
-
-/**
  * Findings that should refuse this write, or [] to stay out of the way.
  *
  * A fragment is checked in the file it lands in, and only the findings on the
@@ -161,9 +124,7 @@ export function blockingFindings(
   for (const unit of unitsOf(toolName, input)) {
     found.push(...findingsFor(rel, unit));
   }
-  // A wrap is repaired rather than reported, so it is never a refusal. What
-  // survives here is what the repair cannot reach.
-  return found.filter((f) => f.fixable === undefined);
+  return found;
 }
 
 /** The refusal text: every finding, and the repair its own check names. */
@@ -189,8 +150,7 @@ export function sweep(sessionId: string, cwd: string): string[] {
   for (const filePath of outstanding(sessionId)) {
     const content = diskContent(filePath);
     const rel = relativePath(filePath, cwd);
-    const left = content === undefined ? [] : findings(rel, content).filter((f) => f.fixable === undefined);
-    if (content === undefined || left.length === 0) {
+    if (content === undefined || findings(rel, content).length === 0) {
       forget(sessionId, filePath);
       continue;
     }
@@ -208,26 +168,17 @@ export function otherFileReason(paths: string[]): string {
   );
 }
 
-export interface Decision {
-  /** The refusal, or "" to stay out of the way. */
-  reason: string;
-  /** The write to run in place of this one, when a repair applies. */
-  updatedInput?: ToolInput;
-}
-
-const ALLOW: Decision = { reason: "" };
-
-export function decide(raw: string): Decision {
+export function decide(raw: string): string {
   let payload: HookPayload;
   try {
     payload = JSON.parse(raw) as HookPayload;
   } catch {
-    return ALLOW;
+    return "";
   }
-  if (payload.hook_event_name !== "PreToolUse") return ALLOW;
-  if (typeof payload.tool_name !== "string") return ALLOW;
+  if (payload.hook_event_name !== "PreToolUse") return "";
+  if (typeof payload.tool_name !== "string") return "";
   const input = (payload.tool_input ?? {}) as ToolInput;
-  if (typeof input !== "object" || input === null) return ALLOW;
+  if (typeof input !== "object" || input === null) return "";
   const cwd = typeof payload.cwd === "string" ? payload.cwd : "";
   const sessionId = typeof payload.session_id === "string" ? payload.session_id : "";
   const filePath = typeof input.file_path === "string" ? input.file_path : "";
@@ -236,54 +187,32 @@ export function decide(raw: string): Decision {
   // outranks whatever is being written now. Walking away to another file is
   // the escape this exists to close.
   const stuck = sweep(sessionId, cwd).filter((p) => p !== filePath);
-  if (stuck.length > 0) return { reason: otherFileReason(stuck) };
+  if (stuck.length > 0) return otherFileReason(stuck);
 
-  const rel = relativePath(filePath, cwd);
-  const judged = filePath !== "" && fileKind(rel) !== "other";
-  const repaired = judged ? repairInput(payload.tool_name, input) : undefined;
-
-  const found = blockingFindings(payload.tool_name, repaired ?? input, cwd);
-  if (found.length > 0) {
-    if (filePath !== "") record(sessionId, filePath);
-    // The repair is dropped with the write. The next attempt carries the same
-    // wraps and gets the same repair, so nothing is lost by refusing here.
-    return { reason: denyReason(found) };
-  }
-  return repaired === undefined ? ALLOW : { reason: "", updatedInput: repaired };
+  const found = blockingFindings(payload.tool_name, input, cwd);
+  if (found.length === 0) return "";
+  if (filePath !== "") record(sessionId, filePath);
+  return denyReason(found);
 }
 
 export async function runHook(stdin: NodeJS.ReadableStream): Promise<void> {
   const chunks: Buffer[] = [];
   for await (const chunk of stdin) chunks.push(Buffer.from(chunk));
-  let decision: Decision = ALLOW;
+  let reason = "";
   try {
-    decision = decide(Buffer.concat(chunks).toString("utf8"));
+    reason = decide(Buffer.concat(chunks).toString("utf8"));
   } catch {
     // A guard that cannot read its own payload must not wedge the session.
-    decision = ALLOW;
+    reason = "";
   }
-  if (decision.reason !== "") {
-    process.stdout.write(
-      JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: decision.reason,
-        },
-      }),
-    );
-    return;
-  }
-  if (decision.updatedInput === undefined) return;
-  // No permissionDecision, so the normal permission flow still runs on the
-  // repaired write. suppressOutput keeps a whitespace fix off the transcript.
+  if (reason === "") return;
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
-        updatedInput: decision.updatedInput,
+        permissionDecision: "deny",
+        permissionDecisionReason: reason,
       },
-      suppressOutput: true,
     }),
   );
 }

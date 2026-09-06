@@ -12,7 +12,6 @@ import * as testsInYaml from "../vendor/no-tests-in-yaml/scan.ts";
 import * as allBuildsJob from "../vendor/no-all-builds-job/detect.ts";
 import * as steLint from "../vendor/ste-lint/lint.ts";
 import * as steGuard from "../vendor/ste-lint/guard.ts";
-import { blocks } from "../vendor/ste-lint/blocks.ts";
 
 export interface Finding {
   /** The check that produced this, used as the diagnostic's `code`. */
@@ -21,12 +20,6 @@ export interface Finding {
   startLine: number;
   endLine: number;
   message: string;
-  /**
-   * Set when the repair is mechanical and this code can write it. The hook
-   * applies the fix instead of refusing. A guard that already knows the answer
-   * must not spend a round trip asking for it.
-   */
-  fixable?: "wrap";
 }
 
 export type FileKind = "workflow" | "action" | "markdown" | "other";
@@ -217,7 +210,6 @@ function ste(relativePath: string, content: string): Finding[] {
         startLine: parsed.line,
         endLine: parsed.line,
         message: `${STE_REMEDIES[bucket]}${detail}${steFix(bucket, parsed.detail)}`,
-        ...(bucket === "wrappedLines" ? { fixable: "wrap" as const } : {}),
       });
     }
   }
@@ -235,45 +227,6 @@ function collapseRuns(name: string, entries: string[]): string[] {
     previous = parsed.line;
   }
   return kept;
-}
-
-/**
- * Joins every hand-wrapped paragraph back into one line.
- *
- * The wrap rule is the one check here whose repair needs no judgement: the
- * lines to join are the ones the check already names, and the text is the same
- * text afterwards. So the hook writes it rather than refusing, and the model
- * never sees a round trip over whitespace.
- *
- * The blocks come from the same stripped view the linter reads, so a fenced
- * code block, a table, a heading and a quotation are all left exactly as they
- * are. The JOIN is applied to the RAW lines, so the file keeps its own text.
- */
-/** 0-based index of every line that gets folded into the one before it. */
-export function continuationLines(content: string): Set<number> {
-  const view = steLint.stripQuotedSpans(steLint.stripCode(content)).split("\n");
-  const continuation = new Set<number>();
-  for (const block of blocks(view)) {
-    for (let i = 1; i < block.starts.length; i++) continuation.add(block.starts[i].line - 1);
-  }
-  return continuation;
-}
-
-export function unwrapParagraphs(content: string): string {
-  const crlf = content.includes("\r\n");
-  const raw = content.split("\n").map((line) => line.replace(/\r$/, ""));
-  const continuation = continuationLines(content);
-  if (continuation.size === 0) return content;
-
-  const out: string[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    if (continuation.has(i) && out.length > 0) {
-      out[out.length - 1] = `${out[out.length - 1].replace(/\s+$/, "")} ${raw[i].trim()}`;
-      continue;
-    }
-    out.push(raw[i]);
-  }
-  return out.join(crlf ? "\r\n" : "\n");
 }
 
 /**

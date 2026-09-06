@@ -6,13 +6,13 @@ The common-checks plugin lives at `plugins/common-checks/`. It is one **language
 
 The hook judges only the text a write ADDS. A violation already in the file therefore never blocks an unrelated edit to it.
 
-**A fragment is judged where it LANDS, not on its own.** An Edit's text carries no fence, no table and no list of its own. Judged alone, an ASCII diagram inside a fenced block reads as a hand-wrapped paragraph. The wrap repair then joined its lines into one. A semicolon inside that same block read as prose and refused the write. A session answered both by deleting the code blocks out of a specification. `placement.ts` puts the fragment back first. It reads the file from disk, applies the edit, and records the line span the new text occupies. Every check then runs against the whole file, and only the findings inside that span are the write's own. The repair moves only lines in that span, so a wrap elsewhere is left for whoever edits that part.
+**A fragment is judged where it LANDS, not on its own.** An Edit's text carries no fence, no table and no list of its own. Judged alone, a semicolon inside a fenced block reads as prose and refuses the write. The lines of an ASCII diagram in that same block read as a hand-wrapped paragraph. A session answered both by deleting the code blocks out of a specification. `placement.ts` puts the fragment back first. It reads the file from disk, applies the edit, and records the line span the new text occupies. Every check then runs against the whole file, and only the findings inside that span are the write's own.
 
 A placement needs the file to be readable and the replaced string to appear in it exactly once. When it cannot be pinned down, the fragment is judged alone, which is what this hook always did.
 
 **It filters nothing else.** `findings()` already returns only what fails CI, so a second list of enforced checks is a list that drifts from the first. An earlier draft kept one and left ste-lint out of it. The file documenting that choice then failed ste-lint in CI.
 
-**A hard wrap is REPAIRED, never refused.** The wrap rule is the one check here whose repair needs no judgement. The lines to join are the ones the check itself names. The text reads the same afterwards. So `unwrapParagraphs` joins them. The hook then emits `hookSpecificOutput.updatedInput` with `suppressOutput`, which is the standing rule in this marketplace. A guard that already knows the answer must not spend a round trip asking for it. The repair reads the same stripped view the linter reads. A fence, a table, a heading and a quotation all keep their own line breaks. The JOIN lands on the raw lines, so the file keeps its own text. A `fixable` finding therefore never reaches the refusal, and never holds a file in the ledger. What the repair cannot reach still denies.
+**A hard wrap is refused, like every other finding.** The hook once repaired it instead. It joined the lines and let the write through on `updatedInput`. That was reverted at the operator's request. A different tool is being built for the job. Placement is what survives from that change. Judging a fragment in its own file is what stops a fenced block reading as prose. That half was never about the repair.
 
 **A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
 
@@ -102,10 +102,10 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 
 ### Files
 
-- **Adapters**: `plugins/common-checks/src/checks.ts` -- file kind, the per-check calls into `vendor/`, the `no-all-builds-job` anchor, the ste-lint bucket wording, and the ranking. Also the wrapped-paragraph collapse, the `fixable` tag, and `unwrapParagraphs`
-- **Hook**: `plugins/common-checks/src/hook.ts` -- the PreToolUse payload, the units a write adds, `repairInput`, the ledger sweep, and the two output shapes
-- **Placement**: `plugins/common-checks/src/placement.ts` -- `place` pins an edit to its line span in the file on disk, and `repairWithin` joins only the wraps inside that span
-- **Tests**: `src/hook.test.ts` covers the refusal and every fail-open path. Also the wrap repair on each write shape, a fence keeping its line breaks, and a wrap beside a real violation. Then the placement cases, against a real file on disk. An edit inside a fence keeps its line breaks. The same edit is not refused for its punctuation. The control edit outside a fence is still joined
+- **Adapters**: `plugins/common-checks/src/checks.ts` -- file kind, the per-check calls into `vendor/`, the `no-all-builds-job` anchor, the ste-lint bucket wording, the wrapped-paragraph collapse, and the ranking
+- **Hook**: `plugins/common-checks/src/hook.ts` -- the PreToolUse payload, the units a write adds, the ledger sweep, and the refusal
+- **Placement**: `plugins/common-checks/src/placement.ts` -- `place` pins an edit to its line span in the file on disk
+- **Tests**: `src/hook.test.ts` covers the refusal and every fail-open path. Then the placement cases, against a real file on disk. An edit inside a fence is not refused for its line breaks. The same edit is not refused for its punctuation. The control edit outside a fence is still refused for its wrap
 - Document sync is full, because a finding is a property of the whole document
 - **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else
 - **Launcher**: `plugins/common-checks/launcher.sh` -- staged into `server/` as `common-checks-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own. The directory is `server/` and not `build/` because `release-plugin` requires every file under `build/` to be a fat APE, and this plugin ships no Go
