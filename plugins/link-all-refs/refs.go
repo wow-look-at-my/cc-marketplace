@@ -55,29 +55,72 @@ func FindUnlinked(text string) []Ref {
 	stripped := stripLinks(assertedText(text))
 	var refs []Ref
 	for _, m := range candidates(stripped) {
-		if slices.ContainsFunc(refs, func(r Ref) bool { return r.Text == m.Text }) {
+		if slices.ContainsFunc(refs, func(r Ref) bool { return r.Text == m.Ref.Text }) {
 			continue
 		}
-		refs = append(refs, m)
+		refs = append(refs, m.Ref)
 	}
 	return refs
 }
 
+// Located is one unlinked reference with the byte range it occupies, so a
+// caller can splice a link in over it.
+type Located struct {
+	Ref
+	Start int
+	End   int
+}
+
+// FindUnlinkedInLine returns every unlinked reference in one line of prose,
+// with offsets into that same line. Every token is reported, including a repeat:
+// the caller rewrites each occurrence, rather than naming the token once.
+//
+// Text that is already a link is blanked first. Without that, the branch matcher
+// fires on the `claude/x` inside `[claude/x](url)` and the URL matcher fires on
+// the target, so the rewrite nests a link inside a link.
+//
+// BLANKED, not stripped: each link becomes an equal run of spaces. A replacement
+// that changes the length moves every offset after it, and a moved offset
+// splices the next link into the middle of a word.
+func FindUnlinkedInLine(line string) []Located {
+	return candidates(blankLinks(line))
+}
+
+// blankLinks replaces every markdown link, autolink and character reference
+// with spaces, preserving the length of the text exactly.
+func blankLinks(text string) string {
+	b := []byte(text)
+	for _, re := range []*regexp.Regexp{mdLinkRe, autoLinkRe, charRefRe} {
+		for _, loc := range re.FindAllStringIndex(text, -1) {
+			for i := loc[0]; i < loc[1]; i++ {
+				b[i] = ' '
+			}
+		}
+	}
+	return string(b)
+}
+
 // candidates runs every matcher over the text and keeps the hits that survive
-// their kind's own validation and a boundary check.
-func candidates(text string) []Ref {
+// their kind's own validation and a boundary check. Each hit carries the byte
+// range it occupies, so a caller can splice over it.
+//
+// Overlaps are dropped: a bare GitHub URL contains a slug that also matches the
+// branch matcher, and rewriting both would nest one link inside another.
+func candidates(text string) []Located {
 	type matcher struct {
 		kind  string
 		re    *regexp.Regexp
 		valid func(string) bool
 	}
+	// URL first: it is the longest match, and claiming its span here is what
+	// stops the branch matcher from firing inside it.
 	matchers := []matcher{
+		{"a bare GitHub URL", urlRe, nil},
 		{"an issue or pull request number", numberRe, nil},
 		{"a commit SHA", shaRe, validSHA},
 		{"a branch", branchRe, validBranch},
-		{"a bare GitHub URL", urlRe, nil},
 	}
-	var out []Ref
+	var out []Located
 	for _, m := range matchers {
 		for _, loc := range m.re.FindAllStringIndex(text, -1) {
 			token := text[loc[0]:loc[1]]
@@ -87,9 +130,17 @@ func candidates(text string) []Ref {
 			if m.valid != nil && !m.valid(token) {
 				continue
 			}
-			out = append(out, Ref{Kind: m.kind, Text: token, Line: lineAt(text, loc[0])})
+			if slices.ContainsFunc(out, func(o Located) bool { return loc[0] < o.End && o.Start < loc[1] }) {
+				continue
+			}
+			out = append(out, Located{
+				Ref:   Ref{Kind: m.kind, Text: token, Line: lineAt(text, loc[0])},
+				Start: loc[0],
+				End:   loc[1],
+			})
 		}
 	}
+	slices.SortStableFunc(out, func(a, b Located) int { return a.Start - b.Start })
 	return out
 }
 

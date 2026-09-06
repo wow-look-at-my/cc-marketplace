@@ -58,17 +58,27 @@ func run(r io.Reader) result {
 	if in.HookEventName != "" && in.HookEventName != "Stop" {
 		return allow()
 	}
+	// At most one refusal per turn. A refusal makes the model write another
+	// message, and that message explains itself by naming the reference again,
+	// which trips the guard a second time. Refusing again asks for a third
+	// message with the same property. The way out of that is a message carrying
+	// nothing but links, which is what the user ends up reading.
+	if in.StopHookActive {
+		return allow()
+	}
 	refs := FindUnlinked(FinalAssistantText(in.TranscriptPath))
 	if len(refs) == 0 {
 		return allow()
 	}
-	return result{code: 2, stderr: reason(refs, in.StopHookActive)}
+	return result{code: 2, stderr: reason(refs)}
 }
 
 // reason is what the model is told. It names each offending token with the
 // line it sits on, states the rule, and shows the shape of the fix, because a
-// refusal that does not say what to write costs a round trip to find out.
-func reason(refs []Ref, repeat bool) string {
+// refusal that does not say what to write costs a round trip to find out. It
+// never asks for the links by themselves: that reply renders as an empty
+// message, and it drops the answer the message was carrying.
+func reason(refs []Ref) string {
 	var b strings.Builder
 	b.WriteString("Do not stop here. This message names things the user cannot click:\n\n")
 	for _, ref := range refs[:min(len(refs), 6)] {
@@ -82,10 +92,8 @@ func reason(refs []Ref, repeat bool) string {
 	b.WriteString("  [owner/repo#42](https://github.com/owner/repo/pull/42)\n")
 	b.WriteString("  [6884dd2](https://github.com/owner/repo/commit/6884dd2)\n")
 	b.WriteString("  [claude/fix-thing](https://github.com/owner/repo/compare/master...claude/fix-thing?expand=1)\n\n")
-	b.WriteString("Rewrite your message with every one of them linked, then stop.")
-	if repeat {
-		b.WriteString("\n\nThis is the second time. Do not argue with the hook and do not delete the\n")
-		b.WriteString("reference to get past it -- write the link.")
-	}
+	b.WriteString("Rewrite your message with every one of them linked, then stop. Send the whole\n")
+	b.WriteString("message, not the links on their own: a reply that is nothing but a bare link\n")
+	b.WriteString("reads as an empty message to the user.")
 	return b.String()
 }

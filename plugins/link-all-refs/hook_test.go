@@ -61,14 +61,27 @@ func TestStopIsAllowedForAMessageWithNoReferences(t *testing.T) {
 	assert.Equal(t, 0, res.code)
 }
 
-func TestRefusalRepeatsWhileTheReferenceStaysUnlinked(t *testing.T) {
+// A refusal is spent once per turn. The message the model writes to satisfy the
+// refusal explains itself by naming the reference again, so refusing a second
+// time asks for a third message with the same property, and the only way out is
+// a reply carrying nothing but links.
+func TestTheRefusalIsSpentOncePerTurn(t *testing.T) {
 	path := writeTranscript(t, "PR #376 is green.")
 	first := stop(t, path, false)
 	second := stop(t, path, true)
 	assert.Equal(t, 2, first.code, "the first stop is refused")
-	assert.Equal(t, 2, second.code, "and so is the retry, because the message still has no link")
-	assert.Contains(t, second.stderr, "second time")
-	assert.NotContains(t, first.stderr, "second time")
+	assert.Equal(t, 0, second.code, "the retry is allowed even though the reference is still unlinked")
+	assert.Empty(t, second.stderr)
+}
+
+// The refusal must never ask for the links by themselves: that reply renders as
+// an empty message and throws away the answer the message was carrying.
+func TestTheRefusalAsksForTheWholeMessage(t *testing.T) {
+	res := stop(t, writeTranscript(t, "PR #376 is green."), false)
+	require.Equal(t, 2, res.code)
+	assert.Contains(t, res.stderr, "Send the whole")
+	assert.NotContains(t, res.stderr, "links alone")
+	assert.NotContains(t, res.stderr, "nothing else")
 }
 
 func TestOnlySixReferencesAreQuoted(t *testing.T) {
