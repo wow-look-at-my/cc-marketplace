@@ -7,10 +7,14 @@
 // nobody reads stops nothing. A refusal at the write does.
 //
 // It judges only the text a write ADDS, so a violation already in the file
-// never blocks an unrelated edit to it, and only the checks whose repair is a
-// mechanical edit of that text -- see BLOCKING.
+// never blocks an unrelated edit to it. It filters nothing else: findings()
+// already returns only what fails CI, and a second list of which checks to
+// enforce is a list that drifts from the first. An earlier draft kept one,
+// left ste-lint out of it as "prose judgement", and the very file documenting
+// that choice then failed ste-lint in CI.
 
 import { fileKind, findings, type Finding } from "./checks.ts";
+import { diskContent, forget, outstanding, record } from "./ledger.ts";
 
 interface ToolInput {
   file_path?: unknown;
@@ -24,12 +28,8 @@ interface HookPayload {
   tool_name?: unknown;
   tool_input?: unknown;
   cwd?: unknown;
+  session_id?: unknown;
 }
-
-// ste-lint is deliberately absent: its findings are prose judgements over a
-// whole document, and refusing a write over one would block ordinary writing.
-// These two are structural, and each names its own repair.
-const BLOCKING = new Set(["yaml-comment-block", "no-tests-in-yaml"]);
 
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
@@ -71,14 +71,11 @@ export function blockingFindings(
   const filePath = typeof input.file_path === "string" ? input.file_path : "";
   if (filePath === "") return [];
   const rel = relativePath(filePath, cwd);
-  const kind = fileKind(rel);
-  if (kind !== "workflow" && kind !== "action") return [];
+  if (fileKind(rel) === "other") return [];
 
   const found: Finding[] = [];
   for (const text of addedText(toolName, input)) {
-    for (const finding of findings(rel, text)) {
-      if (BLOCKING.has(finding.check)) found.push(finding);
-    }
+    found.push(...findings(rel, text));
   }
   return found;
 }
@@ -90,6 +87,37 @@ export function denyReason(found: Finding[]): string {
     "blocked: this write fails a check that gates every build in the org, " +
     "so it would fail CI rather than the edit.\n" +
     lines.join("\n")
+  );
+}
+
+/**
+ * Drops every ledger entry whose file is clean on disk now, and returns the
+ * paths still carrying a violation.
+ *
+ * Re-reading disk is what clears the block on its own: the write that
+ * fixed the file has already landed by the time the next one is judged, so
+ * nothing has to be told the repair happened.
+ */
+export function sweep(sessionId: string, cwd: string): string[] {
+  const still: string[] = [];
+  for (const filePath of outstanding(sessionId)) {
+    const content = diskContent(filePath);
+    const rel = relativePath(filePath, cwd);
+    if (content === undefined || findings(rel, content).length === 0) {
+      forget(sessionId, filePath);
+      continue;
+    }
+    still.push(filePath);
+  }
+  return still;
+}
+
+/** The refusal for a write aimed away from a file already known to be bad. */
+export function otherFileReason(paths: string[]): string {
+  return (
+    "blocked: a file already carries a violation that fails CI, and this write is to a different file.\n" +
+    paths.map((p) => `  ${p}`).join("\n") +
+    "\nFix that first. This clears itself once the file is clean."
   );
 }
 
@@ -105,9 +133,19 @@ export function decide(raw: string): string {
   const input = (payload.tool_input ?? {}) as ToolInput;
   if (typeof input !== "object" || input === null) return "";
   const cwd = typeof payload.cwd === "string" ? payload.cwd : "";
+  const sessionId = typeof payload.session_id === "string" ? payload.session_id : "";
+  const filePath = typeof input.file_path === "string" ? input.file_path : "";
+
+  // Checked before anything about this write: a known-bad file elsewhere
+  // outranks whatever is being written now. Walking away to another file is
+  // the escape this exists to close.
+  const stuck = sweep(sessionId, cwd).filter((p) => p !== filePath);
+  if (stuck.length > 0) return otherFileReason(stuck);
 
   const found = blockingFindings(payload.tool_name, input, cwd);
-  return found.length === 0 ? "" : denyReason(found);
+  if (found.length === 0) return "";
+  if (filePath !== "") record(sessionId, filePath);
+  return denyReason(found);
 }
 
 export async function runHook(stdin: NodeJS.ReadableStream): Promise<void> {
