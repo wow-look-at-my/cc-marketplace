@@ -56,6 +56,23 @@ func TestEvaluateCommands(t *testing.T) {
 	}
 }
 
+// main() evaluates through the package-level rules. A wrapper that reads some
+// other variable passes every sibling test here and denies nothing in
+// production. This test is not parallel, and nothing else touches the global.
+func TestEvaluateCommandReadsTheLoadedRules(t *testing.T) {
+	saved := rules
+	t.Cleanup(func() { rules = saved })
+
+	rules = Rules{DenyProcesses: []ProcessRule{{Name: "python", Behavior: "deny", Message: "python is banned here"}}}
+	decision, reason := evaluateCommand("python3 -c 'print(1)'")
+	assert.Equal(t, "deny", decision)
+	assert.Contains(t, reason, "python is banned here")
+
+	rules = Rules{}
+	decision, _ = evaluateCommand("python3 -c 'print(1)'")
+	assert.Equal(t, "", decision, "an empty rule set decides nothing")
+}
+
 func TestDuplicateEntriesMerged(t *testing.T) {
 	rules := Rules{
 		Allow: []CommandNode{

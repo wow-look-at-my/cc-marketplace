@@ -151,7 +151,7 @@ func evaluateCommand(command string) (string, string) {
 // evaluateCommandWith takes the rule set as a value. A test that wants its own
 // rules passes them here, so nothing has to swap the package-level `rules` and
 // put it back. go-toolchain runs a package's quick tests in parallel, and a
-// test that mutates a global loses to whichever sibling restores it first.
+// test that mutates a global loses to whichever sibling restores it.
 func evaluateCommandWith(command string, rules Rules) (string, string) {
 	// Process rules outrank command rules, and are answered by walking the parse
 	// tree, so they still see a command the allow path below refuses to read --
