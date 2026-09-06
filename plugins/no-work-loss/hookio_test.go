@@ -76,5 +76,6 @@ func TestEmptyCommandIsIgnored(t *testing.T) {
 	in := hookInput{HookEventName: "PreToolUse", ToolName: "Bash", Cwd: t.TempDir()}
 	raw, err := json.Marshal(in)
 	require.NoError(t, err)
-	assert.Empty(t, decide(raw))
+	reason, _ := decide(raw)
+	assert.Empty(t, reason)
 }

@@ -16,13 +16,17 @@ func TestIntegratingCommittedWorkIsAllowedOnACleanTree(t *testing.T) {
 }
 
 // The other hazard is real and belongs to the destruction half: a merge into a
-// tree with uncommitted edits can clobber bytes that exist in no commit.
-func TestIntegratingIsStillRefusedWithUncommittedWork(t *testing.T) {
+// tree with uncommitted edits can clobber bytes that exist in no commit. The
+// destruction half now satisfies that concern by preserving the edit into a
+// ref first, rather than refusing the merge outright -- merge and pull name
+// no provenance route of their own (gitroutes.go), so preservation is the
+// only thing standing between the dirty tree and the command either way.
+func TestIntegratingPreservesAndAllowsWithUncommittedWork(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 
-	denied(t, dir, "git merge origin/master")
-	denied(t, dir, "git pull origin master")
+	preserved(t, dir, "git merge origin/master")
+	preserved(t, dir, "git pull origin master")
 }
 
 // Applying a patch authors content that is in no commit, so it stays refused
@@ -34,15 +38,16 @@ func TestApplyingAPatchIsStillRefused(t *testing.T) {
 	denied(t, dir, "git am /tmp/change.patch")
 }
 
-// A staged change counts as outstanding too: the index is not a commit.
-func TestMergeAndPullDenyOverAStagedChange(t *testing.T) {
+// A staged change counts as outstanding too: the index is not a commit. It is
+// preserved the same way an unstaged one is.
+func TestMergeAndPullPreserveOverAStagedChange(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 	stage(t, dir)
 
-	denied(t, dir, "git merge feature")
-	denied(t, dir, "git pull origin master")
-	denied(t, dir, "git pull --rebase")
+	preserved(t, dir, "git merge feature")
+	preserved(t, dir, "git pull origin master")
+	preserved(t, dir, "git pull --rebase")
 }
 
 // An untracked scratch file is not something a merge can overwrite: git refuses

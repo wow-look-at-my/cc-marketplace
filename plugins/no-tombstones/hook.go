@@ -1,5 +1,5 @@
-// Command no-tombstones is a Claude Code PreToolUse hook that refuses a write
-// adding a tombstone comment.
+// Command no-tombstones is a Claude Code PreToolUse hook that strips a
+// tombstone comment out of a write rather than refusing it.
 //
 // A tombstone describes a state the code is no longer in, or argues for the
 // diff instead of telling the next editor what breaks. Both kinds read as
@@ -8,8 +8,16 @@
 // delete the sentence and ask what the next editor gets wrong. No answer means
 // it was narration.
 //
+// When every finding maps to one whole, comment-only source line, that line is
+// deleted and the write proceeds with the rest untouched. A finding that does
+// not resolve to a clean line -- a code line carrying a trailing tombstone
+// comment, a document sentence sharing a line with other prose, or the volume
+// cap's judgement that a whole block is too long to excise piecemeal -- still
+// gets the write refused, because a strip that guesses wrong corrupts the
+// file worse than a round trip back to the model does.
+//
 // Only text the write ADDS is judged, so a tombstone already in a file is never
-// a reason to refuse an unrelated edit to it.
+// a reason to touch an unrelated edit to it.
 package main
 
 import (
@@ -19,6 +27,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // HookInput is the subset of the PreToolUse payload this plugin reads.
@@ -39,13 +49,17 @@ type toolInput struct {
 	} `json:"edits"`
 }
 
-// response is the deny payload. An allow is the empty output: this hook has no
-// business granting permission, only refusing.
+// response covers both outcomes this hook can produce. A deny sets only the
+// permission fields; a strip sets only UpdatedInput plus AdditionalContext.
+// The empty response is the third outcome -- allow, unchanged -- and is never
+// printed at all.
 type response struct {
 	HookSpecificOutput struct {
-		HookEventName            string `json:"hookEventName"`
-		PermissionDecision       string `json:"permissionDecision"`
-		PermissionDecisionReason string `json:"permissionDecisionReason"`
+		HookEventName            string          `json:"hookEventName"`
+		PermissionDecision       string          `json:"permissionDecision,omitempty"`
+		PermissionDecisionReason string          `json:"permissionDecisionReason,omitempty"`
+		UpdatedInput             json.RawMessage `json:"updatedInput,omitempty"`
+		AdditionalContext        string          `json:"additionalContext,omitempty"`
 	} `json:"hookSpecificOutput"`
 }
 
@@ -61,9 +75,50 @@ func main() {
 	}
 }
 
+// unit is one string this write actually replaces: Write's content, Edit's
+// new_string, or one MultiEdit entry's new_string. apply writes the stripped
+// text back into the generic map that becomes updatedInput, so every other
+// field of the original tool_input (old_string, replace_all, ...) survives
+// untouched.
+type unit struct {
+	text  string
+	apply func(stripped string)
+}
+
+// writeUnits reads the units toolName's own shape carries. raw is the same
+// tool_input decoded generically, mutated in place by each unit's apply.
+func writeUnits(toolName string, ti toolInput, raw map[string]any) []unit {
+	switch toolName {
+	case "Write":
+		return []unit{{text: ti.Content, apply: func(s string) { raw["content"] = s }}}
+	case "Edit":
+		return []unit{{text: ti.NewString, apply: func(s string) { raw["new_string"] = s }}}
+	case "MultiEdit":
+		rawEdits, _ := raw["edits"].([]any)
+		var units []unit
+		for i := range ti.Edits {
+			i := i
+			units = append(units, unit{
+				text: ti.Edits[i].NewString,
+				apply: func(s string) {
+					if i >= len(rawEdits) {
+						return
+					}
+					if m, ok := rawEdits[i].(map[string]any); ok {
+						m["new_string"] = s
+					}
+				},
+			})
+		}
+		return units
+	default:
+		return nil
+	}
+}
+
 // run reads a hook payload from r and returns the JSON to print, or "" to let
-// the call through. Every failure path returns "": a guard that blocks because
-// it could not parse its own input is worse than no guard.
+// the call through unchanged. Every failure path returns "": a guard that
+// blocks because it could not parse its own input is worse than no guard.
 func run(r io.Reader) string {
 	data, _ := io.ReadAll(r)
 	var in HookInput
@@ -80,42 +135,113 @@ func run(r io.Reader) string {
 	if json.Unmarshal(in.ToolInput, &ti) != nil {
 		return ""
 	}
-
-	text := added(ti)
-	blocks := AddedBlocks(ti.FilePath, text)
-	if len(blocks) == 0 {
+	var raw map[string]any
+	if json.Unmarshal(in.ToolInput, &raw) != nil {
 		return ""
 	}
 
-	// The volume cap governs source only. A long paragraph in a document is
-	// ordinary writing; a long comment block attached to a declaration is the
-	// essay this plugin exists to stop.
 	limit := maxCommentLines()
-	if IsDocument(ti.FilePath) {
+	isDoc := IsDocument(ti.FilePath)
+	if isDoc {
 		limit = 0
 	}
 
-	hits := FindTombstones(blocks, limit)
-	for _, name := range DeadReferents(ti.FilePath, text, blocks) {
-		hits = append(hits, Hit{
-			Tell:   "a name nothing in the repository defines",
-			Phrase: name,
-			Line:   lineNaming(blocks, name),
-		})
+	var scans []scanned
+	var allHits []Hit
+	for _, u := range writeUnits(in.ToolName, ti, raw) {
+		blocks := AddedBlocks(ti.FilePath, u.text)
+		if len(blocks) == 0 {
+			continue
+		}
+		hits := FindTombstones(blocks, limit)
+		for _, name := range DeadReferents(ti.FilePath, u.text, blocks) {
+			hits = append(hits, hitForName(blocks, name))
+		}
+		if len(hits) == 0 {
+			continue
+		}
+		if isDoc {
+			// A document line is a paragraph, not a sentence: the org's own
+			// no-hard-wrap convention means several sentences often share
+			// one raw line, so deleting the line can take a keeper with it.
+			// Never guess at the sentence boundary; always send this back.
+			for i := range hits {
+				hits[i].Strippable = false
+			}
+		}
+		scans = append(scans, scanned{u: u, hits: hits})
+		allHits = append(allHits, hits...)
 	}
-	if len(hits) == 0 {
+	if len(allHits) == 0 {
 		return ""
 	}
-	return deny(reason(ti.FilePath, hits))
+
+	for _, h := range allHits {
+		if !h.Strippable {
+			return deny(reason(ti.FilePath, allHits))
+		}
+	}
+	return strip(ti.FilePath, raw, scans, allHits)
 }
 
-// added joins the text this write puts into the file.
-func added(ti toolInput) string {
-	parts := []string{ti.Content, ti.NewString}
-	for _, e := range ti.Edits {
-		parts = append(parts, e.NewString)
+// scanned pairs a unit with the hits found in its own text.
+type scanned struct {
+	u    unit
+	hits []Hit
+}
+
+// strip deletes every hit's source line from its own unit and returns the
+// allow-with-updatedInput response. It is reached only once every hit in
+// scans has already been proven strippable.
+func strip(path string, raw map[string]any, scans []scanned, hits []Hit) string {
+	var removed []string
+	seen := set.New[string]()
+	for _, s := range scans {
+		drop := set.New[int]()
+		for _, h := range s.hits {
+			drop.Add(h.LineNo)
+		}
+		lines := strings.Split(s.u.text, "\n")
+		var kept []string
+		for i, line := range lines {
+			if drop.Contains(i) {
+				trimmed := strings.TrimSpace(line)
+				if !seen.Contains(trimmed) {
+					seen.Add(trimmed)
+					removed = append(removed, trimmed)
+				}
+				continue
+			}
+			kept = append(kept, line)
+		}
+		s.u.apply(strings.Join(kept, "\n"))
 	}
-	return strings.Join(parts, "\n")
+
+	updated, err := json.Marshal(raw)
+	if err != nil {
+		return deny(reason(path, hits))
+	}
+	var res response
+	res.HookSpecificOutput.HookEventName = "PreToolUse"
+	res.HookSpecificOutput.UpdatedInput = updated
+	res.HookSpecificOutput.AdditionalContext = stripNotice(path, removed)
+	out, err := json.Marshal(res)
+	if err != nil {
+		return deny(reason(path, hits))
+	}
+	return string(out)
+}
+
+// stripNotice is said once, so the model knows the write went through with
+// less in it than it asked for, rather than discovering the file changed out
+// from under it.
+func stripNotice(path string, removed []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "no-tombstones: removed %d tombstone line(s) from %s before writing:\n", len(removed), path)
+	for _, line := range removed {
+		fmt.Fprintf(&b, "  %s\n", line)
+	}
+	return b.String()
 }
 
 func maxCommentLines() int {
@@ -130,19 +256,6 @@ func maxCommentLines() int {
 	return n
 }
 
-// lineNaming finds the comment line a dead name sits on, so the refusal can
-// quote it like every other finding.
-func lineNaming(blocks []Block, name string) string {
-	for _, b := range blocks {
-		for _, line := range strings.Split(b.Text, "\n") {
-			if strings.Contains(line, name) {
-				return strings.TrimSpace(line)
-			}
-		}
-	}
-	return name
-}
-
 func deny(why string) string {
 	var res response
 	res.HookSpecificOutput.HookEventName = "PreToolUse"
@@ -155,8 +268,8 @@ func deny(why string) string {
 	return string(out)
 }
 
-// reason is what the model is told: each finding with the tell that caught it,
-// where the text went, and the shape to write instead.
+// reason is what the model is told: each finding with the tell that caught
+// it, and the shape to write instead.
 func reason(path string, hits []Hit) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "blocked: this write adds a tombstone comment to %s.\n\n", path)
@@ -168,10 +281,6 @@ func reason(path string, hits []Hit) string {
 	// so the next write fixes six findings and is refused again.
 	if len(hits) > shown {
 		fmt.Fprintf(&b, "  ... and %d more, not listed.\n", len(hits)-shown)
-	}
-	if dest := Relocate(path, hits); dest != "" {
-		fmt.Fprintf(&b, "\nThe refused lines are appended to %s. Nothing is lost:\n"+
-			"put them in the commit message, where narrating a change belongs.\n", dest)
 	}
 	b.WriteString(remedy)
 	return b.String()
