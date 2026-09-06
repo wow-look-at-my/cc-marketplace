@@ -239,8 +239,12 @@ export function decide(raw: string): Decision {
   if (stuck.length > 0) return { reason: otherFileReason(stuck) };
 
   const rel = relativePath(filePath, cwd);
-  const judged = filePath !== "" && fileKind(rel) !== "other";
-  const repaired = judged ? repairInput(payload.tool_name, input) : undefined;
+  // MARKDOWN ONLY. The wrap rule belongs to ste-lint, which reads no other kind
+  // of file, and a line break outside prose is syntax. This repair joined the
+  // two lines of a YAML `concurrency:` block into `concurrency: group: release`
+  // and GitHub rejected the workflow before a single job started.
+  const repaired =
+    fileKind(rel) === "markdown" ? repairInput(payload.tool_name, input) : undefined;
 
   const found = blockingFindings(payload.tool_name, repaired ?? input, cwd);
   if (found.length > 0) {
