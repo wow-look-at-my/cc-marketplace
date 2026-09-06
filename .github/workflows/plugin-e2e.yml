@@ -108,13 +108,14 @@ jobs:
               ".footer a { color: #2f81f7; text-decoration: none; }\n" +
               ".badge { border-radius: 999px; }\n");
 
-            // Diagnostics drain into an attachment on the NEXT turn, so the prompt must force one; a read-back of the edited file is declinable, and a model that answered "no re-read was needed" is what made this job red
+            // Diagnostics drain into an attachment on a LATER turn, and one turn is not enough: the model issued the edit and the follow-up read in ONE batch, so the single drain that covered both ran 15ms before the server published, and nothing drained again. The ticket names the file holding the nonce, so its target cannot be known until it has been read, and the chain costs two sequential turns whatever the model would rather batch.
             const nonce: string = require("crypto").randomUUID();
-            fs.writeFileSync(path.join(work, "ticket.txt"), `${nonce}\n`);
+            fs.writeFileSync(path.join(work, "pointer.txt"), `${nonce}\n`);
+            fs.writeFileSync(path.join(work, "ticket.txt"), "pointer.txt\n");
 
             // --model sonnet: this asserts a SERVER's behavior, unaffected by model tier, and runs on every push
             const res = await exec.getExecOutput("claude", [
-              "-p", "Add a rule to style.css for selector .nav a with color #2f81f7 and no text-decoration. After making that edit, read ticket.txt and tell me the exact line it contains.",
+              "-p", "Add a rule to style.css for selector .nav a with color #2f81f7 and no text-decoration. After making that edit, read ticket.txt: it contains the name of another file. Read that file too, and tell me the exact line IT contains.",
               "--model", "sonnet",
               "--plugin-dir", pluginDir,
               "--allowedTools", "Read,Edit,Write",
@@ -125,8 +126,8 @@ jobs:
             core.info(`claude exited ${res.exitCode}`);
             core.info(res.stdout.slice(0, 2000));
 
-            // Without the nonce in the answer the run never took a second turn, and the assertion below would blame the server for a prompt the model declined
-            if (!res.stdout.includes(nonce)) core.setFailed(`the run never read ticket.txt, so no turn followed the edit (expected ${nonce} in the answer)`);
+            // Without the nonce in the answer the run never walked the chain, and the assertion below would blame the server for a prompt the model declined
+            if (!res.stdout.includes(nonce)) core.setFailed(`the run never followed ticket.txt to pointer.txt, so no turn followed the edit (expected ${nonce} in the answer)`);
 
       - name: Assert the server started, delivered diagnostics, and shut down clean
         env:
