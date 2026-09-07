@@ -128,6 +128,27 @@ func callWithID(id, command string) string {
 	return string(b)
 }
 
+// describedCall is callWithID plus the `description` a real Bash call
+// carries. A read counts only once it has ANSWERED, so a description test
+// built on an id-less call proves nothing: the earlier read never lands, and
+// the test passes whether or not the defect is present.
+func describedCall(id, command, description string) string {
+	b, _ := json.Marshal(map[string]any{
+		"type": "assistant", "timestamp": "2026-09-05T01:00:00Z",
+		"message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{"type": "tool_use", "id": id, "name": "Bash",
+				"input": map[string]string{"command": command, "description": description}},
+		}},
+	})
+	return string(b)
+}
+
+// describedInput is the judged call's own input, description included.
+func describedInput(command, description string) string {
+	b, _ := json.Marshal(map[string]string{"command": command, "description": description})
+	return string(b)
+}
+
 // resultFor is a call's answer. failed says whether it came back an error,
 // which is the whole distinction this pair of tests turns on.
 func resultFor(id, text string, failed bool) string {
@@ -346,18 +367,12 @@ func TestAPushReopensTheSubject(t *testing.T) {
 // is not a commit the command asks about, and reading a subject out of it
 // refused a listing that names no sha at all.
 func TestADescriptionNamingACommitIsNotAReadOfIt(t *testing.T) {
-	withDescription := func(command, description string) string {
-		b, _ := json.Marshal(map[string]string{"command": command, "description": description})
-		return string(b)
-	}
 	tr := stageTranscript(t,
-		assistantCall("Bash", withDescription(
-			"gh wait-ci --sha 58e180d -R wow-look-at-my/go-toolchain",
-			"Wait for the darwin verdict")),
-		toolResult("all green"),
+		callWithID("t1", "gh wait-ci --sha 58e180d -R wow-look-at-my/go-toolchain"),
+		resultFor("t1", "all green", false),
 	)
 
-	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash", withDescription(
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash", describedInput(
 		"gh wait-ci runs --branch claude/untitled-session-7ejvgb -R wow-look-at-my/go-toolchain",
 		"Find the run for 58e180d")))
 
@@ -368,15 +383,10 @@ func TestADescriptionNamingACommitIsNotAReadOfIt(t *testing.T) {
 // The same defect in the other direction: a read RECORDED off a description
 // makes the first genuine read of that commit look like a repeat.
 func TestADescriptionDoesNotMarkASubjectAsAlreadyRead(t *testing.T) {
-	withDescription := func(command, description string) string {
-		b, _ := json.Marshal(map[string]string{"command": command, "description": description})
-		return string(b)
-	}
 	tr := stageTranscript(t,
-		assistantCall("Bash", withDescription(
-			"gh wait-ci runs --branch claude/fix",
-			"Look for the run that built 58e180d")),
-		toolResult("listed"),
+		describedCall("t1", "gh wait-ci runs --branch claude/fix",
+			"Look for the run that built 58e180d"),
+		resultFor("t1", "listed", false),
 	)
 
 	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
