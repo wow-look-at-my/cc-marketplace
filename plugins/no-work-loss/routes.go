@@ -24,6 +24,9 @@ type write struct {
 	// write denies wherever it runs: fail closed means an unresolvable target is
 	// treated as the worst one.
 	opaque string
+	// fromScript marks a write read out of a script FILE. classify stamps it,
+	// so no route below has to remember to.
+	fromScript bool
 }
 
 // classify returns every write a segment performs. A segment naming no write
@@ -32,6 +35,22 @@ type write struct {
 // generator writes what it writes. What it does close is every route where the
 // command text itself performs or directs the write.
 func classify(seg segment, roots []string, aliases *aliasResolver, depth int) []write {
+	return stampScriptWrites(classifyRoutes(seg, roots, aliases, depth), seg.fromScript)
+}
+
+// stampScriptWrites records where a write came from, in one place, so a route
+// added later inherits the answer instead of forgetting it.
+func stampScriptWrites(out []write, fromScript bool) []write {
+	if !fromScript {
+		return out
+	}
+	for i := range out {
+		out[i].fromScript = true
+	}
+	return out
+}
+
+func classifyRoutes(seg segment, roots []string, aliases *aliasResolver, depth int) []write {
 	out := redirectWrites(seg)
 	if len(seg.argv) == 0 {
 		return out

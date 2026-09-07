@@ -30,7 +30,13 @@ type record struct {
 	// that errored returned no state, so re-asking is the FIRST read of that
 	// subject rather than a repeat of one.
 	failed []string
-	raw    string
+	// answered names every tool_use id a result has arrived for, error or
+	// not. A call with NO result carries no state either: it is in flight, or
+	// its result is not on disk yet when the next call's hook reads the
+	// transcript. Counting one as a read refuses the retry of a call that
+	// just failed.
+	answered []string
+	raw      string
 }
 
 // wakeMarkers are the envelopes the harness delivers when something really
@@ -86,7 +92,11 @@ func parseRecords(path string) []record {
 			var blocks []rawBlock
 			if json.Unmarshal(rec.Message.Content, &blocks) == nil {
 				for _, b := range blocks {
-					if b.Type == "tool_result" && b.IsError && b.ToolUseID != "" {
+					if b.Type != "tool_result" || b.ToolUseID == "" {
+						continue
+					}
+					r.answered = append(r.answered, b.ToolUseID)
+					if b.IsError {
 						r.failed = append(r.failed, b.ToolUseID)
 					}
 				}
@@ -106,10 +116,19 @@ func parseRecords(path string) []record {
 	return out
 }
 
-// callText is the text a subject is read out of: the tool name plus its
-// input. One string means one extractor serves a Bash command line and an
-// MCP tool's JSON arguments alike.
+// callText is the text a subject is read out of. For an MCP tool that is the
+// whole input, whose fields ARE the question. A Bash call is the exception:
+// its input carries a `description` written for a human, and a subject read
+// out of that is a subject the command never asked about.
+//
+// Measured live. `gh wait-ci runs --branch <b>` described as "Find the run
+// for 58e180d" was refused as a repeat read of 58e180d, a commit its command
+// does not name. The same defect marks a subject READ from a description, so
+// the first genuine read of it is then refused as a repeat.
 func callText(c toolCall) string {
+	if strings.EqualFold(c.name, "bash") {
+		return c.name + " " + commandOf(c.input)
+	}
 	return c.name + " " + string(c.input)
 }
 

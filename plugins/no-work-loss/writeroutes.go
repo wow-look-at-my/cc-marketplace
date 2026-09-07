@@ -103,12 +103,24 @@ func analyzeWrites(command, cwd string) string {
 
 // judgeWrite turns one write into a verdict. Every branch that cannot resolve a
 // target denies: a path this hook cannot name is a path it cannot clear.
+// A write read out of a script FILE is the exception. There the unresolvable
+// target belongs to a program this hook runs rather than to the command text,
+// and it already declines to sandbox what it starts. Denying it made an
+// ordinary `./make.bash` unrunnable. A target the script names statically is
+// still judged, so following a script still closes the write-elsewhere-then-run
+// bypass.
 func judgeWrite(w write, roots []string) string {
 	if w.opaque != "" {
+		if w.fromScript {
+			return ""
+		}
 		return "blocked: " + w.route + " runs " + w.opaque + ". " + useTheTools
 	}
 	if w.whole {
 		if w.dir == unknownDirText {
+			if w.fromScript {
+				return ""
+			}
 			return "blocked: " + w.route + " writes into a directory that is not statically known, so this hook cannot tell whether it lands in the working tree. " + useTheTools
 		}
 		if root, hit := coversGuarded(roots, w.dir); hit {
@@ -118,10 +130,16 @@ func judgeWrite(w write, roots []string) string {
 	}
 	for _, p := range w.paths {
 		if !p.static {
+			if w.fromScript {
+				continue
+			}
 			return "blocked: " + w.route + " writes a path built from an expansion (" + p.text + "), so this hook cannot tell whether it lands in the working tree. " + useTheTools
 		}
 		abs := abs(w.dir, p.text)
 		if abs == "" {
+			if w.fromScript {
+				continue
+			}
 			return "blocked: " + w.route + " writes " + p.text + ", which resolves against a directory that is not statically known. " + useTheTools
 		}
 		if isProtectedConfig(abs) {

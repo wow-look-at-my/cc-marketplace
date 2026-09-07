@@ -39,6 +39,23 @@ func analyze(command, cwd string) (string, []string) {
 }
 
 func classifySegment(seg segment, aliases *aliasResolver, depth int) []*finding {
+	return stampScript(classifyVerbs(seg, aliases, depth), seg.fromScript)
+}
+
+// stampScript records where a finding came from. Doing it here rather than in
+// each rule means a new rule inherits the answer instead of forgetting it, and
+// an alias expanded out of a script keeps its origin.
+func stampScript(out []*finding, fromScript bool) []*finding {
+	if !fromScript {
+		return out
+	}
+	for _, f := range out {
+		f.fromScript = true
+	}
+	return out
+}
+
+func classifyVerbs(seg segment, aliases *aliasResolver, depth int) []*finding {
 	out := classifyFS(seg)
 	if len(seg.argv) == 0 || commandName(seg.argv[0].text) != "git" {
 		return out
@@ -75,7 +92,7 @@ func judge(f *finding, cache *repoCache) (deny, notice string) {
 	// an ordinary build of a Go toolchain. A STATIC path inside a script is
 	// still judged, so the write-elsewhere-then-run bypass stays closed.
 	for _, p := range f.paths {
-		if !p.static {
+		if !p.static && !f.fromScript {
 			return fmt.Sprintf("blocked: %s targets a path this hook cannot resolve (%s), so what it would delete is unknown."+
 				"\nrun: %s", f.label, describeUnresolved(p), f.rewrite), ""
 		}

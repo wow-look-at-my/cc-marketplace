@@ -35,6 +35,10 @@ type segment struct {
 	// stdinScript marks a stage fed its input by a pipe or a heredoc. An
 	// interpreter in that position is running a script nothing can resolve.
 	stdinScript bool
+	// fromScript marks a unit read out of a script FILE rather than out of the
+	// command text. The program's own writes are the program's behaviour, which
+	// this hook does not sandbox.
+	fromScript bool
 }
 
 var repoRelocatingEnv = set.Of[string]("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE")
@@ -68,7 +72,11 @@ type walker struct {
 	blockers    []string
 	depth       int
 	scriptDepth int
-	piped       bool
+	// fileDepth counts how deep the walk stands inside a script FILE run as a
+	// NEW shell. An alias body, a `sh -c` string and a sourced file all borrow
+	// the caller's scope, so none of them raises it.
+	fileDepth int
+	piped     bool
 	// vars holds every variable this hook has proven holds one static value,
 	// built up in execution order as the walk reaches each safe assignment.
 	// unsafeVars names what must never enter it; varsDisabled turns the
@@ -233,7 +241,7 @@ func (w *walker) command(c syntax.Command, cwd *string, rs []redirTarget, stdin 
 // `{ ...; } > f` and `(...) > f` truncate f with no command word of their own.
 func (w *walker) bare(rs []redirTarget, cwd string) {
 	if len(rs) > 0 {
-		w.segs = append(w.segs, segment{cwd: cwd, redirs: rs})
+		w.segs = append(w.segs, segment{cwd: cwd, redirs: rs, fromScript: w.fileDepth > 0})
 	}
 }
 
@@ -310,6 +318,7 @@ func (w *walker) call(c *syntax.CallExpr, cwd *string, rs []redirTarget, stdin b
 	w.segs = append(w.segs, segment{
 		argv: eff, cwd: *cwd, redirs: rs,
 		relocated: relocated, stdinScript: stdin,
+		fromScript: w.fileDepth > 0,
 	})
 }
 
@@ -447,6 +456,13 @@ func (w *walker) scriptFile(f word, cwd string, fresh bool) {
 	if fresh {
 		self = path
 	}
+	// Only a NEW shell counts as a program of its own. A sourced file runs in
+	// the caller's scope and its text is the caller's text, so it stays judged
+	// exactly like the command that named it.
+	if fresh {
+		w.fileDepth++
+		defer func() { w.fileDepth-- }()
+	}
 	w.script(string(src), cwd, "the script "+f.text, self)
 }
 
@@ -489,7 +505,7 @@ func (w *walker) emit(argv []word, cwd string) {
 	if w.expand(commandName(eff[0].text), eff, cwd) {
 		return
 	}
-	w.segs = append(w.segs, segment{argv: eff, cwd: cwd})
+	w.segs = append(w.segs, segment{argv: eff, cwd: cwd, fromScript: w.fileDepth > 0})
 }
 
 // A command substitution runs its own shell, so its cd is contained, but the
