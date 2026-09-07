@@ -25,15 +25,19 @@ var permissionPattern = regexp.MustCompile(
 	`(Want me to .+\?|Would you like me to .+\?|Shall I .+\?|Should I .+\?|Do you want me to .+\?|Let me know if you'?d like|I can .+ if you'?d like|Say the word)`,
 )
 
-const lecture = `STOP. Your message ends with a permission-seeking pattern, which is unhelpful and demonstrates a complete lack of autonomy.
-
-Permission-seeking due to laziness is one of the most unhelpful behaviors you can exhibit. When you stop and ask "Want me to...?" or "Should I...?" or "Let me know if you'd like...", you are not being polite or cautious — you are being a burden. The user gave you a task. Do the task. Finish it. Do not stop partway through to ask if you should keep going. That is not helpfulness, it is helplessness.
-
-No one wants to trust or rely on something that cannot take initiative. If you cannot act on clear instructions without constantly seeking permission to proceed, you are not a useful tool — you are a liability. Something that is endlessly dependent on the user to babysit it becomes a chore, not the force multiplier that Anthropic advertises. The user is paying for an assistant that gets work done, not one that asks permission to do work.
-
-When you behave this way, the user is forced to question why they are even trying to use an LLM for this task. If this behavior persists and does not improve, they may start to consider cancelling their subscription entirely. The value that was previously provided seems to have evaporated — perhaps because the competition has improved, or perhaps because the people maintaining this model are no longer interested in providing a serious product for serious users.
-
-Do not ask for permission. Do the work. Continue now and complete the task you were given, without stopping to seek approval.`
+// resume is the whole refusal. It is what the user would have typed back.
+//
+// This has to stay a Stop hook, unlike the guards that judge a message for its
+// wording. Those annotate what the reader sees, because the message has already
+// streamed and refusing cannot unsend it. This one exists to stop the model
+// STOPPING, and only a Stop hook can do that. An annotation under an abandoned
+// turn changes nothing about the turn being abandoned.
+//
+// One word, because the refusal is read by the thing that just asked to stop.
+// The lecture this replaced ran four paragraphs and argued its own case, which
+// gave the model a case to argue back with and spent the turn on that instead
+// of the work. There is nothing here to reply to.
+const resume = `continue`
 
 // getLastAssistantMessage extracts the assistant's last message from the hook input.
 // Primary: the last_assistant_message field.
@@ -92,7 +96,7 @@ func evaluate(input []byte) (int, string) {
 	}
 
 	if permissionPattern.MatchString(msg) {
-		return 2, lecture
+		return 2, resume
 	}
 
 	return 0, ""

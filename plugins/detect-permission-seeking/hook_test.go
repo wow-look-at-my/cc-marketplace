@@ -24,8 +24,9 @@ func TestBlockWantMeTo(t *testing.T) {
 		LastAssistantMessage: "I've analyzed the code. Want me to refactor it?",
 	})
 	assert.Equal(t, 2, code)
-	assert.Contains(t, msg, "permission-seeking")
-	assert.Contains(t, msg, "autonomy")
+	// The refusal is the one word the user would have typed back. Anything
+	// longer is a case the model can argue with instead of doing the work.
+	assert.Equal(t, "continue", msg)
 }
 
 func TestBlockWouldYouLike(t *testing.T) {
@@ -34,7 +35,7 @@ func TestBlockWouldYouLike(t *testing.T) {
 		LastAssistantMessage: "Here's what I found. Would you like me to fix these issues?",
 	})
 	assert.Equal(t, 2, code)
-	assert.Contains(t, msg, "permission-seeking")
+	assert.Equal(t, "continue", msg)
 }
 
 func TestBlockShallI(t *testing.T) {
@@ -134,7 +135,7 @@ func TestTranscriptFallback(t *testing.T) {
 		TranscriptPath: transcript,
 	})
 	assert.Equal(t, 2, code)
-	assert.Contains(t, msg, "permission-seeking")
+	assert.Equal(t, "continue", msg)
 }
 
 func TestTranscriptFallbackContentField(t *testing.T) {
@@ -182,5 +183,5 @@ func TestRunFromReader(t *testing.T) {
 
 	code, msg := run(strings.NewReader(string(data)))
 	assert.Equal(t, 2, code)
-	assert.Contains(t, msg, "permission-seeking")
+	assert.Equal(t, "continue", msg)
 }

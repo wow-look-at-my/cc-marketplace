@@ -1,7 +1,7 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "detect-permission-seeking",
-	"description": "Detects permission-seeking patterns in assistant messages and blocks the stop with a lecture about autonomy",
+	"description": "Refuses a stop whose closing message asks permission to keep going, answering with the one word the user would have typed",
 	"author": {
 		"name": "mhaynie"
 	},
