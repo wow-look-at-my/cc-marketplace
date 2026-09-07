@@ -54,28 +54,78 @@ def has_heredoc:
   | length > 0;
 
 # ---------------------------------------------------------------------------
-# Rule: scrub stderr-to-/dev/null redirections -- everywhere in the tree,
-# including inside command substitutions. Only fd 2 with > or >> and a
-# target that is exactly /dev/null (bare, single-quoted, or double-quoted).
-# String literals that merely CONTAIN the text are words, not Redirect
-# nodes, so they are untouched by construction.
+# Rule: scrub the stderr discard -- everywhere in the tree, including inside
+# command substitutions, subshells and loop bodies. stderr is how a command
+# reports its own failure, so a discarded stderr turns every command into two:
+# the command, and a second call asking whether it worked. Only a target that
+# is exactly /dev/null (bare, single-quoted, or double-quoted) counts. String
+# literals that merely CONTAIN the text are words, not Redirect nodes, so they
+# are untouched by construction.
+#
+# Four shapes, and what each becomes:
+#   2>/dev/null, 2>>/dev/null   -> dropped outright
+#   &>/dev/null, &>>/dev/null   -> demoted to >/dev/null, >>/dev/null
+#   >&/dev/null                 -> demoted to >/dev/null
+#   >/dev/null 2>&1             -> the 2>&1 is dropped, >/dev/null kept
+# A demotion keeps the stdout half the command asked for and frees only
+# stderr. Silencing a chatty command's output is legitimate; blinding
+# yourself to its errors is the defect.
+#
+# 2>&1 on its own is a MERGE, not a discard, and survives. It is dropped only
+# when an EARLIER redirect in the same list already sent stdout to /dev/null,
+# which is the only arrangement where it discards. The reversed spelling
+# (2>&1 >/dev/null) sends stderr to the terminal and is left alone, which the
+# positional walk gets right for free. A redirect of fd 2 to a real file is
+# not a discard either.
 # ---------------------------------------------------------------------------
 
-def is_devnull_target:
+def word_is($v):
   ((.Parts? // []) | length) == 1 and
   (.Parts[0] as $p |
-    (($p.Type == "Lit" or $p.Type == "SglQuoted") and $p.Value == "/dev/null")
+    (($p.Type == "Lit" or $p.Type == "SglQuoted") and $p.Value == $v)
     or ($p.Type == "DblQuoted" and (($p.Parts // []) | length) == 1
-        and $p.Parts[0].Type == "Lit" and $p.Parts[0].Value == "/dev/null"));
+        and $p.Parts[0].Type == "Lit" and $p.Parts[0].Value == $v));
+
+def is_devnull_target: word_is("/dev/null");
 
 def is_stderr_devnull:
   (.N.Value? == "2")
   and (.Op == $ops.gt or .Op == $ops.app)
   and (.Word | is_devnull_target);
 
+# &>/dev/null, &>>/dev/null and >&/dev/null all discard both streams.
+def is_all_devnull:
+  (.N == null)
+  and (.Op == $ops.rdrall or .Op == $ops.appall or .Op == $ops.dup)
+  and (.Word | is_devnull_target);
+
+def demote_all_devnull:
+  .Op = (if .Op == $ops.appall then $ops.app else $ops.gt end);
+
+def is_stdout_devnull:
+  ((.N == null) or (.N.Value? == "1"))
+  and (.Op == $ops.gt or .Op == $ops.app)
+  and (.Word | is_devnull_target);
+
+def is_stderr_to_stdout:
+  (.N.Value? == "2") and (.Op == $ops.dup) and (.Word | word_is("1"));
+
+# One positional pass over a Redirs list: order decides whether a trailing
+# 2>&1 lands in /dev/null or on the terminal.
+def scrub_redirs:
+  reduce .[] as $r ({out: [], sawnull: false};
+    if ($r | is_stderr_devnull) then .
+    elif ($r | is_all_devnull)
+      then .out += [$r | demote_all_devnull] | .sawnull = true
+    elif ($r | is_stdout_devnull) then .out += [$r] | .sawnull = true
+    elif (.sawnull and ($r | is_stderr_to_stdout)) then .
+    else .out += [$r]
+    end)
+  | .out;
+
 def scrub_devnull:
   walk(if type == "object" and has("Redirs")
-    then .Redirs |= map(select(is_stderr_devnull | not))
+    then .Redirs |= scrub_redirs
     else . end);
 
 # ---------------------------------------------------------------------------

@@ -205,6 +205,51 @@ check_rewrite "literal-string carrier containing 2>/dev/null untouched" \
 	': "silence with 2>/dev/null here"' \
 	': "silence with 2>/dev/null here"'
 
+# The both-streams spellings are DEMOTED, not dropped: the stdout discard the
+# command asked for survives and only stderr is freed.
+check_rewrite "&>/dev/null demoted to >/dev/null" \
+	'ls /nope &>/dev/null' \
+	'ls /nope >/dev/null'
+
+check_rewrite "&>>/dev/null demoted to >>/dev/null" \
+	'ls /nope &>>/dev/null' \
+	'ls /nope >>/dev/null'
+
+check_rewrite ">&/dev/null demoted to >/dev/null" \
+	'ls /nope >&/dev/null' \
+	'ls /nope >/dev/null'
+
+check_rewrite ">/dev/null 2>&1 keeps the stdout discard" \
+	'ls /nope >/dev/null 2>&1' \
+	'ls /nope >/dev/null'
+
+# Reversed, 2>&1 sends stderr to the terminal rather than to /dev/null, so
+# the positional walk must leave the whole thing alone.
+check_rewrite "2>&1 before the stdout discard survives" \
+	'ls /nope 2>&1 >/dev/null' \
+	'ls /nope 2>&1 >/dev/null'
+
+# Negative controls: a merge is not a discard, and a real file is not
+# /dev/null. (2>&1 is tested off the final statement, where the separate
+# trailing-2>&1 rule does not reach it.)
+check_rewrite "bare 2>&1 is a merge and survives" \
+	'git status 2>&1; git log' \
+	$'git status 2>&1\ngit log'
+
+check_rewrite "stderr to a real file survives" \
+	'ls /nope 2>errors.log' \
+	'ls /nope 2>errors.log'
+
+check_rewrite "stderr appended to a real file survives" \
+	'ls /nope 2>>errors.log' \
+	'ls /nope 2>>errors.log'
+
+# The reported incident: the discard sits inside a subshell inside a loop
+# body, which is why this rule is tree-wide rather than last-statement.
+check_rewrite "discard inside a subshell inside a loop body" \
+	'for d in a b; do (cd "$d" && git status -sb 2>/dev/null); done' \
+	'for d in a b; do (cd "$d" && git status -sb); done'
+
 # --- Heredocs: banned outright (deny beats everything, incl. pipefail) ---
 
 check_deny "plain heredoc denied" \
@@ -247,9 +292,8 @@ check_rewrite "stdout >/dev/null untouched by scrub and tee" \
 	'ls >/dev/null' \
 	'ls >/dev/null'
 
-check_rewrite "&>/dev/null untouched" \
-	'noisy &>/dev/null' \
-	'noisy &>/dev/null'
+# &>/dev/null is NOT a non-goal any more: it discards stderr too, so it is
+# demoted to a stdout-only discard above.
 
 check_rewrite "spaced fd (2 >/dev/null) is a stdout-to-/dev/null discard" \
 	'echo 2 >/dev/null' \
@@ -441,6 +485,11 @@ check_rewrite_raw "multi-line mix of all rules (set -e preserved)" \
 
 check_deny_read "direct head after cd && (the incident)" \
 	'cd /Users/mhaynie/repos/model-benchmark-ue5/model-benchmark && head -60 src/usage.test.ts'
+# head/tail/sed -n are reached for to read PART of a file, so naming the Read
+# tool alone leaves the reader without the thing they came for.
+check_deny_reason "file-read deny names Read's offset and limit parameters" \
+	'head -60 src/usage.test.ts' \
+	'offset and limit'
 # `sed -n` selecting lines is the same file read as head/tail, in the spelling
 # that used to walk around the rule. Without -n, sed transforms its input and
 # is left alone.

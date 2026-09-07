@@ -11,7 +11,11 @@
 # move-to-recycle-bin (shred/srm, git rm on the working tree, a zero-size
 # truncate carrying another flag, and an rm carrying a flag that does not
 # translate) are DENIED outright. Otherwise the tree is rewritten:
-# scrub stderr-to-/dev/null redirects everywhere; rewrite every `rm` (and
+# scrub the stderr discard everywhere -- 2>/dev/null and 2>>/dev/null are
+# dropped, the both-streams spellings (&>/dev/null, &>>/dev/null,
+# >&/dev/null, and >/dev/null 2>&1) are demoted to a stdout-only discard, and
+# a bare 2>&1 or a redirect of fd 2 to a real file is left alone; rewrite
+# every `rm` (and
 # `xargs rm`) as `recycler trash`, a zero-size `truncate` the same way, and
 # find's `-delete` primary as `-exec recycler trash {} +`, so deletion is
 # non-destructive by
@@ -84,7 +88,7 @@ cmd=$(printf '%s' "$input" | jq -r 'if (.tool_name? == "Bash") then (.tool_input
 # at known paths. The numbers differ between shfmt versions ("|" is 12 in
 # v3.8.0 but 13 in v3.13.1), so they can never be hardcoded. The last two
 # statements probe the heredoc operators (<< and <<-).
-probe=$(printf '%s' $': 2>/dev/null\n: 2>>/dev/null\n: 2>&1\n: && :\n: || :\n: | :\n: |& :\n: <<CBC_A\nCBC_A\n: <<-CBC_B\nCBC_B' | shfmt --to-json 2>&1) || exit 0
+probe=$(printf '%s' $': 2>/dev/null\n: 2>>/dev/null\n: 2>&1\n: && :\n: || :\n: | :\n: |& :\n: <<CBC_A\nCBC_A\n: <<-CBC_B\nCBC_B\n: &>/dev/null\n: &>>/dev/null' | shfmt --to-json 2>&1) || exit 0
 ops=$(printf '%s' "$probe" | jq -c '{
 	gt: .Stmts[0].Redirs[0].Op,
 	app: .Stmts[1].Redirs[0].Op,
@@ -94,7 +98,9 @@ ops=$(printf '%s' "$probe" | jq -c '{
 	pipe: .Stmts[5].Cmd.Op,
 	pipeall: .Stmts[6].Cmd.Op,
 	hdoc: .Stmts[7].Redirs[0].Op,
-	dashhdoc: .Stmts[8].Redirs[0].Op
+	dashhdoc: .Stmts[8].Redirs[0].Op,
+	rdrall: .Stmts[9].Redirs[0].Op,
+	appall: .Stmts[10].Redirs[0].Op
 }' 2>&1) || exit 0
 printf '%s' "$ops" | jq -e 'all(.[]; type == "number")' >/dev/null 2>&1 || exit 0
 
@@ -151,7 +157,7 @@ if [ "$deny" = "true" ]; then
 		reason="perl is banned in this environment."
 		;;
 	file_read)
-		reason="Reading files with cat/head/tail, or with sed -n selecting lines, is banned in this environment. Use the Read tool instead. Only /proc, /sys, and /dev pseudo-files are exempt."
+		reason="Reading files with cat/head/tail, or with sed -n selecting lines, is banned in this environment. Use the Read tool instead: its offset and limit parameters read part of a file, which is what head/tail/sed -n were reached for. Only /proc, /sys, and /dev pseudo-files are exempt."
 		;;
 	shred)
 		reason="shred/srm destroy data unrecoverably by design and are banned in this environment. There is no safe equivalent; if the file must go, use recycler trash <path> and it can be restored."
