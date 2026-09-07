@@ -1,8 +1,7 @@
 #!/bin/sh
-# Fetch the slopfix binary the common-checks plugin runs, and prove it answers
-# before the plugin is allowed to ship.
+# Fetch the slopfix binary a plugin runs, and prove it answers before the plugin
+# is allowed to ship.
 #
-# This is the sibling of vendor-slopfmt.sh, and it exists for the same reason.
 # A plugin that names its binary as a bare word and lets PATH find it travels on
 # a separate track from that binary: a plugin calling a subcommand its installed
 # binary predates reports nothing at all, and nothing says so. Swallowing the
@@ -12,9 +11,15 @@
 # So the binary ships INSIDE the plugin, and this script is the gate. A fetch
 # failure, a wrong file, or a binary that cannot answer the contract all fail
 # the build.
+#
+# This was vendor-slopfmt.sh, naming the project slopfmt. buildhost still serves
+# that name, so a fetch of it succeeds and hands back a binary frozen before the
+# rename. The `report` probe below is what refuses one: that subcommand exists
+# only after the rename, so an old build cannot pass this gate quietly.
 set -eu
 
-plugin_dir=${1:?usage: vendor-slopfix.sh <plugin-dir>}
+plugin_dir=${1:?usage: vendor-slopfix.sh <plugin-dir> [hook-rule...]}
+shift
 
 # An APE runs on every platform this marketplace targets, so one file covers
 # them all and `release-plugin` stages it as the plugin's own binary.
