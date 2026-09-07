@@ -1,17 +1,12 @@
-// The adapters. Each one asks a vendored check the same question CI asks it,
-// then turns the answer into something a diagnostic can point at.
+// The adapter. It asks slopfix the question CI asks it, and turns the answer
+// into something a diagnostic can point at.
 //
-// A rule is never restated here. Every verdict comes out of `../vendor`, which
-// a build re-fetches from wow-look-at-my/actions. What this file adds is the
-// two things a check written for CI has no reason to produce: a file kind that
-// says which checks even apply, and a LINE for a finding whose CI form only
-// ever named a file.
+// A rule is never restated here. Every verdict comes out of the slopfix binary
+// this plugin ships, which is the binary the org's common-checks gate runs.
+// What this file adds is the one thing a check invoked from a workflow has no
+// reason to produce: a file kind that says which checks even apply.
 
-import * as commentBlock from "../vendor/yaml-comment-block/scan.ts";
-import * as testsInYaml from "../vendor/no-tests-in-yaml/scan.ts";
-import * as allBuildsJob from "../vendor/no-all-builds-job/detect.ts";
-import * as steLint from "../vendor/ste-lint/lint.ts";
-import * as steGuard from "../vendor/ste-lint/guard.ts";
+import {report} from "./slopfix.ts";
 
 export interface Finding {
   /** The check that produced this, used as the diagnostic's `code`. */
@@ -43,110 +38,64 @@ export function fileKind(relativePath: string): FileKind {
 // document and the structural checks produce one or two. The client injects
 // only the first handful, so a voluminous check must never crowd out a
 // structural one.
-// This doubles as the coverage claim: every check named here has an adapter
-// below, and `checks.test.ts` holds it against the manifest the build vendored
-// from. A check whose modules are fetched but which nothing calls would
-// otherwise ship as silent non-coverage.
+// This doubles as the coverage claim: every check named here is one this
+// plugin reports, and `checks.test.ts` holds it against the manifest the build
+// read from upstream. A check upstream runs and this plugin neither reports
+// nor declares uncovered would otherwise ship as silent non-coverage.
 export const ADAPTED = ["no-all-builds-job", "yaml-comment-block", "no-tests-in-yaml", "ste-lint"];
+
+/**
+ * The checks upstream runs that no open file can violate, and why.
+ *
+ * Together with ADAPTED this is the whole claim: every check the manifest names
+ * sits in exactly one of the two lists. Naming one here is a declared gap,
+ * which is the honest alternative to reimplementing a rule this plugin must
+ * not own.
+ */
+export const UNCOVERED: Record<string, string> = {
+  "run-once": "it claims the workflow run for one job. There is no rule a file can break.",
+  "push-excludes-tags":
+    "its rule is an inline script inside a composite action, which nothing imports and slopfix does not " +
+    "carry. Reimplementing it here is the one thing this plugin must never do.",
+};
+
+/**
+ * Each slopfix rule the org's gate enforces, and the common-checks step that
+ * runs it. The step name is what a diagnostic carries as its `code`.
+ *
+ * This is a selection rather than a rule. slopfix reports more than the gate
+ * fails on -- `ste/count` is repaired by a different plugin and never fails
+ * common-checks -- and a diagnostic for a rule the merge gate ignores spends
+ * the client's budget on something nobody has to fix.
+ */
+const GATE_RULES: Record<string, string> = {
+  "yaml/all-builds-job": "no-all-builds-job",
+  "yaml/comment-block": "yaml-comment-block",
+  "yaml/test-in-workflow": "no-tests-in-yaml",
+  // ste-lint's own step carries the continue-on-error guard, so a finding
+  // there is reported under that step's name.
+  "yaml/neutered-gate": "ste-lint",
+  "ste/contraction": "ste-lint",
+  "ste/modal": "ste-lint",
+  "ste/semicolon": "ste-lint",
+  "ste/sentence-length": "ste-lint",
+  "ste/comma-splice": "ste-lint",
+  "wrap/hard-wrap": "ste-lint",
+};
 
 function rank(check: string): number {
   const index = ADAPTED.indexOf(check);
   return index === -1 ? ADAPTED.length : index;
 }
 
-/** 1-based line of the first source line matching `pattern`, or `fallback`. */
-function lineOf(lines: string[], pattern: RegExp, fallback: number): number {
-  const index = lines.findIndex((line) => pattern.test(line));
-  return index === -1 ? fallback : index + 1;
+/** The sentence a diagnostic carries, assembled from what slopfix reported. */
+function message(rule: string, detail?: string, fix?: string): string {
+  const quoted = detail ? ` ${JSON.stringify(detail)}` : "";
+  const repair = fix ? ` ${fix}` : "";
+  return `${rule}${quoted}.${repair}`;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function yamlCommentBlock(content: string): Finding[] {
-  return commentBlock.findCommentBlocks(content).map((block) => ({
-    check: "yaml-comment-block",
-    startLine: block.startLine,
-    endLine: block.endLine,
-    message:
-      `${block.lines} comment lines in a row -- the limit is ${commentBlock.MAX_COMMENT_LINES}. ` +
-      "Shorten this to one line. Say only what a reader needs right here.",
-  }));
-}
-
-function noTestsInYaml(content: string): Finding[] {
-  const findings: Finding[] = [];
-  for (const block of testsInYaml.findRunBlocks(content)) {
-    for (const finding of testsInYaml.findFindings(block)) {
-      findings.push({
-        check: "no-tests-in-yaml",
-        startLine: finding.line,
-        endLine: finding.line,
-        message: `a test in a workflow file [${finding.rule}] -- ${finding.remedy}`,
-      });
-    }
-  }
-  return findings;
-}
-
-// The upstream detector names the job, not the line it sits on: a CI
-// annotation only ever had a file to attach to. The verdict stays upstream and
-// only the cursor position is worked out here.
-function noAllBuildsJob(relativePath: string, content: string): Finding[] {
-  const lines = content.split(/\r?\n/);
-  return allBuildsJob.scanWorkflowYaml(relativePath, content).map((violation) => {
-    const key = escapeRegExp(violation.jobKey);
-    const anchor =
-      violation.via === "key"
-        ? new RegExp(`^\\s+${key}\\s*:`)
-        : new RegExp(`^\\s+name\\s*:\\s*['"]?${escapeRegExp(allBuildsJob.GUARDED_NAME)}`);
-    const line = lineOf(lines, anchor, 1);
-    return {
-      check: "no-all-builds-job",
-      startLine: line,
-      endLine: line,
-      message: allBuildsJob.formatViolation(`job ${violation.jobKey}`),
-    };
-  });
-}
-
-// A step allowed to fail is not a gate. The guard reports `uses: ... (line N)`,
-// so the line comes back out of its own text.
-function neuteredGate(content: string): Finding[] {
-  return steGuard.neuteredSteps(content).map((step) => {
-    const at = /\(line (\d+)\)\s*$/.exec(step);
-    const line = at ? Number(at[1]) : 1;
-    return {
-      check: "ste-lint",
-      startLine: line,
-      endLine: line,
-      message:
-        "this step runs common-checks under continue-on-error. A step allowed to fail is not a gate. " +
-        "Remove continue-on-error, or remove the step and say so out loud.",
-    };
-  });
-}
-
-// The one sentence each failing ste-lint bucket needs. The rule and the finding
-// are upstream; this is the wording a single diagnostic carries, where the CI
-// report groups every finding of a kind under one heading.
-const STE_REMEDIES: Record<string, string> = {
-  hardLong: "over the sentence-length cap. Split it.",
-  contractions: "STE bans contractions. Write the words out.",
-  bannedModals: 'STE bans "should"/"shall"/"could"/"might"/"would" -- use "must"/"must not", or "can".',
-  semicolons: "STE bans the semicolon. Use a period and start a new sentence.",
-  commaSplices: "a comma joining two clauses is the semicolon STE bans, spelled differently. Use a period.",
-  wrappedLines: "a paragraph is one line. Join it back up and let the reader's window wrap it.",
-};
-
-// Each failing bucket, in the order failureReport prints them.
-const STE_BUCKETS = ["hardLong", "contractions", "bannedModals", "semicolons", "commaSplices", "wrappedLines"] as const;
-
-// The word STE approves in place of each banned one. A contraction expands. A
-// banned modal maps onto "must" for obligation, "can" for possibility and
-// "will" for the future, which are the three the dictionary approves.
-const STE_WORD_FIX: Record<string, string> = {
+const DELETED_STE_WORD_FIX: Record<string, string> = {
   "can't": "cannot", "won't": "will not", "don't": "do not", "doesn't": "does not",
   "didn't": "did not", "isn't": "is not", "aren't": "are not", "wasn't": "was not",
   "weren't": "were not", "wouldn't": "will not", "shouldn't": "must not",
