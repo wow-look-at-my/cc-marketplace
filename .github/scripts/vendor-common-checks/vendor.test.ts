@@ -6,8 +6,6 @@ import {
   assertPlanCoversCheckSet,
   parseCheckSet,
   parseManifest,
-  stampHeader,
-  vendorPath,
 } from "./plan.ts";
 import { vendor } from "./main.ts";
 
@@ -61,15 +59,14 @@ class FakeClient implements Client {
   }
 }
 
+// Only two paths are ever fetched now: the manifest, and the composite it
+// ships beside. A fetch of anything else is an error the FakeClient throws on,
+// which is what pins that the modules really are no longer downloaded.
 function filesFor(composite: string, manifest: string = MANIFEST): Record<string, string> {
-  const files: Record<string, string> = {
+  return {
     "common-checks/action.yml": composite,
     [MANIFEST_PATH]: manifest,
   };
-  for (const entry of PLAN) {
-    for (const path of entry.files) files[`${entry.name}/${path}`] = `// body of ${entry.name}/${path}\n`;
-  }
-  return files;
 }
 
 test("the check set is read out of the composite in order", () => {
@@ -145,44 +142,30 @@ test("an unreadable or empty manifest fails the build rather than vendoring noth
   assert.throws(() => parseManifest(JSON.stringify({ checks: [] })), /names no checks/);
 });
 
-test("the header names the commit and the upstream path, and keeps the body verbatim", () => {
-  const commit = "b".repeat(40);
-  const stamped = stampHeader(commit, "ste-lint/src/lint.ts", "export const x = 1;\n");
-  assert.ok(stamped.includes(commit));
-  assert.ok(stamped.includes("ste-lint/src/lint.ts"));
-  assert.ok(stamped.endsWith("export const x = 1;\n"));
-});
-
-test("a vendored path drops the src segment so relative imports still resolve", () => {
-  assert.equal(vendorPath("ste-lint", "src/lint.ts"), "ste-lint/lint.ts");
-  assert.equal(vendorPath("ste-lint", "src/blocks.ts"), "ste-lint/blocks.ts");
-});
-
-test("a full run writes every module the manifest names, plus the notice and the plan", async () => {
+test("a full run writes the notice and the plan, and downloads no module", async () => {
   const { commit, files } = await vendor(new FakeClient(filesFor(COMPOSITE)), "master");
   const paths = files.map((file) => file.path);
-  assert.ok(paths.includes("ste-lint/lint.ts"));
-  assert.ok(paths.includes("yaml-comment-block/scan.ts"));
-  assert.ok(paths.includes("NOTICE.md"));
-  // A check the manifest declares uncovered contributes no file to fetch.
-  assert.ok(!paths.some((path) => path.startsWith("push-excludes-tags/")));
+  assert.deepEqual(paths.sort(), ["NOTICE.md", "plan.json"]);
   const noticeFile = files.find((file) => file.path === "NOTICE.md");
   assert.ok(noticeFile?.content.includes(commit));
-  // Every uncovered check appears, so the notice explains its absence from the covered list.
-  assert.ok(noticeFile?.content.includes("run-once"));
-  assert.ok(noticeFile?.content.includes("push-excludes-tags"));
-  // The plugin's own tests hold their adapters against this.
+  // Every check appears, so the notice accounts for the whole gate.
+  for (const name of ["run-once", "push-excludes-tags", "ste-lint", "yaml-comment-block"]) {
+    assert.ok(noticeFile?.content.includes(name), `${name} is missing from the notice`);
+  }
+  // The plugin's own tests hold their coverage against this.
   const planFile = files.find((file) => file.path === "plan.json");
   assert.ok(planFile);
   assert.deepEqual(JSON.parse(planFile.content).plan, PLAN);
 });
 
-test("a module added to the manifest upstream is fetched without an edit here", async () => {
+// The negative control for the case above. The FakeClient throws on any path it
+// was not given, so a run that still reached for a module would fail here.
+test("a manifest naming a module nobody serves still completes", async () => {
   const grown = MANIFEST.replace('"ste-lint/src/guard.ts"', '"ste-lint/src/guard.ts","ste-lint/src/blocks.ts"');
-  const files = filesFor(COMPOSITE, grown);
-  files["ste-lint/src/blocks.ts"] = "// body\n";
-  const run = await vendor(new FakeClient(files), "master");
-  assert.ok(run.files.map((file) => file.path).includes("ste-lint/blocks.ts"));
+  const run = await vendor(new FakeClient(filesFor(COMPOSITE, grown)), "master");
+  const plan = JSON.parse(run.files.find((file) => file.path === "plan.json")!.content).plan as typeof PLAN;
+  const ste = plan.find((entry) => entry.name === "ste-lint");
+  assert.deepEqual(ste?.files, ["src/lint.ts", "src/guard.ts", "src/blocks.ts"]);
 });
 
 test("a drifted composite fails the run before anything is written", async () => {

@@ -24,7 +24,7 @@ A bare `?` is not enough on its own. Nullable types (`Int?`, `raw_args?`) and qu
 
 Fenced code, indented code and blockquotes are exempt. A question can be quoted or documented. Inline backticks are not.
 
-Reporting what you did and stopping is never marked. What earns the line is closing by inviting the user to decide.
+Reporting what you did and stopping is never marked. What gets annotated is closing by inviting the user to decide.
 
 The message is judged whole, on its last flush, because a question can span a line wrap. Set `CC_ASK_PROPERLY=0` to turn it off.
 

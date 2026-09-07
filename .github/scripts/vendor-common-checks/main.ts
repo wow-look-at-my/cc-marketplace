@@ -1,9 +1,14 @@
-// Fetches the check modules the common-checks language server runs, so a
-// released plugin enforces what CI enforces today.
+// Reads upstream's own manifest of the checks common-checks runs, and fails the
+// build when the plugin no longer covers every one of them.
+//
+// It used to fetch each check's TypeScript modules too, and the plugin imported
+// them. Upstream has since moved the rules into wow-look-at-my/slopfix, and the
+// plugin runs that binary instead. What is left here is the coverage question,
+// which no binary answers: does the plugin still report every check the gate
+// runs, or say why it cannot.
 //
 // The output is gitignored on purpose. A copy in the tree is a second source of
-// truth: it goes stale in silence, and it puts prose the repository does not
-// author in front of every check that reads the repository.
+// truth: it goes stale in silence.
 //
 // A fetch failure fails the build. Packaging a silently stale checker is the
 // outcome this whole arrangement exists to avoid.
@@ -18,9 +23,7 @@ import {
   notice,
   parseCheckSet,
   parseManifest,
-  stampHeader,
   upstreamRef,
-  vendorPath,
 } from "./plan.ts";
 
 const VENDOR_DIR = "plugins/common-checks/vendor";
@@ -39,16 +42,10 @@ export async function vendor(client: Client, ref: string): Promise<{ commit: str
   assertPlanCoversCheckSet(plan, parseCheckSet(composite));
 
   const files: Written[] = [];
-  for (const entry of plan) {
-    for (const path of entry.files) {
-      const body = await client.get(UPSTREAM_REPO, commit, `${entry.name}/${path}`);
-      files.push({ path: vendorPath(entry.name, path), content: stampHeader(commit, `${entry.name}/${path}`, body) });
-    }
-  }
   files.push({ path: "NOTICE.md", content: notice(commit, plan) });
-  // The plan lands beside the modules so the plugin's own tests can hold their
-  // adapters against it. A vendored module nothing calls is silent
-  // non-coverage, and the composite's `uses:` list cannot show it.
+  // The plan is what the plugin's own tests hold their coverage against. A
+  // check upstream runs that the plugin neither reports nor declares uncovered
+  // is silent non-coverage, and the composite's `uses:` list cannot show it.
   files.push({ path: "plan.json", content: `${JSON.stringify({ commit, plan }, null, 2)}\n` });
   return { commit, files };
 }
