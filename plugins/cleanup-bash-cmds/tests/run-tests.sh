@@ -611,9 +611,27 @@ check_deny_reason "git rm denied" 'git rm foo' 'recycler trash <path> && git add
 check_deny_reason "git rm -r denied" 'git rm -r src/old' 'recycler trash'
 check_deny_reason "git -C dir rm denied (pre-subcommand flag skipped)" \
 	'git -C /repo rm foo' 'recycler trash'
-check_deny_reason "truncate -s 0 denied" 'truncate -s 0 build.log' 'recycler trash'
-check_deny_reason "truncate --size=0 denied" 'truncate --size=0 build.log' 'recycler trash'
-check_deny_reason "truncate -s0 (joined) denied" 'truncate -s0 build.log' 'recycler trash'
+# A zero-size truncate is rewritten rather than denied: emptying a file and
+# moving it to the recycle bin lose the same content, and only one of them can
+# be undone. The deny already named this exact command.
+check_rewrite "truncate -s 0 recycles" 'truncate -s 0 build.log' 'recycler trash build.log'
+check_rewrite "truncate --size=0 recycles" 'truncate --size=0 build.log' 'recycler trash build.log'
+check_rewrite "truncate -s0 (joined) recycles" 'truncate -s0 build.log' 'recycler trash build.log'
+check_rewrite "truncate --size 0 (separated) recycles" \
+	'truncate --size 0 build.log' 'recycler trash build.log'
+check_rewrite "truncate -s 0 with several targets recycles all of them" \
+	'truncate -s 0 a.log b.log' 'recycler trash a.log b.log'
+check_rewrite "truncate mid-chain recycles" \
+	'cd /tmp && truncate -s 0 out.log' 'cd /tmp && recycler trash out.log'
+# A dash-leading target must not be re-read as a recycler flag.
+check_rewrite "truncate of a dash-leading name keeps the separator" \
+	'truncate -s 0 -- -weird.log' 'recycler trash -- -weird.log'
+# `-r RFILE` names a reference file, not a target. Dropping the flag would
+# recycle a path the command never touched, so this one still denies.
+check_deny_reason "truncate -s 0 -r keeps denying" \
+	'truncate -r ref.log -s 0 build.log' 'recycler trash'
+check_deny_reason "truncate -s 0 with an unknown flag keeps denying" \
+	'truncate -c -s 0 build.log' 'recycler trash'
 
 # git rm --cached only unstages; the working tree is untouched, so it passes.
 check_rewrite "git rm --cached passes through" \
