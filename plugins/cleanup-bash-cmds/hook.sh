@@ -8,11 +8,13 @@
 # ^perl[0-9.]*$), reading a file with cat/head/tail (a static file operand
 # that is not a /proc, /sys, or /dev pseudo-file -- use the Read tool), or
 # destroying data in a form that cannot be rewritten into a
-# move-to-recycle-bin (shred/srm, find -delete, git rm on the working tree,
-# truncate -s 0, and an rm carrying a flag that does not translate) are
-# DENIED outright. Otherwise the tree is rewritten:
+# move-to-recycle-bin (shred/srm, git rm on the working tree, a zero-size
+# truncate carrying another flag, and an rm carrying a flag that does not
+# translate) are DENIED outright. Otherwise the tree is rewritten:
 # scrub stderr-to-/dev/null redirects everywhere; rewrite every `rm` (and
-# `xargs rm`) as `recycler trash` so deletion is non-destructive by
+# `xargs rm`) as `recycler trash`, a zero-size `truncate` the same way, and
+# find's `-delete` primary as `-exec recycler trash {} +`, so deletion is
+# non-destructive by
 # construction -- the target lands in the platform recycle bin where
 # `recycler restore` puts it back; on the FINAL top-level
 # statement only, kill trailing | head / | tail stages, strip trailing
@@ -144,8 +146,8 @@ log_guard() {
 deny=$(printf '%s' "$result" | jq -r '.deny' 2>&1) || exit 0
 if [ "$deny" = "true" ]; then
 	# The transform tags the reason via .rules (heredoc | perl | file_read |
-	# shred | find_delete | git_rm | truncate_zero | rm_flag); pick the
-	# matching message. Anything else falls back to the heredoc text.
+	# shred | git_rm | truncate_zero | rm_flag); pick the matching message.
+	# Anything else falls back to the heredoc text.
 	deny_rule=$(printf '%s' "$result" | jq -r '.rules' 2>&1) || exit 0
 	log_deny "$cmd" "$deny_rule"
 	case "$deny_rule" in
@@ -157,9 +159,6 @@ if [ "$deny" = "true" ]; then
 		;;
 	shred)
 		reason="shred/srm destroy data unrecoverably by design and are banned in this environment. There is no safe equivalent; if the file must go, use recycler trash <path> and it can be restored."
-		;;
-	find_delete)
-		reason="find -delete destroys files unrecoverably and is banned in this environment. Use find ... -exec recycler trash {} + instead, which moves each match to the recycle bin."
 		;;
 	git_rm)
 		reason="git rm deletes the working-tree file and is banned in this environment. Use recycler trash <path> && git add -A instead. (git rm --cached only unstages and is allowed.)"

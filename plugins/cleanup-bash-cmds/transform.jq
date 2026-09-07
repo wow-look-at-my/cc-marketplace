@@ -959,6 +959,30 @@ def has_find_delete:
     | ($ec != null) and ($ec.name == "find")
       and ((.Args[$ec.index + 1:]) | any((word_literal) == "-delete")));
 
+# The `-delete` primary becomes the `-exec` form the deny message already
+# named, in place, so every other primary keeps its position in find's
+# expression grammar. `+` batches the paths into one recycler call.
+def rewrite_find_delete_call:
+  # . = CallExpr
+  (effective_command) as $ec
+  | if ($ec == null) or ($ec.name != "find") then .
+    else . as $call
+      | if (($call.Args[$ec.index + 1:]) | any((word_literal) == "-delete") | not) then $call
+        else $call.Args = ($call.Args[0:$ec.index + 1]
+          + ([$call.Args[$ec.index + 1:][]
+              | if (word_literal) == "-delete"
+                then [lit_word("-exec"), lit_word("recycler"), lit_word("trash"),
+                      lit_word("{}"), lit_word("+")]
+                else [.] end]
+             | add // []))
+        end
+    end;
+
+def rewrite_find_delete:
+  walk(if (type == "object") and (.Type? == "CallExpr")
+    then rewrite_find_delete_call
+    else . end);
+
 # `git rm <path>` removes from the working tree; `git rm --cached` does not.
 # The SUBCOMMAND is the first non-flag word after `git` (so `git -C dir rm f`
 # counts), not merely an `rm` anywhere in the arguments -- otherwise
@@ -984,15 +1008,74 @@ def has_git_rm:
            | ($subcmd == "rm")
              and (($a | index("--cached")) == null)));
 
-# `truncate -s 0 file` (or --size=0 / -s0) empties a file in place.
-def has_truncate_zero:
-  any_call_in_stmts((effective_command) as $ec
-    | ($ec != null) and ($ec.name == "truncate")
-      and ((.Args[$ec.index + 1:] | map(word_literal)) as $a
-           | any($a[]; . != null and test("^(-s|--size=)0+$"))
-             or any(range(0; ($a | length) - 1);
-                    ($a[.] == "-s" or $a[.] == "--size")
-                    and (($a[. + 1] // "") | test("^0+$")))));
+# `truncate -s 0 file` (or --size=0 / -s0) empties a file in place. . = CallExpr.
+def call_is_truncate_zero:
+  (effective_command) as $ec
+  | ($ec != null) and ($ec.name == "truncate")
+    and ((.Args[$ec.index + 1:] | map(word_literal)) as $a
+         | any($a[]; . != null and test("^(-s|--size=)0+$"))
+           or any(range(0; ($a | length) - 1);
+                  ($a[.] == "-s" or $a[.] == "--size")
+                  and (($a[. + 1] // "") | test("^0+$"))));
+
+def has_truncate_zero: any_call_in_stmts(call_is_truncate_zero);
+
+# The files a zero-size `truncate` would empty: the size flag is dropped in
+# each of its spellings, and everything left must be an operand.
+#
+# Any OTHER flag returns null, which sends the call back to the deny. `-r
+# RFILE` names a reference file rather than a target, so dropping the flag and
+# keeping its value would recycle a file the command never touched -- and
+# guessing there is the exact mistake this rule exists to prevent.
+def truncate_targets($args):
+  (reduce range(0; ($args | length)) as $i
+    ({ops: [], skip: false, bad: false, done: false};
+     if .done then .ops += [$args[$i]]
+     elif .skip then .skip = false
+     else ($args[$i] | word_literal) as $lit
+       | if $lit == null then .ops += [$args[$i]]
+         elif $lit == "--" then .done = true
+         elif ($lit | test("^(-s|--size=)0+$")) then .
+         elif ($lit == "-s") or ($lit == "--size") then .skip = true
+         elif ($lit | startswith("-")) and (($lit | length) > 1) then .bad = true
+         else .ops += [$args[$i]] end
+       end))
+  | if .bad or ((.ops | length) == 0) then null
+    else .ops as $ops
+      # A `--` separator is re-emitted in front of a dash-leading name, exactly
+      # as the rm rule does, so recycler reads the file rather than a flag.
+      | if ($ops | any((word_literal) as $l | ($l != null) and ($l | startswith("-")) and ($l != "-")))
+        then [lit_word("--")] + $ops
+        else $ops end
+    end;
+
+# Emptying a file in place and moving it to the recycle bin are the same
+# outcome for the content, and only one of them is recoverable. The deny
+# message named this rewrite and asked the model to type it, which spends a
+# round trip on a command the hook had already worked out.
+def rewrite_truncate_zero_call:
+  # . = CallExpr
+  (effective_command) as $ec
+  | if ($ec == null) or ($ec.name != "truncate") or (call_is_truncate_zero | not) then .
+    else . as $call
+      | (truncate_targets($call.Args[$ec.index + 1:])) as $t
+      | if $t == null then $call
+        else $call.Args = ($call.Args[0:$ec.index] + [lit_word("recycler"), lit_word("trash")] + $t)
+        end
+    end;
+
+def rewrite_truncate_zero:
+  walk(if (type == "object") and (.Type? == "CallExpr")
+    then rewrite_truncate_zero_call
+    else . end);
+
+# What is left for the deny: a zero-size truncate whose flags this rule will
+# not translate.
+def has_unrewritable_truncate_zero:
+  any_call_in_stmts(
+    call_is_truncate_zero
+    and ((effective_command) as $ec
+         | truncate_targets(.Args[$ec.index + 1:]) == null));
 
 # ---------------------------------------------------------------------------
 # Assemble. State: {ast, fired}. Each step compares before/after (positions
@@ -1012,6 +1095,8 @@ def pass_once:
   | apply_step("docker_compose_restart"; rewrite_docker_compose_restart)
   | apply_step("gh_wait_ci"; rewrite_gh_actions_read)
   | apply_step("rm_recycle"; rewrite_rm)
+  | apply_step("truncate_recycle"; rewrite_truncate_zero)
+  | apply_step("find_delete_recycle"; rewrite_find_delete)
   | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]) | strip_trailing_sed_n)))
   | apply_step("or_true"; on_last_stmt(strip_or_true))
   | apply_step("grep"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["grep"]))))
@@ -1034,9 +1119,8 @@ def dedupe:
   elif has_perl_invocation then {deny: true, changed: false, rules: "perl", ast: $orig}
   elif has_banned_file_read then {deny: true, changed: false, rules: "file_read", ast: $orig}
   elif has_shred_invocation then {deny: true, changed: false, rules: "shred", ast: $orig}
-  elif has_find_delete then {deny: true, changed: false, rules: "find_delete", ast: $orig}
   elif has_git_rm then {deny: true, changed: false, rules: "git_rm", ast: $orig}
-  elif has_truncate_zero then {deny: true, changed: false, rules: "truncate_zero", ast: $orig}
+  elif has_unrewritable_truncate_zero then {deny: true, changed: false, rules: "truncate_zero", ast: $orig}
   elif has_untranslatable_rm then {deny: true, changed: false, rules: "rm_flag", ast: $orig}
   else
     ({ast: $orig, fired: []} | fix_state | apply_step("pipefail"; ensure_pipefail)) as $st

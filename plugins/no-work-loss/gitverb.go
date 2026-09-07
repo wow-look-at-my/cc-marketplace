@@ -37,6 +37,9 @@ type finding struct {
 	// reach turns a ref-destroying command into a question about whether the
 	// commits survive elsewhere, rather than a blanket refusal.
 	reach *reachCheck
+	// fromScript marks a finding read out of a script FILE. classifySegment
+	// stamps it, so no rule below has to remember to.
+	fromScript bool
 }
 
 type gitCall struct {
