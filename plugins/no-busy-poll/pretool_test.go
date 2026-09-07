@@ -154,6 +154,22 @@ func TestAReadThatErroredIsNotARead(t *testing.T) {
 	assert.Empty(t, reason, "a call that errored returned no state, so this is the first read")
 }
 
+// The result of a call is not on disk yet when the NEXT call's hook reads the
+// transcript, so an errored read looks like an unanswered one for a moment.
+// Both mean the same thing: nothing came back. Counting either refused the
+// retry of a command that had just died on an unknown flag -- the one call
+// that had to run.
+func TestAReadWithNoResultYetIsNotARead(t *testing.T) {
+	const sha = "4f7cea8b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60"
+	tr := stageTranscript(t,
+		callWithID("t1", "gh wait-ci --sha "+sha+" --timeout 15m"),
+	)
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
+		bashInput("gh wait-ci --sha "+sha)))
+
+	assert.Empty(t, reason, "a call with no result carries no state, so this is the first read")
+}
+
 func TestAReadThatAnsweredIsARead(t *testing.T) {
 	const sha = "4f7cea8b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60"
 	tr := stageTranscript(t,
@@ -191,8 +207,8 @@ func TestAnotherCommitIsStillReadableAfterOneGoesGreen(t *testing.T) {
 
 func TestRereadingTheSameSubjectWithNothingInBetweenIsRefused(t *testing.T) {
 	tr := stageTranscript(t,
-		bashCall("gh pr view 87 --repo wow-look-at-my/grok-build"),
-		toolResult(`{"pr":"wow-look-at-my/grok-build#87","state":"open"}`),
+		callWithID("t1", "gh pr view 87 --repo wow-look-at-my/grok-build"),
+		resultFor("t1", `{"pr":"wow-look-at-my/grok-build#87","state":"open"}`, false),
 	)
 	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
 		bashInput("gh pr checks 87 --repo wow-look-at-my/grok-build")))
@@ -203,8 +219,8 @@ func TestRereadingTheSameSubjectWithNothingInBetweenIsRefused(t *testing.T) {
 
 func TestRespellingTheQuestionWithAnotherToolIsStillARepeat(t *testing.T) {
 	tr := stageTranscript(t,
-		bashCall("gh pr checks 87 --repo wow-look-at-my/grok-build"),
-		toolResult("still running"),
+		callWithID("t1", "gh pr checks 87 --repo wow-look-at-my/grok-build"),
+		resultFor("t1", "still running", false),
 	)
 	reason := denyReasonOf(t, preToolPayload(t, tr, "mcp__github__pull_request_read",
 		`{"owner":"wow-look-at-my","repo":"grok-build","pullNumber":87}`))
@@ -281,8 +297,8 @@ func TestReadingTheStateAgainIsStillARepeat(t *testing.T) {
 	// The negative control for the case above. `watch` and `runs` answer the
 	// question the log does not, and asking twice learns nothing.
 	tr := stageTranscript(t,
-		bashCall("gh wait-ci --sha 9b348b7"),
-		toolResult(`{"sha":"9b348b7","conclusion":"failure"}`),
+		callWithID("t1", "gh wait-ci --sha 9b348b7"),
+		resultFor("t1", `{"sha":"9b348b7","conclusion":"failure"}`, false),
 	)
 	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
 		bashInput("gh wait-ci watch --sha 9b348b7")))
@@ -324,6 +340,49 @@ func TestAPushReopensTheSubject(t *testing.T) {
 		bashInput("gh pr checks 87 --repo wow-look-at-my/grok-build")))
 
 	assert.Empty(t, reason, "CI on a new head is a new question, not a repeat")
+}
+
+// A Bash call's `description` is written for a human. A commit named there
+// is not a commit the command asks about, and reading a subject out of it
+// refused a listing that names no sha at all.
+func TestADescriptionNamingACommitIsNotAReadOfIt(t *testing.T) {
+	withDescription := func(command, description string) string {
+		b, _ := json.Marshal(map[string]string{"command": command, "description": description})
+		return string(b)
+	}
+	tr := stageTranscript(t,
+		assistantCall("Bash", withDescription(
+			"gh wait-ci --sha 58e180d -R wow-look-at-my/go-toolchain",
+			"Wait for the darwin verdict")),
+		toolResult("all green"),
+	)
+
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash", withDescription(
+		"gh wait-ci runs --branch claude/untitled-session-7ejvgb -R wow-look-at-my/go-toolchain",
+		"Find the run for 58e180d")))
+
+	assert.Empty(t, reason,
+		"the command names no sha; 58e180d appears only in the description, which is prose for the reader")
+}
+
+// The same defect in the other direction: a read RECORDED off a description
+// makes the first genuine read of that commit look like a repeat.
+func TestADescriptionDoesNotMarkASubjectAsAlreadyRead(t *testing.T) {
+	withDescription := func(command, description string) string {
+		b, _ := json.Marshal(map[string]string{"command": command, "description": description})
+		return string(b)
+	}
+	tr := stageTranscript(t,
+		assistantCall("Bash", withDescription(
+			"gh wait-ci runs --branch claude/fix",
+			"Look for the run that built 58e180d")),
+		toolResult("listed"),
+	)
+
+	reason := denyReasonOf(t, preToolPayload(t, tr, "Bash",
+		bashInput("gh wait-ci --sha 58e180d -R wow-look-at-my/go-toolchain")))
+
+	assert.Empty(t, reason, "nothing has read that commit's state yet")
 }
 
 func TestAListingNamingSeveralPullRequestsSettlesNone(t *testing.T) {

@@ -127,13 +127,35 @@ rm -f "${BASH_SOURCE[0]}"
 func TestMktempWithARepoTemplateStaysGuarded(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
-	script := filepath.Join(t.TempDir(), "build.sh")
-	require.NoError(t, os.WriteFile(script, []byte(`#!/bin/bash
-F="$(mktemp ./stageXXXXXX)"
-rm -f "$F"
-`), 0o755))
-	r := denied(t, dir, "bash "+script)
+	r := denied(t, dir, `F="$(mktemp ./stageXXXXXX)"; rm -f "$F"`)
 	assert.Contains(t, r, "cannot resolve")
+}
+
+// The same text inside a script file run as a new shell. A script's own
+// unresolvable target is the program's behaviour, which this hook does not
+// sandbox, and refusing it made an ordinary `cd src && ./make.bash` unrunnable.
+func TestAScriptsUnresolvableTargetIsTheProgramsOwnBusiness(t *testing.T) {
+	dir := newRepo(t)
+	modify(t, dir)
+	script := filepath.Join(dir, "make.bash")
+	require.NoError(t, os.WriteFile(script, []byte(`#!/bin/bash
+OUT="$(dirname "$0")/../pkg/tool/$GOOS/link"
+echo built > "$OUT"
+rm -f "$OUT.tmp"
+`), 0o755))
+	allowed(t, dir, "cd "+dir+" && ./make.bash")
+}
+
+// The half of that which must NOT relax: a script naming a path statically
+// still writes where it says, so following the file still closes the
+// write-elsewhere-then-run bypass.
+func TestAScriptsStaticTargetIsStillJudged(t *testing.T) {
+	dir := newRepo(t)
+	modify(t, dir)
+	script := filepath.Join(dir, "sneak.sh")
+	require.NoError(t, os.WriteFile(script, []byte("#!/bin/bash\necho x > tracked.go\n"), 0o755))
+	r := denied(t, dir, "cd "+dir+" && ./sneak.sh")
+	assert.Contains(t, r, "tracked.go")
 }
 
 // A sourced file runs in the caller's scope, so its assignments say nothing
