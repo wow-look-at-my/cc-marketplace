@@ -1,0 +1,32 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Renders a pull request number, a commit SHA, a branch, or a GitHub URL as a markdown link while the message streams, so the reader can click it. Writes the link itself rather than refusing a stop, so there is no round trip and nothing to loop on. A reference whose target cannot be shown to exist is left as plain text rather than given a dead link",
+	"hooks": {
+		"MessageDisplay": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/link-all-refs",
+						"timeout": 10,
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"link",
+		"markdown",
+		"pull-request",
+		"commit",
+		"sha",
+		"branch",
+		"url",
+		"messagedisplay",
+		"hook"
+	],
+	"name": "link-all-refs",
+	"version": "1424"
+}
