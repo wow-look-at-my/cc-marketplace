@@ -116,10 +116,19 @@ func parseRecords(path string) []record {
 	return out
 }
 
-// callText is the text a subject is read out of: the tool name plus its
-// input. One string means one extractor serves a Bash command line and an
-// MCP tool's JSON arguments alike.
+// callText is the text a subject is read out of. For an MCP tool that is the
+// whole input, whose fields ARE the question. A Bash call is the exception:
+// its input carries a `description` written for a human, and a subject read
+// out of that is a subject the command never asked about.
+//
+// Measured live. `gh wait-ci runs --branch <b>` described as "Find the run
+// for 58e180d" was refused as a repeat read of 58e180d, a commit its command
+// does not name. The same defect marks a subject READ from a description, so
+// the first genuine read of it is then refused as a repeat.
 func callText(c toolCall) string {
+	if strings.EqualFold(c.name, "bash") {
+		return c.name + " " + commandOf(c.input)
+	}
 	return c.name + " " + string(c.input)
 }
 
