@@ -863,6 +863,30 @@ def has_find_delete:
     | ($ec != null) and ($ec.name == "find")
       and ((.Args[$ec.index + 1:]) | any((word_literal) == "-delete")));
 
+# The `-delete` primary becomes the `-exec` form the deny message already
+# named, in place, so every other primary keeps its position in find's
+# expression grammar. `+` batches the paths into one recycler call.
+def rewrite_find_delete_call:
+  # . = CallExpr
+  (effective_command) as $ec
+  | if ($ec == null) or ($ec.name != "find") then .
+    else . as $call
+      | if (($call.Args[$ec.index + 1:]) | any((word_literal) == "-delete") | not) then $call
+        else $call.Args = ($call.Args[0:$ec.index + 1]
+          + ([$call.Args[$ec.index + 1:][]
+              | if (word_literal) == "-delete"
+                then [lit_word("-exec"), lit_word("recycler"), lit_word("trash"),
+                      lit_word("{}"), lit_word("+")]
+                else [.] end]
+             | add // []))
+        end
+    end;
+
+def rewrite_find_delete:
+  walk(if (type == "object") and (.Type? == "CallExpr")
+    then rewrite_find_delete_call
+    else . end);
+
 # `git rm <path>` removes from the working tree; `git rm --cached` does not.
 # The SUBCOMMAND is the first non-flag word after `git` (so `git -C dir rm f`
 # counts), not merely an `rm` anywhere in the arguments -- otherwise
@@ -975,6 +999,7 @@ def pass_once:
   | apply_step("docker_compose_restart"; rewrite_docker_compose_restart)
   | apply_step("rm_recycle"; rewrite_rm)
   | apply_step("truncate_recycle"; rewrite_truncate_zero)
+  | apply_step("find_delete_recycle"; rewrite_find_delete)
   | apply_step("head_tail"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["head", "tail"]) | strip_trailing_sed_n)))
   | apply_step("or_true"; on_last_stmt(strip_or_true))
   | apply_step("grep"; on_last_stmt(on_spine_leaf(strip_trailing_stages(["grep"]))))
@@ -997,7 +1022,6 @@ def dedupe:
   elif has_perl_invocation then {deny: true, changed: false, rules: "perl", ast: $orig}
   elif has_banned_file_read then {deny: true, changed: false, rules: "file_read", ast: $orig}
   elif has_shred_invocation then {deny: true, changed: false, rules: "shred", ast: $orig}
-  elif has_find_delete then {deny: true, changed: false, rules: "find_delete", ast: $orig}
   elif has_git_rm then {deny: true, changed: false, rules: "git_rm", ast: $orig}
   elif has_unrewritable_truncate_zero then {deny: true, changed: false, rules: "truncate_zero", ast: $orig}
   elif has_untranslatable_rm then {deny: true, changed: false, rules: "rm_flag", ast: $orig}

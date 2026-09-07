@@ -601,12 +601,17 @@ check_rewrite "string containing --nonsense is not a flag" \
 
 check_deny_reason "shred denied" 'shred /tmp/secret' 'recycler trash'
 check_deny_reason "srm denied" 'srm /tmp/secret' 'recycler trash'
-check_deny_reason "find -delete denied" \
+# `-delete` becomes the -exec form the deny already named, in place, so every
+# other primary keeps its position in find's expression grammar.
+check_rewrite "find -delete recycles" \
 	'find . -name "*.tmp" -delete' \
-	'find \.\.\. -exec recycler trash \{\} \+'
-check_deny_reason "find -delete mid-chain denied" \
+	'find . -name "*.tmp" -exec recycler trash {} +'
+check_rewrite "find -delete mid-chain recycles" \
 	'cd /tmp && find . -name "*.o" -delete' \
-	'recycler trash'
+	'cd /tmp && find . -name "*.o" -exec recycler trash {} +'
+check_rewrite "a primary after -delete keeps its place" \
+	'find /var -type f -delete -print' \
+	'find /var -type f -exec recycler trash {} + -print'
 check_deny_reason "git rm denied" 'git rm foo' 'recycler trash <path> && git add -A'
 check_deny_reason "git rm -r denied" 'git rm -r src/old' 'recycler trash'
 check_deny_reason "git -C dir rm denied (pre-subcommand flag skipped)" \
