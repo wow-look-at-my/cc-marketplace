@@ -1,0 +1,35 @@
+{
+  "name": "no-tombstones",
+  "version": "1424",
+  "tag": "no-tombstones#1424",
+  "pluginJson": {
+    "author": {
+      "name": "mhaynie"
+    },
+    "description": "Strips a tombstone comment out of a write -- prose about a state the code is no longer in, or an argument aimed at whoever reviews the diff. A finding that cannot be cleanly excised still gets the write refused",
+    "hooks": {
+      "PreToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/hook.sh",
+              "type": "command"
+            }
+          ],
+          "matcher": "*"
+        }
+      ]
+    },
+    "keywords": [
+      "comments",
+      "documentation",
+      "staleness",
+      "narration",
+      "pretooluse",
+      "hook",
+      "enforcement"
+    ],
+    "name": "no-tombstones",
+    "version": "1424"
+  }
+}
