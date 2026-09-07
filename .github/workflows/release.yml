@@ -5,8 +5,8 @@ on:
     # Every branch, no tag: this workflow pushes a plugin/*/v* tag per release, which must not re-enter it.
     branches: ["**"]
 
-concurrency:
-  group: release-${{ github.ref }}
+# Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
+concurrency: {group: 'release-${{ github.ref }}'}
 
 jobs:
   prepare:
@@ -136,6 +136,10 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
+    # The shared resource is one moving tag, `<plugin>#latest`, which every branch force-pushes. Keying the group to the plugin serialises exactly that, so two branches releasing different plugins still run at once.
+    concurrency:
+      group: release-tag-${{ matrix.plugin }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 

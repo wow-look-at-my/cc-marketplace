@@ -4,13 +4,23 @@ The common-checks plugin lives at `plugins/common-checks/`. It is one **language
 
 **Both exist because a diagnostic is advice and a write is a decision.** A session put a three-line YAML comment above a trigger. That failed `yaml-comment-block` and took a pull request red. The same three lines went into a second repository an hour later. The server was adapting that exact rule the whole time. A finding nobody reads stops nothing.
 
-The hook judges only the text a write ADDS. A violation already in the file therefore never blocks an unrelated edit to it. A fragment is checked as if it were the file, because a comment run is a comment run wherever it sits.
+The hook judges only the text a write ADDS. A violation already in the file therefore never blocks an unrelated edit to it.
+
+**A fragment is judged where it LANDS, not on its own.** An Edit's text carries no fence, no table and no list of its own. Judged alone, a semicolon inside a fenced block reads as prose and refuses the write. The lines of an ASCII diagram in that same block read as a hand-wrapped paragraph. A session answered both by deleting the code blocks out of a specification. `placement.ts` puts the fragment back first. It reads the file from disk, applies the edit, and records the line span the new text occupies. Every check then runs against the whole file, and only the findings inside that span are the write's own.
+
+A placement needs the file to be readable and the replaced string to appear in it exactly once. When it cannot be pinned down, the fragment is judged alone, which is what this hook always did.
+
+**The span alone is not enough, and the gap wedged a whole session.** An edit anchors on text the file already has. A `new_string` that repeats any of it puts those lines inside the span. A sentence the write never touched is then reported as its own. That refusal records the file, and the record never clears. `sweep` drops an entry only once the whole file passes, and the finding naming it is one no edit here introduced. Every later write in the session is then refused against a file nothing can repair. So `findingsFor` subtracts what the file carried BEFORE the edit. A finding is matched by check and message rather than by line, because every line below an edit moves. Each pre-edit finding cancels one match, so a second copy of a sentence the file already breaks is still the write's own.
 
 **It filters nothing else.** `findings()` already returns only what fails CI, so a second list of enforced checks is a list that drifts from the first. An earlier draft kept one and left ste-lint out of it. The file documenting that choice then failed ste-lint in CI.
 
+**A hard wrap is refused, like every other finding.** The hook once repaired it instead. It joined the lines and let the write through on `updatedInput`. That was reverted at the operator's request. A different tool is being built for the job. Placement is what survives from that change. Judging a fragment in its own file is what stops a fenced block reading as prose. That half was never about the repair.
+
 **A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
 
-It clears itself. Every write re-reads each recorded file from disk, and drops the ones that now pass, so the repair needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
+It clears itself. Every write re-reads each recorded file from disk and drops the ones whose finding is gone. The repair therefore needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
+
+**An entry names the FINDINGS, never the file alone.** The earlier sweep asked whether the whole file passed. A file carries findings no write here introduced, and a hard-wrapped document carries one per paragraph. The entry then never cleared. Every later write in the session was refused against a file nothing was able to clean. That is a wedge whose only way out is deleting the entry by hand, which is what happened. So `record` stores each finding's identity, and `sweep` drops the entry once none of them is on disk any more. A different finding the file already had holds nothing.
 
 Every failure path allows the write: an unparseable payload, an unjudged path, a tool that does not write. **A missing Node allows it too, in `launcher.sh`.** A non-zero exit from a PreToolUse hook blocks the tool. The server's `exit 127` there refuses every write in the session rather than none.
 
@@ -97,6 +107,10 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 ### Files
 
 - **Adapters**: `plugins/common-checks/src/checks.ts` -- file kind, the per-check calls into `vendor/`, the `no-all-builds-job` anchor, the ste-lint bucket wording, the wrapped-paragraph collapse, and the ranking
+- **Hook**: `plugins/common-checks/src/hook.ts` -- the PreToolUse payload, the units a write adds, the ledger sweep, and the refusal
+- **Placement**: `plugins/common-checks/src/placement.ts` -- `place` pins an edit to its line span in the file on disk
+- **Local scan**: `plugins/common-checks/src/scan-repo.ts` -- `npx tsx plugins/common-checks/src/scan-repo.ts .` reports every hard ste-lint finding in the repository. CI lints only what a push changed, so a file nothing touches keeps its findings until somebody edits it. This finds them first
+- **Tests**: `src/hook.test.ts` covers the refusal and every fail-open path. Then the placement cases, against a real file on disk. An edit inside a fence is not refused for its line breaks. The same edit is not refused for its punctuation. The control edit outside a fence is still refused for its wrap
 - Document sync is full, because a finding is a property of the whole document
 - **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else
 - **Launcher**: `plugins/common-checks/launcher.sh` -- staged into `server/` as `common-checks-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own. The directory is `server/` and not `build/` because `release-plugin` requires every file under `build/` to be a fat APE, and this plugin ships no Go

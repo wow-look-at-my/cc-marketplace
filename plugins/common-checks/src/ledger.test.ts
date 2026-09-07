@@ -28,6 +28,11 @@ function write(cwd: string, name: string, body: string): string {
   return path;
 }
 
+/** Named for the assertions below, which read the refusal and nothing else. */
+function reasonOf(raw: string): string {
+  return decide(raw);
+}
+
 function payload(sessionId: string, cwd: string, filePath: string, text: string): string {
   return JSON.stringify({
     hook_event_name: "PreToolUse",
@@ -46,10 +51,10 @@ test("a write to another file is refused while a known file is bad", () => {
   const bad = write(cwd, "bad.yml", BAD_YAML);
   const other = write(cwd, "other.yml", GOOD_YAML);
 
-  const first = decide(payload(id, cwd, bad, BAD_YAML));
+  const first = reasonOf(payload(id, cwd, bad, BAD_YAML));
   assert.match(first, /yaml-comment-block/);
 
-  const second = decide(payload(id, cwd, other, GOOD_YAML));
+  const second = reasonOf(payload(id, cwd, other, GOOD_YAML));
   assert.match(second, /already carries a violation/);
   assert.match(second, /bad\.yml/);
 });
@@ -61,13 +66,13 @@ test("the block clears once the file is clean on disk", () => {
   const bad = write(cwd, "bad.yml", BAD_YAML);
   const other = write(cwd, "other.yml", GOOD_YAML);
 
-  assert.match(decide(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
-  assert.match(decide(payload(id, cwd, other, GOOD_YAML)), /already carries/);
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload(id, cwd, other, GOOD_YAML)), /already carries/);
 
   // The repair lands on disk, exactly as a real write would.
   writeFileSync(bad, GOOD_YAML, "utf8");
 
-  assert.equal(decide(payload(id, cwd, other, GOOD_YAML)), "");
+  assert.equal(reasonOf(payload(id, cwd, other, GOOD_YAML)), "");
   assert.deepEqual(sweep(id, cwd), []);
 });
 
@@ -77,15 +82,56 @@ test("the file that is bad can still be edited", () => {
   const cwd = repo();
   const bad = write(cwd, "bad.yml", BAD_YAML);
 
-  assert.match(decide(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
-  assert.equal(decide(payload(id, cwd, bad, GOOD_YAML)), "");
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.equal(reasonOf(payload(id, cwd, bad, GOOD_YAML)), "");
 });
 
 // A file that vanished cannot be fixed, so holding the session on it is a wedge.
 test("a deleted file drops out of the ledger", () => {
   const id = session();
   const cwd = repo();
-  record(id, join(cwd, "gone.yml"));
+  record(id, join(cwd, "gone.yml"), ["yaml-comment-block anything"]);
+  assert.deepEqual(sweep(id, cwd), []);
+});
+
+// The wedge this closes. A file can carry findings that no write here
+// introduced and no rewrite can repair. Asking the whole file to pass then
+// holds the session against a file nothing can clean.
+test("a file keeping findings the write never introduced clears the ledger", () => {
+  const id = session();
+  const cwd = repo();
+  const bad = write(cwd, "bad.yml", BAD_YAML);
+  const other = write(cwd, "other.yml", GOOD_YAML);
+
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload(id, cwd, other, GOOD_YAML)), /already carries/);
+
+  // The recorded finding goes. A different one the file already had stays.
+  writeFileSync(bad, GOOD_YAML + "jobs:\n  all-builds:\n    runs-on: ubuntu-latest\n", "utf8");
+
+  assert.deepEqual(sweep(id, cwd), []);
+  assert.equal(reasonOf(payload(id, cwd, other, GOOD_YAML)), "");
+});
+
+// The block still has to hold while the recorded finding is really there.
+test("the block holds while the recorded finding is still on disk", () => {
+  const id = session();
+  const cwd = repo();
+  const bad = write(cwd, "bad.yml", BAD_YAML);
+  const other = write(cwd, "other.yml", GOOD_YAML);
+
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.deepEqual(sweep(id, cwd), [bad]);
+  assert.match(reasonOf(payload(id, cwd, other, GOOD_YAML)), /already carries/);
+});
+
+// An entry an older build wrote is a bare path, not JSON. Reading it as an
+// entry with no findings clears it, which is the same answer as re-checking.
+test("an entry written by an older build is dropped rather than trusted", () => {
+  const id = session();
+  const cwd = repo();
+  const bad = write(cwd, "bad.yml", BAD_YAML);
+  record(id, bad, []);
   assert.deepEqual(sweep(id, cwd), []);
 });
 
@@ -96,15 +142,15 @@ test("sessions do not block each other", () => {
   const bad = write(cwd, "bad.yml", BAD_YAML);
   const other = write(cwd, "other.yml", GOOD_YAML);
 
-  assert.match(decide(payload(mine, cwd, bad, BAD_YAML)), /yaml-comment-block/);
-  assert.equal(decide(payload(theirs, cwd, other, GOOD_YAML)), "");
+  assert.match(reasonOf(payload(mine, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.equal(reasonOf(payload(theirs, cwd, other, GOOD_YAML)), "");
 });
 
 // No session id means no ledger, which is the behaviour before this existed.
 test("a payload with no session id still checks the write itself", () => {
   const cwd = repo();
   const bad = write(cwd, "bad.yml", BAD_YAML);
-  assert.match(decide(payload("", cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload("", cwd, bad, BAD_YAML)), /yaml-comment-block/);
   assert.deepEqual(outstanding(""), []);
 });
 

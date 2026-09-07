@@ -15,12 +15,57 @@
 
 import { fileKind, findings, type Finding } from "./checks.ts";
 import { diskContent, forget, outstanding, record } from "./ledger.ts";
+import { place, type Placement } from "./placement.ts";
 
 interface ToolInput {
   file_path?: unknown;
   content?: unknown;
+  old_string?: unknown;
   new_string?: unknown;
   edits?: unknown;
+}
+
+/**
+ * One piece of text a write adds, with where it lands in the file.
+ *
+ * A `content` unit is the whole file already, so it needs no placement. An
+ * edit's fragment gets one when the file can be read and the string it replaces
+ * appears exactly once. Without a placement the fragment is judged alone, which
+ * is what this hook did before and is still the safe answer.
+ */
+interface Unit {
+  text: string;
+  placement?: Placement;
+}
+
+function unitsOf(toolName: string, input: ToolInput): Unit[] {
+  if (!WRITE_TOOLS.has(toolName)) return [];
+  const filePath = typeof input.file_path === "string" ? input.file_path : "";
+  const units: Unit[] = [];
+  if (typeof input.content === "string") units.push({ text: input.content });
+  if (typeof input.new_string === "string") {
+    const old = typeof input.old_string === "string" ? input.old_string : "";
+    units.push({ text: input.new_string, placement: place(filePath, old, input.new_string) });
+  }
+  if (Array.isArray(input.edits)) {
+    for (const edit of input.edits) {
+      const next = (edit as { new_string?: unknown } | null)?.new_string;
+      if (typeof next !== "string") continue;
+      const old = (edit as { old_string?: unknown } | null)?.old_string;
+      units.push({
+        text: next,
+        placement: place(filePath, typeof old === "string" ? old : "", next),
+      });
+    }
+  }
+  return units;
+}
+
+/** The findings this unit is answerable for. */
+function findingsFor(rel: string, unit: Unit): Finding[] {
+  if (unit.placement === undefined) return findings(rel, unit.text);
+  const { full, start, end } = unit.placement;
+  return findings(rel, full).filter((f) => f.startLine - 1 >= start && f.startLine - 1 <= end);
 }
 
 interface HookPayload {
@@ -59,9 +104,11 @@ export function relativePath(filePath: string, cwd: string): string {
 /**
  * Findings that should refuse this write, or [] to stay out of the way.
  *
- * A fragment is checked as if it were the file: a comment run is a comment
- * run wherever it sits, and judging the fragment is what keeps an existing
- * violation elsewhere in the file from blocking an unrelated edit.
+ * A fragment is checked in the file it lands in, and only the findings on the
+ * lines it adds are its own. That keeps an existing violation elsewhere from
+ * blocking an unrelated edit, while a fence, a table or a list the fragment
+ * sits inside still counts. A fragment that cannot be placed is checked on its
+ * own, as it always was.
  */
 export function blockingFindings(
   toolName: string,
@@ -74,8 +121,8 @@ export function blockingFindings(
   if (fileKind(rel) === "other") return [];
 
   const found: Finding[] = [];
-  for (const text of addedText(toolName, input)) {
-    found.push(...findings(rel, text));
+  for (const unit of unitsOf(toolName, input)) {
+    found.push(...findingsFor(rel, unit));
   }
   return found;
 }
@@ -90,24 +137,40 @@ export function denyReason(found: Finding[]): string {
   );
 }
 
+/** What makes two findings the same one, across the lines an edit moves. */
+function identity(f: Finding): string {
+  return `${f.check} ${f.message}`;
+}
+
 /**
- * Drops every ledger entry whose file is clean on disk now, and returns the
- * paths still carrying a violation.
+ * Drops every ledger entry whose recorded findings are gone from disk, and
+ * returns the paths still carrying one.
  *
- * Re-reading disk is what clears the block on its own: the write that
- * fixed the file has already landed by the time the next one is judged, so
- * nothing has to be told the repair happened.
+ * Re-reading disk is what clears the block on its own: the write that fixed
+ * the file has already landed by the time the next one is judged, so nothing
+ * has to be told the repair happened.
+ *
+ * It asks after the RECORDED findings rather than the file's own. A file the
+ * write never made worse is one the session cannot be asked to repair. This
+ * repository's own CLAUDE.md is hard-wrapped throughout, so a whole-file test
+ * on it can never pass. An entry made under that test wedged every later write
+ * in the session against a file nothing could clean.
  */
 export function sweep(sessionId: string, cwd: string): string[] {
   const still: string[] = [];
-  for (const filePath of outstanding(sessionId)) {
-    const content = diskContent(filePath);
-    const rel = relativePath(filePath, cwd);
-    if (content === undefined || findings(rel, content).length === 0) {
-      forget(sessionId, filePath);
+  for (const entry of outstanding(sessionId)) {
+    const content = diskContent(entry.path);
+    if (content === undefined) {
+      forget(sessionId, entry.path);
       continue;
     }
-    still.push(filePath);
+    const rel = relativePath(entry.path, cwd);
+    const left = new Set(findings(rel, content).map(identity));
+    if (!entry.ids.some((id) => left.has(id))) {
+      forget(sessionId, entry.path);
+      continue;
+    }
+    still.push(entry.path);
   }
   return still;
 }
@@ -144,7 +207,7 @@ export function decide(raw: string): string {
 
   const found = blockingFindings(payload.tool_name, input, cwd);
   if (found.length === 0) return "";
-  if (filePath !== "") record(sessionId, filePath);
+  if (filePath !== "") record(sessionId, filePath, found.map(identity));
   return denyReason(found);
 }
 
