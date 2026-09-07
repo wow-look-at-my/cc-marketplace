@@ -42,10 +42,14 @@ export function place(
   if (at === -1) return undefined;
   if (disk.indexOf(oldString, at + 1) !== -1) return undefined;
 
-  const before = disk.slice(0, at);
+  const prefix = disk.slice(0, at);
   const after = disk.slice(at + oldString.length);
-  const start = before.split("\n").length - 1;
+  const start = prefix.split("\n").length - 1;
   const end = start + newString.split("\n").length - 1;
-  return { full: before + newString + after, start, end };
+  // `before` is the whole file as it stands, not the prefix. The caller
+  // subtracts what the file already carried, and a prefix answers a different
+  // question. It was declared here and never filled in, which left the
+  // subtraction reading an empty document and cancelling nothing.
+  return { full: prefix + newString + after, before: disk, start, end };
 }
 

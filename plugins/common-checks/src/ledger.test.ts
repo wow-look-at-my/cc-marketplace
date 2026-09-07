@@ -46,6 +46,34 @@ function payload(sessionId: string, cwd: string, filePath: string, text: string)
   });
 }
 
+// A session here normally holds several checkouts. The ledger is keyed by
+// session and holds absolute paths, so without a work-tree test an entry
+// recorded in one project refuses every write in an unrelated one. A sibling
+// was blocked from editing this repository by a file in another.
+test("a bad file in another checkout does not block a write here", () => {
+  const id = session();
+  const elsewhere = repo();
+  const bad = write(elsewhere, "bad.yml", BAD_YAML);
+  assert.match(reasonOf(payload(id, elsewhere, bad, BAD_YAML)), /yaml\/comment-block/);
+
+  const here = repo();
+  const clean = write(here, "fine.yml", GOOD_YAML);
+  assert.equal(reasonOf(payload(id, here, clean, GOOD_YAML)), "");
+});
+
+// The negative control for the case above. The same entry, in the same work
+// tree as the write, still blocks. Without this the case passes on a ledger
+// that blocks nothing at all.
+test("a bad file in this checkout still blocks a write here", () => {
+  const id = session();
+  const cwd = repo();
+  const bad = write(cwd, "bad.yml", BAD_YAML);
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml\/comment-block/);
+
+  const clean = write(cwd, "fine.yml", GOOD_YAML);
+  assert.match(reasonOf(payload(id, cwd, clean, GOOD_YAML)), /already carries a violation/);
+});
+
 // The escape this closes: a refusal on one file, then move to another and the
 // finding is behind you.
 test("a write to another file is refused while a known file is bad", () => {
@@ -55,7 +83,7 @@ test("a write to another file is refused while a known file is bad", () => {
   const other = write(cwd, "other.yml", GOOD_YAML);
 
   const first = reasonOf(payload(id, cwd, bad, BAD_YAML));
-  assert.match(first, /yaml-comment-block/);
+  assert.match(first, /yaml\/comment-block/);
 
   const second = reasonOf(payload(id, cwd, other, GOOD_YAML));
   assert.match(second, /already carries a violation/);
@@ -69,7 +97,7 @@ test("the block clears once the file is clean on disk", () => {
   const bad = write(cwd, "bad.yml", BAD_YAML);
   const other = write(cwd, "other.yml", GOOD_YAML);
 
-  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml\/comment-block/);
   assert.match(reasonOf(payload(id, cwd, other, GOOD_YAML)), /already carries/);
 
   // The repair lands on disk, exactly as a real write would.
@@ -85,7 +113,7 @@ test("the file that is bad can still be edited", () => {
   const cwd = repo();
   const bad = write(cwd, "bad.yml", BAD_YAML);
 
-  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml\/comment-block/);
   assert.equal(reasonOf(payload(id, cwd, bad, GOOD_YAML)), "");
 });
 
@@ -93,7 +121,7 @@ test("the file that is bad can still be edited", () => {
 test("a deleted file drops out of the ledger", () => {
   const id = session();
   const cwd = repo();
-  record(id, join(cwd, "gone.yml"), ["yaml-comment-block anything"]);
+  record(id, join(cwd, "gone.yml"), ["yaml/comment-block anything"]);
   assert.deepEqual(sweep(id, cwd), []);
 });
 
@@ -106,7 +134,7 @@ test("a file keeping findings the write never introduced clears the ledger", () 
   const bad = write(cwd, "bad.yml", BAD_YAML);
   const other = write(cwd, "other.yml", GOOD_YAML);
 
-  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml\/comment-block/);
   assert.match(reasonOf(payload(id, cwd, other, GOOD_YAML)), /already carries/);
 
   // The recorded finding goes. A different one the file already had stays.
@@ -123,7 +151,7 @@ test("the block holds while the recorded finding is still on disk", () => {
   const bad = write(cwd, "bad.yml", BAD_YAML);
   const other = write(cwd, "other.yml", GOOD_YAML);
 
-  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload(id, cwd, bad, BAD_YAML)), /yaml\/comment-block/);
   assert.deepEqual(sweep(id, cwd), [bad]);
   assert.match(reasonOf(payload(id, cwd, other, GOOD_YAML)), /already carries/);
 });
@@ -145,7 +173,7 @@ test("sessions do not block each other", () => {
   const bad = write(cwd, "bad.yml", BAD_YAML);
   const other = write(cwd, "other.yml", GOOD_YAML);
 
-  assert.match(reasonOf(payload(mine, cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload(mine, cwd, bad, BAD_YAML)), /yaml\/comment-block/);
   assert.equal(reasonOf(payload(theirs, cwd, other, GOOD_YAML)), "");
 });
 
@@ -153,7 +181,7 @@ test("sessions do not block each other", () => {
 test("a payload with no session id still checks the write itself", () => {
   const cwd = repo();
   const bad = write(cwd, "bad.yml", BAD_YAML);
-  assert.match(reasonOf(payload("", cwd, bad, BAD_YAML)), /yaml-comment-block/);
+  assert.match(reasonOf(payload("", cwd, bad, BAD_YAML)), /yaml\/comment-block/);
   assert.deepEqual(outstanding(""), []);
 });
 

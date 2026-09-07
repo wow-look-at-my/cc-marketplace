@@ -50,7 +50,10 @@ let cached: string | undefined;
  * slopfix that has not published.
  */
 export function slopfixPath(): string | undefined {
-  if (process.env.COMMON_CHECKS_SLOPFIX) return process.env.COMMON_CHECKS_SLOPFIX;
+  // An override that names nothing is the same as no binary at all, and it must
+  // read that way rather than as a spawn failure further down.
+  const named = process.env.COMMON_CHECKS_SLOPFIX;
+  if (named) return existsSync(named) ? named : undefined;
   if (cached !== undefined) return cached || undefined;
   // The module sits one directory under the plugin root, whether that is
   // `src/` under tsx or `server/` in the bundle.

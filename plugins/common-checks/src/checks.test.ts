@@ -196,7 +196,8 @@ test("a hard-wrapped paragraph is one finding, not one per line", () => {
   const wrapped = "This is a paragraph that the author\nwrapped by hand across four\nseparate lines in the source\nfile itself.\n";
   const found = findings("docs/x.md", wrapped).filter((finding) => /one line/.test(finding.message));
   assert.equal(found.length, 1);
-  assert.equal(found[0].startLine, 2);
+  // slopfix reports the paragraph where it starts, not where it first wraps.
+  assert.equal(found[0].startLine, 1);
 });
 
 test("two wrapped paragraphs are two findings", () => {

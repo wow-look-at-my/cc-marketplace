@@ -44,7 +44,7 @@ test("the three-line comment that took a pull request red is refused", () => {
       ].join("\n"),
     }),
   );
-  assert.match(reason, /yaml-comment-block/);
+  assert.match(reason, /yaml\/comment-block/);
   assert.match(reason, /comment lines in a row/);
 });
 
@@ -90,7 +90,7 @@ test("an action manifest is judged like a workflow", () => {
       },
     }),
   );
-  assert.match(reason, /yaml-comment-block/);
+  assert.match(reason, /yaml\/comment-block/);
 });
 
 test("every write shape contributes its added text", () => {
@@ -115,7 +115,7 @@ test("a MultiEdit is refused when any one of its edits violates", () => {
       },
     }),
   );
-  assert.match(reason, /yaml-comment-block/);
+  assert.match(reason, /yaml\/comment-block/);
 });
 
 test("paths resolve relative to the working directory, and absolute ones survive", () => {
@@ -209,16 +209,70 @@ test("an edit inside a fenced block is not refused for its line breaks", () => {
 test("an edit outside a fence is still refused for its wrap", () => {
   const dir = repoDir();
   const file = join(dir, "spec.md");
-  const before = "A paragraph the author wrapped\nacross two lines by hand.";
+  // The file starts clean, so the wrap the edit adds is unambiguously its own.
+  // Rewording a paragraph the file already wrapped is a different case, and the
+  // subtraction above deliberately leaves that one alone.
+  const before = "One line, one paragraph.";
   writeFileSync(file, `# Title\n\n${before}\n`, "utf8");
 
-  const after = "A paragraph the author rewrapped\nacross two lines by hand.";
+  const after = "A paragraph the author wrapped\nacross two lines by hand.";
   const reason = decide(
     JSON.stringify({
       hook_event_name: "PreToolUse",
       tool_name: "Edit",
       cwd: dir,
       tool_input: { file_path: file, old_string: before, new_string: after },
+    }),
+  );
+  assert.match(reason, /Join it back up/);
+});
+
+// The span alone is not enough. An edit anchors on text the file already has,
+// and a new_string that repeats any of it puts those lines inside the span. The
+// file below already breaks the rule on a paragraph the edit only re-anchors on.
+// Without the subtraction that sentence is reported as this write's own, and the
+// ledger records a file no write here made worse.
+test("a finding the write only re-anchored on is not its own", () => {
+  const dir = repoDir();
+  const file = join(dir, "spec.md");
+  const carried = "A paragraph the author wrapped\nacross two lines by hand.";
+  writeFileSync(file, `# Title\n\n${carried}\n\nOne line, one paragraph.\n`, "utf8");
+
+  const reason = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      cwd: dir,
+      tool_input: {
+        file_path: file,
+        // The edit anchors on the wrapped paragraph and writes it back
+        // unchanged, so it lands inside the span without being this write's.
+        old_string: carried,
+        new_string: `${carried}\n\nA sentence this write really adds.`,
+      },
+    }),
+  );
+  assert.equal(reason, "");
+});
+
+// The control. A SECOND copy of a sentence the file already breaks is still the
+// write's own, so each pre-edit finding cancels exactly one match.
+test("a second copy of a carried finding is still the write's own", () => {
+  const dir = repoDir();
+  const file = join(dir, "spec.md");
+  const carried = "A paragraph the author wrapped\nacross two lines by hand.";
+  writeFileSync(file, `# Title\n\n${carried}\n\nOne line, one paragraph.\n`, "utf8");
+
+  const reason = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      cwd: dir,
+      tool_input: {
+        file_path: file,
+        old_string: carried,
+        new_string: `${carried}\n\n${carried}`,
+      },
     }),
   );
   assert.match(reason, /Join it back up/);
@@ -341,5 +395,5 @@ test("blockingFindings reports the check by name", () => {
     CWD,
   );
   assert.equal(found.length > 0, true);
-  assert.equal(found[0]?.check, "yaml-comment-block");
+  assert.equal(found[0]?.check, "yaml/comment-block");
 });

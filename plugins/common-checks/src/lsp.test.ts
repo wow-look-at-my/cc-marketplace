@@ -68,7 +68,7 @@ test("opening a dirty workflow publishes one diagnostic per finding", () => {
   assert.equal(published[0]!.uri, CI);
   assert.deepEqual(
     published[0]!.diagnostics.map((diagnostic) => diagnostic.code),
-    ["no-all-builds-job", "yaml-comment-block"],
+    ["yaml/comment-block", "yaml/all-builds-job"],
   );
 });
 
@@ -149,8 +149,10 @@ test("the pull path answers with the same findings the push path published", () 
 });
 
 test("a truncated file says how many findings it did not send", () => {
-  // Twelve semicolons: more findings than the per-file cap.
-  const lines = Array.from({ length: 12 }, (_, index) => `Line ${index} reads; it then stops.`);
+  // More semicolons than the per-file cap. The paragraphs carry no number of
+  // their own, or the stated-count rule adds findings the cap arithmetic here
+  // does not expect.
+  const lines = Array.from({ length: 12 }, () => "The server reads the file; it then stops.");
   const diagnostics = diagnosticsFor("docs/x.md", `${lines.join("\n\n")}\n`);
   assert.equal(diagnostics.length, 10);
   assert.match(diagnostics.at(-1)!.message, /\+2 more common-checks findings/);
