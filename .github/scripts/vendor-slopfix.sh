@@ -12,10 +12,9 @@
 # failure, a wrong file, or a binary that cannot answer the contract all fail
 # the build.
 #
-# This was vendor-slopfmt.sh, naming the project slopfmt. buildhost still serves
-# that name, so a fetch of it succeeds and hands back a binary frozen before the
-# rename. The `report` probe below is what refuses one: that subcommand exists
-# only after the rename, so an old build cannot pass this gate quietly.
+# buildhost still serves the retired `slopfmt` project name, so naming it fetches
+# a binary frozen before the rename instead of failing. The `report` probe below
+# is what refuses one: that subcommand exists only in slopfix.
 set -eu
 
 plugin_dir=${1:?usage: vendor-slopfix.sh <plugin-dir> [hook-rule...]}

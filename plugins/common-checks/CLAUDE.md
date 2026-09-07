@@ -6,7 +6,7 @@ The common-checks plugin lives at `plugins/common-checks/`. It is one **language
 
 The hook judges only the text a write ADDS. A violation already in the file therefore never blocks an unrelated edit to it.
 
-**Scope is the repository. It is decided before any check runs.** Writing a plan under `~/.claude` was refused with 29 ste-lint findings, under a message claiming the write fails CI. That claim was false. A plan sits in no repository, it never ships, and no build reads it. The hard-wrap rule is wrong there for a second reason. A plan is read in a terminal pane, where one-line paragraphs read worse. So `scope.ts` walks up from the file looking for a `.git` entry. A worktree and a submodule carry a `.git` FILE rather than a directory, so it asks only whether the name exists. A path with none in any ancestor is judged by nothing at all. `$HOME/.claude` is excluded on top of that, because a versioned dotfiles tree puts the user's own configuration inside a real work tree. That exclusion matches the resolved home prefix and nothing wider. A repository that keeps a `.claude/` of its own is a directory CI really does read. Both callers ask the ABSOLUTE path. The hook asks before it makes the path relative to the working directory, and the server asks the URI's own path. A relative path cannot be walked upward. The answer there is the working directory's rather than the file's. Every failure answers out of scope, which allows the write and publishes nothing. The ledger drops an out-of-scope entry for the same reason. Nothing re-checks such a file, so an entry naming one can never clear on its own. What survives is the refusal's own sentence. It claims the write fails CI, and that claim is now only ever made about a file inside a work tree.
+**Scope is the repository.** It is decided before any check runs. Writing a plan under `~/.claude` was refused with a wall of ste-lint findings. The message claimed the write fails CI. That claim was false. A plan sits in no repository. It never ships, and no build reads it. The hard-wrap rule is wrong there for a second reason. A plan is read in a terminal pane, where one-line paragraphs read worse. So `scope.ts` walks up from the file looking for a `.git` entry. A worktree and a submodule carry a `.git` FILE rather than a directory, so it asks only whether the name exists. A path with none in any ancestor is judged by nothing at all. `$HOME/.claude` is excluded on top of that, because a versioned dotfiles tree puts the user's own configuration inside a real work tree. That exclusion matches the resolved home prefix and nothing wider. A repository that keeps a `.claude/` of its own is a directory CI really does read. Both callers ask the ABSOLUTE path. The hook asks before it makes the path relative to the working directory, and the server asks the URI's own path. A relative path cannot be walked upward. The answer there is the working directory's rather than the file's. Every failure answers out of scope, which allows the write and publishes nothing. The ledger drops an out-of-scope entry for the same reason. Nothing re-checks such a file, so an entry naming one can never clear on its own. What survives is the refusal's own sentence. It claims the write fails CI. That claim is now only ever made about a file inside a work tree.
 
 **A fragment is judged where it LANDS, not on its own.** An Edit's text carries no fence, no table and no list of its own. Judged alone, a semicolon inside a fenced block reads as prose and refuses the write. The lines of an ASCII diagram in that same block read as a hand-wrapped paragraph. A session answered both by deleting the code blocks out of a specification. `placement.ts` puts the fragment back first. It reads the file from disk, applies the edit, and records the line span the new text occupies. Every check then runs against the whole file, and only the findings inside that span are the write's own.
 
@@ -18,11 +18,11 @@ A placement needs the file to be readable and the replaced string to appear in i
 
 One consequence is deliberate and worth stating. Rewording a paragraph the file already hard-wrapped, and leaving it wrapped, is no longer refused. The write did not make the file worse. Adding a wrapped paragraph to a clean file still is.
 
-**It filters nothing else.** `findings()` already returns only what fails CI, so a second list of enforced checks is a list that drifts from the first. An earlier draft kept one and left ste-lint out of it. The file documenting that choice then failed ste-lint in CI.
+**It filters nothing else.** `findings()` already returns only what fails CI. A second list of enforced checks is a list that drifts from the first. An earlier draft kept one and left ste-lint out of it. The file documenting that choice then failed ste-lint in CI.
 
 **A hard wrap is refused, like every other finding.** The hook once repaired it instead. It joined the lines and let the write through on `updatedInput`. That was reverted at the operator's request. A different tool is being built for the job. Placement is what survives from that change. Judging a fragment in its own file is what stops a fenced block reading as prose. That half was never about the repair.
 
-**A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
+**A refusal on one write is escapable. Moving to another file leaves the finding behind.** So a write to any OTHER judged file is refused once a file is known bad. It stays refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
 
 **That block stops at the work tree's edge. It did not before.** The ledger is keyed by session and holds absolute paths. A session here normally holds several checkouts. So an entry recorded while working in one repository refused every write in an unrelated one. A sibling agent was blocked from editing this repository by a file in another. `sweep` now takes the write's own work tree and skips every entry outside it. `scope.ts` exports `workTree` for both callers. The two cannot then disagree about which project a path belongs to. A write with no path, or one outside every work tree, has no project and blocks on nothing.
 
@@ -44,7 +44,7 @@ It takes its shape from `css-duplication`, for the same reason. A finding that t
 
 That sentence is the whole architecture. It is the owner's ruling. The org's `common-checks` action is a name every repository already calls. Its steps forward to slopfix. Running slopfix with no `--only` IS common-checks. This plugin runs exactly that.
 
-Everything that kept a hand-maintained list in step with upstream is deleted. That was a `checks.json` manifest parser. It was also a vendored copy of each check's TypeScript modules. It was also an `ADAPTED` coverage list, and three build-time drift assertions holding them against each other. All of it guarded one failure: this plugin's list of checks falling out of step with the gate's. A plugin that runs the binary's default set cannot fall out of step. There is nothing left to assert. Do not reintroduce any of it.
+Everything that kept a hand-maintained list in step with upstream is deleted. That was a `checks.json` manifest parser. It was also a vendored copy of each check's TypeScript modules. It was also an `ADAPTED` coverage list, and the build-time drift assertions holding them against each other. All of it guarded one failure: this plugin's list of checks falling out of step with the gate's. A plugin that runs the binary's default set cannot fall out of step. There is nothing left to assert. Do not reintroduce any of it.
 
 `push-excludes-tags` is the one gap. It is a stated one. Its rule is an inline script inside a composite action. Nothing imports it and slopfix does not carry it. No diagnostic here reports it. Never close that by writing the rule in TypeScript.
 
@@ -64,11 +64,11 @@ The rules are Go now. The plugin reaches them by running the binary rather than 
 
 The same script serves `no-counts-in-docs` and `no-tombstones`. Each names the rules it drives through the `hook` contract. Each rule gets the same treatment. The script runs it on text built to violate the rule and requires a verdict.
 
-**The `prepare` job resolves slopfix's head commit into the cache key.** Nothing under these three plugins' own directories changes when a rule changes in slopfix. Without it a cached build serves a checker that CI no longer runs.
+**The `prepare` job resolves slopfix's head commit into the cache key.** Nothing under these plugins' own directories changes when a rule changes in slopfix. Without it a cached build serves a checker that CI no longer runs.
 
 ### What `src/checks.ts` adds
 
-It adds exactly two things, and slopfix answers neither.
+It adds what slopfix does not answer, and nothing more.
 
 A **file kind**. slopfix decides which rules read a path too. It has to: a server handed one open buffer knows nothing else about it. What slopfix does not answer is whether the file is one the gate reads at ALL. Its `check` command judges any file it is named as prose, because naming it is the request. The gate instead walks a tree. That walk selects workflow files, action manifests and markdown. `fileKind` mirrors the walk. Firing on every `.yaml` and every `.go` is how a checker earns the reputation that gets it uninstalled.
 
@@ -90,7 +90,7 @@ The PreToolUse hook is the one place that still allows the write. A non-zero exi
 
 Ranking decides what the model actually sees. The client injects only the first handful of diagnostics per file. ste-lint reports hundreds of findings on one document, and `no-all-builds-job` reports one. So the order puts the structural checks first and ste-lint last.
 
-Two more things follow from the same budget. A hard-wrapped paragraph reports ONE finding at its first continuation line, rather than one per line. That is the same information. It leaves room for everything else. A file with more findings than the cap says so on the last diagnostic it sends. Dropping the tail in silence reads as a claim that the list is complete.
+More follows from the same budget. slopfix reports a hard-wrapped paragraph ONCE, where it starts, rather than one finding per line. That is the same information. It leaves room for everything else. A file with more findings than the cap says so on the last diagnostic it sends. Dropping the tail in silence reads as a claim that the list is complete.
 
 ### Every diagnostic is severity Error
 
@@ -111,14 +111,14 @@ A sentence over the cap gets no such text. It has no single replacement. Inventi
 These facts were read out of the shipped bundle, per `/docs:claude-code-source`. The highest version carrying an extractable `cli.js` is 2.1.241. From 2.1.242 the npm package ships a native binary and `cli.js` is a stub. So these are 2.1.241's rules. A later change does not show up here.
 
 - **`.lsp.json` at the plugin root is auto-discovered.** The manifest's `lspServers` key is read separately and merged into the same map. Either one works, and both together merge by server name. This plugin ships only the file, matching `css-duplication`.
-- **`command` and `extensionToLanguage` are the two required keys**, and every extension must start with a dot. An entry missing either is dropped with an error rather than started. `diagnostics` defaults to true. That default is what pushes `publishDiagnostics` into the agent's context after an edit. This plugin leaves it alone.
+- **`command` and `extensionToLanguage` are both required**, and every extension must start with a dot. An entry missing either is dropped with an error rather than started. `diagnostics` defaults to true. That default is what pushes `publishDiagnostics` into the agent's context after an edit. This plugin leaves it alone.
 - **Three gates stop a server before it starts.** The plugin must be enabled. A `--plugin-dir` plugin counts as enabled unless somebody disables it. Safe mode disables `lspServers` outright. Bare mode and simple mode disable it unless a caller explicitly requests it. There is no print-mode gate in 2.1.241.
 - A session without one gets no findings, silently. This plugin cannot detect that.
 - **One server per extension, and the first registered wins**, with a warning that names the loser. This plugin claims `.yml`, `.yaml` and `.md`. That is a wide claim. Another plugin that wants full YAML or markdown diagnostics cannot run beside it. That is a real tradeoff, not a gap to fix here.
 
 **Live verification did not complete. The control was a plugin whose entire LSP command appends one line to a file. It never ran either, on a real `Edit` to a file with its registered extension. The diagnostics log carried `load_plugin_hooks_completed` and no LSP event of any kind.
 
-The layer below that IS verified. A real LSP client drove the bundled `build/server.cjs` over stdio. It answered `initialize`, `didOpen` and `shutdown` correctly, and published all four workflow findings on the right lines. Run the interactive check before you trust the registration.
+The layer below that IS verified. A real LSP client drove the bundled `build/server.cjs` over stdio. It answered `initialize`, `didOpen` and `shutdown` correctly, and published every workflow finding on the right line. Run the interactive check before you trust the registration.
 
 ### Files
 
