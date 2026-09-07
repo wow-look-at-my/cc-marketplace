@@ -12,7 +12,11 @@ The hook judges only the text a write ADDS. A violation already in the file ther
 
 A placement needs the file to be readable and the replaced string to appear in it exactly once. When it cannot be pinned down, the fragment is judged alone, which is what this hook always did.
 
-**The span alone is not enough, and the gap wedged a whole session.** An edit anchors on text the file already has. A `new_string` that repeats any of it puts those lines inside the span. A sentence the write never touched is then reported as its own. That refusal records the file, and the record never clears. `sweep` drops an entry only once the whole file passes, and the finding naming it is one no edit here introduced. Every later write in the session is then refused against a file nothing can repair. So `findingsFor` subtracts what the file carried BEFORE the edit. A finding is matched by check and message rather than by line, because every line below an edit moves. Each pre-edit finding cancels one match, so a second copy of a sentence the file already breaks is still the write's own.
+**The span alone is not enough, and the gap wedged a whole session.** An edit anchors on text the file already has. A `new_string` that repeats any of it puts those lines inside the span. A sentence the write never touched is then reported as its own. That refusal records the file, and the record never clears. Every later write in the session is then refused against a file nothing can repair. So `findingsFor` subtracts what the file carried BEFORE the edit. A finding is matched by check and message rather than by line, because every line below an edit moves. Each pre-edit finding cancels one match. A second copy of a sentence the file already breaks is still the write's own.
+
+**That subtraction was documented here and never wired up.** `Placement` declared a `before` field for it. `place` never filled the field in, so the subtraction read an empty document and cancelled nothing. It is a real fix rather than a described one now, and `hook.test.ts` pins both halves. The cost is one more slopfix run per edit unit.
+
+One consequence is deliberate and worth stating. Rewording a paragraph the file already hard-wrapped, and leaving it wrapped, is no longer refused. The write did not make the file worse. Adding a wrapped paragraph to a clean file still is.
 
 **It filters nothing else.** `findings()` already returns only what fails CI, so a second list of enforced checks is a list that drifts from the first. An earlier draft kept one and left ste-lint out of it. The file documenting that choice then failed ste-lint in CI.
 
@@ -20,57 +24,67 @@ A placement needs the file to be readable and the replaced string to appear in i
 
 **A refusal on one write is escapable. Moving to another file leaves the finding behind.** So once a file is known bad, a write to any OTHER judged file is refused until that file is clean. `ledger.ts` holds the set, one directory per session under the temp directory.
 
+**That block stops at the work tree's edge. It did not before.** The ledger is keyed by session and holds absolute paths. A session here normally holds several checkouts. So an entry recorded while working in one repository refused every write in an unrelated one. A sibling agent was blocked from editing this repository by a file in another. `sweep` now takes the write's own work tree and skips every entry outside it. `scope.ts` exports `workTree` for both callers. The two cannot then disagree about which project a path belongs to. A write with no path, or one outside every work tree, has no project and blocks on nothing.
+
 It clears itself. Every write re-reads each recorded file from disk and drops the ones whose finding is gone. The repair therefore needs no announcement. Editing the bad file is always allowed, or nothing can ever fix it. A file that was deleted drops out too. No session id means no ledger, which is the behaviour before this existed.
 
 **An entry names the FINDINGS, never the file alone.** The earlier sweep asked whether the whole file passed. A file carries findings no write here introduced, and a hard-wrapped document carries one per paragraph. The entry then never cleared. Every later write in the session was refused against a file nothing was able to clean. That is a wedge whose only way out is deleting the entry by hand, which is what happened. So `record` stores each finding's identity, and `sweep` drops the entry once none of them is on disk any more. A different finding the file already had holds nothing.
 
 Every failure path allows the write: an unparseable payload, an unjudged path, a tool that does not write. **A missing Node allows it too, in `launcher.sh`.** A non-zero exit from a PreToolUse hook blocks the tool. The server's `exit 127` there refuses every write in the session rather than none.
 
+**An entry recorded before the slopfix migration clears itself.** `sweep` drops an entry once none of its recorded findings is on disk any more. An entry made under the old vendored checks carries their wording. Nothing in a slopfix finding matches that wording. So the entry reads as repaired and goes, rather than wedging the session against a file nothing can clean.
+
 One bundle serves both. `server.ts` dispatches on `--hook`, so neither half can drift from the other or from CI.
 
 It takes its shape from `css-duplication`, for the same reason. A finding that tracks the file's state disappears when the code is fixed. A hook shouts once per edit, whether or not the finding is still true.
 
-**It differs from every other plugin here in one way, and that way decides its whole design. It contains no rules.** Every verdict comes out of the check's own module. The build fetches each module from [wow-look-at-my/actions](https://github.com/wow-look-at-my/actions).
+**It differs from every other plugin here in one way. That way decides its whole design. It contains no rules.** Every verdict comes out of [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix). That binary owns every prose and YAML rule the org applies. The build fetches it and the plugin ships it.
+
+### common-checks is slopfix's default rule set
+
+That sentence is the whole architecture. It is the owner's ruling. The org's `common-checks` action is a name every repository already calls. Its steps forward to slopfix. Running slopfix with no `--only` IS common-checks. This plugin runs exactly that.
+
+Everything that kept a hand-maintained list in step with upstream is deleted. That was a `checks.json` manifest parser. It was also a vendored copy of each check's TypeScript modules. It was also an `ADAPTED` coverage list, and three build-time drift assertions holding them against each other. All of it guarded one failure: this plugin's list of checks falling out of step with the gate's. A plugin that runs the binary's default set cannot fall out of step. There is nothing left to assert. Do not reintroduce any of it.
+
+`push-excludes-tags` is the one gap. It is a stated one. Its rule is an inline script inside a composite action. Nothing imports it and slopfix does not carry it. No diagnostic here reports it. Never close that by writing the rule in TypeScript.
 
 ### Why this plugin is TypeScript in a marketplace of Go binaries
 
-Reuse of the real check code is the point. A Go reimplementation of five checkers is a second source of truth. It is correct on the day somebody writes it. It is wrong the first time a regex changes upstream. Nothing says so.
+The server is TypeScript, and `esbuild` bundles it into one file. A `/bin/sh` launcher finds Node and starts it. The cost is a Node runtime that the other plugins do not need. The launcher states a missing Node out loud on stderr. A language server that fails to start reports nothing either way.
 
-The checks are TypeScript. The server is TypeScript too. `esbuild` bundles it into one file. A `/bin/sh` launcher finds Node and starts it. The cost is a Node runtime that the other plugins do not need. The launcher states a missing Node out loud on stderr, because a language server that fails to start reports nothing either way. The only thing a message changes is whether `--debug lsp` explains the silence.
+The rules are Go now. The plugin reaches them by running the binary rather than by importing anything.
 
-### Upstream names its own checks. Nothing here keeps a copy of that list.
+### The plugin SHIPS the binary. It never looks on PATH.
 
-`common-checks/checks.json` is the manifest, published beside the composite in [wow-look-at-my/actions](https://github.com/wow-look-at-my/actions). It names every check the composite runs and, for each, the modules that carry its rules. `.github/scripts/vendor-common-checks/` resolves the upstream branch to one commit, reads the manifest, and fetches exactly the modules it names.
+`build/` carries slopfix itself, fetched by `.github/scripts/vendor-slopfix.sh` at build time. The sibling plugins settled this shape and their CLAUDE.md files record why. A plugin that names its binary as a bare word travels on a separate track from that binary. One calling a subcommand its installed binary predates then reports nothing at all. Swallowing that failure is worse. It leaves a guard that installs, reports success and does nothing.
 
-A list maintained on this side describes only what upstream looked like when somebody last read it. The manifest replaced one for that reason. A rule that moves into a new module now arrives with no edit here. The `uses:` list can never show that move at all.
+**The fetch is a GATE, not a download.** It checks the APE prologue first. Then it runs `report` on a workflow and on a document built to violate a rule. Each must come back with a verdict. Exit status alone proves only that the subcommand parses.
 
-**Three assertions run on every build, and each catches a different drift.**
+`report` doubles as the proof that this is a post-rename build. buildhost still serves the old `slopfmt` project name. A fetch of that name succeeds and hands back a binary frozen before the rename. That build has no `report` at all. It cannot pass this gate quietly. `SLOPFIX_URL` points the fetch elsewhere, for a build against a slopfix that has not published.
 
-- The manifest against the composite's `uses:` list. A check the composite runs and the manifest does not name fails the build. So does a manifest entry for a check the composite dropped. Both sides are upstream, so this catches a step added without a manifest entry.
-- The manifest against this plugin's adapters. The vendor step writes the parsed plan to `vendor/plan.json`, and `src/checks.test.ts` holds `ADAPTED` against it. A check whose modules are fetched and which nothing calls fails here. Vendoring alone leaves the plugin quietly enforcing four fifths of the gate while every surface reports success.
-- The plan's own shape. A module path under the wrong check fails. So does an entry with no name. So does a manifest that is empty or unparseable. Each of them fails rather than vendoring a subset.
+The same script serves `no-counts-in-docs` and `no-tombstones`. Each names the rules it drives through the `hook` contract. Each rule gets the same treatment. The script runs it on text built to violate the rule and requires a verdict.
 
-An entry may declare `modules: []` plus a `reason`. The reason is required rather than optional, because the assertion cannot tell a decision from an omission. Two checks use it, for the two different reasons a check reports nothing.
-
-`run-once` has no rule an open file can break. It claims the workflow run for one job.
-
-`push-excludes-tags` has a real rule, inline in a composite action, where nothing can import it. Making it importable meant converting it to a node action. That cost 642 lines against 34, on an action every repository in the org runs. 386 of those lines were a lockfile, for an eight-line rule. The gap is declared rather than paid for. Never close it by reimplementing the rule here.
-
-The vendor step runs from the plugin's `justfile` `prebuild` recipe on every CI build. A fetch failure fails the build, which matches the `docs` plugin's Docker reference. Packaging a silently stale checker is the outcome this arrangement exists to avoid. `COMMON_CHECKS_REF` points the fetch at a branch, for a build against a check that has not merged yet.
-
-**The `prepare` job resolves the upstream commit. That resolution is load-bearing twice over.** It runs the same manifest assertion, so a check added upstream fails the run before any plugin builds. It also feeds the plugin's cache key. Nothing under `plugins/common-checks/` changes when a rule changes upstream, so without it a cached build serves check code that CI no longer runs.
-
-**`vendor/` is gitignored. That is the design rather than an oversight.** A copy of the checks in the tree is a second source of truth. It goes stale in silence, and nothing marks the moment it stops matching CI. It also puts prose the repository does not author in front of every check that reads the repository. The build fetches the modules and bundles them. Nothing is committed. Nothing can drift.
-
-The whole directory is replaced on each fetch rather than merged. A file the manifest stopped naming then goes away. It does not linger as a module nothing imports and nothing refreshes.
+**The `prepare` job resolves slopfix's head commit into the cache key.** Nothing under these three plugins' own directories changes when a rule changes in slopfix. Without it a cached build serves a checker that CI no longer runs.
 
 ### What `src/checks.ts` adds
 
-It adds exactly two things that a check written for CI has no reason to produce.
+It adds exactly two things, and slopfix answers neither.
 
-A **file kind**, because a check invoked from a workflow already knows what it reads, and a server handed one open document does not. Workflow files and action manifests go to the YAML checks. Every markdown file goes to ste-lint. Nothing else is judged. Firing on every `.yaml` is how a checker earns the reputation that gets it uninstalled.
+A **file kind**. slopfix decides which rules read a path too. It has to: a server handed one open buffer knows nothing else about it. What slopfix does not answer is whether the file is one the gate reads at ALL. Its `check` command judges any file it is named as prose, because naming it is the request. The gate instead walks a tree. That walk selects workflow files, action manifests and markdown. `fileKind` mirrors the walk. Firing on every `.yaml` and every `.go` is how a checker earns the reputation that gets it uninstalled.
 
-A **line** for `no-all-builds-job`, whose CI form names the job and never the line. A CI annotation only ever had a file to attach to. The verdict there is still upstream's. Only the cursor position is worked out locally.
+A **ranking**, for the client's diagnostic budget. slopfix sorts by line, which is right for a report a person reads top to bottom. It is wrong for a channel that carries only the first handful. `FAMILY_ORDER` puts the YAML rules first and the wrap rule last. A structural finding is then never crowded out by a voluminous one.
+
+### The bridge, and what a missing binary means
+
+`src/slopfix.ts` finds the binary. It runs `report --path <p>` with the content on stdin, and reads the findings back. It THROWS when the binary is absent or cannot answer. It never returns an empty list there. An empty list reads exactly like a clean file.
+
+Each caller then decides, and only one of them swallows it.
+
+`scan-file.ts` and every CI-facing path fail hard. The failure this replaced was a run that printed `no slopfix binary` and then `clean`, and exited zero. Those two lines contradict each other. A caller reading the exit code was told the file passed.
+
+The language server logs the failure and keeps serving. A server that dies on one document stops answering for every other one.
+
+The PreToolUse hook is the one place that still allows the write. A non-zero exit from a PreToolUse hook blocks the tool. Failing hard there refuses every write in the session rather than none. It says so loudly on stderr instead.
 
 ### Ranking, and the client's budget
 
@@ -108,19 +122,21 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 
 ### Files
 
-- **Adapters**: `plugins/common-checks/src/checks.ts` -- file kind, the per-check calls into `vendor/`, the `no-all-builds-job` anchor, the ste-lint bucket wording, the wrapped-paragraph collapse, and the ranking
+- **Adapter**: `plugins/common-checks/src/checks.ts` -- the file kind, the family ranking, and the sentence a diagnostic carries. Nothing else
+- **Bridge**: `plugins/common-checks/src/slopfix.ts` -- finding the shipped binary, running `report`, and `SlopfixUnavailable`
 - **Hook**: `plugins/common-checks/src/hook.ts` -- the PreToolUse payload, the units a write adds, the ledger sweep, and the refusal
-- **Scope**: `plugins/common-checks/src/scope.ts` -- `inScope` walks for a `.git` entry, excludes `$HOME/.claude`, and answers out of scope on every failure. The hook and the server share it, so the two cannot disagree about which files are judged
+- **Scope**: `plugins/common-checks/src/scope.ts` -- `inScope` walks for a `.git` entry, excludes `$HOME/.claude`, and answers out of scope on every failure. `workTree` returns the root it found, which is what keeps one project's ledger out of another's. The hook and the server share both
 - **Placement**: `plugins/common-checks/src/placement.ts` -- `place` pins an edit to its line span in the file on disk
 - **Local scan**: `plugins/common-checks/src/scan-repo.ts` -- `npx tsx plugins/common-checks/src/scan-repo.ts .` reports every hard ste-lint finding in the repository. CI lints only what a push changed, so a file nothing touches keeps its findings until somebody edits it. This finds them first
 - **Tests**: `src/hook.test.ts` covers the refusal and every fail-open path. Then the placement cases, against a real file on disk. An edit inside a fence is not refused for its line breaks. The same edit is not refused for its punctuation. The control edit outside a fence is still refused for its wrap. The scope cases run against real directories on disk. A hard-wrapped document under a directory with no `.git` is allowed. The same bytes one `.git` away are still refused, which is the control that proves the case can fail. A plan under `$HOME/.claude` is allowed while `$HOME` itself is a work tree
 - Document sync is full, because a finding is a property of the whole document
 - **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else
 - **Launcher**: `plugins/common-checks/launcher.sh` -- staged into `server/` as `common-checks-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own. The directory is `server/` and not `build/` because `release-plugin` requires every file under `build/` to be a fat APE, and this plugin ships no Go
-- **Fetching**: `.github/scripts/vendor-common-checks/plan.ts` holds the manifest parser, the drift assertion and the provenance header. `main.ts` holds the network and disk half, plus `--commit`. The GitHub client is shared with the `docs` plugin's fetcher rather than written twice
-- **Tests**: `src/checks.test.ts` fires each check on the right line, with a clean control beside it. It also covers the file-kind boundaries, the ranking, the wrapped-paragraph collapse, and a heuristic-only finding staying unreported
+- **Fetching**: `.github/scripts/vendor-slopfix.sh` -- the download, the APE check, the `report` probes, and the per-rule `hook` probes the sibling plugins name
+- **Tests**: `src/checks.test.ts` fires each rule on the right line, with a clean control beside it. It also covers the file-kind boundaries, the ranking, and a heuristic-only finding staying unreported. Every case drives the real binary. A fake here is the second source of truth this plugin exists to avoid
+- **Tests**: `src/slopfix.test.ts` covers the missing binary. `report` and `findings` both throw, and `scan-file` exits non-zero without printing `clean`. The control proves the same command reports normally when the binary is there
+- **Tests**: `src/ledger.test.ts` covers the cross-checkout case. An entry in another work tree blocks nothing, and the same entry in this one still blocks
 - **Tests**: `src/lsp.test.ts` covers the handshake, publish and clear, pull and push agreeing, and the cap's overflow note. It also covers path resolution with and without a root, and the framing edge cases. It asserts the explicit `null` shutdown result on the RAW JSON keys
-- **Tests**: `vendor.test.ts` drives a fake client that never touches the network. A check added upstream and a check dropped upstream each fail the build by name. A module added to the manifest is fetched with no edit here, and every malformed manifest is rejected rather than vendoring a subset
 - **Registration**: `plugins/common-checks/.lsp.json`
 
-Adding a check upstream is meant to break this build. The failure names the check and the ways out. List its modules in `common-checks/checks.json` and write the adapter here, or give the entry no modules and say why no open file can violate it. Do not silence it by deleting an assertion. The assertions are the feature.
+Adding a rule to slopfix needs no edit here. That is the point of the arrangement. The plugin runs the default set, so a new rule arrives with the next build's fetch.

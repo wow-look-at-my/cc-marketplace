@@ -22,7 +22,7 @@ jobs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
-      common_checks_commit: ${{ steps.common_checks.outputs.commit }}
+      slopfix_commit: ${{ steps.slopfix.outputs.commit }}
       has_build: ${{ steps.split.outputs.has_build }}
     steps:
       - uses: actions/checkout@v7
@@ -39,12 +39,12 @@ jobs:
       - name: Script tests
         run: npx tsx --test ".github/scripts/**/*.test.ts"
 
-      # The commit the common-checks plugin builds against. Resolving it here fails the run when the plugin stops covering a check that common-checks runs.
-      - name: Resolve the common-checks upstream commit
-        id: common_checks
+      # Three plugins ship a slopfix binary they fetch at build time. Nothing under their own directories changes when a rule changes there, so the cache key carries slopfix's head instead.
+      - name: Resolve the slopfix commit
+        id: slopfix
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: echo "commit=$(npx tsx .github/scripts/vendor-common-checks/main.ts --commit)" >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ github.token }}
+        run: echo "commit=$(gh api repos/wow-look-at-my/slopfix/commits/master --jq .sha)" >> "$GITHUB_OUTPUT"
 
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
@@ -70,8 +70,13 @@ jobs:
             // shellwalk is compiled into no-work-loss and enhanced-auto-allow through a local replace, so a change there must rebuild them.
             const toolHash = await hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod');
 
-            // common-checks commits no copy of the check modules it runs, so nothing under its own directory changes when a rule changes upstream.
-            const upstream: Record<string, string> = { 'common-checks': steps.common_checks.outputs.commit };
+            // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when a rule moves there.
+            const slopfix = steps.slopfix.outputs.commit;
+            const upstream: Record<string, string> = {
+              'common-checks': slopfix,
+              'no-counts-in-docs': slopfix,
+              'no-tombstones': slopfix,
+            };
 
             for (const plugin of plugins) {
               const hash = await hashFiles(`plugins/${plugin}/**`);
@@ -146,7 +151,7 @@ jobs:
       - name: Compute plugin hash
         id: hash
         # Must match the key prepare computes, shellwalk included, or a cached hit is checked against one hash and saved under another.
-        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod') }}${{ matrix.plugin == 'common-checks' && format('-{0}', needs.prepare.outputs.common_checks_commit) || '' }}" >> $GITHUB_OUTPUT
+        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod') }}${{ contains(fromJSON('["common-checks","no-counts-in-docs","no-tombstones"]'), matrix.plugin) && format('-{0}', needs.prepare.outputs.slopfix_commit) || '' }}" >> $GITHUB_OUTPUT
 
       # see docs/ci-yaml-notes.md#release-build-binary-format-and-action-pin
       - name: Build Go plugin

@@ -18,7 +18,7 @@ The plugin named `slopfmt` as a bare word at first. The plugin and the binary th
 
 The second answer swallowed the exit code. That turned a loud break into a guard that installs, reports success and does nothing. Nothing reports such a guard, and nothing repairs it. It was rejected for that reason, and rightly.
 
-So `build/` carries slopfmt itself, fetched by `.github/scripts/vendor-slopfmt.sh` at build time. Absent and too-old cannot reach a session any more. `hook.sh` holds no probe and swallows nothing. A crash is the one failure left. A crash is loud.
+So `build/` carries slopfix itself, fetched by `.github/scripts/vendor-slopfix.sh` at build time. Absent and too-old cannot reach a session any more. `hook.sh` holds no probe and swallows nothing. A crash is the one failure left. A crash is loud.
 
 **The fetch is a GATE, not a download.** It checks the APE prologue, then runs the real hook contract on text built to violate the rule, and requires a verdict. Exit status alone proves only that the subcommand parses. A guard that runs and finds nothing in a violation is the silent failure this exists to prevent. All three refusals were driven and watched. Those are a fetch that 404s, a real APE that cannot answer, and a run reporting nothing. `SLOPFMT_URL` points the fetch elsewhere. That is how the red controls run, and how a build targets a slopfmt that has not published.
 

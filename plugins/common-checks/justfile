@@ -2,12 +2,10 @@
 help:
     @just --list
 
-# Re-read upstream's manifest, fetch the slopfix that carries every rule, and
-# bundle the server, so a release enforces what common-checks enforces today.
-# Either fetch failing fails the build: shipping a silently stale checker, or one
-# with no checker at all, is what this arrangement exists to avoid.
+# Fetch the slopfix that carries every rule, and bundle the server, so a release
+# enforces what common-checks enforces today. A fetch failure fails the build:
+# shipping a plugin with no checker in it is what this arrangement avoids.
 prebuild:
-    cd ../.. && npx tsx .github/scripts/vendor-common-checks/main.ts
     cd ../.. && sh .github/scripts/vendor-slopfix.sh plugins/common-checks
     cd ../.. && npx tsx --test plugins/common-checks/src/*.test.ts
     mkdir -p server

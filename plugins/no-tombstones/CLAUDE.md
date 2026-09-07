@@ -24,7 +24,7 @@ Every failure path allows the call: an unparseable payload, an unparseable `tool
 
 That plumbing used to live here, in Go, and identically again in `no-counts-in-docs`. The same payload parse, the same Write/Edit/MultiEdit shapes, the same splice back into `tool_input`. A write shape added to one and not the other is a guard that silently stops seeing half the writes.
 
-**The plugin SHIPS the binary it runs. It never looks on PATH.** `build/` carries slopfmt itself, fetched by `.github/scripts/vendor-slopfmt.sh` at build time. `hook.sh` holds no probe and swallows nothing.
+**The plugin SHIPS the binary it runs. It never looks on PATH.** `build/` carries slopfix itself, fetched by `.github/scripts/vendor-slopfix.sh` at build time. `hook.sh` holds no probe and swallows nothing.
 
 A bare `slopfmt` word let the plugin and the binary ship on separate tracks with nothing checking they agreed. A plugin naming a subcommand its installed binary predated exited 1, and every write in the session was then refused. Swallowing that exit code was the second wrong answer. It turned a loud break into a guard that installs, reports success and does nothing.
 
