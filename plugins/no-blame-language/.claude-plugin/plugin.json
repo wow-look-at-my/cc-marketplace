@@ -1,18 +1,19 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "no-blame-language",
-	"description": "Refuses to end a turn whose closing message deflects a defect instead of fixing it -- 'pre-existing', 'not my problem', 'out of scope', 'flagging this for you', and their kin. Fix it, or say precisely why you are not the one to fix it",
+	"description": "Marks a closing message that deflects a defect instead of fixing it -- 'pre-existing', 'not my problem', 'out of scope', 'flagging this for you', and their kin -- by appending one line to what the reader sees while the message streams. It never blocks and sends nothing back to the model",
 	"author": {
 		"name": "mhaynie"
 	},
-	"keywords": ["blame", "deflection", "ownership", "pre-existing", "stop", "hook", "enforcement"],
+	"keywords": ["blame", "deflection", "ownership", "pre-existing", "messagedisplay", "hook", "annotation"],
 	"hooks": {
-		"Stop": [
+		"MessageDisplay": [
 			{
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-blame-language"
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-blame-language",
+						"timeout": 10
 					}
 				]
 			}

@@ -1,18 +1,19 @@
 {
 	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
 	"name": "ask-properly",
-	"description": "Refuses to end a turn on a question put to the user in prose. Answer it yourself, or ask it through AskUserQuestion with your recommendation first and the cost of every option spelled out",
+	"description": "Marks a question put to the user in prose by appending one line to what the reader sees while the message streams: answer it yourself, or ask it through AskUserQuestion with your recommendation first and the cost of every option spelled out. It never blocks and sends nothing back to the model",
 	"author": {
 		"name": "mhaynie"
 	},
-	"keywords": ["questions", "askuserquestion", "deferral", "stop", "hook", "enforcement"],
+	"keywords": ["questions", "askuserquestion", "deferral", "messagedisplay", "hook", "annotation"],
 	"hooks": {
-		"Stop": [
+		"MessageDisplay": [
 			{
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/ask-properly"
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/ask-properly",
+						"timeout": 10
 					}
 				]
 			}

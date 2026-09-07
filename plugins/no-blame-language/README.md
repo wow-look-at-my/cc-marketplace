@@ -1,25 +1,14 @@
 # no-blame-language
 
-A turn does not end while its closing message deflects a defect instead of fixing it.
+A closing message that deflects a defect instead of fixing it is marked where the reader can see it.
 
-This org's convention bans that shape of sentence -- found it, fix it, or say precisely why you are not the one to fix it. The Stop hook refuses the stop and quotes the phrase back.
+This org's convention bans that shape of sentence -- found it, fix it, or say precisely why you are not the one to fix it. The hook appends one line to the message as it streams. It never blocks, and it sends nothing back to the model.
 
-```
-Do not stop here. This message reports a defect instead of owning it:
+> That bug is pre-existing, so it stays left as-is.
+>
+> > **no-blame-language** -- "pre-existing", "left as-is". This reports a defect instead of owning it. Fix the root cause and say so, or state precisely what you found, why it is not yours to fix, and what you did instead.
 
-  "pre-existing"
-      That bug is pre-existing, so it stays left as-is.
-  "left as-is"
-      That bug is pre-existing, so it stays left as-is.
-
-This org bans deflecting, blame-shifting language in a closing message: a
-finding you report and leave is a defect you caused, and a correction never
-authorizes naming who wrote the broken line first. Fix the root cause and say
-so, or state precisely what you found, why it is not yours to fix, and what
-you did instead -- never park a finding and walk away from it.
-
-Rewrite your message without the phrase above, then stop.
-```
+A refusal was the first design. It was wrong. A Stop hook runs after the message has streamed, so refusing cannot unsend it. The reader gets the deflection, then a near-identical retype that names the phrase again while explaining itself. That fires the guard a second time.
 
 ## Fix it, or own the deferral
 
@@ -32,6 +21,8 @@ What is banned is reporting a defect and stopping there, or reaching for provena
 ## How it decides
 
 Fenced code, indented code and blockquotes are exempt, so documenting the rule does not trip it. Inline backticks are not exempt.
+
+The message is judged whole, on its last flush, because a phrase can span a line wrap. Set `CC_NO_BLAME_LANGUAGE=0` to turn it off.
 
 ## Install
 

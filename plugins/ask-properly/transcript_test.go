@@ -17,30 +17,19 @@ func write(t *testing.T, lines ...string) string {
 	return path
 }
 
-func TestReadTurnReturnsTheLastAssistantText(t *testing.T) {
-	path := write(t,
-		userPrompt("go"),
-		assistantText("first"),
-		assistantText("second"),
-	)
-	assert.Equal(t, "second", ReadTurn(path).FinalText)
-}
-
 func TestReadTurnSeesTheAskToolInThisTurn(t *testing.T) {
 	path := write(t,
 		userPrompt("go"),
 		assistantAsk(),
 		assistantText("asked"),
 	)
-	turn := ReadTurn(path)
-	assert.True(t, turn.UsedAskTool)
-	assert.Equal(t, "asked", turn.FinalText)
+	assert.True(t, ReadTurn(path).UsedAskTool)
 }
 
 // A user record carrying only tool_result blocks answers a call from earlier
 // in the SAME turn, so it must not split the turn.
 func TestAToolResultDoesNotStartANewTurn(t *testing.T) {
-	toolResult := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","text":"ok"}]}}`
+	toolResult := record("user", map[string]any{"type": "tool_result", "text": "ok"})
 	path := write(t,
 		userPrompt("go"),
 		assistantAsk(),
@@ -57,9 +46,7 @@ func TestAnEarlierTurnsAskToolIsNotSeen(t *testing.T) {
 		userPrompt("two"),
 		assistantText("done"),
 	)
-	turn := ReadTurn(path)
-	assert.False(t, turn.UsedAskTool)
-	assert.Equal(t, "done", turn.FinalText)
+	assert.False(t, ReadTurn(path).UsedAskTool)
 }
 
 func TestUnreadableTranscriptIsAZeroTurn(t *testing.T) {
@@ -71,7 +58,7 @@ func TestGarbageLinesAreSkipped(t *testing.T) {
 	path := write(t,
 		"{not json",
 		userPrompt("go"),
-		assistantText("fine"),
+		assistantAsk(),
 	)
-	assert.Equal(t, "fine", ReadTurn(path).FinalText)
+	assert.True(t, ReadTurn(path).UsedAskTool)
 }

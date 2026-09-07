@@ -1,16 +1,15 @@
-// transcript.go pulls the two things this plugin judges: the text the
-// assistant just put in front of the user, and whether this turn asked its
-// question through the AskUserQuestion tool.
+// transcript.go answers one question: did this turn ask through the
+// AskUserQuestion tool? The message being judged arrives on the hook payload
+// itself, flush by flush, so nothing is read out of the transcript but this.
 //
-// Only the closing message counts, and only THIS turn's tool calls count. A
-// question asked properly three turns ago does not license one in prose now.
+// Only THIS turn's tool calls count. A question asked properly three turns ago
+// does not license one in prose now.
 package main
 
 import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"strings"
 )
 
 // transcriptTailBytes bounds the read. A long session's transcript reaches
@@ -37,14 +36,13 @@ type contentBlock struct {
 
 // Turn is what one invocation reads out of the transcript.
 type Turn struct {
-	FinalText   string
 	UsedAskTool bool
 }
 
-// ReadTurn returns the last assistant message's text and whether the current
-// turn called AskUserQuestion. An unreadable, empty, or text-less transcript
-// returns a zero Turn -- which allows the stop, because a guard that blocks
-// on its own read failure wedges the session it was meant to improve.
+// ReadTurn reports whether the current turn called AskUserQuestion. An
+// unreadable or empty transcript returns a zero Turn, which leaves the message
+// judged on its own text -- the worst that costs is one advisory line under a
+// message that had a card beside it.
 func ReadTurn(path string) Turn {
 	if path == "" {
 		return Turn{}
@@ -74,17 +72,10 @@ func ReadTurn(path string) Turn {
 		if json.Unmarshal(recs[i].Message.Content, &blocks) != nil {
 			continue
 		}
-		var parts []string
 		for _, b := range blocks {
 			if b.Type == "tool_use" && b.Name == askTool {
 				turn.UsedAskTool = true
 			}
-			if b.Type == "text" && strings.TrimSpace(b.Text) != "" {
-				parts = append(parts, b.Text)
-			}
-		}
-		if turn.FinalText == "" && len(parts) > 0 {
-			turn.FinalText = strings.Join(parts, "\n")
 		}
 	}
 	return turn
