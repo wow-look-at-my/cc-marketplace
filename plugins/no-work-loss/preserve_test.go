@@ -164,6 +164,154 @@ func TestPreservesLocallyWhenPushFails(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// What the preservation commit contains, and what it does to the index.
+// ---------------------------------------------------------------------------
+
+// dirtyThreeWays builds the tree every question below is asked about: one
+// tracked file staged, one tracked file modified and left unstaged, and one
+// file git has never seen.
+func dirtyThreeWays(t *testing.T, dir string) {
+	t.Helper()
+	writeAt(t, dir, "staged.go", "package a\n")
+	writeAt(t, dir, "unstaged.go", "package b\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "second")
+
+	writeAt(t, dir, "staged.go", "package a\n// staged\n")
+	git(t, dir, "add", "staged.go")
+	writeAt(t, dir, "unstaged.go", "package b\n// unstaged\n")
+	untrack(t, dir, "new.txt")
+}
+
+// The commit must carry the at-risk paths on top of HEAD and nothing else. A
+// staged file the command never touches keeps HEAD's content, so preservation
+// never smuggles unrelated staged work into a commit nobody wrote.
+func TestPreservationCommitsOnlyTheAtRiskPaths(t *testing.T) {
+	dir := newRepo(t)
+	dirtyThreeWays(t, dir)
+	head := gitOutput(t, dir, "rev-parse", "HEAD")
+
+	notice := preserved(t, dir, "rm unstaged.go new.txt")
+	assert.Contains(t, notice, "unstaged.go")
+
+	refs := listPreservationRefs(t, dir)
+	require.Len(t, refs, 1)
+	assert.Equal(t, head, gitOutput(t, dir, "rev-parse", refs[0]+"^"))
+
+	// The two at-risk paths carry their working-tree content.
+	assert.Equal(t, "package b\n// unstaged", gitOutput(t, dir, "show", refs[0]+":unstaged.go"))
+	assert.Equal(t, "scratch", gitOutput(t, dir, "show", refs[0]+":new.txt"))
+	// staged.go was never at risk, so the commit holds HEAD's version of it
+	// rather than the one sitting in the index.
+	assert.Equal(t, "package a", gitOutput(t, dir, "show", refs[0]+":staged.go"))
+	assert.Equal(t, []string{"new.txt", "unstaged.go"},
+		splitLines(gitOutput(t, dir, "diff", "--name-only", head, refs[0])))
+}
+
+// The staged version of a file is a third state, distinct from HEAD and from
+// the working tree, and it lives only in the index. Preserving the working
+// tree while overwriting the index with it destroys that state, so both go
+// into the commit chain: the index content first, the working tree on top.
+func TestPreservationKeepsAStagedVersionDistinctFromTheWorkingTree(t *testing.T) {
+	dir := newRepo(t)
+	writeAt(t, dir, "app.go", "package a\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "second")
+
+	writeAt(t, dir, "app.go", "package a\n// staged\n")
+	git(t, dir, "add", "app.go")
+	writeAt(t, dir, "app.go", "package a\n// staged\n// working\n")
+
+	preserved(t, dir, "rm app.go")
+
+	// The tip carries the working tree; its parent carries what was staged.
+	assert.Equal(t, "package a\n// staged\n// working", gitOutput(t, dir, "show", "HEAD:app.go"))
+	assert.Equal(t, "package a\n// staged", gitOutput(t, dir, "show", "HEAD^:app.go"))
+}
+
+// Nothing is staged that was not already, so a tree whose at-risk paths are
+// all unstaged produces exactly one commit rather than an empty one plus the
+// real one.
+func TestPreservationMakesNoEmptyIndexCommit(t *testing.T) {
+	dir := newRepo(t)
+	modify(t, dir)
+	head := gitOutput(t, dir, "rev-parse", "HEAD")
+
+	preserved(t, dir, "rm tracked.go")
+	assert.Equal(t, head, gitOutput(t, dir, "rev-parse", "HEAD^"))
+}
+
+// The working tree is never written, and every at-risk path is still on disk
+// byte for byte: this hook analyses a command and never runs one.
+func TestPreservationNeverWritesTheWorkingTree(t *testing.T) {
+	dir := newRepo(t)
+	dirtyThreeWays(t, dir)
+	before := readTree(t, dir)
+
+	preserved(t, dir, "rm staged.go unstaged.go new.txt")
+	assert.Equal(t, before, readTree(t, dir))
+}
+
+// Preservation commits the at-risk content to the CURRENT BRANCH, so content
+// that was uncommitted before the hook ran is committed after it. That is the
+// whole point, and it is also the one thing a session sees change: `git
+// status` and `git diff --cached` stop reporting what was just preserved.
+// This pins the shape of that change rather than leaving it to be
+// rediscovered -- and pins that it is confined to the at-risk paths.
+func TestPreservationClearsOnlyTheAtRiskPathsFromStatus(t *testing.T) {
+	dir := newRepo(t)
+	dirtyThreeWays(t, dir)
+
+	require.ElementsMatch(t, []string{"M  staged.go", " M unstaged.go", "?? new.txt"},
+		splitLines(gitOutput(t, dir, "status", "--porcelain")))
+
+	preserved(t, dir, "rm unstaged.go new.txt")
+
+	// The two preserved paths are committed now, so they read clean. The
+	// staged file nothing threatened is still staged, and still names the
+	// same content it did before.
+	assert.Equal(t, []string{"M  staged.go"},
+		splitLines(gitOutput(t, dir, "status", "--porcelain")))
+	assert.Equal(t, []string{"staged.go"},
+		splitLines(gitOutput(t, dir, "diff", "--cached", "--name-only")))
+	assert.Equal(t, "package a\n// staged", gitOutput(t, dir, "show", ":staged.go"))
+}
+
+// splitLines turns git's line output into a slice, with no entry for empty
+// output -- an assertion against nil is what "git reported nothing" means.
+func splitLines(out string) []string {
+	if out == "" {
+		return nil
+	}
+	return strings.Split(out, "\n")
+}
+
+// readTree reads every file in the working tree, ignoring .git, so a test can
+// assert the hook wrote none of them.
+func readTree(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	require.NoError(t, filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, relErr := filepath.Rel(dir, p)
+		require.NoError(t, relErr)
+		if d.IsDir() {
+			if rel == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		b, readErr := os.ReadFile(p)
+		require.NoError(t, readErr)
+		files[rel] = string(b)
+		return nil
+	}))
+	return files
+}
+
+// ---------------------------------------------------------------------------
 // What still denies -- preservation must never widen what this hook allows.
 // ---------------------------------------------------------------------------
 

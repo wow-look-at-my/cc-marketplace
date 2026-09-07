@@ -76,9 +76,7 @@ func TestAScriptsUnreadableInnerShellIsTheProgramsOwnBusiness(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 
-	cmd := writeScript(t, dir, "run-tests.sh", `cmd="echo hello"
-sh -c "$cmd"
-`)
+	cmd := writeScript(t, dir, "run-tests.sh", "sh -c \"$1\"\n")
 	allowed(t, dir, cmd)
 }
 
@@ -88,8 +86,22 @@ func TestAnUnreadableInnerShellStillDeniesInTheCommandText(t *testing.T) {
 	dir := newRepo(t)
 	modify(t, dir)
 
-	r := denied(t, dir, `cmd="echo hello"; sh -c "$cmd"`)
+	r := denied(t, dir, `sh -c "$1"`)
 	assert.Contains(t, r, "assembled from an expansion")
+}
+
+// A script the walk cannot parse at all is still refused, whatever depth the
+// walk stands at when it opens the file. That blocker describes the command
+// that named the file, not the program inside it, and exempting it would
+// reopen the write-elsewhere-then-run bypass this hook follows scripts to
+// close.
+func TestAnUnparseableScriptStillDenies(t *testing.T) {
+	dir := newRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "broken.sh"),
+		[]byte("#!/bin/bash\nif then fi ((\n"), 0o755))
+
+	r := denied(t, dir, "cd "+dir+" && bash ./broken.sh")
+	assert.Contains(t, r, "does not parse as shell")
 }
 
 // A script whose blockers are exempt must still be judged on everything the
@@ -98,10 +110,7 @@ func TestAnUnreadableInnerShellStillDeniesInTheCommandText(t *testing.T) {
 func TestAScriptWithABlockerIsStillJudgedOnWhatItNamesStatically(t *testing.T) {
 	dir := newRepo(t)
 
-	cmd := writeScript(t, dir, "mixed.sh", `cmd="echo hello"
-sh -c "$cmd"
-echo generated > tracked.go
-`)
+	cmd := writeScript(t, dir, "mixed.sh", "sh -c \"$1\"\necho generated > tracked.go\n")
 	r := denied(t, dir, cmd)
 	assert.Contains(t, r, "tracked.go")
 }

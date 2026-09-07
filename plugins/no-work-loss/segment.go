@@ -445,16 +445,22 @@ func shellNoExec(eff []word) bool {
 // that runs in the caller's own scope.
 func (w *walker) script(src, cwd, what, self string) {
 	if w.scriptDepth >= maxScriptDepth {
-		w.block(what+", nested deeper than this hook will follow")
+		w.block(what + ", nested deeper than this hook will follow")
 		return
 	}
 	f, err := syntax.NewParser().Parse(strings.NewReader(src), "")
 	if err != nil {
-		w.block(what+", which does not parse as shell")
+		w.block(what + ", which does not parse as shell")
 		return
 	}
 	w.scriptDepth++
 	if self != "" {
+		// The depth rises only once the file's text is in hand. A blocker
+		// about THIS file -- it does not parse, it nests too deep -- describes
+		// the command that named it, and stamping it as the program's own
+		// business would reopen the write-elsewhere-then-run bypass.
+		w.fileDepth++
+		defer func() { w.fileDepth-- }()
 		defer w.enterScope(f.Stmts, self)()
 	} else {
 		prev := w.scopeOK
@@ -485,25 +491,22 @@ func (w *walker) scriptFile(f word, cwd string, fresh bool) {
 		return
 	}
 	if st.Size() > maxScriptBytes {
-		w.block("the script "+f.text+", which is too large to analyse")
+		w.block("the script " + f.text + ", which is too large to analyse")
 		return
 	}
 	src, err := os.ReadFile(path)
 	if err != nil {
-		w.block("the script "+f.text+", which cannot be read")
+		w.block("the script " + f.text + ", which cannot be read")
 		return
 	}
 	self := ""
 	if fresh {
 		self = path
 	}
-	// Only a NEW shell counts as a program of its own. A sourced file runs in
-	// the caller's scope and its text is the caller's text, so it stays judged
-	// exactly like the command that named it.
-	if fresh {
-		w.fileDepth++
-		defer func() { w.fileDepth-- }()
-	}
+	// Only a NEW shell counts as a program of its own, and script raises the
+	// depth once it has the text. A sourced file runs in the caller's scope
+	// and its text is the caller's text, so it stays judged exactly like the
+	// command that named it.
 	w.script(string(src), cwd, "the script "+f.text, self)
 }
 

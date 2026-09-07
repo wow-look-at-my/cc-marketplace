@@ -62,6 +62,25 @@ func preserveAtRiskPaths(root string, paths []string) (res *preserveResult, ok b
 		hasHead = false
 	}
 
+	headTree := ""
+	if hasHead {
+		out, _, err := runGit(root, "rev-parse", "HEAD^{tree}")
+		if err == nil {
+			headTree = strings.TrimSpace(out)
+		}
+	}
+
+	// A staged version is a THIRD state, distinct from HEAD and from the
+	// working tree, and it lives only in the index. Committing the working
+	// tree and then refreshing the index to match it destroys that state, so
+	// it is captured first and the working tree lands on top of it. A path
+	// with nothing staged contributes no entry, and a run where nothing was
+	// staged produces no commit here at all.
+	var trees []string
+	if t := stagedTree(root, env, paths, hasHead); t != "" && t != headTree {
+		trees = append(trees, t)
+	}
+
 	// --force: an ignored file (clean -fdx) is exactly the case `git add`
 	// otherwise refuses to stage, and a tracked or plain untracked path is
 	// unaffected by the flag.
@@ -78,18 +97,29 @@ func preserveAtRiskPaths(root string, paths []string) (res *preserveResult, ok b
 	if tree == "" {
 		return nil, false
 	}
+	if len(trees) == 0 || trees[len(trees)-1] != tree {
+		trees = append(trees, tree)
+	}
 
-	commitArgs := []string{"commit-tree", tree, "-m", preserveMessage(paths)}
+	commit := ""
+	parent := ""
 	if hasHead {
-		commitArgs = append(commitArgs, "-p", "HEAD")
+		parent = "HEAD"
 	}
-	commitOut, _, err := runGit(root, commitArgs...)
-	if err != nil {
-		return nil, false
-	}
-	commit := strings.TrimSpace(commitOut)
-	if commit == "" {
-		return nil, false
+	for i, t := range trees {
+		commitArgs := []string{"commit-tree", t, "-m", preserveMessage(paths, i == len(trees)-1)}
+		if parent != "" {
+			commitArgs = append(commitArgs, "-p", parent)
+		}
+		commitOut, _, err := runGit(root, commitArgs...)
+		if err != nil {
+			return nil, false
+		}
+		commit = strings.TrimSpace(commitOut)
+		if commit == "" {
+			return nil, false
+		}
+		parent = commit
 	}
 
 	// The commit lands on the CURRENT BRANCH. A commit under a private ref
@@ -121,9 +151,76 @@ func preserveAtRiskPaths(root string, paths []string) (res *preserveResult, ok b
 	return res, true
 }
 
-func preserveMessage(paths []string) string {
-	return fmt.Sprintf("no-work-loss: preserved %d path(s) before a destructive command\n\n%s",
-		len(paths), strings.Join(paths, "\n"))
+// stagedTree builds a tree holding HEAD's content everywhere except the
+// at-risk paths, which take the content sitting in the USER'S index. It reads
+// the real index with `ls-files --stage` and copies each entry into the
+// throwaway one; the user's own index is never written. An empty result means
+// no at-risk path had a staged entry to keep, which is the ordinary case.
+func stagedTree(root string, env, paths []string, hasHead bool) string {
+	// Ask first, in one call, which at-risk paths have anything staged at
+	// all. A hook runs in front of every Bash call, and the ordinary tree has
+	// nothing staged, so the walk below must cost nothing there rather than
+	// one subprocess per path. A repository with no HEAD has no tree to
+	// differ from; its working-tree commit is the whole story.
+	if !hasHead {
+		return ""
+	}
+	diffArgs := append([]string{"diff", "--cached", "--name-only", "-z", "--"}, paths...)
+	diff, _, err := runGit(root, diffArgs...)
+	if err != nil {
+		return ""
+	}
+	var changed []string
+	for _, p := range strings.Split(diff, "\x00") {
+		if p != "" {
+			changed = append(changed, p)
+		}
+	}
+	if len(changed) == 0 {
+		return ""
+	}
+
+	args := append([]string{"ls-files", "--stage", "-z", "--"}, changed...)
+	out, _, err := runGit(root, args...)
+	if err != nil {
+		return ""
+	}
+	staged := 0
+	for _, rec := range strings.Split(out, "\x00") {
+		meta, path, ok := strings.Cut(rec, "\t")
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(meta)
+		if len(fields) != 3 || fields[2] != "0" {
+			// Stage 1, 2 or 3 is an unresolved merge conflict. Its entries do
+			// not make a tree, and a conflicted path is not a state a commit
+			// can hold, so it is left to the working-tree pass below.
+			continue
+		}
+		info := fields[0] + "," + fields[1] + "," + path
+		if _, _, err := runGitEnvTimeout(root, gitTimeout, env, "update-index", "--add", "--cacheinfo", info); err != nil {
+			return ""
+		}
+		staged++
+	}
+	if staged == 0 {
+		return ""
+	}
+	tree, _, err := runGitEnvTimeout(root, gitTimeout, env, "write-tree")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(tree)
+}
+
+func preserveMessage(paths []string, working bool) string {
+	what := "the staged version of"
+	if working {
+		what = "the working-tree version of"
+	}
+	return fmt.Sprintf("no-work-loss: preserved %s %d path(s) before a destructive command\n\n%s",
+		what, len(paths), strings.Join(paths, "\n"))
 }
 
 // branchName is the branch HEAD points at, for the notice. A detached HEAD
