@@ -12,7 +12,15 @@ The owner's ruling was that maintaining a count in a markdown file is not the ki
 
 That plumbing used to live here, in Go, and identically again in `no-tombstones`. The same payload parse, the same Write/Edit/MultiEdit shapes, the same splice back into `tool_input`. A write shape added to one and not the other is a guard that silently stops seeing half the writes.
 
-**`hook.sh` exists for one reason: to fail OPEN.** A PreToolUse hook blocks the tool on any non-zero exit. Naming `slopfmt` straight in `plugin.json` therefore turns a missing binary into a guard that refuses every write in the session rather than none. The launcher probes for the binary and exits 0 when it is absent. `SLOPFMT` names another path, which is how a test drives a stub.
+**The plugin SHIPS the binary it runs. It never looks on PATH.** That is the whole of the fix, and it replaced two wrong answers in a row.
+
+The plugin named `slopfmt` as a bare word at first. The plugin and the binary then shipped on separate tracks with nothing checking they agreed. The plugin arrived from this marketplace per session, and the binary from an unpinned `buildhost_install slopfmt`. A plugin naming a subcommand its installed binary predated exited 1. A PreToolUse hook blocks the tool on any non-zero exit, so every write in the session was refused. That shipped.
+
+The second answer swallowed the exit code. That turned a loud break into a guard that installs, reports success and does nothing. Nothing reports such a guard, and nothing repairs it. It was rejected for that reason, and rightly.
+
+So `build/` carries slopfmt itself, fetched by `.github/scripts/vendor-slopfmt.sh` at build time. Absent and too-old cannot reach a session any more. `hook.sh` holds no probe and swallows nothing. A crash is the one failure left. A crash is loud.
+
+**The fetch is a GATE, not a download.** It checks the APE prologue, then runs the real hook contract on text built to violate the rule, and requires a verdict. Exit status alone proves only that the subcommand parses. A guard that runs and finds nothing in a violation is the silent failure this exists to prevent. All three refusals were driven and watched. Those are a fetch that 404s, a real APE that cannot answer, and a run reporting nothing. `SLOPFMT_URL` points the fetch elsewhere. That is how the red controls run, and how a build targets a slopfmt that has not published.
 
 The rule slopfmt applies is described below, because a reader of this plugin needs to know what it asks for. `wow-look-at-my/slopfmt` is where it lives and where it is tested.
 
