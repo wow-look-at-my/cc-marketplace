@@ -163,6 +163,119 @@ func resultFor(id, text string, failed bool) string {
 	return string(b)
 }
 
+// callIn and resultIn are callWithID/resultFor stamped with the session that
+// wrote the record, and with the sidechain flag a subagent's records carry.
+// Both fields decide whether a read in the file is a read THIS session made.
+func callIn(id, command, session string, sidechain bool) string {
+	b, _ := json.Marshal(map[string]any{
+		"type": "assistant", "timestamp": "2026-09-05T01:00:00Z",
+		"sessionId": session, "isSidechain": sidechain,
+		"message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{"type": "tool_use", "id": id, "name": "Bash",
+				"input": map[string]string{"command": command}},
+		}},
+	})
+	return string(b)
+}
+
+func resultIn(id, text, session string, sidechain bool) string {
+	b, _ := json.Marshal(map[string]any{
+		"type": "user", "timestamp": "2026-09-05T01:00:01Z",
+		"sessionId": session, "isSidechain": sidechain,
+		"message": map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "tool_result", "tool_use_id": id, "content": text},
+		}},
+	})
+	return string(b)
+}
+
+// preToolPayloadIn is preToolPayload carrying the session id the harness sends.
+func preToolPayloadIn(t *testing.T, transcript, session, tool, input string) string {
+	t.Helper()
+	b, err := json.Marshal(map[string]any{
+		"hook_event_name": "PreToolUse",
+		"transcript_path": transcript,
+		"session_id":      session,
+		"tool_name":       tool,
+		"tool_input":      json.RawMessage(input),
+	})
+	require.NoError(t, err)
+	return string(b)
+}
+
+func TestAnEarlierSessionsReadIsNotThisSessionsRead(t *testing.T) {
+	// A resumed or imported conversation writes its records into the same
+	// file, each still stamped with the session that produced it. Reported
+	// live: a brand-new session ran `gh pr view 130` as its first GitHub call
+	// and was refused as a repeat of a read it had never made.
+	const read = "gh pr view 130 --repo wow-look-at-my/grok-build"
+	tr := stageTranscript(t,
+		callIn("t1", read, "session-before", false),
+		resultIn("t1", `{"state":"open"}`, "session-before", false),
+	)
+	assert.Empty(t, denyReasonOf(t, preToolPayloadIn(t, tr, "session-now", "Bash", bashInput(read))),
+		"another session's read is not an answer this session holds")
+
+	same := stageTranscript(t,
+		callIn("t1", read, "session-now", false),
+		resultIn("t1", `{"state":"open"}`, "session-now", false),
+	)
+	assert.NotEmpty(t, denyReasonOf(t, preToolPayloadIn(t, same, "session-now", "Bash", bashInput(read))),
+		"the control: this session's own answered read is still a repeat")
+}
+
+func TestASubagentsReadIsNotTheCallersRead(t *testing.T) {
+	const read = "gh pr view 130 --repo wow-look-at-my/grok-build"
+	tr := stageTranscript(t,
+		callIn("t1", read, "session-now", true),
+		resultIn("t1", `{"state":"open"}`, "session-now", true),
+	)
+	assert.Empty(t, denyReasonOf(t, preToolPayloadIn(t, tr, "session-now", "Bash", bashInput(read))),
+		"a subagent's records share the transcript, and its answer is not the caller's")
+}
+
+func TestALocalGitCommandIsNeverAStatusRead(t *testing.T) {
+	// Every one of these reads a local object. None reaches the network, and
+	// none asks what state anything is in. All three were refused while a SHA
+	// anywhere in the command text was enough to name a subject.
+	const sha = "4f7cea8b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60"
+	tr := stageTranscript(t,
+		callIn("t1", "gh wait-ci checks --sha "+sha, "s", false),
+		resultIn("t1", "still running", "s", false),
+	)
+	for _, cmd := range []string{
+		"git show " + sha + ":src/cmd/go.mod",
+		"git ls-tree " + sha + " src/cmd/",
+		"git log " + sha,
+		"git ls-remote origin " + sha,
+	} {
+		assert.Empty(t, denyReasonOf(t, preToolPayloadIn(t, tr, "s", "Bash", bashInput(cmd))),
+			"%s reads a local object and costs nothing", cmd)
+	}
+
+	assert.NotEmpty(t, denyReasonOf(t, preToolPayloadIn(t, tr, "s", "Bash",
+		bashInput("gh wait-ci checks --sha "+sha))),
+		"the control: asking GitHub the same question again is still a repeat")
+}
+
+func TestASHAInANeighbouringStatementIsNotTheSubject(t *testing.T) {
+	// The earlier call asked GitHub about one pull request and, in a second
+	// statement, read a local object. Only the first statement's arguments say
+	// what that call learned.
+	const sha = "4f7cea8b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60"
+	tr := stageTranscript(t,
+		callIn("t1", "gh pr view 130 && git show "+sha+":go.mod", "s", false),
+		resultIn("t1", `{"state":"open"}`, "s", false),
+	)
+	assert.Empty(t, denyReasonOf(t, preToolPayloadIn(t, tr, "s", "Bash",
+		bashInput("gh wait-ci checks --sha "+sha))),
+		"the commit was never asked after, so this is its first read")
+
+	assert.NotEmpty(t, denyReasonOf(t, preToolPayloadIn(t, tr, "s", "Bash",
+		bashInput("gh pr checks 130"))),
+		"the control: the pull request the gh statement did name is still settled")
+}
+
 func TestAReadThatErroredIsNotARead(t *testing.T) {
 	const sha = "4f7cea8b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60"
 	tr := stageTranscript(t,
@@ -255,7 +368,7 @@ func TestAWakeEnvelopeIsRecognisedInAToolResult(t *testing.T) {
 	tr := stageTranscript(t,
 		toolResult(`<wake reason="external-event"><event source="github"/></wake>`),
 	)
-	recs := parseRecords(tr)
+	recs := parseRecords(tr, "")
 	require.Len(t, recs, 1)
 	assert.True(t, recs[0].wake, "the envelope arrives escaped inside the result's content")
 
@@ -266,7 +379,7 @@ func TestAWakeEnvelopeIsRecognisedInAToolResult(t *testing.T) {
 	require.Contains(t, string(escaped), "\\u003c", "this fixture must be the escaped spelling")
 	recs = parseRecords(stageTranscript(t,
 		`{"type":"user","message":{"role":"user","content":`+
-			`[{"type":"tool_result","content":`+string(escaped)+`}]}}`))
+			`[{"type":"tool_result","content":`+string(escaped)+`}]}}`), "")
 	require.Len(t, recs, 1)
 	assert.True(t, recs[0].wake, "the escaped spelling of the envelope counts too")
 }

@@ -56,10 +56,21 @@ var wakeMarkers = []string{
 // nothing, and the next read of that pull request was refused as a repeat.
 const interjectionMarker = "the user sent a new message while you were working"
 
-// parseRecords reads the tail of the transcript at path. An unreadable or
-// empty transcript returns nil, which allows every call: a guard that blocks
-// because it could not read a file is worse than no guard.
-func parseRecords(path string) []record {
+// parseRecords reads the tail of the transcript at path, keeping only what
+// THIS session did. An unreadable or empty transcript returns nil, which
+// allows every call: a guard that blocks because it could not read a file is
+// worse than no guard.
+//
+// Two kinds of record are dropped, and both were seeding the guard with reads
+// this session never made. A resumed or imported conversation writes its
+// earlier records into the same file, each still carrying the session id that
+// produced it, so a brand-new session inherited a full ledger of pull requests
+// somebody else had already read: `gh pr view 130` was refused as a repeat on
+// its FIRST call. A subagent's records land in the same file too, marked
+// isSidechain, and a read the subagent made is not a read the caller has the
+// answer to. sessionID is compared only when both sides carry one, so a
+// transcript shape without the field behaves as it always did.
+func parseRecords(path, sessionID string) []record {
 	if path == "" {
 		return nil
 	}
@@ -76,6 +87,12 @@ func parseRecords(path string) []record {
 		}
 		var rec rawRecord
 		if json.Unmarshal(line, &rec) != nil {
+			continue
+		}
+		if rec.Sidechain {
+			continue
+		}
+		if sessionID != "" && rec.SessionID != "" && rec.SessionID != sessionID {
 			continue
 		}
 		r := record{raw: unescape(string(line))}
@@ -125,9 +142,13 @@ func parseRecords(path string) []record {
 // for 58e180d" was refused as a repeat read of 58e180d, a commit its command
 // does not name. The same defect marks a subject READ from a description, so
 // the first genuine read of it is then refused as a repeat.
+// A Bash call narrows further still: only the status commands it runs, each
+// bounded to its own statement. `git show <sha>:src/cmd/go.mod` names a commit
+// and reads a local object, and a SHA in one statement says nothing about what
+// the `gh` call in the next one is asking after.
 func callText(c toolCall) string {
 	if strings.EqualFold(c.name, "bash") {
-		return c.name + " " + commandOf(c.input)
+		return c.name + " " + strings.Join(statusStatements(commandOf(c.input)), " ; ")
 	}
 	return c.name + " " + string(c.input)
 }

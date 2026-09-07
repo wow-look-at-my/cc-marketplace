@@ -30,6 +30,7 @@ import (
 type HookInput struct {
 	HookEventName  string          `json:"hook_event_name"`
 	TranscriptPath string          `json:"transcript_path"`
+	SessionID      string          `json:"session_id"`
 	StopHookActive bool            `json:"stop_hook_active"`
 	ToolName       string          `json:"tool_name"`
 	ToolInput      json.RawMessage `json:"tool_input"`
@@ -91,7 +92,7 @@ func runPreTool(in HookInput) result {
 	if in.ToolName == "" {
 		return allow()
 	}
-	v := judgeCall(toolCall{name: in.ToolName, input: in.ToolInput}, parseRecords(in.TranscriptPath))
+	v := judgeCall(toolCall{name: in.ToolName, input: in.ToolInput}, parseRecords(in.TranscriptPath, in.SessionID))
 	if !v.deny {
 		return allow()
 	}

@@ -22,6 +22,8 @@ const transcriptTailBytes = 6 << 20 // 6 MiB
 type rawRecord struct {
 	Type      string `json:"type"`
 	Timestamp string `json:"timestamp"`
+	SessionID string `json:"sessionId"`
+	Sidechain bool   `json:"isSidechain"`
 	Message   struct {
 		Role    string          `json:"role"`
 		Content json.RawMessage `json:"content"`

@@ -37,6 +37,13 @@ var statusReadTools = set.Of(
 
 // statusReadCommands are the Bash spellings of the same question. Each is
 // matched in statement position, so `grep 'gh pr view' notes.md` is not one.
+//
+// Every entry runs `gh`, and no entry may ever run `git`. A `git` command
+// reads local objects: `git show <sha>:src/cmd/go.mod`, `git ls-tree <sha>`
+// and `git log <sha>` cost nothing, reach no network, and answer a question
+// about a file rather than about a state. All three were refused while this
+// list carried `git ls-remote`, because a SHA anywhere in the command text was
+// enough to make the call a status read of that commit.
 var statusReadCommands = []string{
 	"gh wait-ci",
 	"gh pr view",
@@ -46,7 +53,6 @@ var statusReadCommands = []string{
 	"gh run view",
 	"gh run list",
 	"gh run watch",
-	"git ls-remote",
 }
 
 // contentSubcommands read a run's OUTPUT rather than its state: a log, a
@@ -108,7 +114,20 @@ func isStatusRead(c toolCall) bool {
 // statement position. Requiring statement position is what keeps a command
 // that merely MENTIONS one -- a grep, a commit message -- from counting.
 func namesAStatusCommand(cmd string) bool {
+	return len(statusStatements(cmd)) > 0
+}
+
+// statusStatements returns the text of each status command cmd runs, from its
+// command word to the end of that statement, and nothing else.
+//
+// The bound is what makes the subject the command's own. Reading a subject out
+// of the whole command string let a SHA that belonged to a neighbouring
+// statement -- or to no command at all -- decide what a `gh` call was asking
+// about, so the first genuine read of that commit came back refused as a
+// repeat. A subject now has to sit in the arguments of the GitHub read itself.
+func statusStatements(cmd string) []string {
 	lower := strings.ToLower(cmd)
+	var out []string
 	for _, want := range statusReadCommands {
 		for i := 0; ; {
 			j := strings.Index(lower[i:], want)
@@ -116,30 +135,52 @@ func namesAStatusCommand(cmd string) bool {
 				break
 			}
 			at := i + j
-			if reStatement.MatchString(lower[:at]) {
-				if want == "gh wait-ci" && contentSubcommands.Contains(afterWaitCI(lower, at)) {
-					i = at + len(want)
-					continue
-				}
-				return true
-			}
 			i = at + len(want)
+			if !reStatement.MatchString(lower[:at]) {
+				continue
+			}
+			if want == "gh wait-ci" && contentSubcommands.Contains(afterWaitCI(lower, at)) {
+				continue
+			}
+			out = append(out, cmd[at:at+statementLen(cmd[at:])])
 		}
 	}
-	return false
+	return out
+}
+
+// statementLen is how far a statement runs from s[0]. Anything that starts a
+// new command ends it, which is enough here: the subject regexes read flags
+// and operands, and a quoted separator inside one of those widens the span by
+// a few harmless characters rather than swallowing a neighbouring command.
+func statementLen(s string) int {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ';', '\n', '|', '&', ')', '`':
+			return i
+		}
+	}
+	return len(s)
 }
 
 // reCommand is hoisted because the ledger walk reads every Bash call in the
 // window, and compiling this per call would pay for the pattern each time.
 var reCommand = regexp.MustCompile(`"command"\s*:\s*"((?:[^"\\]|\\.)*)"`)
 
-// commandOf pulls the command string out of a Bash call's input.
+// commandOf pulls the command string out of a Bash call's input, undone to
+// the text the shell would have run.
+//
+// It shares the record walk's replacer rather than keeping a shorter one of
+// its own. A Go encoder writes `&&` as `&&` and a JavaScript one
+// leaves it alone, so a private replacer that folded only the backslash
+// escapes read `a && b` as one long statement on half the transcripts it may
+// be handed -- and a SHA in the second statement then named the subject of the
+// first.
 func commandOf(input []byte) string {
 	m := reCommand.FindSubmatch(input)
 	if m == nil {
 		return ""
 	}
-	return strings.NewReplacer(`\"`, `"`, `\\`, `\`, `\n`, "\n").Replace(string(m[1]))
+	return unescapeReplacer.Replace(string(m[1]))
 }
 
 // subjectsIn returns every state-carrying thing named in text, normalized so
