@@ -14,7 +14,7 @@ Keeps you in charge of the working tree. Two rules, one parse of the command:
 
 ## What it preserves, then allows
 
-The content is committed to `refs/no-work-loss/<timestamp>`, pushed to origin, and the command proceeds. A push failure still allows — the local ref already holds it:
+The content is committed onto the current branch, pushed to origin, and the command proceeds. A push failure still allows — the local commit already holds it. A file staged to something different from what is on disk gets two commits, so the index version survives too:
 
 | Command | Preserved when |
 |---|---|
@@ -25,8 +25,7 @@ The content is committed to `refs/no-work-loss/<timestamp>`, pushed to origin, a
 
 ```
 preserved: rm would have lost 1 untracked file (scratch.txt), so it was committed to
-refs/no-work-loss/20260906T153012.000000001 (a1b2c3d4e5f6) and pushed to origin
-before being allowed to proceed.
+master (a1b2c3d4e5f6) and pushed to origin before being allowed to proceed.
 ```
 
 ## What it still refuses

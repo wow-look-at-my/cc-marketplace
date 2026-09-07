@@ -150,6 +150,10 @@ export function denyReason(found: Finding[]): string {
   );
 }
 
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** What makes two findings the same one, across the lines an edit moves. */
 function identity(f: Finding): string {
   return `${f.check} ${f.message}`;
@@ -237,8 +241,12 @@ export async function runHook(stdin: NodeJS.ReadableStream): Promise<void> {
   let reason = "";
   try {
     reason = decide(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    // A guard that cannot read its own payload must not wedge the session.
+  } catch (error) {
+    // This is the ONE place a broken guard still allows the write. A non-zero
+    // exit from a PreToolUse hook blocks the tool, so failing hard here refuses
+    // every write in the session rather than none. It says so on stderr instead:
+    // a guard that quietly stops working is one nobody repairs.
+    process.stderr.write(`common-checks: allowing this write unchecked -- ${describe(error)}\n`);
     reason = "";
   }
   if (reason === "") return;

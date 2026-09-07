@@ -101,6 +101,12 @@ Three cases produce a denial without a state answer. A destructive verb whose ta
 - An operand is not statically known -- `rm $TARGET`, `cd $DIR && git reset --hard`, `cd -`.
 - `GIT_DIR` / `GIT_WORK_TREE` / `--git-dir` relocate the repository away from the path words. The target is no longer knowable.
 
+A script FILE the walk follows as a new shell is the exception to all of it. Its variables, its working directory and the text it hands another shell are its own. This hook does not sandbox the programs it starts. A build script names its output from a variable. So an unresolvable operand, an unresolvable working directory and an unreadable inner shell are all out of scope inside one. A path the script names STATICALLY is still judged, so following a file still closes the write-elsewhere-then-run bypass. A blocker ABOUT the file, such as one that does not parse, still denies. It describes the command that named the file rather than the program inside it.
+
+## A redirect has a descriptor as well as a target
+
+Two redirect shapes cannot empty a file holding content no git object has. A device target swallows what it is given. `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/tty` and `/dev/fd/*` are all absolute, so no working directory is needed to resolve one. A descriptor other than stdout carries a stream rather than the command's output. The destruction half skips both. The provenance half judges every descriptor, because content reaching a file inside the tree is authored content whichever stream filled it. So `git status 2>/dev/null` runs and `echo x 2> tracked.go` is refused by name.
+
 ## Fail-safety, stated honestly
 
 Inside the process, failure denies for destructive verbs. A panic is recovered and converted to a denial, a git subprocess that errors or exceeds the 3-second timeout produces "cannot tell whether ... would lose uncommitted work". An unreadable repository is never assumed clean. Everything non-destructive fails open. A bug here cannot brick a session.

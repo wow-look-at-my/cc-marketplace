@@ -39,7 +39,18 @@ export function toDiagnostic(finding: Finding, lines: string[]): Diagnostic {
 }
 
 export function diagnosticsFor(relativePath: string, content: string): Diagnostic[] {
-  const all = findings(relativePath, content);
+  // A server that dies on one document stops answering for every other one, so
+  // this reports the failure and keeps serving. It says so on stderr, which is
+  // where `--debug lsp` looks when a server publishes nothing.
+  let all: Finding[];
+  try {
+    all = findings(relativePath, content);
+  } catch (error) {
+    process.stderr.write(
+      `common-checks: no diagnostics for ${relativePath} -- ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return [];
+  }
   const lines = content.split(/\r?\n/);
   const shown = all.slice(0, MAX_PER_FILE).map((finding) => toDiagnostic(finding, lines));
   const hidden = all.length - shown.length;

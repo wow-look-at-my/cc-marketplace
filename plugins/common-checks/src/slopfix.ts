@@ -71,45 +71,41 @@ export function forgetSlopfixPath(): void {
   cached = undefined;
 }
 
-let announced = false;
+/**
+ * A slopfix that is absent, or that cannot answer. Named so a caller tells it
+ * apart from a finding and decides what to do about it.
+ */
+export class SlopfixUnavailable extends Error {}
 
 /**
  * Every finding slopfix reports for text headed for `relativePath`.
  *
- * A failure answers with no findings and says so once on stderr. Throwing here
- * publishes nothing from the server and blocks every write from the hook, and a
- * guard that wedges a session is worse than a guard that is quiet. The build
- * gate is what stops a binary that cannot answer from shipping at all.
+ * A failure THROWS. It does not answer with an empty list, which reads exactly
+ * like a clean file: a run that checked nothing must never report a pass. Every
+ * caller decides for itself, and only the PreToolUse hook swallows this. The
+ * build gate is what stops a binary that cannot answer from shipping at all.
  */
 export function report(relativePath: string, content: string): SlopfixFinding[] {
   const binary = slopfixPath();
   if (!binary) {
-    warnOnce("common-checks: no slopfix binary beside this plugin, so nothing is checked.");
-    return [];
+    throw new SlopfixUnavailable(
+      "no slopfix binary beside this plugin, so nothing can be checked. " +
+        "The plugin ships one under build/. Set COMMON_CHECKS_SLOPFIX to point at another.",
+    );
   }
+  let out: string;
   try {
-    const out = execFileSync(binary, ["report", "--path", relativePath], {
+    out = execFileSync(binary, ["report", "--path", relativePath], {
       input: content,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
     });
-    const parsed = JSON.parse(out) as {findings?: SlopfixFinding[]};
-    return parsed.findings ?? [];
   } catch (error) {
-    warnOnce(`common-checks: slopfix could not read ${relativePath}: ${(error as Error).message}`);
-    return [];
+    throw new SlopfixUnavailable(`${binary} could not read ${relativePath}: ${(error as Error).message}`);
   }
-}
-
-// Said once. A server that repeats a failure on every keystroke buries the
-// output that explains it.
-function warnOnce(message: string): void {
-  if (announced) return;
-  announced = true;
-  process.stderr.write(`${message}\n`);
-}
-
-/** Reset the once-per-process warning. Tests drive the failure path. */
-export function forgetWarning(): void {
-  announced = false;
+  try {
+    return (JSON.parse(out) as {findings?: SlopfixFinding[]}).findings ?? [];
+  } catch (error) {
+    throw new SlopfixUnavailable(`${binary} answered with something that is not JSON: ${(error as Error).message}`);
+  }
 }
