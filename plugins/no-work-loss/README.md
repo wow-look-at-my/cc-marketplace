@@ -2,7 +2,7 @@
 
 Keeps you in charge of the working tree. Two rules, one parse of the command:
 
-- **Destruction** — a command that destroys content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything. So the hook commits that content into a dedicated ref, pushes it to origin, and then allows the command.
+- **Destruction** — a command that would destroy content existing only in the working tree. Committed history survives in the reflog. A modified or untracked file does not survive anything. So the hook commits that content into a dedicated ref, pushes it to origin, and then allows the command.
 - **Provenance** — a change to file content that skips Write, Edit or NotebookEdit. Bash runs things. It does not author files. This one still refuses.
 
 ## Installation
