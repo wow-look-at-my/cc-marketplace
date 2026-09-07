@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { Framing, Server, diagnosticsFor, relativize } from "./lsp.ts";
 
-const ROOT = "file:///repo";
-const CI = "file:///repo/.github/workflows/ci.yml";
+// A real work tree on disk: the server publishes nothing for a document that
+// lives in no repository, so the fixture has to live in one.
+const REPO = mkdtempSync(join(tmpdir(), "common-checks-lsp-"));
+mkdirSync(join(REPO, ".git"));
+
+const ROOT = `file://${REPO}`;
+const CI = `${ROOT}/.github/workflows/ci.yml`;
 
 // A workflow that breaks three rules at once.
 const DIRTY = ["# one", "# two", "on:", "  push:", "jobs:", "  all-builds:", "    runs-on: x", ""].join("\n");
@@ -95,7 +103,16 @@ test("closing a document clears its diagnostics", () => {
 
 test("a file none of the checks read publishes an empty list", () => {
   const harness = new Harness();
-  harness.open("file:///repo/compose.yaml", "# a\n# b\n# c\nservices: {}\n");
+  harness.open(`${ROOT}/compose.yaml`, "# a\n# b\n# c\nservices: {}\n");
+  assert.deepEqual(harness.published[0]!.diagnostics, []);
+});
+
+// A file in no repository is out of scope entirely: the same dirty workflow one
+// directory outside a work tree publishes nothing to report.
+test("a document outside any work tree publishes no diagnostics", () => {
+  const loose = mkdtempSync(join(tmpdir(), "common-checks-loose-lsp-"));
+  const harness = new Harness();
+  harness.open(`file://${loose}/.github/workflows/ci.yml`, DIRTY);
   assert.deepEqual(harness.published[0]!.diagnostics, []);
 });
 

@@ -14,8 +14,11 @@ function session(): string {
   return `test-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 }
 
+// A real `.git`, because only a file inside a work tree is judged at all.
 function repo(): string {
-  return mkdtempSync(join(tmpdir(), "common-checks-block-"));
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-block-"));
+  mkdirSync(join(dir, ".git"));
+  return dir;
 }
 
 // fileKind only judges a workflow, an action manifest or markdown, so the

@@ -2,6 +2,7 @@
 // common-checks would say about it in CI.
 
 import { findings, fileKind, type Finding } from "./checks.ts";
+import { inScope } from "./scope.ts";
 
 export const SOURCE = "common-checks";
 
@@ -105,11 +106,21 @@ export class Server {
     this.#send({ jsonrpc: "2.0", id, result: result === undefined ? null : result });
   }
 
+  /**
+   * Whether a document is one the checks judge at all.
+   *
+   * Scope is asked of the URI's own path, which is absolute. The relative form
+   * below is for the checks, and it cannot answer where the file lives.
+   */
+  #judged(uri: string, relative: string): boolean {
+    return inScope(pathOf(uri)) && fileKind(relative) !== "other";
+  }
+
   #publish(uri: string): void {
     const content = this.#open.get(uri);
     if (content === undefined) return;
     const relative = relativize(uri, this.#root);
-    const diagnostics = fileKind(relative) === "other" ? [] : diagnosticsFor(relative, content);
+    const diagnostics = this.#judged(uri, relative) ? diagnosticsFor(relative, content) : [];
     this.#send({
       jsonrpc: "2.0",
       method: "textDocument/publishDiagnostics",
@@ -175,7 +186,9 @@ export class Server {
         const content = doc?.uri ? this.#open.get(doc.uri) : undefined;
         const relative = doc?.uri ? relativize(doc.uri, this.#root) : "";
         const items =
-          content === undefined || fileKind(relative) === "other" ? [] : diagnosticsFor(relative, content);
+          content === undefined || !doc?.uri || !this.#judged(doc.uri, relative)
+            ? []
+            : diagnosticsFor(relative, content);
         this.#respond(id as number, { kind: "full", items });
         return;
       }

@@ -1,12 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { addedText, blockingFindings, decide, relativePath } from "./hook.ts";
+import { inScope } from "./scope.ts";
 
-const CWD = "/home/user/js-snippets";
+/**
+ * A real directory carrying a real `.git`, because scope is now decided by
+ * walking the path on disk. A fixture under a bare temp directory is out of
+ * scope by design, which is what the scope tests at the bottom pin.
+ */
+function repoDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  mkdirSync(join(dir, ".git"));
+  return dir;
+}
+
+const CWD = repoDir();
 const WORKFLOW = `${CWD}/.github/workflows/deploy.yml`;
 
 function payload(extra: Record<string, unknown>): string {
@@ -175,7 +187,7 @@ test("a fenced code block is not read as a wrapped paragraph", () => {
 // fenced block. Judged alone the fragment shows no fence, so its lines read as
 // a hand-wrapped paragraph and the write was refused for prose it never wrote.
 test("an edit inside a fenced block is not refused for its line breaks", () => {
-  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  const dir = repoDir();
   const file = join(dir, "spec.md");
   const before = "Input: ls -la\nFlow:  Shell then Parser then Command";
   writeFileSync(file, `# Title\n\nOne line, one paragraph.\n\n\`\`\`\n${before}\n\`\`\`\n`, "utf8");
@@ -195,7 +207,7 @@ test("an edit inside a fenced block is not refused for its line breaks", () => {
 // The control: the same two lines as prose in the same file are still refused,
 // so placement did not simply switch the wrap check off.
 test("an edit outside a fence is still refused for its wrap", () => {
-  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  const dir = repoDir();
   const file = join(dir, "spec.md");
   const before = "A paragraph the author wrapped\nacross two lines by hand.";
   writeFileSync(file, `# Title\n\n${before}\n`, "utf8");
@@ -216,7 +228,7 @@ test("an edit outside a fence is still refused for its wrap", () => {
 // fragment alone shows no fence, and the refusal that followed is what taught a
 // session to delete code blocks out of a spec.
 test("a fenced fragment is not refused for its punctuation", () => {
-  const dir = mkdtempSync(join(tmpdir(), "common-checks-hook-"));
+  const dir = repoDir();
   const file = join(dir, "spec.md");
   const before = "const a = 1;";
   writeFileSync(file, `# Title\n\n\`\`\`go\n${before}\n\`\`\`\n`, "utf8");
@@ -242,6 +254,84 @@ test("a workflow file is never wrap-checked", () => {
     }),
   );
   assert.equal(reason, "");
+});
+
+// The incident: writing a plan file under ~/.claude was refused with 29
+// ste-lint findings and told it would fail CI. A plan is in no repository, it
+// never ships, and no build reads it, so that sentence was false. The hard-wrap
+// rule is wrong there too, because a plan is read in a terminal pane.
+const WRAPPED = "# Plan\n\nA paragraph that the author wrapped\nacross two lines by hand.\n";
+
+test("a document outside any work tree is not judged", () => {
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-loose-"));
+  const file = join(dir, "notes.md");
+  const reason = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      cwd: dir,
+      tool_input: { file_path: file, content: WRAPPED },
+    }),
+  );
+  assert.equal(reason, "");
+});
+
+// The control that proves the case above can fail: the same bytes, one `.git`
+// away, are refused exactly as before.
+test("the same document inside a work tree is still refused", () => {
+  const dir = repoDir();
+  const file = join(dir, "notes.md");
+  const reason = decide(
+    JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      cwd: dir,
+      tool_input: { file_path: file, content: WRAPPED },
+    }),
+  );
+  assert.match(reason, /Join it back up/);
+});
+
+// The user's own configuration directory is out of scope even when it sits
+// inside a work tree, which it does whenever somebody versions their dotfiles.
+test("a plan under the Claude configuration directory is not judged", () => {
+  const home = repoDir();
+  const plans = join(home, ".claude", "plans");
+  mkdirSync(plans, { recursive: true });
+  const file = join(plans, "x.md");
+
+  const previous = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    assert.equal(inScope(join(home, "src", "real.md")), true, "the work tree itself is still in scope");
+    const reason = decide(
+      JSON.stringify({
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        cwd: home,
+        tool_input: { file_path: file, content: WRAPPED },
+      }),
+    );
+    assert.equal(reason, "");
+  } finally {
+    if (previous === undefined) delete process.env.HOME;
+    else process.env.HOME = previous;
+  }
+});
+
+// A worktree and a submodule carry a `.git` FILE rather than a directory, so
+// asking whether the name exists is what covers both.
+test("a work tree whose .git is a file is in scope", () => {
+  const dir = mkdtempSync(join(tmpdir(), "common-checks-worktree-"));
+  writeFileSync(join(dir, ".git"), "gitdir: /elsewhere/.git/worktrees/x\n", "utf8");
+  assert.equal(inScope(join(dir, "docs", "notes.md")), true);
+});
+
+// Fail safe: a path the predicate cannot reason about is out of scope, so the
+// write goes through rather than wedging on a guard that cannot read it.
+test("a path that is not absolute is out of scope", () => {
+  assert.equal(inScope("docs/notes.md"), false);
+  assert.equal(inScope(""), false);
 });
 
 test("blockingFindings reports the check by name", () => {

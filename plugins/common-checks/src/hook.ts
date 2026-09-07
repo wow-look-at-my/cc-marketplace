@@ -16,6 +16,7 @@
 import { fileKind, findings, type Finding } from "./checks.ts";
 import { diskContent, forget, outstanding, record } from "./ledger.ts";
 import { place, type Placement } from "./placement.ts";
+import { inScope } from "./scope.ts";
 
 interface ToolInput {
   file_path?: unknown;
@@ -109,6 +110,11 @@ export function relativePath(filePath: string, cwd: string): string {
  * blocking an unrelated edit, while a fence, a table or a list the fragment
  * sits inside still counts. A fragment that cannot be placed is checked on its
  * own, as it always was.
+ *
+ * Scope is decided on the ABSOLUTE path the payload carried, before it is made
+ * relative to the working directory. A relative path cannot be walked upward
+ * for a `.git`, so the answer would be the working directory's rather than the
+ * file's.
  */
 export function blockingFindings(
   toolName: string,
@@ -117,6 +123,7 @@ export function blockingFindings(
 ): Finding[] {
   const filePath = typeof input.file_path === "string" ? input.file_path : "";
   if (filePath === "") return [];
+  if (!inScope(filePath)) return [];
   const rel = relativePath(filePath, cwd);
   if (fileKind(rel) === "other") return [];
 
@@ -127,7 +134,13 @@ export function blockingFindings(
   return found;
 }
 
-/** The refusal text: every finding, and the repair its own check names. */
+/**
+ * The refusal text: every finding, and the repair its own check names.
+ *
+ * It says the write would fail CI, and that stays true because it is only ever
+ * reached for a file inside a work tree. A file outside one is never judged, so
+ * this sentence is never said about a plan or a note that no build reads.
+ */
 export function denyReason(found: Finding[]): string {
   const lines = found.map((f) => `  ${f.check}: ${f.message}`);
   return (
@@ -159,6 +172,13 @@ function identity(f: Finding): string {
 export function sweep(sessionId: string, cwd: string): string[] {
   const still: string[] = [];
   for (const entry of outstanding(sessionId)) {
+    // An entry an older build recorded for a file outside any work tree can
+    // never clear on its own: the checks that put it there no longer run on
+    // that file, so nothing it says about disk is asked again.
+    if (!inScope(entry.path)) {
+      forget(sessionId, entry.path);
+      continue;
+    }
     const content = diskContent(entry.path);
     if (content === undefined) {
       forget(sessionId, entry.path);
