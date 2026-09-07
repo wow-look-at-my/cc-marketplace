@@ -87,8 +87,18 @@ func analyzeWrites(command, cwd string) string {
 	if !ok {
 		return "blocked: this command does not parse as shell, so the files it would write cannot be resolved. " + useTheTools
 	}
+	// A blocker found inside a script FILE is the same case as an unresolvable
+	// target found there: the program's own text, not this command's. A build
+	// script that runs `bash -c "$cmd"` or sources a path it computed is doing
+	// what a program does, and this hook does not sandbox what it starts.
+	// Denying on it made `bash tests/run-tests.sh` unrunnable -- the script
+	// runs one `sh -c` built from a variable, and that single line refused the
+	// whole suite before any write was ever judged.
 	for _, b := range blockers {
-		return "blocked: the command runs " + b + ". " + useTheTools
+		if b.fromScript {
+			continue
+		}
+		return "blocked: the command runs " + b.text + ". " + useTheTools
 	}
 	aliases := newAliasResolver()
 	for _, seg := range segs {

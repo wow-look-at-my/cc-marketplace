@@ -124,6 +124,19 @@ func judge(f *finding, cache *repoCache) (deny, notice string) {
 			"\nrun: %s", f.label, where, f.rewrite), ""
 	}
 
+	// The same rule as the unresolvable operand above, applied to the other
+	// half of the same question. A path resolves against a directory, and a
+	// script that runs `cd "$targ"` names that directory out of its own text.
+	// The operand `rm -f .gitignore` is perfectly static; what nothing here
+	// can know is where it lands. That is the program's business too, and
+	// refusing it made `./bootstrap.bash` -- an ordinary Go toolchain build
+	// step -- unrunnable. The provenance half already answered this way; only
+	// this half was left denying. A ref-destroying command is judged before
+	// this point and keeps its own posture.
+	if f.dir == unknownDirText && f.fromScript {
+		return "", ""
+	}
+
 	st := cache.probe(f.dir)
 	if st.err == nil && st.inRepo {
 		if f.haz&hazIgnored != 0 {

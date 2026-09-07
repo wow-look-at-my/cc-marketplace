@@ -27,6 +27,53 @@ var varMutatingCommands = set.Of[string](
 	"eval", "set", "declare", "local", "typeset", "export",
 )
 
+// mutatesAVariable reports whether a call can bind a name behind this scan's
+// back. Everything in varMutatingCommands does, with one exception worth
+// spelling out: `set` sets SHELL OPTIONS as well as positional parameters,
+// and `set -e` or `set +o pipefail` binds nothing at all. Treating those as a
+// hazard disabled resolution for every script that opens with `set -e`, which
+// is most of them -- one such line refused a whole test suite over a path the
+// script built from its own variable. Only an operand form rebinds anything.
+func mutatesAVariable(eff []word) bool {
+	name := commandName(eff[0].text)
+	if !varMutatingCommands.Contains(name) {
+		return false
+	}
+	if name != "set" {
+		return true
+	}
+	return setRebindsParameters(eff[1:])
+}
+
+// setRebindsParameters reports whether a `set` call carries operands rather
+// than options. A bare `set`, a `--`, and any word that is not an option all
+// count; `-o`/`+o` consume the option name that follows them.
+func setRebindsParameters(args []word) bool {
+	if len(args) == 0 {
+		return true
+	}
+	optionName := false
+	for _, a := range args {
+		if optionName {
+			optionName = false
+			continue
+		}
+		if !a.static {
+			return true
+		}
+		if !strings.HasPrefix(a.text, "-") && !strings.HasPrefix(a.text, "+") {
+			return true
+		}
+		if a.text == "--" || a.text == "-" || a.text == "+" {
+			return true
+		}
+		if a.text == "-o" || a.text == "+o" {
+			optionName = true
+		}
+	}
+	return false
+}
+
 // unsafeVarNames finds every variable name this hook must never resolve:
 // assigned more than once anywhere, assigned inside a construct that can
 // run zero times or more than once, or bound by a for-loop. abort reports a
@@ -112,8 +159,7 @@ func (c *varScan) command(cmd syntax.Command, risky bool) {
 			for _, wd := range x.Args {
 				argv = append(argv, wordText(wd))
 			}
-			if eff := stripWrappers(argv); len(eff) > 0 &&
-				varMutatingCommands.Contains(commandName(eff[0].text)) {
+			if eff := stripWrappers(argv); len(eff) > 0 && mutatesAVariable(eff) {
 				c.abort = true
 			}
 		}

@@ -19,8 +19,20 @@ func classifyFS(seg segment) []*finding {
 		if !truncating(r) {
 			continue
 		}
+		// A redirect this half objects to is one that empties a file holding
+		// content no git object has. Neither of these can be that file. A
+		// device swallows what it is given and has nothing to lose, and a
+		// descriptor other than stdout carries a stream rather than the
+		// command's output. `git status 2>/dev/null` put nothing at risk and
+		// was refused for both reasons at once, over a target that needs no
+		// working directory to resolve. Content arriving at a file in the tree
+		// is still the provenance half's business at every descriptor, so
+		// `echo x 2> tracked.go` is refused there and named for what it is.
+		if isDeviceFile(r.file.text) || !touchesStdout(r) {
+			continue
+		}
 		out = append(out, &finding{
-			label: "> " + r.file.text, haz: hazTracked | hazUntracked, dir: seg.cwd,
+			label: redirLabel(r, ">"), haz: hazTracked | hazUntracked, dir: seg.cwd,
 			paths: []word{r.file},
 			// Not `>> file`: appending spares the existing content but is still
 			// a write outside the edit tools, so the provenance half refuses it

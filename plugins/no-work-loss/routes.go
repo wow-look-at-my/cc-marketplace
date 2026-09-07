@@ -97,7 +97,11 @@ func redirectWrites(seg segment) []write {
 		if r.op == syntax.AppOut || r.op == syntax.AppAll {
 			op = ">>"
 		}
-		out = append(out, write{route: op + " " + r.file.text, paths: []word{r.file}, dir: seg.cwd})
+		// Every descriptor counts here. This half asks how content reached a
+		// file, and a file the tree holds is authored content whichever stream
+		// filled it. The label carries the descriptor so the message quotes
+		// what the reader wrote.
+		out = append(out, write{route: redirLabel(r, op), paths: []word{r.file}, dir: seg.cwd})
 	}
 	return out
 }

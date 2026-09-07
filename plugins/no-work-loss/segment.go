@@ -18,8 +18,29 @@ type word struct {
 }
 
 type redirTarget struct {
-	op   syntax.RedirOperator
+	op syntax.RedirOperator
+	// fd is the descriptor the redirect rebinds, as written. An empty value is
+	// the default for the operator, which for every output form is stdout.
+	// `2> log` rebinds stderr and puts no file the tree holds at risk, so the
+	// destruction half has to be able to tell the two apart.
+	fd   string
 	file word
+}
+
+// touchesStdout reports whether a redirect points stdout at its target. `&>`
+// and `&>>` carry both streams whatever descriptor is written in front of
+// them; everything else is stdout only when it names fd 1 or names none.
+func touchesStdout(r redirTarget) bool {
+	if r.op == syntax.RdrAll || r.op == syntax.AppAll {
+		return true
+	}
+	return r.fd == "" || r.fd == "1"
+}
+
+// redirLabel names a redirect the way the reader wrote it, so a message about
+// `2> log` never quotes it back as `> log`.
+func redirLabel(r redirTarget, op string) string {
+	return r.fd + op + " " + r.file.text
 }
 
 // One executable unit: an argv with the directory it runs in, plus the redirects
@@ -55,7 +76,7 @@ const (
 // execution order, tracking the working directory across the sequence. It
 // reports the blockers it hit -- a script it could not analyse -- separately
 // from the segments, because those deny on their own.
-func parseSegments(command, cwd string) (segs []segment, blockers []string, ok bool) {
+func parseSegments(command, cwd string) (segs []segment, blockers []blocker, ok bool) {
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
 	if err != nil {
 		return nil, nil, false
@@ -69,7 +90,7 @@ func parseSegments(command, cwd string) (segs []segment, blockers []string, ok b
 
 type walker struct {
 	segs        []segment
-	blockers    []string
+	blockers    []blocker
 	depth       int
 	scriptDepth int
 	// fileDepth counts how deep the walk stands inside a script FILE run as a
@@ -120,6 +141,22 @@ func (w *walker) enterScope(stmts []*syntax.Stmt, self string) func() {
 	}
 }
 
+// A blocker is a piece of the command whose text this walk could not read at
+// all -- a script assembled from an expansion, a shell reading stdin, a file
+// too large or too broken to parse. fromScript records whether it was found
+// inside a script FILE the walk followed as a new shell, because there it
+// describes the running program rather than the command the session typed.
+type blocker struct {
+	text       string
+	fromScript bool
+}
+
+// block records one, stamping where it was found in the same place every
+// other origin question is answered, so a site added later cannot forget.
+func (w *walker) block(text string) {
+	w.blockers = append(w.blockers, blocker{text: text, fromScript: w.fileDepth > 0})
+}
+
 func (w *walker) full() bool { return len(w.segs) >= maxSegments }
 
 func (w *walker) stmts(sts []*syntax.Stmt, cwd *string) {
@@ -151,7 +188,11 @@ func (w *walker) stmt(st *syntax.Stmt, cwd *string) {
 			stdin = true
 			continue // input, not a target this command writes
 		}
-		rs = append(rs, redirTarget{op: r.Op, file: w.resolve(r.Word)})
+		fd := ""
+		if r.N != nil {
+			fd = r.N.Value
+		}
+		rs = append(rs, redirTarget{op: r.Op, fd: fd, file: w.resolve(r.Word)})
 	}
 	w.command(st.Cmd, cwd, rs, stdin)
 }
@@ -168,7 +209,7 @@ func (w *walker) command(c syntax.Command, cwd *string, rs []redirTarget, stdin 
 	w.depth++
 	defer func() { w.depth-- }()
 	if w.depth > maxWalkDepth {
-		w.blockers = append(w.blockers, "the command nests deeper than this hook will follow")
+		w.block("the command nests deeper than this hook will follow")
 		return
 	}
 
@@ -370,7 +411,7 @@ func (w *walker) shellCall(eff []word, cwd string) bool {
 				return true
 			}
 			if !eff[i+1].static {
-				w.blockers = append(w.blockers, "a shell -c script assembled from an expansion, whose writes cannot be resolved")
+				w.block("a shell -c script assembled from an expansion, whose writes cannot be resolved")
 				return true
 			}
 			w.script(eff[i+1].text, cwd, "a shell -c script", "")
@@ -383,7 +424,7 @@ func (w *walker) shellCall(eff []word, cwd string) bool {
 		return true
 	}
 	// A bare `bash` reads its script from stdin, which is not in the text.
-	w.blockers = append(w.blockers, "a shell reading its script from stdin, whose writes cannot be resolved")
+	w.block("a shell reading its script from stdin, whose writes cannot be resolved")
 	return true
 }
 
@@ -404,12 +445,12 @@ func shellNoExec(eff []word) bool {
 // that runs in the caller's own scope.
 func (w *walker) script(src, cwd, what, self string) {
 	if w.scriptDepth >= maxScriptDepth {
-		w.blockers = append(w.blockers, what+", nested deeper than this hook will follow")
+		w.block(what+", nested deeper than this hook will follow")
 		return
 	}
 	f, err := syntax.NewParser().Parse(strings.NewReader(src), "")
 	if err != nil {
-		w.blockers = append(w.blockers, what+", which does not parse as shell")
+		w.block(what+", which does not parse as shell")
 		return
 	}
 	w.scriptDepth++
@@ -431,12 +472,12 @@ func (w *walker) script(src, cwd, what, self string) {
 // its own text; a sourced file shares the caller's scope and passes false.
 func (w *walker) scriptFile(f word, cwd string, fresh bool) {
 	if !f.static {
-		w.blockers = append(w.blockers, "a script path built from an expansion, whose writes cannot be resolved")
+		w.block("a script path built from an expansion, whose writes cannot be resolved")
 		return
 	}
 	path := abs(cwd, f.text)
 	if path == "" {
-		w.blockers = append(w.blockers, "a script at a path that is not statically known")
+		w.block("a script at a path that is not statically known")
 		return
 	}
 	st, err := os.Stat(path)
@@ -444,12 +485,12 @@ func (w *walker) scriptFile(f word, cwd string, fresh bool) {
 		return
 	}
 	if st.Size() > maxScriptBytes {
-		w.blockers = append(w.blockers, "the script "+f.text+", which is too large to analyse")
+		w.block("the script "+f.text+", which is too large to analyse")
 		return
 	}
 	src, err := os.ReadFile(path)
 	if err != nil {
-		w.blockers = append(w.blockers, "the script "+f.text+", which cannot be read")
+		w.block("the script "+f.text+", which cannot be read")
 		return
 	}
 	self := ""
