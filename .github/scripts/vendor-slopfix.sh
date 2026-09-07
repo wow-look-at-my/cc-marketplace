@@ -83,9 +83,51 @@ check_probe() {
 	echo "vendor-slopfix: ${rule} fired on its probe"
 }
 
-# One probe per rule family the plugin reports. A workflow rule and a prose rule
-# reach slopfix down different paths, so one probe proves only half of it.
+# One probe per rule family. A workflow rule and a prose rule reach slopfix down
+# different paths, so one probe proves only half of it. Both run for every
+# plugin, because `report` is also what proves this is a post-rename build.
 check_probe "yaml/comment-block" ".github/workflows/ci.yml" "$probe_workflow"
 check_probe "ste/contraction" "docs/probe.md" "$probe_markdown"
+
+# A plugin that drives the PreToolUse contract names the rules it runs, and each
+# gets the same treatment: run it on text built to violate it, and require a
+# verdict. Exit status alone proves only that the subcommand parses.
+for rule in "$@"; do
+	case "$rule" in
+	counts)
+		probe='This page has three sections.'
+		suffix=md
+		;;
+	tombstones)
+		probe='// This used to call the old resolver, which was removed.'
+		suffix=go
+		;;
+	*)
+		echo "vendor-slopfix: no probe defined for rule ${rule}. Add one -- an unprobed rule ships unproven." >&2
+		exit 1
+		;;
+	esac
+
+	payload=$(printf '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/tmp/vendor-slopfix-probe.%s","content":"%s\\n"}}' \
+		"$suffix" "$probe")
+
+	if ! answer=$(printf '%s' "$payload" | "$binary" hook --only "$rule" 2>&1); then
+		echo "vendor-slopfix: the fetched slopfix cannot answer 'hook --only ${rule}':" >&2
+		echo "  ${answer}" >&2
+		echo "vendor-slopfix: publish slopfix first -- a plugin whose guard cannot run must not ship." >&2
+		exit 1
+	fi
+	case "$answer" in
+	*hookSpecificOutput*) ;;
+	*)
+		echo "vendor-slopfix: 'hook --only ${rule}' ran and reported nothing on text that violates it." >&2
+		echo "  probe:  ${probe}" >&2
+		echo "  answer: ${answer:-<empty>}" >&2
+		echo "vendor-slopfix: the guard would install and do nothing. Refusing to ship it." >&2
+		exit 1
+		;;
+	esac
+	echo "vendor-slopfix: ${rule} fired on its hook probe"
+done
 
 echo "vendor-slopfix: staged $(wc -c <"$binary") bytes at ${binary}"

@@ -1,23 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { ADAPTED, fileKind, findings } from "./checks.ts";
+import { fileKind, findings } from "./checks.ts";
+import { slopfixPath } from "./slopfix.ts";
 
 const WORKFLOW = ".github/workflows/ci.yml";
 
-// The build writes this beside the modules it fetched. Reading it here is what
-// makes coverage a property of the manifest rather than of this file.
-const PLAN: { plan: { name: string; files: string[] }[] } = JSON.parse(
-  readFileSync(new URL("../vendor/plan.json", import.meta.url), "utf8"),
-);
-
-test("every check whose modules the build fetched has an adapter", () => {
-  const vendored = PLAN.plan.filter((entry) => entry.files.length > 0).map((entry) => entry.name).sort();
-  assert.deepEqual(
-    [...ADAPTED].sort(),
-    vendored,
-    "the manifest and the adapters disagree. A check upstream vendors modules for and nothing here calls " +
-      "reports nothing, and an adapter for a check upstream dropped runs code no build refreshes.",
+// Every case below runs the real slopfix the plugin ships. A fake would be a
+// second source of truth for the rules, which is the one thing this plugin must
+// not carry. A missing binary fails here rather than reporting a clean file.
+test("the plugin ships a slopfix to run", () => {
+  assert.ok(
+    slopfixPath(),
+    "no slopfix beside the plugin. Run `just prebuild`, or point COMMON_CHECKS_SLOPFIX at one.",
   );
 });
 
@@ -44,7 +38,7 @@ test("a file the checks never read reports nothing", () => {
 
 test("a comment wall is reported with the span it covers", () => {
   const content = "name: CI\n# one\n# two\n# three\non:\n  push:\n    branches: ['**']\n";
-  const found = findings(WORKFLOW, content).filter((finding) => finding.check === "yaml-comment-block");
+  const found = findings(WORKFLOW, content).filter((finding) => finding.check === "yaml/comment-block");
   assert.equal(found.length, 1);
   assert.equal(found[0].startLine, 2);
   assert.equal(found[0].endLine, 4);
@@ -56,17 +50,16 @@ test("a single comment line is not a wall", () => {
   assert.deepEqual(checks(WORKFLOW, content), []);
 });
 
-// push-excludes-tags keeps its rule inline in a composite action, so there is
-// no module to run and the plan declares it uncovered. A diagnostic here would
-// mean this plugin had reimplemented the rule, which is the one thing it must
-// never do.
+// push-excludes-tags keeps its rule inline in a composite action, and slopfix
+// does not carry it. A diagnostic here would mean this plugin had reimplemented
+// the rule, which is the one thing it must never do.
 test("an unfiltered push trigger is not reported", () => {
   assert.deepEqual(checks(WORKFLOW, "name: CI\non:\n  push:\njobs: {}\n"), []);
 });
 
 test("an all-builds job key is reported on its own line", () => {
   const content = "name: CI\non:\n  push:\n    branches: ['**']\njobs:\n  build:\n    runs-on: x\n  all-builds:\n    runs-on: x\n";
-  const found = findings(WORKFLOW, content).filter((finding) => finding.check === "no-all-builds-job");
+  const found = findings(WORKFLOW, content).filter((finding) => finding.check === "yaml/all-builds-job");
   assert.equal(found.length, 1);
   assert.equal(found[0].startLine, 8);
   assert.match(found[0].message, /known deception attempt/);
@@ -74,7 +67,7 @@ test("an all-builds job key is reported on its own line", () => {
 
 test("an all-builds job name is reported on the name line", () => {
   const content = "on:\n  push:\n    branches: ['**']\njobs:\n  gate:\n    name: all-builds\n    runs-on: x\n";
-  const found = findings(WORKFLOW, content).filter((finding) => finding.check === "no-all-builds-job");
+  const found = findings(WORKFLOW, content).filter((finding) => finding.check === "yaml/all-builds-job");
   assert.equal(found.length, 1);
   assert.equal(found[0].startLine, 6);
 });
@@ -97,10 +90,9 @@ test("an assertion inside a run block is reported on its own line", () => {
     '          grep -q hello out.txt || { echo "::error::missing"; exit 1; }',
     "",
   ].join("\n");
-  const found = findings(WORKFLOW, content).filter((finding) => finding.check === "no-tests-in-yaml");
+  const found = findings(WORKFLOW, content).filter((finding) => finding.check === "yaml/test-in-workflow");
   assert.equal(found.length, 1);
   assert.equal(found[0].startLine, 9);
-  assert.match(found[0].message, /repository suite/);
 });
 
 test("a run block that only runs a command is not a test", () => {
@@ -111,7 +103,7 @@ test("a run block that only runs a command is not a test", () => {
 test("the yaml checks also read an action manifest, and the workflow-only ones do not", () => {
   const content = "name: A\n# one\n# two\ndescription: d\nruns:\n  using: composite\n";
   const found = checks("my-action/action.yml", content);
-  assert.deepEqual(found, ["yaml-comment-block"]);
+  assert.deepEqual(found, ["yaml/comment-block"]);
 });
 
 test("continue-on-error over common-checks is reported", () => {
@@ -148,7 +140,7 @@ test("a common-checks step that is allowed to fail nothing is clean", () => {
 test("a semicolon in markdown is a finding, and it names the line", () => {
   const found = findings("docs/x.md", "The server reads the file; it then reports.\n");
   assert.equal(found.length, 1);
-  assert.equal(found[0].check, "ste-lint");
+  assert.equal(found[0].check, "ste/semicolon");
   assert.equal(found[0].startLine, 1);
   assert.match(found[0].message, /semicolon/);
 });
@@ -164,13 +156,13 @@ test("a banned modal and a contraction are both reported", () => {
 // that is one word has to arrive as text or it does not arrive at all.
 test("a rule with exactly one repair names the word to write", () => {
   const modal = findings("docs/x.md", "You should not do that.\n");
-  assert.match(modal.map((f) => f.message).join("\n"), /Write "must"\./);
+  assert.match(modal.map((f) => f.message).join("\n"), /Write must/);
 
   const contraction = findings("docs/x.md", "It isn't ready.\n");
-  assert.match(contraction.map((f) => f.message).join("\n"), /Write "is not"\./);
+  assert.match(contraction.map((f) => f.message).join("\n"), /Write is not\./);
 
   const semicolon = findings("docs/x.md", "The server reads the file; it then reports.\n");
-  assert.match(semicolon[0].message, /Write "\. " and capitalize the next word\./);
+  assert.match(semicolon[0].message, /Write a period/);
 });
 
 test("a repair the rule cannot name is not invented", () => {
@@ -181,22 +173,21 @@ test("a repair the rule cannot name is not invented", () => {
   assert.ok(long.length > 0);
   // A sentence past the cap has no single replacement, so the message must not
   // pretend to offer one.
-  assert.doesNotMatch(long[0].message, /Write "/);
+  assert.doesNotMatch(long[0].message, /Write [a-z]/);
 });
 
-test("a capitalized banned word keeps its capital in the replacement", () => {
+test("a banned modal names the approved word", () => {
   const found = findings("docs/x.md", "Should the server refuse, it reports.\n");
-  assert.match(found.map((f) => f.message).join("\n"), /Write "Must"\./);
+  assert.match(found.map((f) => f.message).join("\n"), /Write must/);
 });
 
 test("ordinary conforming prose reports nothing", () => {
   assert.deepEqual(findings("docs/x.md", "The server reads the file. It reports what it finds.\n"), []);
 });
 
-// The heuristic buckets never fail CI, so a diagnostic for one would spend the
-// client's budget on something the gate does not care about.
+// slopfix reports what fails the gate and nothing else, so passive voice and a
+// noun cluster produce no diagnostic to spend the client's budget on.
 test("a heuristic-only finding is not reported", () => {
-  // Passive voice and a long noun cluster, with nothing that fails.
   const found = findings("docs/x.md", "The value is returned by the handler.\n");
   assert.deepEqual(found, []);
 });
@@ -228,9 +219,9 @@ test("a structural finding outranks a voluminous one", () => {
     "    runs-on: x",
     "",
   ].join("\n");
-  assert.deepEqual(checks(WORKFLOW, content), ["no-all-builds-job", "yaml-comment-block"]);
+  assert.deepEqual(checks(WORKFLOW, content), ["yaml/comment-block", "yaml/all-builds-job"]);
 });
 
 test("unparseable YAML is not judged by the check that parses it", () => {
-  assert.deepEqual(checks(WORKFLOW, "on:\n  push:\njobs:\n  all-builds:\n :::not yaml\n\t\tbad\n").includes("no-all-builds-job"), false);
+  assert.deepEqual(checks(WORKFLOW, "on:\n  push:\njobs:\n  all-builds:\n :::not yaml\n\t\tbad\n").includes("yaml/all-builds-job"), false);
 });

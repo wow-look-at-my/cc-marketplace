@@ -1,5 +1,5 @@
 #!/bin/sh
-# The rule, the payload parse and the response all live in slopfmt. This runs
+# The rule, the payload parse and the response all live in slopfix. This runs
 # the copy this plugin SHIPS, never one found on PATH.
 #
 # There is no probe and no swallowed exit code on purpose. Both were here, and

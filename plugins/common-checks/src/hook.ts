@@ -16,7 +16,7 @@
 import { fileKind, findings, type Finding } from "./checks.ts";
 import { diskContent, forget, outstanding, record } from "./ledger.ts";
 import { place, type Placement } from "./placement.ts";
-import { inScope } from "./scope.ts";
+import { inScope, workTree } from "./scope.ts";
 
 interface ToolInput {
   file_path?: unknown;
@@ -62,11 +62,35 @@ function unitsOf(toolName: string, input: ToolInput): Unit[] {
   return units;
 }
 
-/** The findings this unit is answerable for. */
+/**
+ * The findings this unit is answerable for.
+ *
+ * The line span alone is not enough. An edit anchors on text the file already
+ * has, and a `new_string` that repeats any of it puts those lines inside the
+ * span. A sentence the write never touched is then reported as the write's own,
+ * and the ledger records the file over a violation nothing here introduced.
+ *
+ * So what the file carried BEFORE the edit is subtracted. A finding is matched
+ * by its identity rather than by its line, because every line below an edit
+ * moves. Each pre-edit finding cancels one match, so a second copy of a sentence
+ * the file already breaks is still the write's own.
+ */
 function findingsFor(rel: string, unit: Unit): Finding[] {
   if (unit.placement === undefined) return findings(rel, unit.text);
-  const { full, start, end } = unit.placement;
-  return findings(rel, full).filter((f) => f.startLine - 1 >= start && f.startLine - 1 <= end);
+  const { full, before, start, end } = unit.placement;
+  const carried = new Map<string, number>();
+  for (const finding of findings(rel, before)) {
+    const key = identity(finding);
+    carried.set(key, (carried.get(key) ?? 0) + 1);
+  }
+  return findings(rel, full)
+    .filter((f) => f.startLine - 1 >= start && f.startLine - 1 <= end)
+    .filter((f) => {
+      const left = carried.get(identity(f)) ?? 0;
+      if (left === 0) return true;
+      carried.set(identity(f), left - 1);
+      return false;
+    });
 }
 
 interface HookPayload {
@@ -173,9 +197,15 @@ function identity(f: Finding): string {
  * on it can never pass. An entry made under that test wedged every later write
  * in the session against a file nothing could clean.
  */
-export function sweep(sessionId: string, cwd: string): string[] {
+export function sweep(sessionId: string, cwd: string, project?: string): string[] {
   const still: string[] = [];
   for (const entry of outstanding(sessionId)) {
+    // An entry in another checkout is another project's business. The ledger is
+    // keyed by session and holds absolute paths, and a session here normally
+    // holds several checkouts. Without this, a pre-existing violation in one
+    // repository refuses every write in an unrelated one. `otherFileReason`
+    // closes the escape inside the work at hand, never across projects.
+    if (project !== undefined && workTree(entry.path) !== project) continue;
     // An entry an older build recorded for a file outside any work tree can
     // never clear on its own: the checks that put it there no longer run on
     // that file, so nothing it says about disk is asked again.
@@ -226,7 +256,10 @@ export function decide(raw: string): string {
   // Checked before anything about this write: a known-bad file elsewhere
   // outranks whatever is being written now. Walking away to another file is
   // the escape this exists to close.
-  const stuck = sweep(sessionId, cwd).filter((p) => p !== filePath);
+  // A write with no path, or one outside every work tree, has no project. There
+  // is then no "other file in this project" to hold against it.
+  const project = workTree(filePath);
+  const stuck = project === undefined ? [] : sweep(sessionId, cwd, project).filter((p) => p !== filePath);
   if (stuck.length > 0) return otherFileReason(stuck);
 
   const found = blockingFindings(payload.tool_name, input, cwd);

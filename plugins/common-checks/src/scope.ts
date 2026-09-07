@@ -45,12 +45,31 @@ function underClaudeConfig(path: string): boolean {
  * submodule, so this asks only whether the name exists.
  */
 function insideWorkTree(path: string): boolean {
-  let dir = dirname(path);
-  for (;;) {
-    if (existsSync(join(dir, ".git"))) return true;
-    const parent = dirname(dir);
-    if (parent === dir) return false;
-    dir = parent;
+  return workTree(path) !== undefined;
+}
+
+/**
+ * The root of the work tree the path sits in, or undefined when it is in none.
+ *
+ * The `.git` entry is a directory in an ordinary clone and a FILE in a worktree
+ * or a submodule, so this asks only whether the name exists.
+ *
+ * A session in this environment normally holds several checkouts at once, and
+ * anything that reasons about "the other file" has to know which project that
+ * other file belongs to.
+ */
+export function workTree(absPath: string): string | undefined {
+  try {
+    if (typeof absPath !== "string" || absPath === "" || !isAbsolute(absPath)) return undefined;
+    let dir = dirname(resolve(absPath));
+    for (;;) {
+      if (existsSync(join(dir, ".git"))) return dir;
+      const parent = dirname(dir);
+      if (parent === dir) return undefined;
+      dir = parent;
+    }
+  } catch {
+    return undefined;
   }
 }
 
