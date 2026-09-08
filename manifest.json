@@ -1,0 +1,35 @@
+{
+  "name": "no-blame-language",
+  "version": "1455",
+  "tag": "no-blame-language#1455",
+  "pluginJson": {
+    "author": {
+      "name": "mhaynie"
+    },
+    "description": "Marks a closing message that deflects a defect instead of fixing it -- 'pre-existing', 'not my problem', 'out of scope', 'flagging this for you', and their kin -- by appending one line to what the reader sees while the message streams. It never blocks and sends nothing back to the model",
+    "hooks": {
+      "MessageDisplay": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/no-blame-language",
+              "timeout": 10,
+              "type": "command"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": [
+      "blame",
+      "deflection",
+      "ownership",
+      "pre-existing",
+      "messagedisplay",
+      "hook",
+      "annotation"
+    ],
+    "name": "no-blame-language",
+    "version": "1455"
+  }
+}
