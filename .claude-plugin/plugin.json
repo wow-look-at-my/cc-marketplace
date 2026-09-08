@@ -1,0 +1,27 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Refuses a stop whose closing message asks permission to keep going, answering with the one word the user would have typed",
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/detect-permission-seeking",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"stop",
+		"permission",
+		"autonomy",
+		"behavior",
+		"hook"
+	],
+	"name": "detect-permission-seeking",
+	"version": "1455"
+}
