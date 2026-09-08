@@ -170,7 +170,7 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 		}
 		return one("truncate", operands...)
 
-	case "cp", "mv", "install", "rsync", "scp":
+	case "mv", "install", "rsync", "scp":
 		return copyWrites(seg, name, rest, roots)
 
 	case "ln":
@@ -277,6 +277,9 @@ func fileWrites(seg segment, name string, rest []word, roots []string) []write {
 // through one, so moving or copying them around it -- `mv old.go new.go` -- is
 // ordinary refactoring. A source from outside is the splice this closes: write a
 // file to /tmp with Write, then move it over the target.
+//
+// cp is not on this list. Copying a file is the ordinary way to move a tree of
+// them into place, and denying it turned one copy into one Write call per file.
 func copyWrites(seg segment, name string, rest []word, roots []string) []write {
 	flags, operands := scanArgs(rest, set.Of[string](
 		"-t", "--target-directory", "-S", "--suffix",

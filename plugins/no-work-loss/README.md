@@ -60,7 +60,7 @@ A change to file content under the working tree goes through Write, Edit or Note
 | Route | Examples |
 |---|---|
 | in-place editors | `sed -i`, `awk -i inplace`, `ed`, `vim -c`, `perl -pi -e`, an inline `node -e` |
-| redirection and copy-over | `> file`, `>> file`, `tee`, `dd of=`, `truncate`, `cp`/`mv`/`scp` from outside the tree |
+| redirection and copy-over | `> file`, `>> file`, `tee`, `dd of=`, `truncate`, `mv`/`scp` from outside the tree (`cp` is allowed) |
 | patch application | `patch`, `git apply`, `git apply --cached`, `git am` |
 | git as an editor | `checkout <ref> -- path`, `restore`, `stash pop`, `revert`, `cherry-pick`, `merge`, `reset --hard` |
 | git plumbing | `hash-object -w`, `update-index`, `commit-tree`, `checkout-index` |

@@ -8,7 +8,7 @@ Every route resolves to one of three, and the verdict follows from the shape rat
 
 | Shape | Meaning | Denies when |
 |---|---|---|
-| named path | the target is on the argv (`sed -i x.go`, `> x.go`, `cp a x.go`) | the path resolves inside a guarded root and is not under a build directory |
+| named path | the target is on the argv (`sed -i x.go`, `> x.go`, `mv a x.go`) | the path resolves inside a guarded root and is not under a build directory |
 | whole directory | the write lands *somewhere* under a directory (`patch`, `tar -x`, `git apply`, `split`) | that directory contains a guarded root, or sits inside one |
 | opaque | the target cannot be resolved at all (an inline `node -e`, an `xargs`-fed `sed -i`, a GitHub API commit) | always -- fail closed treats an unresolvable target as the worst one |
 
@@ -24,7 +24,9 @@ The session scratchpad is the one temporary directory that does NOT deny. Claude
 
 **Redirection and copy-over.** `>`, `>>`, `>|`, `&>`, `<>`, and `>&file` (but not `2>&1`, which duplicates a descriptor, and not `/dev/null` and friends). `tee` and `tee -a`, `dd of=`, `truncate -s`, `sponge`, `xxd -r`, `base64`/`openssl -out`.
 
-**cp, mv, install, rsync, scp** are the one family with a source-side test. It is where the rule's real shape shows. This is about content *entering* the tree. Bytes already in the tree have been through an edit tool, so `mv old.go new.go` is ordinary refactoring and passes.
+**cp is not a write route.** Copying a file is the ordinary way to put a tree of them in place. Denying it turned one copy into one Write call per file.
+
+**mv, install, rsync, scp** are the one family with a source-side test. It is where the rule's real shape shows. This is about content *entering* the tree. Bytes already in the tree have been through an edit tool, so `mv old.go new.go` is ordinary refactoring and passes.
 
 **Patch application.** `patch` (the files are named inside the diff. The write is a whole-directory one against `-d` or the working directory), `git apply`, `git apply --cached`, `git am`.
 

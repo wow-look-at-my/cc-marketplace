@@ -58,7 +58,6 @@ func routeCases() []routeCase {
 		{route: "tee -a", deny: "echo hi | tee -a src.txt", allow: "echo hi | tee -a {{out}}/src.txt", names: "src.txt"},
 		{route: "dd of=", deny: "dd if=/dev/zero of=src.txt", allow: "dd if=/dev/zero of={{out}}/src.txt", names: "src.txt"},
 		{route: "truncate", deny: "truncate -s 0 src.txt", allow: "truncate -s 0 {{out}}/src.txt", names: "src.txt"},
-		{route: "cp over a tracked file", deny: "cp {{out}}/src.txt src.txt", allow: "cp src.txt {{out}}/copy.txt", names: "src.txt"},
 		{route: "mv over a tracked file", deny: "mv {{out}}/staged.txt src.txt", allow: "mv src.txt {{out}}/staged.txt", names: "src.txt"},
 		{route: "install", deny: "install -m 644 {{out}}/src.txt src.txt", allow: "install -m 644 src.txt {{out}}/copy.txt", names: "src.txt"},
 		{route: "rsync into the tree", deny: "rsync -a {{out}}/src.txt src.txt", allow: "rsync -a src.txt {{out}}/copy.txt", names: "src.txt"},
@@ -248,6 +247,11 @@ func TestOrdinaryCommandsAreUntouched(t *testing.T) {
 		`awk '$1 > 5' src.txt`, `awk '{print $2}' src.txt`, "sed s/a/b/ src.txt",
 		"sort src.txt | uniq -c", "jq '.name' package.json", "echo hi > /dev/null",
 		"gzip -c notes.md", "docker compose up -d", "docker cp src.txt web:/tmp/x",
+
+		// cp. Moving bytes into place is how a file gets copied, and denying it
+		// forced every such move through the edit tools one file at a time. The
+		// other copiers stay denied: cp is the one the workflow needs.
+		"cp {{out}}/src.txt src.txt", "cp -r {{out}}/dir src", "cp {{out}}/a.txt {{out}}/b.txt src/",
 		"yq '.a' config.yaml", "sort -k 2 src.txt",
 		"go test ./... 2>&1", "diff src.txt notes.md",
 
