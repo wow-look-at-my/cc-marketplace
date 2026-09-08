@@ -41,11 +41,11 @@ claude plugin marketplace update
 
 ### Quick Start
 
-1. Copy `plugins/example-plugin/` to `plugins/your-plugin/`
-2. Rename `.template.` files (remove `.template.` from names)
-3. Edit `.claude-plugin/plugin.json` with your metadata
-4. Add your commands, agents, or skills
-5. Add the plugin to `.claude-plugin/marketplace.json`
+1. Create `plugins/your-plugin/.claude-plugin/plugin.json` with your metadata
+2. Add your commands, agents, or skills
+3. Add the plugin to `.claude-plugin/marketplace.json`
+
+A prose rule does not belong here. It goes in [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix), and `plugins/slopfix/` reaches it with a launcher.
 
 ### Documentation
 
@@ -67,21 +67,6 @@ plugins/your-plugin/
 ├── .mcp.json               # MCP server configs
 └── README.md               # Plugin docs
 ```
-
-## Template Files
-
-The `plugins/example-plugin/` directory contains `.template.` files showing the correct structure and format for each component:
-
-| File | Creates |
-|------|---------|
-| [plugin.template.json](plugins/example-plugin/.claude-plugin/plugin.template.json) | Plugin metadata |
-| [command.template.md](plugins/example-plugin/commands/command.template.md) | Slash command |
-| [agent.template.md](plugins/example-plugin/agents/agent.template.md) | Subagent definition |
-| [SKILL.template.md](plugins/example-plugin/skills/example-skill/SKILL.template.md) | Skill |
-| [.mcp.template.json](plugins/example-plugin/.mcp.template.json) | MCP server config |
-| [README.template.md](plugins/example-plugin/README.template.md) | Plugin documentation |
-
-Copy the folder, rename files (remove `.template.`), and edit.
 
 ## Resources
 

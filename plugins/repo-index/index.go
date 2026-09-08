@@ -30,16 +30,14 @@ const maxDescription = 240
 // genericTerms are words that would match most prompts, so a repository named
 // after one earns nothing by matching. This list is about English and software
 // in general. It says nothing about any particular repository.
-var genericTerms = map[string]bool{
-	"api": true, "app": true, "apps": true, "code": true, "common": true,
-	"config": true, "core": true, "data": true, "demo": true, "dev": true,
-	"docs": true, "example": true, "examples": true, "helper": true,
-	"helpers": true, "lib": true, "libs": true, "main": true, "misc": true,
-	"new": true, "old": true, "project": true, "repo": true, "sample": true,
-	"scripts": true, "server": true, "service": true, "shared": true,
-	"simple": true, "site": true, "test": true, "tests": true, "tool": true,
-	"tools": true, "util": true, "utils": true, "web": true, "www": true,
-}
+var genericTerms = set.Of[string]("api", "app", "apps", "code", "common",
+	"config", "core", "data", "demo", "dev",
+	"docs", "example", "examples", "helper",
+	"helpers", "lib", "libs", "main", "misc",
+	"new", "old", "project", "repo", "sample",
+	"scripts", "server", "service", "shared",
+	"simple", "site", "test", "tests", "tool",
+	"tools", "util", "utils", "web", "www")
 
 var (
 	splitName    = regexp.MustCompile(`[-_.]+`)
@@ -166,7 +164,7 @@ var word = regexp.MustCompile(`[a-z][a-z0-9]{2,}`)
 func tokens(text string) []string {
 	var out []string
 	for _, w := range word.FindAllString(strings.ToLower(text), -1) {
-		if !genericTerms[w] {
+		if !genericTerms.Contains(w) {
 			out = append(out, w)
 		}
 	}
@@ -198,7 +196,7 @@ func phrasesFor(r repo) (identifiers, parts []string) {
 	seen := set.New[string]()
 	keep := func(phrase string, into *[]string) {
 		phrase = strings.ToLower(strings.TrimSpace(phrase))
-		if phrase == "" || seen.Contains(phrase) || genericTerms[phrase] || len(phrase) < 3 {
+		if phrase == "" || seen.Contains(phrase) || genericTerms.Contains(phrase) || len(phrase) < 3 {
 			return
 		}
 		seen.Add(phrase)
