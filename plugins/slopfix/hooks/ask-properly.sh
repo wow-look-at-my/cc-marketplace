@@ -1,8 +1,3 @@
 #!/bin/sh
-# The prose-question guard. The rule is slopfix's `askproperly` package,
-# reached through `slopfix ask-properly`.
-#
-# A closing message that hands the reader a decision in prose gets one line
-# appended to what the reader sees. It refuses nothing: the reader is the
-# person the question was aimed at, so the note goes there.
-exec "$(dirname "$0")/../bin/slopfix.ape" ask-properly
+# Marks a decision put to the reader in prose. Appends a line, refuses nothing.
+exec "${CLAUDE_PLUGIN_ROOT:?only a plugin hook has one}/bin/slopfix.ape" ask-properly

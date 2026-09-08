@@ -1,18 +1,5 @@
 #!/bin/sh
-# The deflection guard. The rule is slopfix's `blamelanguage` package, reached
-# through `slopfix message --only blame`.
-#
-# MessageDisplay, not Stop. A Stop hook runs after the message has streamed, so
-# refusing cannot unsend it: the reader sees the deflection, then a near
-# identical retype that explains itself and names the phrase again, and the
-# guard fires a second time. That loop has no bound. The reader is the surface
-# this rule is about, so the annotation goes there and the model is left alone.
-#
-# The message is judged whole on its last flush. One flush carries only the
-# lines that completed since the last one, so a phrase straddling a wrap is
-# missed and the same message is marked several times over. The deltas
-# accumulate in a per-message file under the temp directory, keyed by
-# message_id, and it is dropped on the final flush.
+# Marks deflecting language. MessageDisplay: a Stop refusal only buys a retype.
 set -eu
 
 payload=$(cat)
@@ -20,8 +7,7 @@ final=$(printf '%s' "$payload" | jq -r '.final // false')
 id=$(printf '%s' "$payload" | jq -r '.message_id // ""')
 delta=$(printf '%s' "$payload" | jq -r '.delta // ""')
 
-# Four spellings, matching the sibling guards. A user who wrote `off` and lost
-# their opt-out to a one-value test has no way to tell it stopped working.
+# Four spellings: a one-value test breaks an opt-out silently.
 case "${CC_NO_BLAME_LANGUAGE:-1}" in
 0 | false | no | off) exit 0 ;;
 esac
@@ -37,15 +23,13 @@ printf '%s' "$delta" >>"$key" 2>/dev/null || exit 0
 message=$(cat "$key" 2>/dev/null || printf '')
 rm -f "$key"
 
-# A message that never reaches a final flush strands its key forever, so collect
-# what an hour has passed over. The directory is exclusive to this guard. Only
-# on the final flush: sweeping per delta spends a find per token.
+# A message with no final flush strands its key. Swept here, not per delta.
 find "$state" -maxdepth 1 -type f -mmin +60 -delete 2>/dev/null || :
 
 [ -n "$message" ] || exit 0
 
 set +e
-findings=$(printf '%s' "$message" | "$(dirname "$0")/../bin/slopfix.ape" message --only blame --json 2>/dev/null)
+findings=$(printf '%s' "$message" | "${CLAUDE_PLUGIN_ROOT:?only a plugin hook has one}/bin/slopfix.ape" message --only blame --json 2>/dev/null)
 set -e
 [ -n "$findings" ] || exit 0
 
@@ -61,9 +45,6 @@ line=$(printf '%s' "$findings" | jq -r '
     end') || exit 0
 [ -n "$line" ] || exit 0
 
-# displayContent REPLACES the delta on screen, not the message. Emitting the
-# accumulated text here renders the whole message a second time, appended to
-# itself, on exactly the messages this guard exists to make readable. The
-# accumulation is for DETECTION only: a phrase can straddle a wrap.
+# Emit $delta: displayContent replaces the delta, so accumulation renders twice.
 jq -n --arg text "$delta$line" \
   '{hookSpecificOutput: {hookEventName: "MessageDisplay", displayContent: $text}}'
