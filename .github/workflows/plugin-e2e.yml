@@ -21,7 +21,7 @@ jobs:
       - name: Fetch the slopfix binary the plugin ships
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: .github/scripts/vendor-slopfix.sh
+        run: sh .github/scripts/vendor-slopfix.sh plugins/slopfix
 
       - uses: ./.github/actions/setup-claude-code
 
