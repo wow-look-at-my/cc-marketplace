@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "example-server": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/servers/your-server",
+      "args": ["--config", "${CLAUDE_PLUGIN_ROOT}/config.json"],
+      "env": {
+        "API_KEY": "${YOUR_API_KEY}",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}

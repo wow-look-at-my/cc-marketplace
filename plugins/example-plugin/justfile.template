@@ -1,0 +1,11 @@
+[private]
+help:
+    @just --list
+
+# Optional: runs before the build
+prebuild:
+    npm install
+
+# Optional: runs after the build
+postbuild:
+    npm run lint
