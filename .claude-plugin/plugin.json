@@ -1,0 +1,131 @@
+{
+	"author": {
+		"name": "wow-look-at-my"
+	},
+	"description": "The org's slop guards in one plugin: the common-checks CI gate as a language server and a write refusal, the counts and tombstones repairs, and the permission-seeking, blame-language and busy-poll guards.",
+	"hooks": {
+		"MessageDisplay": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape blame-language",
+						"timeout": 10,
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape link-refs",
+						"timeout": 10,
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape ask-properly",
+						"timeout": 10,
+						"type": "command"
+					}
+				]
+			}
+		],
+		"PermissionRequest": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape auto-allow",
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			}
+		],
+		"PostToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape md-budget",
+						"type": "command"
+					}
+				],
+				"matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit"
+			}
+		],
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/server/slopfix-lsp --hook",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook --only counts,tombstones --max-comment-lines ${NO_TOMBSTONES_MAX_COMMENT_LINES:-14}",
+						"type": "command"
+					}
+				],
+				"matcher": "Write|Edit|MultiEdit|NotebookEdit"
+			},
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape busy-poll",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape no-work-loss",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape auto-allow",
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			},
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape clean-bash",
+						"type": "command"
+					}
+				],
+				"matcher": "Bash"
+			}
+		],
+		"SessionStart": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape md-budget",
+						"type": "command"
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape laziness",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape md-budget",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape busy-poll",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"lsp",
+		"ci",
+		"github-actions",
+		"lint",
+		"common-checks",
+		"slopfix",
+		"prose"
+	],
+	"name": "slopfix",
+	"version": "1495"
+}
