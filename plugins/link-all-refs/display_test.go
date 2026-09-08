@@ -18,11 +18,10 @@ type fakeResolver struct {
 	base     string
 	branches []string
 	commits  []string
-	// settled and open are the references whose state is known. Anything named
-	// in neither is a lookup that could not answer, which is the case that must
-	// leave the text exactly as it was written.
-	settled []string
-	open    []string
+	// states is what each pull request is doing. A reference named here gets
+	// its dot; one that is not is a lookup that could not answer, which must
+	// render no dot and link exactly as it always did.
+	states map[string]PullState
 }
 
 func (f fakeResolver) Repo() (Repo, bool)         { return f.repo, f.found }
@@ -30,15 +29,15 @@ func (f fakeResolver) DefaultBranch() string      { return f.base }
 func (f fakeResolver) BranchExists(b string) bool { return slices.Contains(f.branches, b) }
 func (f fakeResolver) CommitExists(s string) bool { return slices.Contains(f.commits, s) }
 
-func (f fakeResolver) Settled(repo Repo, number string) (bool, bool) {
-	key := repo.Owner + "/" + repo.Name + "#" + number
-	switch {
-	case slices.Contains(f.settled, key):
-		return true, true
-	case slices.Contains(f.open, key):
-		return false, true
-	}
-	return false, false
+func (f fakeResolver) PullState(repo Repo, number string) PullState {
+	return f.states[repo.Owner+"/"+repo.Name+"#"+number]
+}
+
+// withState is live() plus one pull request whose state is known.
+func withState(key string, s PullState) fakeResolver {
+	res := live()
+	res.states = map[string]PullState{key: s}
+	return res
 }
 
 // live is a checkout of o/r whose master exists, with one pushed branch and one
@@ -120,64 +119,109 @@ func TestAReferenceWithNoPageIsLeftAlone(t *testing.T) {
 	}
 }
 
-// A merged or closed pull request has nothing left to do, so a link to one
-// spends the reader's attention on a page they closed hours ago. It stays plain
-// text -- the words the model wrote, with no link put on them.
-func TestASettledPullRequestIsNotLinked(t *testing.T) {
-	res := live()
-	res.settled = []string{"o/r#376"}
-
-	cases := []string{
-		"o/r#376 is merged.",
-		"here: https://github.com/o/r/pull/376",
-		"see https://github.com/o/r/issues/376 for the detail",
-		"the diff: https://github.com/o/r/pull/376/files",
+// Each live state renders its dot beside a reference that is still linked, so
+// the reader can tell what the page is doing without opening it.
+func TestEachLiveStateRendersItsDot(t *testing.T) {
+	cases := []struct {
+		name  string
+		state PullState
+		want  string
+	}{
+		{"mergeable", StateMergeable, "🟢 [o/r#376](https://github.com/o/r/issues/376) is up."},
+		{"checks running", StatePending, "🟡 [o/r#376](https://github.com/o/r/issues/376) is up."},
+		{"checks failed", StateFailing, "🔴 [o/r#376](https://github.com/o/r/issues/376) is up."},
+		{"conflicted", StateConflicted, "🟠 [o/r#376](https://github.com/o/r/issues/376) is up."},
 	}
-	for _, text := range cases {
-		out, changed := RewriteDelta(text, false, res)
-		assert.False(t, changed, "expected no link on %q, got %q", text, out)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, rewrite(t, "o/r#376 is up.", withState("o/r#376", tc.state)))
+		})
 	}
 }
 
-// The negative control: an OPEN pull request is still something to click, and
-// still gets linked. Without this the case above passes by linking nothing.
-func TestAnOpenPullRequestIsStillLinked(t *testing.T) {
-	res := live()
-	res.open = []string{"o/r#376"}
+// A merged pull request is the one state where the link MOVES. The words go back
+// to plain text and the purple dot carries the link: the reader sees it is
+// merged at a glance, and the route to the page is still there for anyone who
+// wants it.
+//
+// The open case beside it is the control that keeps the two apart. Without it a
+// later change could collapse them back together and this would still pass.
+func TestMergedMovesTheLinkOntoTheDot(t *testing.T) {
+	merged := rewrite(t, "o/r#376 landed.", withState("o/r#376", StateMerged))
+	assert.Equal(t, "[🟣](https://github.com/o/r/issues/376) o/r#376 landed.", merged)
 
-	got := rewrite(t, "o/r#376 is green.", res)
-	assert.Equal(t, "[o/r#376](https://github.com/o/r/issues/376) is green.", got)
+	open := rewrite(t, "o/r#376 landed.", withState("o/r#376", StateMergeable))
+	assert.Equal(t, "🟢 [o/r#376](https://github.com/o/r/issues/376) landed.", open)
 
-	got = rewrite(t, "here: https://github.com/o/r/pull/376", res)
-	assert.Contains(t, got, "](https://github.com/o/r/pull/376)")
+	assert.NotContains(t, merged, "[o/r#376](", "the words must not be a link when merged")
+	assert.Contains(t, open, "[o/r#376](", "an open pull request keeps the reference linked")
 }
 
-// A lookup that cannot answer leaves the reference exactly as it was written.
-// Stripping on a failed call turns a network blip into lost information, so an
-// unknown state must behave like an open one.
-func TestAnUnknownStateLinksAsBefore(t *testing.T) {
-	// live() names no state at all, so every lookup here reports unknown.
+// A pull request closed without merging is finished the same way a merged one
+// is, so it is rendered the same way. The colour is this plugin's own choice --
+// the owner's mapping does not cover this state.
+func TestAClosedPullRequestAlsoMovesTheLink(t *testing.T) {
+	got := rewrite(t, "o/r#376 was dropped.", withState("o/r#376", StateClosed))
+	assert.Equal(t, "[⚫](https://github.com/o/r/issues/376) o/r#376 was dropped.", got)
+}
+
+// A state that could not be determined renders NO dot, and links exactly as this
+// plugin always did. An unknown must never show as green.
+func TestAnUnknownStateRendersNoDot(t *testing.T) {
+	// live() knows no state at all, so every lookup here reports unknown.
 	got := rewrite(t, "o/r#376 is up.", live())
 	assert.Equal(t, "[o/r#376](https://github.com/o/r/issues/376) is up.", got)
+	for _, d := range []string{"🟢", "🟡", "🔴", "🟠", "🟣", "⚫"} {
+		assert.NotContains(t, got, d)
+	}
 }
 
-// A settled answer for one pull request says nothing about another.
-func TestOnlyTheSettledReferenceLosesItsLink(t *testing.T) {
+// A bare pull request URL earns a dot too, and merged moves its link the same
+// way. The trailing path on a link to one file is ignored.
+func TestABarePullRequestURLGetsItsDot(t *testing.T) {
+	res := withState("o/r#376", StateFailing)
+	assert.Equal(t,
+		"here: 🔴 [https://github.com/o/r/pull/376](https://github.com/o/r/pull/376)",
+		rewrite(t, "here: https://github.com/o/r/pull/376", res))
+
+	merged := withState("o/r#376", StateMerged)
+	assert.Equal(t,
+		"diff: [🟣](https://github.com/o/r/pull/376/files) https://github.com/o/r/pull/376/files",
+		rewrite(t, "diff: https://github.com/o/r/pull/376/files", merged))
+}
+
+// An answer for one pull request says nothing about another.
+func TestOnlyTheNamedReferenceGetsItsDot(t *testing.T) {
 	res := live()
-	res.settled = []string{"o/r#1"}
-	res.open = []string{"o/r#2"}
+	res.states = map[string]PullState{"o/r#1": StateMerged, "o/r#2": StatePending}
 
 	got := rewrite(t, "o/r#1 merged, o/r#2 is next.", res)
-	assert.Equal(t, "o/r#1 merged, [o/r#2](https://github.com/o/r/issues/2) is next.", got)
+	assert.Equal(t,
+		"[🟣](https://github.com/o/r/issues/1) o/r#1 merged, 🟡 [o/r#2](https://github.com/o/r/issues/2) is next.",
+		got)
 }
 
-// A URL that is not a pull request or an issue is never asked about, and is
-// linked the way it always was.
-func TestANonIssueURLIsUnaffected(t *testing.T) {
-	res := live()
-	res.settled = []string{"o/r#376"}
-	got := rewrite(t, "tree: https://github.com/o/r/tree/claude/pushed", res)
-	assert.Contains(t, got, "](https://github.com/o/r/tree/claude/pushed)")
+// A reference that is not a pull request is never asked about, and is linked the
+// way it always was. A commit, a branch and an ordinary repository URL each have
+// no merge state to report.
+func TestANonPullRequestReferenceGetsNoDot(t *testing.T) {
+	res := withState("o/r#376", StateMerged)
+	for _, text := range []string{
+		"re-pushed as 6884dd2.",
+		"pushed claude/pushed to origin.",
+		"tree: https://github.com/o/r/tree/claude/pushed",
+	} {
+		got := rewrite(t, text, res)
+		assert.Contains(t, got, "](https://github.com/o/r/")
+		assert.NotContains(t, got, "🟣", "for %q", text)
+	}
+}
+
+// A backticked reference keeps its backticks inside the link text, and the dot
+// sits outside the code span rather than inside it.
+func TestABacktickedReferenceKeepsItsDotOutsideTheCodeSpan(t *testing.T) {
+	got := rewrite(t, "see `o/r#376` for it.", withState("o/r#376", StateMergeable))
+	assert.Equal(t, "see 🟢 [`o/r#376`](https://github.com/o/r/issues/376) for it.", got)
 }
 
 // An owner/repo#N slug carries its own repository, so it resolves even when the

@@ -170,9 +170,9 @@ func TestRewriteAgainstARealCheckout(t *testing.T) {
 }
 
 // A reference with no repository to resolve against never reaches the network:
-// there is nothing to ask about, and the answer is the one that leaves the text
-// alone. This is what keeps a bare #N from becoming a GitHub call per flush.
-func TestSettledAsksNothingWithoutARepository(t *testing.T) {
+// there is nothing to ask about. This is what keeps a bare #N, which this plugin
+// never links anyway, from costing a GitHub call per flush.
+func TestPullStateAsksNothingWithoutARepository(t *testing.T) {
 	res := &GitResolver{Dir: t.TempDir()}
 	for _, tc := range []struct {
 		repo   Repo
@@ -182,9 +182,8 @@ func TestSettledAsksNothingWithoutARepository(t *testing.T) {
 		{Repo{Owner: "o"}, "376"},
 		{Repo{Owner: "o", Name: "r"}, ""},
 	} {
-		settled, known := res.Settled(tc.repo, tc.number)
-		assert.False(t, known, "expected no answer for %+v/%q", tc.repo, tc.number)
-		assert.False(t, settled)
+		assert.Equal(t, StateUnknown, res.PullState(tc.repo, tc.number),
+			"expected no answer for %+v/%q", tc.repo, tc.number)
 	}
 	assert.Empty(t, res.prSeen, "nothing was asked, so nothing is memoized")
 }
@@ -192,38 +191,78 @@ func TestSettledAsksNothingWithoutARepository(t *testing.T) {
 // The answer is memoized per reference: one message names the same pull request
 // several times, and this runs while the message streams. Seeding the memo is
 // also what keeps this suite off the network.
-func TestASettledAnswerIsMemoized(t *testing.T) {
+func TestAPullStateIsMemoized(t *testing.T) {
 	res := &GitResolver{Dir: t.TempDir()}
-	res.prSeen = map[string]prAnswer{
-		"o/r#376": {settled: true, known: true},
-		"o/r#377": {settled: false, known: true},
-	}
+	res.prSeen = map[string]PullState{"o/r#376": StateMerged, "o/r#377": StateMergeable}
 
-	settled, known := res.Settled(Repo{Owner: "o", Name: "r"}, "376")
-	assert.True(t, known)
-	assert.True(t, settled, "a merged pull request reads as settled")
-
-	settled, known = res.Settled(Repo{Owner: "o", Name: "r"}, "377")
-	assert.True(t, known)
-	assert.False(t, settled, "an open pull request is not settled")
+	assert.Equal(t, StateMerged, res.PullState(Repo{Owner: "o", Name: "r"}, "376"))
+	assert.Equal(t, StateMergeable, res.PullState(Repo{Owner: "o", Name: "r"}, "377"))
 }
 
-// End to end through the memo: a settled pull request loses its link and an open
-// one keeps it, with the real resolver doing the reading.
-func TestARealResolverDropsTheLinkOnASettledPullRequest(t *testing.T) {
+// End to end through the real resolver: a merged pull request comes back with
+// the words bare and the dot linked, and an open one with the reference linked.
+func TestARealResolverMovesTheLinkOnAMergedPullRequest(t *testing.T) {
 	dir, _ := newRepo(t)
 	res := &GitResolver{Dir: dir}
-	res.prSeen = map[string]prAnswer{
-		"o/r#376": {settled: true, known: true},
-		"o/r#377": {settled: false, known: true},
-	}
+	res.prSeen = map[string]PullState{"o/r#376": StateMerged, "o/r#377": StateMergeable}
 
 	out, changed := RewriteDelta("o/r#376 is merged.", false, res)
-	assert.False(t, changed, "expected no link, got %q", out)
+	require.True(t, changed)
+	assert.Equal(t, "[🟣](https://github.com/o/r/issues/376) o/r#376 is merged.", out)
 
 	out, changed = RewriteDelta("o/r#377 is green.", false, res)
 	require.True(t, changed)
-	assert.Contains(t, out, "](https://github.com/o/r/issues/377)")
+	assert.Equal(t, "🟢 [o/r#377](https://github.com/o/r/issues/377) is green.", out)
+}
+
+// classify turns what gh reports into the dot it earns. The fixtures are the
+// real field spellings, read off a live `gh pr view --json`.
+func TestClassifyReadsWhatGHReports(t *testing.T) {
+	cases := []struct {
+		name string
+		view pullView
+		want PullState
+	}{
+		{"merged wins over everything", pullView{State: "MERGED", Mergeable: "UNKNOWN", Checks: []string{"FAILURE"}}, StateMerged},
+		{"closed without merging", pullView{State: "CLOSED"}, StateClosed},
+		{"a failing check", pullView{State: "OPEN", Mergeable: "MERGEABLE", Checks: []string{"SUCCESS", "FAILURE"}}, StateFailing},
+		{"a failure outranks a conflict", pullView{State: "OPEN", Mergeable: "CONFLICTING", Checks: []string{"FAILURE"}}, StateFailing},
+		{"conflicting", pullView{State: "OPEN", Mergeable: "CONFLICTING", Checks: []string{"SUCCESS"}}, StateConflicted},
+		{"a dirty merge state is a conflict", pullView{State: "OPEN", MergeState: "DIRTY", Checks: []string{"SUCCESS"}}, StateConflicted},
+		{"a conflict outranks a running check", pullView{State: "OPEN", Mergeable: "CONFLICTING", Checks: []string{"PENDING"}}, StateConflicted},
+		{"a check still running", pullView{State: "OPEN", Mergeable: "MERGEABLE", Checks: []string{"SUCCESS", "PENDING"}}, StatePending},
+		{"an expected status context", pullView{State: "OPEN", Checks: []string{"EXPECTED"}}, StatePending},
+		{"green", pullView{State: "OPEN", Mergeable: "MERGEABLE", Checks: []string{"SUCCESS", "SKIPPED", "NEUTRAL"}}, StateMergeable},
+		{"no checks at all is green", pullView{State: "OPEN", Mergeable: "MERGEABLE"}, StateMergeable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, classify(tc.view))
+		})
+	}
+}
+
+// A skipped job is one that correctly did not need to run. Colouring it red
+// would make almost every message red, because this org's workflows skip jobs
+// routinely.
+func TestASkippedCheckIsNotAFailure(t *testing.T) {
+	assert.False(t, checkFailed("SKIPPED"))
+	assert.False(t, checkFailed("SUCCESS"))
+	assert.False(t, checkFailed("NEUTRAL"))
+	assert.True(t, checkFailed("FAILURE"))
+	assert.True(t, checkFailed("TIMED_OUT"))
+}
+
+// The dot is what the reader actually sees, so the mapping is pinned rather than
+// left to the constant order.
+func TestEveryStateRendersItsOwnDot(t *testing.T) {
+	assert.Equal(t, "🟣", dot(StateMerged))
+	assert.Equal(t, "⚫", dot(StateClosed))
+	assert.Equal(t, "🔴", dot(StateFailing))
+	assert.Equal(t, "🟠", dot(StateConflicted))
+	assert.Equal(t, "🟡", dot(StatePending))
+	assert.Equal(t, "🟢", dot(StateMergeable))
+	assert.Empty(t, dot(StateUnknown), "an unknown state must render no dot")
 }
 
 func TestStateFileIgnoresAnUnsafeMessageID(t *testing.T) {

@@ -57,11 +57,11 @@ func TestSplitNumber(t *testing.T) {
 // `issues` are one case, because GitHub serves a pull request under both.
 func TestIssueRefReadsAPullRequestOrIssueURL(t *testing.T) {
 	cases := map[string]string{
-		"https://github.com/o/r/pull/376":                "376",
-		"https://github.com/o/r/issues/376":              "376",
-		"https://www.github.com/o/r/pull/376":            "376",
-		"http://github.com/o/r/pull/376":                 "376",
-		"https://github.com/o/r/pull/376/files":          "376",
+		"https://github.com/o/r/pull/376":                 "376",
+		"https://github.com/o/r/issues/376":               "376",
+		"https://www.github.com/o/r/pull/376":             "376",
+		"http://github.com/o/r/pull/376":                  "376",
+		"https://github.com/o/r/pull/376/files":           "376",
 		"https://github.com/o/r/issues/12#issuecomment-1": "12",
 	}
 	for url, want := range cases {

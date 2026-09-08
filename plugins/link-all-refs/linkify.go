@@ -12,8 +12,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -45,31 +47,90 @@ type Resolver interface {
 	CommitExists(sha string) bool
 	// DefaultBranch is the base a compare URL is taken against.
 	DefaultBranch() string
-	// Settled reports whether a pull request or issue has nothing left to do:
-	// merged, or closed. The second return is false when the state is not
-	// known, and unknown must leave the reference exactly as it was written.
-	// Stripping on a failed lookup turns a network blip into lost information.
-	Settled(repo Repo, number string) (settled bool, known bool)
+	// PullState reports what a pull request is doing, which decides the dot
+	// beside it. StateUnknown covers every question that could not be
+	// answered, and renders no dot at all: an unknown state must never show as
+	// green.
+	PullState(repo Repo, number string) PullState
 }
 
-// settled reports whether a reference names a pull request or issue that is
-// already merged or closed.
+// PullState is what a pull request is doing right now. The reader sees it as one
+// character beside the reference, so they can tell whether the page is worth
+// opening without opening it.
+type PullState int
+
+const (
+	// StateUnknown is every question that could not be answered: no `gh`, no
+	// network, a timeout, a number that names an issue rather than a pull
+	// request. It renders no dot, and the reference is linked as it always was.
+	StateUnknown PullState = iota
+	StateMerged
+	StateClosed
+	StateFailing
+	StateConflicted
+	StatePending
+	StateMergeable
+)
+
+// dot is the character rendered beside the reference.
+//
+// The first four colours are the owner's own mapping. StateClosed is not in
+// that list: a pull request that closed without merging is finished the same way
+// a merged one is, so it is rendered black, which reads as abandoned and
+// collides with none of the five. That choice is this file's, not the owner's.
+func dot(s PullState) string {
+	switch s {
+	case StateMerged:
+		return "🟣"
+	case StateClosed:
+		return "⚫"
+	case StateFailing:
+		return "🔴"
+	case StateConflicted:
+		return "🟠"
+	case StatePending:
+		return "🟡"
+	case StateMergeable:
+		return "🟢"
+	}
+	return ""
+}
+
+// finished reports the states where the page has nothing left to do.
 //
 // A link is a demand: stop reading, move your hand, click this. The reader pays
-// that cost before knowing whether it was worth paying. A merged or closed pull
-// request has nothing left to do, so the link spends that attention on a page
-// they closed hours ago. An owner called it a prank, in those words.
+// that cost before knowing whether it was worth paying, and on a merged pull
+// request they pay it to reach a page somebody closed hours ago. An owner called
+// that a prank, in those words.
 //
-// This is the same call the rest of this file already makes for a branch and a
-// commit. Where those ask whether the target exists, this asks whether it is
-// still worth opening. A false answer here means leave the text alone, which
-// covers both "still open" and "could not find out".
-func settled(repo Repo, number string, res Resolver) bool {
-	if !repo.valid() || number == "" {
-		return false
+// So for these states the words stay plain and the DOT carries the link. The
+// dot already announces that the page is finished, so the demand shrinks to one
+// character that tells the reader why they probably do not want it -- and the
+// route to the page still exists for anyone who does.
+func finished(s PullState) bool { return s == StateMerged || s == StateClosed }
+
+// pullState asks about the reference behind one match, and answers StateUnknown
+// for every kind that is not a pull request.
+func pullState(ref Ref, res Resolver) PullState {
+	var repo Repo
+	var number string
+	switch ref.Kind {
+	case "an issue or pull request number":
+		owner, name, n := splitNumber(ref.Text)
+		repo, number = Repo{Owner: owner, Name: name}, n
+	case "a bare GitHub URL":
+		r, n, ok := IssueRef(ref.Text)
+		if !ok {
+			return StateUnknown
+		}
+		repo, number = r, n
+	default:
+		return StateUnknown
 	}
-	done, known := res.Settled(repo, number)
-	return known && done
+	if !repo.valid() || number == "" {
+		return StateUnknown
+	}
+	return res.PullState(repo, number)
 }
 
 // Linkify returns the markdown link for one reference, and false when the
@@ -86,19 +147,24 @@ func Linkify(ref Ref, res Resolver) (string, bool) {
 		// span and the link the same span, instead of one nested in the other.
 		text = "`" + text + "`"
 	}
-	return "[" + text + "](" + url + ")", true
+
+	state := pullState(ref, res)
+	switch {
+	case state == StateUnknown:
+		return "[" + text + "](" + url + ")", true
+	case finished(state):
+		// The words go back to plain text and the dot carries the link.
+		return "[" + dot(state) + "](" + url + ") " + text, true
+	default:
+		return dot(state) + " [" + text + "](" + url + ")", true
+	}
 }
 
 func refURL(ref Ref, res Resolver) (string, bool) {
 	switch ref.Kind {
 	case "a bare GitHub URL":
-		// Already a URL, and already proven to exist by whoever wrote it, so
-		// this kind needs no repository and no existence probe. It still needs
-		// the liveness one: a bare URL to a merged pull request stays plain
-		// text rather than becoming something to click.
-		if repo, number, ok := IssueRef(ref.Text); ok && settled(repo, number, res) {
-			return "", false
-		}
+		// Already a URL, and already proven to exist by whoever wrote it. This
+		// is the one kind that needs no repository and no probe.
 		return ref.Text, true
 
 	case "an issue or pull request number":
@@ -116,12 +182,6 @@ func refURL(ref Ref, res Resolver) (string, bool) {
 		// notice. It produces a link to a real, unrelated issue, which they
 		// would not.
 		if !repo.valid() || number == "" {
-			return "", false
-		}
-		// A slug that names something already merged or closed gets no link
-		// either. Adding one and stripping one the model wrote are the same
-		// rule, so they ask the same question in the same place.
-		if settled(repo, number, res) {
 			return "", false
 		}
 		// /issues/N, never /pull/N: GitHub redirects an issue number to the
@@ -179,15 +239,12 @@ type GitResolver struct {
 	mu    sync.Mutex
 	cache map[string]bool
 
-	// Liveness needs two bits -- what the answer is, and whether there is one
-	// at all -- so it cannot share the memo above.
+	// A pull request's state is not a yes or no, so it cannot share the memo
+	// above. StateUnknown is memoized like any other answer: a `gh` that
+	// cannot answer once will not answer differently in the same message.
 	prMu   sync.Mutex
-	prSeen map[string]prAnswer
+	prSeen map[string]PullState
 }
-
-// prAnswer is one liveness answer. known is false when the call failed, which
-// is the answer that leaves the reference exactly as it was written.
-type prAnswer struct{ settled, known bool }
 
 func (g *GitResolver) git(args ...string) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
@@ -253,46 +310,104 @@ func (g *GitResolver) CommitExists(sha string) bool {
 // slow answer costs the reader a pause rather than the message.
 const ghTimeout = 2 * time.Second
 
-// Settled asks GitHub whether a pull request or issue is merged or closed. It is
-// memoized per reference, because one message names the same pull request
-// several times and this runs while the message streams.
+// statusJQ flattens the rollup gh returns into the few words the decision needs.
+// The array holds two shapes: a CheckRun carries `status` and `conclusion`, and
+// a StatusContext carries `state`. Reducing both to one word here keeps the
+// parsing on this side trivial.
+const statusJQ = `{state:.state,mergeable:.mergeable,mergeState:.mergeStateStatus,` +
+	`checks:[.statusCheckRollup[]?|if .__typename=="CheckRun" then ` +
+	`(if .status!="COMPLETED" then "PENDING" else (.conclusion//"") end) else (.state//"") end]}`
+
+// pullView is statusJQ's output.
+type pullView struct {
+	State      string   `json:"state"`
+	Mergeable  string   `json:"mergeable"`
+	MergeState string   `json:"mergeState"`
+	Checks     []string `json:"checks"`
+}
+
+// PullState asks GitHub what a pull request is doing. It is memoized per
+// reference, because one message names the same pull request several times and
+// this runs while the message streams.
 //
-// A call that fails, times out, or answers something unrecognized reports
-// known=false. That is what keeps a network blip from stripping a link off a
-// pull request that is still open.
-func (g *GitResolver) Settled(repo Repo, number string) (bool, bool) {
+// Every failure answers StateUnknown: no `gh`, no network, a timeout, or a
+// number that names an issue rather than a pull request, which `gh pr view`
+// refuses outright. Unknown renders no dot, so a lookup that could not answer
+// can never show as green.
+//
+// The call rides github-state-mirror through `gh`, which reads GH_HOST from the
+// session env. Never name a host here, and never reach api.github.com: that
+// spends real API quota for nothing. `--json` is served by GraphQL, so this
+// posts to https://$GH_HOST/api/graphql -- verified by pointing GH_HOST at a
+// host that does not exist and watching the call fail there.
+func (g *GitResolver) PullState(repo Repo, number string) PullState {
 	if !repo.valid() || number == "" {
-		return false, false
+		return StateUnknown
 	}
 	key := repo.Owner + "/" + repo.Name + "#" + number
 
 	g.prMu.Lock()
 	defer g.prMu.Unlock()
 	if g.prSeen == nil {
-		g.prSeen = map[string]prAnswer{}
+		g.prSeen = map[string]PullState{}
 	}
-	if a, ok := g.prSeen[key]; ok {
-		return a.settled, a.known
+	if s, ok := g.prSeen[key]; ok {
+		return s
 	}
 
-	// The issues endpoint serves a pull request too, so one call covers both,
-	// and a closed issue has nothing left to do either.
 	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "gh", "api",
-		"repos/"+repo.Owner+"/"+repo.Name+"/issues/"+number, "--jq", ".state").Output()
+	out, err := exec.CommandContext(ctx, "gh", "pr", "view", number,
+		"-R", repo.Owner+"/"+repo.Name,
+		"--json", "state,mergeable,mergeStateStatus,statusCheckRollup",
+		"--jq", statusJQ).Output()
 
-	a := prAnswer{}
+	state := StateUnknown
 	if err == nil {
-		switch strings.TrimSpace(string(out)) {
-		case "closed":
-			a = prAnswer{settled: true, known: true}
-		case "open":
-			a = prAnswer{settled: false, known: true}
+		var v pullView
+		if json.Unmarshal(out, &v) == nil {
+			state = classify(v)
 		}
 	}
-	g.prSeen[key] = a
-	return a.settled, a.known
+	g.prSeen[key] = state
+	return state
+}
+
+// classify turns one pull request's fields into the dot it earns.
+//
+// Order is severity, not the owner's list order: a merged or closed pull request
+// is finished whatever its checks say, a failing check is a defect in the code,
+// a conflict is a merge-time chore, and a run still going is not yet news. Green
+// is what is left, which is also the answer for a pull request with no checks at
+// all.
+func classify(v pullView) PullState {
+	switch v.State {
+	case "MERGED":
+		return StateMerged
+	case "CLOSED":
+		return StateClosed
+	}
+	if slices.ContainsFunc(v.Checks, checkFailed) {
+		return StateFailing
+	}
+	if v.Mergeable == "CONFLICTING" || v.MergeState == "DIRTY" {
+		return StateConflicted
+	}
+	if slices.Contains(v.Checks, "PENDING") || slices.Contains(v.Checks, "EXPECTED") {
+		return StatePending
+	}
+	return StateMergeable
+}
+
+// checkFailed reports the conclusions that mean a check did not pass. SUCCESS,
+// SKIPPED and NEUTRAL are not among them: a skipped job is a job that correctly
+// did not need to run, and colouring it red would make every message red.
+func checkFailed(conclusion string) bool {
+	switch conclusion {
+	case "FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE":
+		return true
+	}
+	return false
 }
 
 // remoteRe pulls owner and repo out of every spelling of a GitHub remote:
