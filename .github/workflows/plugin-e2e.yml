@@ -34,7 +34,7 @@ jobs:
           repository: wow-look-at-my/slopfix
           path: .slopfix-src
 
-      # Every subcommand the manifest names has to EXIST, and slopfix's own source is what says so. Building it here instead would fail this job for a lint finding in another repository.
+      # A manifest typo, caught on the branch that makes it. Source is not the artifact, so vendor-slopfix.sh asks the fetched binary the same question.
       - name: Every hook names a subcommand slopfix defines
         uses: wow-look-at-my/actions@typescript#latest
         with:
