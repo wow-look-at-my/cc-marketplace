@@ -12,15 +12,13 @@ The `master` branch is protected. All changes require a pull request.
 
 ## Schemas
 
-@.claude-plugin/marketplace.schema.json @plugins/example-plugin/.claude-plugin/plugin.schema.json @plugins/example-plugin/.mcp.schema.json
-
-## Templates
-
-@plugins/example-plugin/.claude-plugin/plugin.template.json @plugins/example-plugin/commands/command.template.md @plugins/example-plugin/agents/agent.template.md @plugins/example-plugin/skills/example-skill/SKILL.template.md @plugins/example-plugin/.mcp.template.json @plugins/example-plugin/README.template.md
+@.claude-plugin/marketplace.schema.json
 
 ## Plugins
 
 Each plugin documents itself in its own directory. Add a new plugin's notes at `plugins/<name>/CLAUDE.md` and import it here so it loads from the repo root.
 
-@plugins/ask-properly/CLAUDE.md @plugins/cleanup-bash-cmds/CLAUDE.md @plugins/common-checks/CLAUDE.md @plugins/css-duplication/CLAUDE.md @plugins/no-work-loss/CLAUDE.md @plugins/docs/CLAUDE.md @plugins/enhanced-auto-allow/CLAUDE.md @plugins/focus-please/CLAUDE.md @plugins/glob/CLAUDE.md @plugins/grep/CLAUDE.md @plugins/link-all-refs/CLAUDE.md @plugins/misc-skills/CLAUDE.md @plugins/no-blame-language/CLAUDE.md @plugins/no-busy-poll/CLAUDE.md @plugins/no-counts-in-docs/CLAUDE.md @plugins/no-tombstones/CLAUDE.md @plugins/repo-index/CLAUDE.md
+@plugins/css-duplication/CLAUDE.md @plugins/docs/CLAUDE.md @plugins/focus-please/CLAUDE.md @plugins/glob/CLAUDE.md @plugins/grep/CLAUDE.md @plugins/misc-skills/CLAUDE.md @plugins/repo-index/CLAUDE.md @plugins/slopfix/CLAUDE.md
+
+The rules that were their own plugins now live in [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix), and `plugins/slopfix/` is the manifest that reaches them. That covers ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking, enhanced-auto-allow, link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain.
 

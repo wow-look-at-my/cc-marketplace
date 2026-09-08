@@ -4,11 +4,11 @@ This guide walks through creating a Claude Code plugin from scratch.
 
 ## Quick Start
 
-1. Copy the `example-plugin/` folder and rename it to your plugin name
-2. Rename all `.template.` files (remove `.template.` from names)
-3. Edit `plugin.json` with your plugin's metadata
-4. Add your commands, agents, or skills
-5. Add the plugin to `../.claude-plugin/marketplace.json`
+1. Create `your-plugin/.claude-plugin/plugin.json` with your plugin's metadata
+2. Add your commands, agents, or skills
+3. Add the plugin to `../.claude-plugin/marketplace.json`
+
+A prose or shell rule does not belong here. It goes in [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix), and `slopfix/`'s manifest reaches it by naming the check. Read `slopfix/CLAUDE.md` before adding a guard.
 
 ## Plugin Directory Structure
 
@@ -77,7 +77,7 @@ argument-hint: [args]
 Instructions Claude follows when user runs /command-name.
 ```
 
-See `example-plugin/commands/command.template.md` for a full example.
+The frontmatter fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#slash-commands).
 
 ### Agents (`agents/`)
 
@@ -94,7 +94,7 @@ model: sonnet
 You are a code reviewer. Analyze code and provide feedback.
 ```
 
-See `example-plugin/agents/agent.template.md` for a full example.
+The frontmatter fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#agents).
 
 ### Skills (`skills/`)
 
@@ -108,7 +108,7 @@ skills/
     └── examples/        # Example outputs (optional)
 ```
 
-See `example-plugin/skills/example-skill/SKILL.template.md` for a full example.
+The frontmatter fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#skills).
 
 ### MCP Servers (`.mcp.json`)
 
@@ -128,7 +128,7 @@ External tools and data sources:
 }
 ```
 
-See `example-plugin/.mcp.template.json` for a full example.
+The server fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#mcp-servers).
 
 ### Build Script (`justfile`)
 
@@ -149,7 +149,7 @@ The marketplace builder runs in this order:
 2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
-See `example-plugin/justfile.template` for examples.
+`docs/justfile` and `slopfix/justfile` are the two real ones in this repo.
 
 ## Step 3: Enable Marketplace Inclusion
 
