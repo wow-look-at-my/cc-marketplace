@@ -1,5 +1,5 @@
 {
-  "$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+  "$schema": "../../../.claude-plugin/plugin.schema.json",
   "name": "docs",
   "description": "Corrective reference notes the model loads before touching things it reliably gets wrong from stale training data",
   "author": {

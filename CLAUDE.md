@@ -12,11 +12,7 @@ The `master` branch is protected. All changes require a pull request.
 
 ## Schemas
 
-@.claude-plugin/marketplace.schema.json @plugins/example-plugin/.claude-plugin/plugin.schema.json @plugins/example-plugin/.mcp.schema.json
-
-## Templates
-
-@plugins/example-plugin/.claude-plugin/plugin.template.json @plugins/example-plugin/commands/command.template.md @plugins/example-plugin/agents/agent.template.md @plugins/example-plugin/skills/example-skill/SKILL.template.md @plugins/example-plugin/.mcp.template.json @plugins/example-plugin/README.template.md
+@.claude-plugin/marketplace.schema.json
 
 ## Plugins
 
