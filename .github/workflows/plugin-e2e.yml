@@ -10,14 +10,14 @@ permissions:
   contents: read
 
 jobs:
-  # The Bash cleaner's rule moved to slopfix, so this drives the launcher that reaches it: manifest, launcher and binary, which no unit test covers.
+  # The Bash cleaner's rule moved to slopfix, so this drives the manifest against the real binary, which no unit test covers.
   slopfix-clean-bash:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
-      # Against the slopfix this branch is written for, not the published one: a launcher for a rule that has not shipped yet would otherwise fail here for the whole time between the two merges.
+      # Against the slopfix this branch is written for, not the published one: a check that has not shipped yet would otherwise fail here for the whole time between the two merges.
       - name: Check out the slopfix this branch expects
         uses: actions/checkout@v7
         with:
@@ -34,8 +34,8 @@ jobs:
           repository: wow-look-at-my/slopfix
           path: .slopfix-src
 
-      # The subcommand each launcher names has to EXIST, and slopfix's own source is what says so. Building it here instead would fail this job for a lint finding in another repository.
-      - name: Every launcher names a subcommand slopfix defines
+      # Every subcommand the manifest names has to EXIST, and slopfix's own source is what says so. Building it here instead would fail this job for a lint finding in another repository.
+      - name: Every hook names a subcommand slopfix defines
         uses: wow-look-at-my/actions@typescript#latest
         with:
           script: |
@@ -46,15 +46,14 @@ jobs:
             for (const entries of Object.values(manifest.hooks) as any[]) {
               for (const entry of entries) {
                 for (const h of entry.hooks) {
-                  const m = /\$\{CLAUDE_PLUGIN_ROOT\}\/hooks\/([a-z-]+\.sh)/.exec(h.command);
+                  const m = /slopfix\.ape\s+([a-z][a-z-]*)/.exec(h.command);
                   if (m) registered.add(m[1]);
                 }
               }
             }
-            if (registered.size === 0) core.setFailed("the manifest registers no launcher at all");
+            if (registered.size === 0) core.setFailed("the manifest names no slopfix subcommand at all");
 
-            // Every subcommand slopfix registers, read off its source. A launcher
-            // naming one that is not there reaches nothing at run time.
+            // Every subcommand slopfix registers, read off its source. A script naming one that is not there reaches nothing at run time.
             const defined = new Set<string>();
             const cmdDir = ".slopfix-src/cmd";
             for (const f of fs.readdirSync(cmdDir)) {
@@ -66,19 +65,11 @@ jobs:
             core.info(`slopfix defines: ${[...defined].sort().join(", ")}`);
 
             const failures: string[] = [];
-            for (const launcher of [...registered].sort()) {
-              const p = `${root}/hooks/${launcher}`;
-              if (!fs.existsSync(p)) { failures.push(`${launcher}: registered but absent`); continue; }
-              const body = fs.readFileSync(p, "utf-8");
-              const m = /slopfix\.ape["']?\s+([a-z][a-z-]*)/.exec(body);
-              if (!m) { failures.push(`${launcher}: execs no slopfix subcommand`); continue; }
-              if (!defined.has(m[1])) {
-                failures.push(`${launcher}: names "${m[1]}", which slopfix does not define`);
-              } else {
-                core.info(`OK ${launcher} -> ${m[1]}`);
-              }
+            for (const name of [...registered].sort()) {
+              if (defined.has(name)) core.info(`OK ${name}`);
+              else failures.push(`the manifest names "${name}", which slopfix does not define`);
             }
-            if (failures.length > 0) core.setFailed(`launchers that reach nothing:\n${failures.join("\n")}`);
+            if (failures.length > 0) core.setFailed(`hooks that reach nothing:\n${failures.join("\n")}`);
 
   # see docs/ci-yaml-notes.md#css-duplication-lsp-job
   css-duplication-lsp:
