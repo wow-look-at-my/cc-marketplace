@@ -4,7 +4,7 @@ The slopfix plugin lives at `plugins/slopfix/`. It carries **no rule of its own*
 
 ### The checks, and where each is named
 
-A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs the binary directly. There is no `hooks/` directory and no per-check script. `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
+A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs the binary directly. **There is no `hooks/` directory and no shell script of any kind.** `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
 
 | Subcommand | Event | What it does |
 | --- | --- | --- |
@@ -16,10 +16,10 @@ A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted
 | `busy-poll` | Stop, PreToolUse | Refuses a repeat that cannot learn anything |
 | `link-refs` | MessageDisplay | Renders a reference as a markdown link |
 | `ask-properly` | MessageDisplay | Marks a decision put to the reader in prose |
-| `message-hook.sh laziness` | Stop | Marks a message that reports a defect it did not fix |
-| `message-hook.sh blame` | MessageDisplay | Marks deflecting language |
+| `laziness` | Stop | Refuses a turn that reports a defect it left alone |
+| `blame-language` | MessageDisplay | Marks deflecting language |
 
-`message-hook.sh` is the one script left. It exists because a check listed against it needs the message ASSEMBLED before slopfix sees it. The Stop payload does not always carry `last_assistant_message`, so that case falls back to the transcript. A MessageDisplay payload arrives as deltas, so that case accumulates them and judges the message whole. Neither is bytes-through, which is why neither is a manifest line.
+`laziness` and `blame-language` need the message assembled before a rule reads it. slopfix does that itself. The Stop payload does not always carry `last_assistant_message`, so `laziness` falls back to the transcript. A MessageDisplay payload arrives as deltas. So `blame-language` accumulates them and judges the message whole, the way `link-refs` carries its fence state.
 
 These replace the plugins that used to hold the same rules. Those are ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking, enhanced-auto-allow, link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with two homes drifts, and the second copy is the one nobody updates.
 

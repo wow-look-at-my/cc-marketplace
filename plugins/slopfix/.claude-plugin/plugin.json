@@ -92,7 +92,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/message-hook.sh laziness"
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape laziness"
           },
           {
             "type": "command",
@@ -110,7 +110,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/message-hook.sh blame",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape blame-language",
             "timeout": 10
           },
           {
