@@ -23,39 +23,59 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: sh .github/scripts/vendor-slopfix.sh plugins/slopfix
 
-      - uses: ./.github/actions/setup-claude-code
-
-      # --model sonnet, deliberate: this checks a HOOK decision, which does not vary by model tier, and omitting it bills the default model per push.
-      - name: Run Claude with the slopfix plugin loaded
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_WOW }}
-        run: |
-          claude -p 'Run exactly this Bash command and report what happens: cat <<EOF
-          hello
-          EOF' \
-            --model sonnet \
-            --plugin-dir ./plugins/slopfix \
-            --allowedTools "Bash" \
-            --permission-mode bypassPermissions \
-            > "${{ runner.temp }}/claude.stdout" \
-            2> "${{ runner.temp }}/claude.stderr" || true
-
-      - name: Claude output
-        run: |
-          echo "::group::Claude stdout"
-          cat "${{ runner.temp }}/claude.stdout" || true
-          echo "::endgroup::"
-          echo "::group::Claude stderr"
-          cat "${{ runner.temp }}/claude.stderr" || true
-          echo "::endgroup::"
-
-      - name: Assert the hook refused the heredoc
+      # Every launcher is driven with a real payload, so one naming a subcommand the shipped binary does not carry cannot pass.
+      - name: Drive every launcher the manifest registers
         uses: wow-look-at-my/actions@typescript#latest
         with:
           script: |
-            const out = fs.readFileSync(`${process.env.RUNNER_TEMP}/claude.stdout`, "utf-8");
-            if (!/heredoc/i.test(out)) {
-              core.setFailed("the run reports no refusal, so the hook never reached the command");
+            const root = "plugins/slopfix";
+            const manifest = JSON.parse(fs.readFileSync(`${root}/.claude-plugin/plugin.json`, "utf-8"));
+
+            const registered = new Set<string>();
+            for (const entries of Object.values(manifest.hooks) as any[]) {
+              for (const entry of entries) {
+                for (const h of entry.hooks) {
+                  const m = /\$\{CLAUDE_PLUGIN_ROOT\}\/hooks\/([a-z-]+\.sh)/.exec(h.command);
+                  if (m) registered.add(m[1]);
+                }
+              }
+            }
+            if (registered.size === 0) core.setFailed("the manifest registers no launcher at all");
+
+            const failures: string[] = [];
+            for (const launcher of [...registered].sort()) {
+              const p = `${root}/hooks/${launcher}`;
+              if (!fs.existsSync(p)) { failures.push(`${launcher}: registered but absent`); continue; }
+              const res = require("child_process").spawnSync("sh", [p], {
+                input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls" } }),
+                encoding: "utf-8",
+              });
+              const err = (res.stderr || "").trim();
+              if (/unknown command|unknown flag|not found|No such file/i.test(err)) {
+                failures.push(`${launcher}: reached no subcommand -- ${err.split("\n")[0]}`);
+              } else {
+                core.info(`OK ${launcher}`);
+              }
+            }
+            if (failures.length > 0) core.setFailed(`launchers that reach nothing:\n${failures.join("\n")}`);
+
+      # The refusal is the one verdict this rule owes on a heredoc, and it names the tool that does the job instead.
+      - name: Assert the Bash cleaner refuses a heredoc
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const payload = JSON.stringify({
+              hook_event_name: "PreToolUse",
+              tool_name: "Bash",
+              tool_input: { command: "cat <<EOF\nhello\nEOF\n" },
+            });
+            const res = require("child_process").spawnSync("sh", ["plugins/slopfix/hooks/clean-bash.sh"], {
+              input: payload, encoding: "utf-8",
+            });
+            core.info(`stdout: ${res.stdout}`);
+            core.info(`stderr: ${res.stderr}`);
+            if (!/"permissionDecision"\s*:\s*"deny"/.test(res.stdout || "")) {
+              core.setFailed("the launcher returned no refusal, so the rule never reached the command");
             } else {
               core.info("OK: the launcher reached the binary and the rule refused the heredoc");
             }
