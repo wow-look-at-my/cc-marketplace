@@ -148,21 +148,21 @@ The layer below that IS verified. A real LSP client drove the bundled `build/ser
 
 ### Files
 
-- **Adapter**: `plugins/common-checks/src/checks.ts` -- the file kind, the family ranking, and the sentence a diagnostic carries. Nothing else
-- **Bridge**: `plugins/common-checks/src/slopfix.ts` -- finding the shipped binary, running `report`, and `SlopfixUnavailable`
-- **Hook**: `plugins/common-checks/src/hook.ts` -- the PreToolUse payload, the units a write adds, the ledger sweep, and the refusal
-- **Scope**: `plugins/common-checks/src/scope.ts` -- `inScope` walks for a `.git` entry, excludes `$HOME/.claude`, and answers out of scope on every failure. `workTree` returns the root it found, which is what keeps one project's ledger out of another's. The hook and the server share both
-- **Placement**: `plugins/common-checks/src/placement.ts` -- `place` pins an edit to its line span in the file on disk
-- **Local scan**: `plugins/common-checks/src/scan-repo.ts` -- `npx tsx plugins/common-checks/src/scan-repo.ts .` reports every hard ste-lint finding in the repository. CI lints only what a push changed, so a file nothing touches keeps its findings until somebody edits it. This finds them first
+- **Adapter**: `plugins/slopfix/src/checks.ts` -- the file kind, the family ranking, and the sentence a diagnostic carries. Nothing else
+- **Bridge**: `plugins/slopfix/src/slopfix.ts` -- finding the shipped binary, running `report`, and `SlopfixUnavailable`
+- **Hook**: `plugins/slopfix/src/hook.ts` -- the PreToolUse payload, the units a write adds, the ledger sweep, and the refusal
+- **Scope**: `plugins/slopfix/src/scope.ts` -- `inScope` walks for a `.git` entry, excludes `$HOME/.claude`, and answers out of scope on every failure. `workTree` returns the root it found, which is what keeps one project's ledger out of another's. The hook and the server share both
+- **Placement**: `plugins/slopfix/src/placement.ts` -- `place` pins an edit to its line span in the file on disk
+- **Local scan**: `plugins/slopfix/src/scan-repo.ts` -- `npx tsx plugins/slopfix/src/scan-repo.ts .` reports every hard ste-lint finding in the repository. CI lints only what a push changed, so a file nothing touches keeps its findings until somebody edits it. This finds them first
 - **Tests**: `src/hook.test.ts` covers the refusal and every fail-open path. Then the placement cases, against a real file on disk. An edit inside a fence is not refused for its line breaks. The same edit is not refused for its punctuation. The control edit outside a fence is still refused for its wrap. The scope cases run against real directories on disk. A hard-wrapped document under a directory with no `.git` is allowed. The same bytes one `.git` away are still refused, which is the control that proves the case can fail. A plan under `$HOME/.claude` is allowed while `$HOME` itself is a work tree
 - Document sync is full, because a finding is a property of the whole document
-- **Entry point**: `plugins/common-checks/src/server.ts` -- serve stdio, nothing else
-- **Launcher**: `plugins/common-checks/launcher.sh` -- staged into `server/` as `common-checks-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own. The directory is `server/` and not `build/` because `release-plugin` requires every file under `build/` to be a fat APE, and this plugin ships no Go
+- **Entry point**: `plugins/slopfix/src/server.ts` -- serve stdio, nothing else
+- **Launcher**: `plugins/slopfix/launcher.sh` -- staged into `server/` as `slopfix-lsp`. The client execve()s the path in `.lsp.json`, and a bundled `.js` file is not executable on its own. The directory is `server/` and not `build/` because `release-plugin` requires every file under `build/` to be a fat APE, and this plugin ships no Go
 - **Fetching**: `.github/scripts/vendor-slopfix.sh` -- the download, the APE check, the `report` probes, and the per-rule `hook` probes the sibling plugins name
 - **Tests**: `src/checks.test.ts` fires each rule on the right line, with a clean control beside it. It also covers the file-kind boundaries, the ranking, and a heuristic-only finding staying unreported. Every case drives the real binary. A fake here is the second source of truth this plugin exists to avoid
 - **Tests**: `src/slopfix.test.ts` covers the missing binary. `report` and `findings` both throw, and `scan-file` exits non-zero without printing `clean`. The control proves the same command reports normally when the binary is there
 - **Tests**: `src/ledger.test.ts` covers the cross-checkout case. An entry in another work tree blocks nothing, and the same entry in this one still blocks
 - **Tests**: `src/lsp.test.ts` covers the handshake, publish and clear, pull and push agreeing, and the cap's overflow note. It also covers path resolution with and without a root, and the framing edge cases. It asserts the explicit `null` shutdown result on the RAW JSON keys
-- **Registration**: `plugins/common-checks/.lsp.json`
+- **Registration**: `plugins/slopfix/.lsp.json`
 
 Adding a rule to slopfix needs no edit here. That is the point of the arrangement. The plugin runs the default set, so a new rule arrives with the next build's fetch.
