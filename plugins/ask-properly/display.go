@@ -48,9 +48,17 @@ func Annotate(message string) string {
 	if len(texts) > annotationCap {
 		more = ", and more"
 	}
+	// The repair is DECIDE, not "ask on a card instead". A card is a slower
+	// stall: the work stops either way, and the owner is answering a question
+	// he did not want. His words on being pointed at one: "the opposite of what
+	// i want". Every change here lands on one branch he can delete in seconds,
+	// so a wrong guess is cheap and a stall costs the session. A card is right
+	// only where guessing is not: an action outside the branch, a destructive
+	// one, access this session lacks, or a fork the owner reserved.
 	return fmt.Sprintf("\n\n> **ask-properly** -- %s%s. That is a decision handed over in prose. "+
-		"Answer it yourself and say what you assumed, or ask it with AskUserQuestion: recommendation "+
-		"first and labelled, and every option saying what it costs and what it buys.",
+		"Make it yourself and say what you assumed. A card is for the narrow "+
+		"cases guessing cannot cover: reaching outside this branch, destroying "+
+		"something, access you lack, or a fork the owner reserved.",
 		strings.Join(quoted, ", "), more)
 }
 

@@ -216,6 +216,66 @@ func validBranch(token string) bool {
 	return i > 0 && i < len(token)-1
 }
 
+// Linked is one markdown link the text already carries, with the byte range of
+// the whole construct and the words inside it.
+//
+// The unlinked matchers never see these, because blankLinks wipes them first.
+// That is right for adding a link and wrong for removing one, so a caller that
+// wants to strip a link asks for it here instead.
+type Linked struct {
+	// Text is what survives the strip: the link text, or the bare URL for an
+	// autolink. The words stay and only the wrapper goes.
+	Text string
+	// URL is the target, which is what decides whether the link is dead.
+	URL   string
+	Start int
+	End   int
+}
+
+// linkPartsRe is mdLinkRe with the text and the target captured.
+var linkPartsRe = regexp.MustCompile(`\[([^\]\n]*)\]\(([^)\s]+)(?:[ \t]+"[^"]*")?\)`)
+
+// FindLinksInLine returns every markdown link and autolink in one line, with the
+// byte range each occupies. The ranges are taken from the original text, so a
+// caller can splice over them directly.
+func FindLinksInLine(line string) []Linked {
+	var out []Linked
+	for _, m := range linkPartsRe.FindAllStringSubmatchIndex(line, -1) {
+		out = append(out, Linked{
+			Text:  line[m[2]:m[3]],
+			URL:   line[m[4]:m[5]],
+			Start: m[0],
+			End:   m[1],
+		})
+	}
+	for _, loc := range autoLinkRe.FindAllStringIndex(line, -1) {
+		// An autolink has no separate text. Unwrapping it leaves the URL,
+		// which is the same words with the angle brackets gone.
+		url := line[loc[0]+1 : loc[1]-1]
+		out = append(out, Linked{Text: url, URL: url, Start: loc[0], End: loc[1]})
+	}
+	slices.SortStableFunc(out, func(a, b Linked) int { return a.Start - b.Start })
+	return out
+}
+
+// issueURLRe matches a GitHub pull request or issue URL. A trailing path or
+// anchor is allowed and ignored: a link to one file of a merged pull request is
+// just as dead as a link to the pull request itself.
+//
+// `pull` and `issues` are one case on purpose. GitHub serves a pull request
+// under both spellings, and a closed issue has nothing left to do either.
+var issueURLRe = regexp.MustCompile(`^https?://(?:www\.)?github\.com/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)/(?:pull|issues)/([0-9]{1,7})(?:[/#?].*)?$`)
+
+// IssueRef reads the repository and number out of a GitHub pull request or issue
+// URL, and reports false for every other URL.
+func IssueRef(url string) (Repo, string, bool) {
+	m := issueURLRe.FindStringSubmatch(strings.TrimRight(url, "."))
+	if m == nil {
+		return Repo{}, "", false
+	}
+	return Repo{Owner: m[1], Name: m[2]}, m[3], true
+}
+
 // charRefRe is a `&#N;` character reference. It is XML, not an issue number,
 // and the two are indistinguishable to the matcher, so it is blanked alongside
 // the links.

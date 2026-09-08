@@ -125,7 +125,8 @@
         "PostToolUse": { "$ref": "#/$defs/hookEventArray" },
         "Stop": { "$ref": "#/$defs/hookEventArray" },
         "PermissionRequest": { "$ref": "#/$defs/hookEventArray" },
-        "UserPromptSubmit": { "$ref": "#/$defs/hookEventArray" }
+        "UserPromptSubmit": { "$ref": "#/$defs/hookEventArray" },
+        "MessageDisplay": { "$ref": "#/$defs/hookEventArray" }
       }
     },
     "hookEventArray": {
@@ -153,6 +154,10 @@
                 "command": {
                   "type": "string",
                   "description": "Shell command to run"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Seconds to allow the command before it is abandoned"
                 }
               }
             }

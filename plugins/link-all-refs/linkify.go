@@ -45,6 +45,31 @@ type Resolver interface {
 	CommitExists(sha string) bool
 	// DefaultBranch is the base a compare URL is taken against.
 	DefaultBranch() string
+	// Settled reports whether a pull request or issue has nothing left to do:
+	// merged, or closed. The second return is false when the state is not
+	// known, and unknown must leave the reference exactly as it was written.
+	// Stripping on a failed lookup turns a network blip into lost information.
+	Settled(repo Repo, number string) (settled bool, known bool)
+}
+
+// settled reports whether a reference names a pull request or issue that is
+// already merged or closed.
+//
+// A link is a demand: stop reading, move your hand, click this. The reader pays
+// that cost before knowing whether it was worth paying. A merged or closed pull
+// request has nothing left to do, so the link spends that attention on a page
+// they closed hours ago. An owner called it a prank, in those words.
+//
+// This is the same call the rest of this file already makes for a branch and a
+// commit. Where those ask whether the target exists, this asks whether it is
+// still worth opening. A false answer here means leave the text alone, which
+// covers both "still open" and "could not find out".
+func settled(repo Repo, number string, res Resolver) bool {
+	if !repo.valid() || number == "" {
+		return false
+	}
+	done, known := res.Settled(repo, number)
+	return known && done
 }
 
 // Linkify returns the markdown link for one reference, and false when the
@@ -67,8 +92,13 @@ func Linkify(ref Ref, res Resolver) (string, bool) {
 func refURL(ref Ref, res Resolver) (string, bool) {
 	switch ref.Kind {
 	case "a bare GitHub URL":
-		// Already a URL, and already proven to exist by whoever wrote it. This
-		// is the one kind that needs no repository and no probe.
+		// Already a URL, and already proven to exist by whoever wrote it, so
+		// this kind needs no repository and no existence probe. It still needs
+		// the liveness one: a bare URL to a merged pull request stays plain
+		// text rather than becoming something to click.
+		if repo, number, ok := IssueRef(ref.Text); ok && settled(repo, number, res) {
+			return "", false
+		}
 		return ref.Text, true
 
 	case "an issue or pull request number":
@@ -86,6 +116,12 @@ func refURL(ref Ref, res Resolver) (string, bool) {
 		// notice. It produces a link to a real, unrelated issue, which they
 		// would not.
 		if !repo.valid() || number == "" {
+			return "", false
+		}
+		// A slug that names something already merged or closed gets no link
+		// either. Adding one and stripping one the model wrote are the same
+		// rule, so they ask the same question in the same place.
+		if settled(repo, number, res) {
 			return "", false
 		}
 		// /issues/N, never /pull/N: GitHub redirects an issue number to the
@@ -142,6 +178,11 @@ type GitResolver struct {
 
 	mu    sync.Mutex
 	cache map[string]bool
+
+	// Liveness is answered from disk rather than from git, so it gets its own
+	// memo. See prstate.go for why it never reaches the network from here.
+	prMu   sync.Mutex
+	prSeen map[string]prAnswer
 }
 
 func (g *GitResolver) git(args ...string) (string, bool) {

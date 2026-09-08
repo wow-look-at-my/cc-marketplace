@@ -267,9 +267,39 @@ func assertedText(text string) string {
 			out = append(out, "")
 			continue
 		}
-		out = append(out, line)
+		out = append(out, blankQuoted(line))
 	}
 	return strings.Join(out, "\n")
+}
+
+// blankQuoted replaces the inside of a double-quoted span with spaces, so a
+// phrase a message MENTIONS is not read as one it USES.
+//
+// A sentence naming a trigger is not that trigger. Explaining this plugin,
+// which fires on a decision handed over in prose, means writing one of its
+// phrases down, and the explanation was marked for the phrase it defined. A
+// span keeps its own length so every later offset on the line still points
+// where it did, which is the same reason link-all-refs blanks rather than cuts.
+//
+// A fence already covers a quoted block, so this is only about the inline case:
+// naming a phrase mid-sentence, in quotes, the way prose does.
+func blankQuoted(line string) string {
+	out := []byte(line)
+	open := -1
+	for i := 0; i < len(out); i++ {
+		if out[i] != '"' {
+			continue
+		}
+		if open < 0 {
+			open = i
+			continue
+		}
+		for j := open + 1; j < i; j++ {
+			out[j] = ' '
+		}
+		open = -1
+	}
+	return string(out)
 }
 
 // fenceMarker returns "`" or "~" when a line opens or closes a code fence.
