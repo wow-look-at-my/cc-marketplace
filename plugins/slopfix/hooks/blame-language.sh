@@ -20,7 +20,11 @@ final=$(printf '%s' "$payload" | jq -r '.final // false')
 id=$(printf '%s' "$payload" | jq -r '.message_id // ""')
 delta=$(printf '%s' "$payload" | jq -r '.delta // ""')
 
-[ "${CC_NO_BLAME_LANGUAGE:-1}" = "0" ] && exit 0
+# Four spellings, matching the sibling guards. A user who wrote `off` and lost
+# their opt-out to a one-value test has no way to tell it stopped working.
+case "${CC_NO_BLAME_LANGUAGE:-1}" in
+0 | false | no | off) exit 0 ;;
+esac
 [ -n "$id" ] || exit 0
 
 state="${TMPDIR:-/tmp}/slopfix-blame"
@@ -57,5 +61,9 @@ line=$(printf '%s' "$findings" | jq -r '
     end') || exit 0
 [ -n "$line" ] || exit 0
 
-jq -n --arg text "$message$line" \
+# displayContent REPLACES the delta on screen, not the message. Emitting the
+# accumulated text here renders the whole message a second time, appended to
+# itself, on exactly the messages this guard exists to make readable. The
+# accumulation is for DETECTION only: a phrase can straddle a wrap.
+jq -n --arg text "$delta$line" \
   '{hookSpecificOutput: {hookEventName: "MessageDisplay", displayContent: $text}}'

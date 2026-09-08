@@ -24,6 +24,24 @@ payload=$(cat)
 [ "$(printf '%s' "$payload" | jq -r '.stop_hook_active // false')" = "true" ] && exit 0
 
 message=$(printf '%s' "$payload" | jq -r 'select(.hook_event_name == "Stop") | .last_assistant_message // ""')
+
+# The field is not always there. Without this fallback such a turn ends
+# unjudged, which is a guard that reports nothing on the payloads it is handed
+# rather than one that is off. The transcript is JSONL, newest last, so take the
+# last assistant entry.
+if [ -z "$message" ]; then
+	transcript=$(printf '%s' "$payload" | jq -r '.transcript_path // ""')
+	if [ -n "$transcript" ] && [ -r "$transcript" ]; then
+		message=$(jq -rs '
+			map(select(.type == "assistant" or .role == "assistant"))
+			| last
+			| if . == null then ""
+			  else (.message.content // .content) end
+			| if type == "array" then map(select(.type == "text") | .text) | join("")
+			  elif type == "string" then .
+			  else "" end' "$transcript" 2>/dev/null || printf '')
+	fi
+fi
 [ -n "$message" ] || exit 0
 
 # The exit code alone cannot say whether the rule ran: cobra answers an unknown
