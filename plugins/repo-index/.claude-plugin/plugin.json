@@ -1,5 +1,5 @@
 {
-	"$schema": "../../example-plugin/.claude-plugin/plugin.schema.json",
+	"$schema": "../../../.claude-plugin/plugin.schema.json",
 	"name": "repo-index",
 	"description": "Suggests the repository that already solves the job. Matches each prompt against an index built from the GitHub API -- names, topics, and each repository's own description -- and injects the link and description of each relevant one, at most once per session.",
 	"author": {
