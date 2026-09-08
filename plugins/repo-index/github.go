@@ -15,6 +15,23 @@ import (
 
 const defaultAPI = "https://api.github.com"
 
+// apiBase picks the host this process talks to when it cannot go through gh.
+// GH_HOST names a GitHub state mirror, and every gh call in this environment
+// already rides it. A direct request that ignores it spends real GitHub API
+// quota for an answer the mirror holds. gh builds "https://<host>/api/v3" for a
+// non-dotcom host, so this builds the same base.
+func apiBase() string {
+	if api := os.Getenv("GITHUB_API_URL"); api != "" {
+		return strings.TrimSuffix(api, "/")
+	}
+	host := strings.TrimPrefix(strings.TrimPrefix(os.Getenv("GH_HOST"), "https://"), "http://")
+	host = strings.Trim(host, "/")
+	if host == "" || host == "github.com" {
+		return defaultAPI
+	}
+	return "https://" + host + "/api/v3"
+}
+
 // repo is the part of a GitHub repository this plugin reads.
 type repo struct {
 	Name        string   `json:"name"`
@@ -37,16 +54,14 @@ type client struct {
 }
 
 func newClient() *client {
-	api := os.Getenv("GITHUB_API_URL")
-	if api == "" {
-		api = defaultAPI
-	}
 	c := &client{
-		api:   strings.TrimSuffix(api, "/"),
+		api:   apiBase(),
 		token: resolveToken(),
 		http:  &http.Client{Timeout: 30 * time.Second},
 	}
-	if _, err := exec.LookPath("gh"); err == nil && c.api == defaultAPI {
+	// gh resolves its own host from GH_HOST, so it is preferred whenever the
+	// caller has not pinned a base of their own.
+	if _, err := exec.LookPath("gh"); err == nil && os.Getenv("GITHUB_API_URL") == "" {
 		c.viaGH = true
 	}
 	return c

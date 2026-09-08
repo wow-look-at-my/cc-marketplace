@@ -141,7 +141,32 @@ func TestNewClientHonoursTheEnvironment(t *testing.T) {
 
 func TestNewClientDefaultsToPublicGitHub(t *testing.T) {
 	t.Setenv("GITHUB_API_URL", "")
+	t.Setenv("GH_HOST", "")
 	assert.Equal(t, defaultAPI, newClient().api)
+
+	t.Setenv("GH_HOST", "github.com")
+	assert.Equal(t, defaultAPI, newClient().api)
+}
+
+// Every gh call in this environment rides the state mirror. A direct request
+// that ignores GH_HOST spends real GitHub API quota for an answer the mirror
+// already holds.
+func TestNewClientRidesTheStateMirror(t *testing.T) {
+	t.Setenv("GITHUB_API_URL", "")
+	for _, host := range []string{
+		"github-state-mirror.pazer.io",
+		"https://github-state-mirror.pazer.io/",
+	} {
+		t.Setenv("GH_HOST", host)
+		assert.Equal(t, "https://github-state-mirror.pazer.io/api/v3", newClient().api, "for GH_HOST=%q", host)
+	}
+}
+
+// An explicit base still wins, so a caller can point this at a fixture server.
+func TestAnExplicitAPIBaseOutranksTheMirror(t *testing.T) {
+	t.Setenv("GH_HOST", "github-state-mirror.pazer.io")
+	t.Setenv("GITHUB_API_URL", "http://127.0.0.1:1/")
+	assert.Equal(t, "http://127.0.0.1:1", newClient().api)
 }
 
 func TestResolveTokenPrefersGHTokenOverGitHubToken(t *testing.T) {
