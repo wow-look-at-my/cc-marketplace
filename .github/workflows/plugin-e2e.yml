@@ -10,54 +10,55 @@ permissions:
   contents: read
 
 jobs:
-  # see docs/ci-yaml-notes.md#plugin-e2e-workflow-rationale
-  cleanup-bash-cmds:
+  # The Bash cleaner's rule moved to slopfix, so this drives the launcher that reaches it: manifest, launcher and binary, which no unit test covers.
+  slopfix-clean-bash:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
-      # hook.sh is checked-in bash+jq+shfmt, nothing to build, but shfmt (--to-json/--from-json) must be on the runner.
-      - name: Install shfmt
-        run: sudo apt-get update -q && sudo apt-get install -y -q shfmt
+      # The plugin ships the binary rather than looking on PATH, and the fetch refuses a build that cannot answer the rule.
+      - name: Fetch the slopfix binary the plugin ships
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/vendor-slopfix.sh
 
       - uses: ./.github/actions/setup-claude-code
 
-      - name: Run Claude with the cleanup-bash-cmds plugin loaded
+      # --model sonnet, deliberate: this checks a HOOK decision, which does not vary by model tier, and omitting it bills the default model per push.
+      - name: Run Claude with the slopfix plugin loaded
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_WOW }}
-          CLEANUP_BASH_CMDS_LOG: ${{ runner.temp }}/hook.log
         run: |
-          : > "$CLEANUP_BASH_CMDS_LOG"
-          # --model sonnet, deliberate: this checks a HOOK rewrite (model-tier-independent); omitting the flag bills the account's default model per push.
-          claude -p "Run exactly this Bash command and report the output: seq 1 10 | head -3" \
+          claude -p 'Run exactly this Bash command and report what happens: cat <<EOF
+          hello
+          EOF' \
             --model sonnet \
-            --plugin-dir ./plugins/cleanup-bash-cmds \
+            --plugin-dir ./plugins/slopfix \
             --allowedTools "Bash" \
             --permission-mode bypassPermissions \
             > "${{ runner.temp }}/claude.stdout" \
             2> "${{ runner.temp }}/claude.stderr" || true
 
-      - name: Claude stdout
+      - name: Claude output
         run: |
           echo "::group::Claude stdout"
           cat "${{ runner.temp }}/claude.stdout" || true
           echo "::endgroup::"
-
-      - name: Claude stderr
-        run: |
           echo "::group::Claude stderr"
           cat "${{ runner.temp }}/claude.stderr" || true
           echo "::endgroup::"
 
-      - name: Hook rewrite log
-        run: |
-          echo "::group::cleanup-bash-cmds hook log"
-          cat "${{ runner.temp }}/hook.log" || echo "(empty)"
-          echo "::endgroup::"
-
-      - name: Assert the hook rewrote the trailing | head
-        run: plugins/cleanup-bash-cmds/tests/assert-hook-log.sh "${{ runner.temp }}/hook.log"
+      - name: Assert the hook refused the heredoc
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const out = fs.readFileSync(`${process.env.RUNNER_TEMP}/claude.stdout`, "utf-8");
+            if (!/heredoc/i.test(out)) {
+              core.setFailed("the run reports no refusal, so the hook never reached the command");
+            } else {
+              core.info("OK: the launcher reached the binary and the rule refused the heredoc");
+            }
 
   # see docs/ci-yaml-notes.md#css-duplication-lsp-job
   css-duplication-lsp:
