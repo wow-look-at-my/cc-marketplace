@@ -1,0 +1,135 @@
+{
+	"author": {
+		"name": "wow-look-at-my"
+	},
+	"description": "The org's slop guards in one plugin: the common-checks CI gate as a language server and a write refusal, the counts and tombstones repairs, and the permission-seeking, blame-language and busy-poll guards.",
+	"hooks": {
+		"MessageDisplay": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/blame-language.sh",
+						"timeout": 10,
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/link-refs.sh",
+						"timeout": 10,
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/ask-properly.sh",
+						"timeout": 10,
+						"type": "command"
+					}
+				]
+			}
+		],
+		"PermissionRequest": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-allow.sh",
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			}
+		],
+		"PostToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/md-budget.sh",
+						"type": "command"
+					}
+				],
+				"matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit"
+			}
+		],
+		"PreToolUse": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/server/slopfix-lsp --hook",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/counts.sh",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/tombstones.sh",
+						"type": "command"
+					}
+				],
+				"matcher": "Write|Edit|MultiEdit|NotebookEdit"
+			},
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/busy-poll.sh",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/no-work-loss.sh",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-allow.sh",
+						"type": "command"
+					}
+				],
+				"matcher": "*"
+			},
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/clean-bash.sh",
+						"type": "command"
+					}
+				],
+				"matcher": "Bash"
+			}
+		],
+		"SessionStart": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/md-budget.sh",
+						"type": "command"
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/laziness.sh",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/md-budget.sh",
+						"type": "command"
+					},
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/hooks/busy-poll.sh",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"lsp",
+		"ci",
+		"github-actions",
+		"lint",
+		"common-checks",
+		"slopfix",
+		"prose"
+	],
+	"name": "slopfix",
+	"version": "1487"
+}
