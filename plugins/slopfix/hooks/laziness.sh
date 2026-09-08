@@ -17,16 +17,24 @@
 set -eu
 
 payload=$(cat)
+
+# One shot. A Stop refusal cannot unsend the message, so the model retypes, and
+# a message it cannot rewrite into compliance would trip this guard forever.
+# stop_hook_active is true on the continuation a refusal caused.
+[ "$(printf '%s' "$payload" | jq -r '.stop_hook_active // false')" = "true" ] && exit 0
+
 message=$(printf '%s' "$payload" | jq -r 'select(.hook_event_name == "Stop") | .last_assistant_message // ""')
 [ -n "$message" ] || exit 0
 
-# Only exit 1 means findings. Any other failure is this guard breaking rather
-# than the message offending, and a broken guard must not end the turn.
+# The exit code alone cannot say whether the rule ran: cobra answers an unknown
+# subcommand with 1, which is also what a finding returns. A binary too old to
+# know `message` therefore refused every turn. So ask for JSON and require a
+# finding in it. A broken guard must not end the turn.
 set +e
-printf '%s' "$message" | "$(dirname "$0")/../bin/slopfix.ape" message >/dev/null 2>&1
-status=$?
+findings=$(printf '%s' "$message" | "$(dirname "$0")/../bin/slopfix.ape" message --json 2>/dev/null)
 set -e
-[ "$status" -eq 1 ] || exit 0
+[ -n "$findings" ] || exit 0
+printf '%s' "$findings" | jq -e '(.findings // []) | length > 0' >/dev/null 2>&1 || exit 0
 
 printf 'continue' >&2
 exit 2

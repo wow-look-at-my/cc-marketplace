@@ -32,6 +32,12 @@ printf '%s' "$delta" >>"$key" 2>/dev/null || exit 0
 
 message=$(cat "$key" 2>/dev/null || printf '')
 rm -f "$key"
+
+# A message that never reaches a final flush strands its key forever, so collect
+# what an hour has passed over. The directory is exclusive to this guard. Only
+# on the final flush: sweeping per delta spends a find per token.
+find "$state" -maxdepth 1 -type f -mmin +60 -delete 2>/dev/null || :
+
 [ -n "$message" ] || exit 0
 
 set +e
@@ -41,7 +47,7 @@ set -e
 
 line=$(printf '%s' "$findings" | jq -r '
   (.findings // [])
-  | map(.sentence)
+  | map(.phrase // .sentence)
   | unique
   | .[0:3] as $named
   | if ($named | length) == 0 then empty
