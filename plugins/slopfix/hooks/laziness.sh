@@ -31,7 +31,7 @@ message=$(printf '%s' "$payload" | jq -r 'select(.hook_event_name == "Stop") | .
 # know `message` therefore refused every turn. So ask for JSON and require a
 # finding in it. A broken guard must not end the turn.
 set +e
-findings=$(printf '%s' "$message" | "$(dirname "$0")/../bin/slopfix.ape" message --json 2>/dev/null)
+findings=$(printf '%s' "$message" | "$(dirname "$0")/../bin/slopfix.ape" message --only laziness --json 2>/dev/null)
 set -e
 [ -n "$findings" ] || exit 0
 printf '%s' "$findings" | jq -e '(.findings // []) | length > 0' >/dev/null 2>&1 || exit 0

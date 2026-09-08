@@ -46,14 +46,12 @@ set -e
 [ -n "$findings" ] || exit 0
 
 line=$(printf '%s' "$findings" | jq -r '
-  (.findings // [])
-  | map(.phrase // .sentence)
-  | unique
-  | .[0:3] as $named
+  (.findings // []) as $f
+  | ($f | map(.phrase // .sentence) | unique | .[0:3]) as $named
   | if ($named | length) == 0 then empty
     else "\n\n> **no-blame-language** -- "
        + ($named | map("\"" + . + "\"") | join(", "))
-       + (if (.findings | length) > 3 then ", and more" else "" end)
+       + (if ($f | length) > 3 then ", and more" else "" end)
        + ". Every repository here was written by the same hand, so there is no "
        + "other author to hand this to. Own it and say what you fixed."
     end') || exit 0
