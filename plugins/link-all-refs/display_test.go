@@ -18,12 +18,28 @@ type fakeResolver struct {
 	base     string
 	branches []string
 	commits  []string
+	// settled and open are the references whose state is known. Anything named
+	// in neither is a lookup that could not answer, which is the case that must
+	// leave the text exactly as it was written.
+	settled []string
+	open    []string
 }
 
 func (f fakeResolver) Repo() (Repo, bool)         { return f.repo, f.found }
 func (f fakeResolver) DefaultBranch() string      { return f.base }
 func (f fakeResolver) BranchExists(b string) bool { return slices.Contains(f.branches, b) }
 func (f fakeResolver) CommitExists(s string) bool { return slices.Contains(f.commits, s) }
+
+func (f fakeResolver) Settled(repo Repo, number string) (bool, bool) {
+	key := repo.Owner + "/" + repo.Name + "#" + number
+	switch {
+	case slices.Contains(f.settled, key):
+		return true, true
+	case slices.Contains(f.open, key):
+		return false, true
+	}
+	return false, false
+}
 
 // live is a checkout of o/r whose master exists, with one pushed branch and one
 // known commit.
@@ -102,6 +118,66 @@ func TestAReferenceWithNoPageIsLeftAlone(t *testing.T) {
 			assert.False(t, changed, "expected no rewrite, got %q", out)
 		})
 	}
+}
+
+// A merged or closed pull request has nothing left to do, so a link to one
+// spends the reader's attention on a page they closed hours ago. It stays plain
+// text -- the words the model wrote, with no link put on them.
+func TestASettledPullRequestIsNotLinked(t *testing.T) {
+	res := live()
+	res.settled = []string{"o/r#376"}
+
+	cases := []string{
+		"o/r#376 is merged.",
+		"here: https://github.com/o/r/pull/376",
+		"see https://github.com/o/r/issues/376 for the detail",
+		"the diff: https://github.com/o/r/pull/376/files",
+	}
+	for _, text := range cases {
+		out, changed := RewriteDelta(text, false, res)
+		assert.False(t, changed, "expected no link on %q, got %q", text, out)
+	}
+}
+
+// The negative control: an OPEN pull request is still something to click, and
+// still gets linked. Without this the case above passes by linking nothing.
+func TestAnOpenPullRequestIsStillLinked(t *testing.T) {
+	res := live()
+	res.open = []string{"o/r#376"}
+
+	got := rewrite(t, "o/r#376 is green.", res)
+	assert.Equal(t, "[o/r#376](https://github.com/o/r/issues/376) is green.", got)
+
+	got = rewrite(t, "here: https://github.com/o/r/pull/376", res)
+	assert.Contains(t, got, "](https://github.com/o/r/pull/376)")
+}
+
+// A lookup that cannot answer leaves the reference exactly as it was written.
+// Stripping on a failed call turns a network blip into lost information, so an
+// unknown state must behave like an open one.
+func TestAnUnknownStateLinksAsBefore(t *testing.T) {
+	// live() names no state at all, so every lookup here reports unknown.
+	got := rewrite(t, "o/r#376 is up.", live())
+	assert.Equal(t, "[o/r#376](https://github.com/o/r/issues/376) is up.", got)
+}
+
+// A settled answer for one pull request says nothing about another.
+func TestOnlyTheSettledReferenceLosesItsLink(t *testing.T) {
+	res := live()
+	res.settled = []string{"o/r#1"}
+	res.open = []string{"o/r#2"}
+
+	got := rewrite(t, "o/r#1 merged, o/r#2 is next.", res)
+	assert.Equal(t, "o/r#1 merged, [o/r#2](https://github.com/o/r/issues/2) is next.", got)
+}
+
+// A URL that is not a pull request or an issue is never asked about, and is
+// linked the way it always was.
+func TestANonIssueURLIsUnaffected(t *testing.T) {
+	res := live()
+	res.settled = []string{"o/r#376"}
+	got := rewrite(t, "tree: https://github.com/o/r/tree/claude/pushed", res)
+	assert.Contains(t, got, "](https://github.com/o/r/tree/claude/pushed)")
 }
 
 // An owner/repo#N slug carries its own repository, so it resolves even when the

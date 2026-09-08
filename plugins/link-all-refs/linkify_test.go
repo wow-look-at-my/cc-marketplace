@@ -53,6 +53,39 @@ func TestSplitNumber(t *testing.T) {
 	assert.Equal(t, "42", number)
 }
 
+// IssueRef decides which URLs are worth asking GitHub about. `pull` and
+// `issues` are one case, because GitHub serves a pull request under both.
+func TestIssueRefReadsAPullRequestOrIssueURL(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/o/r/pull/376":                "376",
+		"https://github.com/o/r/issues/376":              "376",
+		"https://www.github.com/o/r/pull/376":            "376",
+		"http://github.com/o/r/pull/376":                 "376",
+		"https://github.com/o/r/pull/376/files":          "376",
+		"https://github.com/o/r/issues/12#issuecomment-1": "12",
+	}
+	for url, want := range cases {
+		repo, number, ok := IssueRef(url)
+		require.True(t, ok, "expected %q to parse", url)
+		assert.Equal(t, Repo{Owner: "o", Name: "r"}, repo, "for %q", url)
+		assert.Equal(t, want, number, "for %q", url)
+	}
+}
+
+func TestIssueRefRefusesEveryOtherURL(t *testing.T) {
+	for _, url := range []string{
+		"https://github.com/o/r",
+		"https://github.com/o/r/commit/6884dd2",
+		"https://github.com/o/r/tree/claude/pushed",
+		"https://github.com/o/r/compare/master...claude/x?expand=1",
+		"https://gitlab.com/o/r/pull/1",
+		"",
+	} {
+		_, _, ok := IssueRef(url)
+		assert.False(t, ok, "expected %q not to parse", url)
+	}
+}
+
 func TestLinkifyRefusesAnUnknownKind(t *testing.T) {
 	_, ok := Linkify(Ref{Kind: "something else", Text: "x"}, live())
 	assert.False(t, ok)

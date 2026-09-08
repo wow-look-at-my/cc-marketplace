@@ -169,6 +169,63 @@ func TestRewriteAgainstARealCheckout(t *testing.T) {
 	assert.False(t, changed, "an absent commit must not be linked")
 }
 
+// A reference with no repository to resolve against never reaches the network:
+// there is nothing to ask about, and the answer is the one that leaves the text
+// alone. This is what keeps a bare #N from becoming a GitHub call per flush.
+func TestSettledAsksNothingWithoutARepository(t *testing.T) {
+	res := &GitResolver{Dir: t.TempDir()}
+	for _, tc := range []struct {
+		repo   Repo
+		number string
+	}{
+		{Repo{}, "376"},
+		{Repo{Owner: "o"}, "376"},
+		{Repo{Owner: "o", Name: "r"}, ""},
+	} {
+		settled, known := res.Settled(tc.repo, tc.number)
+		assert.False(t, known, "expected no answer for %+v/%q", tc.repo, tc.number)
+		assert.False(t, settled)
+	}
+	assert.Empty(t, res.prSeen, "nothing was asked, so nothing is memoized")
+}
+
+// The answer is memoized per reference: one message names the same pull request
+// several times, and this runs while the message streams. Seeding the memo is
+// also what keeps this suite off the network.
+func TestASettledAnswerIsMemoized(t *testing.T) {
+	res := &GitResolver{Dir: t.TempDir()}
+	res.prSeen = map[string]prAnswer{
+		"o/r#376": {settled: true, known: true},
+		"o/r#377": {settled: false, known: true},
+	}
+
+	settled, known := res.Settled(Repo{Owner: "o", Name: "r"}, "376")
+	assert.True(t, known)
+	assert.True(t, settled, "a merged pull request reads as settled")
+
+	settled, known = res.Settled(Repo{Owner: "o", Name: "r"}, "377")
+	assert.True(t, known)
+	assert.False(t, settled, "an open pull request is not settled")
+}
+
+// End to end through the memo: a settled pull request loses its link and an open
+// one keeps it, with the real resolver doing the reading.
+func TestARealResolverDropsTheLinkOnASettledPullRequest(t *testing.T) {
+	dir, _ := newRepo(t)
+	res := &GitResolver{Dir: dir}
+	res.prSeen = map[string]prAnswer{
+		"o/r#376": {settled: true, known: true},
+		"o/r#377": {settled: false, known: true},
+	}
+
+	out, changed := RewriteDelta("o/r#376 is merged.", false, res)
+	assert.False(t, changed, "expected no link, got %q", out)
+
+	out, changed = RewriteDelta("o/r#377 is green.", false, res)
+	require.True(t, changed)
+	assert.Contains(t, out, "](https://github.com/o/r/issues/377)")
+}
+
 func TestStateFileIgnoresAnUnsafeMessageID(t *testing.T) {
 	assert.Equal(t, filepath.Join(stateDir, "abc123.txt"), stateFile("../../abc/123"))
 	assert.Empty(t, priorText("no-such-message-id-here"))

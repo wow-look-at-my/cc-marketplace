@@ -179,11 +179,15 @@ type GitResolver struct {
 	mu    sync.Mutex
 	cache map[string]bool
 
-	// Liveness is answered from disk rather than from git, so it gets its own
-	// memo. See prstate.go for why it never reaches the network from here.
+	// Liveness needs two bits -- what the answer is, and whether there is one
+	// at all -- so it cannot share the memo above.
 	prMu   sync.Mutex
 	prSeen map[string]prAnswer
 }
+
+// prAnswer is one liveness answer. known is false when the call failed, which
+// is the answer that leaves the reference exactly as it was written.
+type prAnswer struct{ settled, known bool }
 
 func (g *GitResolver) git(args ...string) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
@@ -242,6 +246,53 @@ func (g *GitResolver) CommitExists(sha string) bool {
 		_, ok := g.git("cat-file", "-e", sha+"^{commit}")
 		return ok
 	})
+}
+
+// ghTimeout bounds the one call that leaves the machine. It is longer than
+// gitTimeout because a remote answer is not a local one, and short enough that a
+// slow answer costs the reader a pause rather than the message.
+const ghTimeout = 2 * time.Second
+
+// Settled asks GitHub whether a pull request or issue is merged or closed. It is
+// memoized per reference, because one message names the same pull request
+// several times and this runs while the message streams.
+//
+// A call that fails, times out, or answers something unrecognized reports
+// known=false. That is what keeps a network blip from stripping a link off a
+// pull request that is still open.
+func (g *GitResolver) Settled(repo Repo, number string) (bool, bool) {
+	if !repo.valid() || number == "" {
+		return false, false
+	}
+	key := repo.Owner + "/" + repo.Name + "#" + number
+
+	g.prMu.Lock()
+	defer g.prMu.Unlock()
+	if g.prSeen == nil {
+		g.prSeen = map[string]prAnswer{}
+	}
+	if a, ok := g.prSeen[key]; ok {
+		return a.settled, a.known
+	}
+
+	// The issues endpoint serves a pull request too, so one call covers both,
+	// and a closed issue has nothing left to do either.
+	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "gh", "api",
+		"repos/"+repo.Owner+"/"+repo.Name+"/issues/"+number, "--jq", ".state").Output()
+
+	a := prAnswer{}
+	if err == nil {
+		switch strings.TrimSpace(string(out)) {
+		case "closed":
+			a = prAnswer{settled: true, known: true}
+		case "open":
+			a = prAnswer{settled: false, known: true}
+		}
+	}
+	g.prSeen[key] = a
+	return a.settled, a.known
 }
 
 // remoteRe pulls owner and repo out of every spelling of a GitHub remote:
