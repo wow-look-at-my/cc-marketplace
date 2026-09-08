@@ -1,0 +1,29 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Marks a question put to the user in prose by appending one line to what the reader sees while the message streams: answer it yourself, or ask it through AskUserQuestion with your recommendation first and the cost of every option spelled out. It never blocks and sends nothing back to the model",
+	"hooks": {
+		"MessageDisplay": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/ask-properly",
+						"timeout": 10,
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"questions",
+		"askuserquestion",
+		"deferral",
+		"messagedisplay",
+		"hook",
+		"annotation"
+	],
+	"name": "ask-properly",
+	"version": "1455"
+}
