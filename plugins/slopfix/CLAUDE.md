@@ -2,24 +2,11 @@
 
 The slopfix plugin lives at `plugins/slopfix/`. It carries **no rule of its own**. Every verdict comes out of [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix). This directory is the manifest and nothing else.
 
-### The checks, and where each is named
+### How a check is wired
 
 A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs the binary directly. **There is no `hooks/` directory and no shell script of any kind.** `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
 
-| Subcommand | Event | What it does |
-| --- | --- | --- |
-| `hook --only counts,tombstones` | PreToolUse | Cuts a cardinal out of a document, and strips a tombstone or refuses what it cannot excise |
-| `md-budget` | SessionStart, PostToolUse, Stop | Reports an instruction file over budget |
-| `no-work-loss` | PreToolUse | Refuses a loss, and a write that skips the edit tools |
-| `auto-allow` | PermissionRequest, PreToolUse | Approves read-only work, refuses a banned program |
-| `clean-bash` | PreToolUse | Rewrites a Bash command instead of refusing it |
-| `busy-poll` | Stop, PreToolUse | Refuses a repeat that cannot learn anything |
-| `link-refs` | MessageDisplay | Renders a reference as a markdown link |
-| `ask-properly` | MessageDisplay | Marks a decision put to the reader in prose |
-| `laziness` | Stop | Refuses a turn that reports a defect it left alone |
-| `blame-language` | MessageDisplay | Marks deflecting language |
-
-`laziness` and `blame-language` need the message assembled before a rule reads it. slopfix does that itself. The Stop payload does not always carry `last_assistant_message`, so `laziness` falls back to the transcript. A MessageDisplay payload arrives as deltas. So `blame-language` accumulates them and judges the message whole, the way `link-refs` carries its fence state.
+What each subcommand DOES is slopfix's own documentation. Read `slopfix --help`, or that repository. A table here is a copy that drifts. The copy nobody updates is this one. The manifest is the list of which events reach which subcommand. It is the only such list.
 
 These replace the plugins that used to hold the same rules. Those are ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking, enhanced-auto-allow, link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with two homes drifts, and the second copy is the one nobody updates.
 
