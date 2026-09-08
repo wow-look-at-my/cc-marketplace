@@ -13,15 +13,46 @@ jobs:
   # The Bash cleaner's rule moved to slopfix, so this drives the launcher that reaches it: manifest, launcher and binary, which no unit test covers.
   slopfix-clean-bash:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    # The go-toolchain build needs these; a job-level block replaces the workflow-level one, so every grant it wants is listed.
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+      checks: read
     steps:
       - uses: actions/checkout@v7
 
-      # The plugin ships the binary rather than looking on PATH, and the fetch refuses a build that cannot answer the rule.
-      - name: Fetch the slopfix binary the plugin ships
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: sh .github/scripts/vendor-slopfix.sh plugins/slopfix
+      # Against the slopfix this branch is written for, not the published one: a launcher for a rule that has not shipped yet would otherwise fail here for the whole time between the two merges.
+      - name: Check out the slopfix this branch expects
+        uses: actions/checkout@v7
+        with:
+          repository: wow-look-at-my/slopfix
+          ref: ${{ github.ref_name }}
+          path: .slopfix-src
+        continue-on-error: true
+
+      # A branch of that name may not exist, and master is then what this plugin ships against.
+      - name: Fall back to slopfix master
+        if: hashFiles('.slopfix-src/go.mod') == ''
+        uses: actions/checkout@v7
+        with:
+          repository: wow-look-at-my/slopfix
+          path: .slopfix-src
+
+      - name: Build it
+        uses: wow-look-at-my/go-toolchain@master
+        with:
+          working-directory: .slopfix-src
+          targets: cosmo
+          autorelease: 'false'
+
+      # The plugin ships the binary rather than looking on PATH, so the built one is staged exactly where a release puts it.
+      - name: Stage the binary the launchers exec
+        run: |
+          mkdir -p plugins/slopfix/bin
+          cp .slopfix-src/build/slopfix plugins/slopfix/bin/slopfix.ape
+          chmod +x plugins/slopfix/bin/slopfix.ape
 
       # Every launcher is driven with a real payload, so one naming a subcommand the shipped binary does not carry cannot pass.
       - name: Drive every launcher the manifest registers
