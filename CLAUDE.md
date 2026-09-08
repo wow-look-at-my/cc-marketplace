@@ -22,5 +22,5 @@ The `master` branch is protected. All changes require a pull request.
 
 Each plugin documents itself in its own directory. Add a new plugin's notes at `plugins/<name>/CLAUDE.md` and import it here so it loads from the repo root.
 
-@plugins/ask-properly/CLAUDE.md @plugins/cleanup-bash-cmds/CLAUDE.md @plugins/common-checks/CLAUDE.md @plugins/css-duplication/CLAUDE.md @plugins/no-work-loss/CLAUDE.md @plugins/docs/CLAUDE.md @plugins/enhanced-auto-allow/CLAUDE.md @plugins/focus-please/CLAUDE.md @plugins/glob/CLAUDE.md @plugins/grep/CLAUDE.md @plugins/link-all-refs/CLAUDE.md @plugins/misc-skills/CLAUDE.md @plugins/no-blame-language/CLAUDE.md @plugins/no-busy-poll/CLAUDE.md @plugins/no-counts-in-docs/CLAUDE.md @plugins/no-tombstones/CLAUDE.md @plugins/repo-index/CLAUDE.md
+@plugins/ask-properly/CLAUDE.md @plugins/cleanup-bash-cmds/CLAUDE.md @plugins/css-duplication/CLAUDE.md @plugins/no-work-loss/CLAUDE.md @plugins/docs/CLAUDE.md @plugins/enhanced-auto-allow/CLAUDE.md @plugins/focus-please/CLAUDE.md @plugins/glob/CLAUDE.md @plugins/grep/CLAUDE.md @plugins/misc-skills/CLAUDE.md @plugins/repo-index/CLAUDE.md @plugins/slopfix/CLAUDE.md
 

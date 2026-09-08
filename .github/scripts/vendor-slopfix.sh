@@ -27,8 +27,16 @@ shift
 # not published yet. It is also how the red control is driven: the gate is worth
 # nothing until somebody has watched it reject a binary that cannot answer.
 url=${SLOPFIX_URL:-"https://dl.pazer.build/slopfix?os=linux&arch=amd64"}
-build_dir="${plugin_dir}/build"
-binary="${build_dir}/slopfix_cosmo_fat"
+# NOT build/. `stageBinaries` rewrites build/ into exactly one APE named after
+# the plugin plus its launcher, and deletes every other file there. The plugin
+# builds its own Go hook binary into build/, so a second APE beside it would be
+# dropped silently. bin/ is outside that rewrite, the same way server/ is.
+#
+# A shell can exec an APE: execve answers ENOEXEC, and the prologue is valid sh
+# that re-execs the file properly. Every caller here is already a /bin/sh
+# script, so this needs no launcher of its own.
+build_dir="${plugin_dir}/bin"
+binary="${build_dir}/slopfix.ape"
 
 mkdir -p "$build_dir"
 if ! curl -fL --compressed --no-progress-meter --connect-timeout 30 "$url" -o "$binary"; then

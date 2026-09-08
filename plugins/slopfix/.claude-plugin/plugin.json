@@ -1,10 +1,10 @@
 {
-  "name": "common-checks",
-  "description": "Reports, while you edit, every violation that would fail the org's common-checks CI gate. Runs the checks' own code, re-fetched from wow-look-at-my/actions on every build.",
+  "name": "slopfix",
+  "description": "The org's slop guards in one plugin: the common-checks CI gate as a language server and a write refusal, the counts and tombstones repairs, and the permission-seeking, blame-language and busy-poll guards.",
   "author": {
     "name": "wow-look-at-my"
   },
-  "keywords": ["lsp", "ci", "github-actions", "lint", "common-checks"],
+  "keywords": ["lsp", "ci", "github-actions", "lint", "common-checks", "slopfix", "prose"],
   "hooks": {
     "PreToolUse": [
       {
@@ -12,7 +12,54 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/server/common-checks-lsp --hook"
+            "command": "${CLAUDE_PLUGIN_ROOT}/server/slopfix-lsp --hook"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/counts.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/tombstones.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/busy-poll.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/laziness.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/busy-poll.sh"
+          }
+        ]
+      }
+    ],
+    "MessageDisplay": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/blame-language.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/link-refs.sh",
+            "timeout": 10
           }
         ]
       }

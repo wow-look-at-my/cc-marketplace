@@ -75,18 +75,17 @@
       ]
     },
     {
-      "name": "link-all-refs",
-      "source": "./link-all-refs",
-      "description": "Blocks the Stop event while the closing message names a pull request, a commit, a branch, or a GitHub URL without a markdown link to it",
+      "name": "slopfix",
+      "source": "./slopfix",
+      "description": "The org's slop guards in one plugin: the common-checks gate as a language server and a write refusal, the counts and tombstones repairs, and the permission-seeking, blame-language, busy-poll and link-refs guards",
       "category": "development",
       "keywords": [
-        "link",
+        "lint",
+        "prose",
         "markdown",
-        "pull-request",
-        "commit",
-        "branch",
-        "stop",
-        "hook"
+        "lsp",
+        "hook",
+        "enforcement"
       ]
     },
     {

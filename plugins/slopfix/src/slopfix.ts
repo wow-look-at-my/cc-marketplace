@@ -24,12 +24,12 @@ export interface SlopfixFinding {
 /**
  * Where the shipped binary sits, relative to the plugin root.
  *
- * `release-plugin` rewrites `build/` into the APE plus a launcher named after
- * the plugin, so a published plugin carries the first name. A local `just
- * prebuild` leaves the fetched file under its own name, so the tests that run
- * inside that same recipe find the second.
+ * bin/ rather than build/. `stageBinaries` keeps exactly one APE in build/,
+ * named after the plugin, and deletes everything else there. That slot belongs
+ * to this plugin's own Go hook binary, so slopfix sits outside the rewrite and
+ * carries the same name in a published plugin as in a local `just prebuild`.
  */
-const CANDIDATES = ["build/common-checks", "build/slopfix_cosmo_fat"];
+const CANDIDATES = ["bin/slopfix.ape"];
 
 /** The directory this module was loaded from, under tsx and under the bundle. */
 function moduleDir(): string {
@@ -93,7 +93,7 @@ export function report(relativePath: string, content: string): SlopfixFinding[] 
   if (!binary) {
     throw new SlopfixUnavailable(
       "no slopfix binary beside this plugin, so nothing can be checked. " +
-        "The plugin ships one under build/. Set COMMON_CHECKS_SLOPFIX to point at another.",
+        "The plugin ships one under bin/. Set COMMON_CHECKS_SLOPFIX to point at another.",
     );
   }
   let out: string;

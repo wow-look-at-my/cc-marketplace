@@ -1,5 +1,5 @@
 #!/bin/sh
-# Staged into build/ as common-checks-lsp, because the LSP client execve()s the
+# Staged into server/ as slopfix-lsp, because the LSP client execve()s the
 # path in .lsp.json and a bundled .js is not executable on its own.
 #
 # A missing Node is stated out loud on stderr. An LSP server that cannot start
