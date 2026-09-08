@@ -1,28 +1,16 @@
 ## Slopfix Plugin
 
-The slopfix plugin lives at `plugins/slopfix/`. It carries **no rule of its own**. Every verdict comes out of [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix). This directory is the manifest plus one launcher per rule.
+The slopfix plugin lives at `plugins/slopfix/`. It carries **no rule of its own**. Every verdict comes out of [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix). This directory is the manifest and nothing else.
 
-### The launchers, and the subcommand each reaches
+### How a check is wired
 
-Each file in `hooks/` is a `/bin/sh` script that execs `bin/slopfix.ape` with one subcommand. The binary reads the hook payload on stdin and writes the hook's own response on stdout. The launcher passes bytes through and nothing else.
+A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs the binary directly. **There is no `hooks/` directory and no shell script of any kind.** `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
 
-| Launcher | Subcommand | Event | What it does |
-| --- | --- | --- | --- |
-| `counts.sh` | `hook --only counts` | PreToolUse | Cuts a cardinal out of a document |
-| `tombstones.sh` | `hook --only tombstones` | PreToolUse | Strips a tombstone, or refuses what it cannot excise |
-| `md-budget.sh` | `md-budget` | SessionStart, PreToolUse, Stop | Reports an instruction file over budget |
-| `no-work-loss.sh` | `no-work-loss` | PreToolUse | Refuses a loss, and a write that skips the edit tools |
-| `auto-allow.sh` | `auto-allow` | PermissionRequest, PreToolUse | Approves read-only work, refuses a banned program |
-| `clean-bash.sh` | `clean-bash` | PreToolUse | Rewrites a Bash command instead of refusing it |
-| `busy-poll.sh` | `busy-poll` | Stop, PreToolUse | Refuses a repeat that cannot learn anything |
-| `laziness.sh` | `message` | Stop | Marks a message that reports a defect it did not fix |
-| `blame-language.sh` | `message --only blame` | MessageDisplay | Marks deflecting language |
-| `link-refs.sh` | `link-refs` | MessageDisplay | Renders a reference as a markdown link |
-| `ask-properly.sh` | `ask-properly` | MessageDisplay | Marks a decision put to the reader in prose |
+What each subcommand DOES is slopfix's own documentation. Read `slopfix --help`, or that repository. A table here is a copy that drifts. The copy nobody updates is this one. The manifest is the list of which events reach which subcommand. It is the only such list.
 
 These replace the plugins that used to hold the same rules. Those are ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking, enhanced-auto-allow, link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with two homes drifts, and the second copy is the one nobody updates.
 
-**There are no `.go` files here, and there must not be.** A launcher that shells out to slopfix needs no Go. The `plugin-e2e` workflow drives the `clean-bash` launcher end to end. That is the only place the manifest, the launcher and the binary are exercised together.
+**There are no `.go` files here, and there must not be.** A manifest that names a subcommand needs no Go. The `plugin-e2e` workflow drives `clean-bash` end to end. That is the only place the manifest and the binary are exercised together.
 
 ### The language server half
 

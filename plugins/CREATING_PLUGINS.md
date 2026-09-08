@@ -8,7 +8,7 @@ This guide walks through creating a Claude Code plugin from scratch.
 2. Add your commands, agents, or skills
 3. Add the plugin to `../.claude-plugin/marketplace.json`
 
-A prose or shell rule does not belong here. It goes in [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix), and `slopfix/` reaches it with a `/bin/sh` launcher. Read `slopfix/CLAUDE.md` before adding a guard.
+A prose or shell rule does not belong here. It goes in [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix), and `slopfix/`'s manifest reaches it by naming the check. Read `slopfix/CLAUDE.md` before adding a guard.
 
 ## Plugin Directory Structure
 
