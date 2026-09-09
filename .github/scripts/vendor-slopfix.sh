@@ -53,6 +53,36 @@ if [ "$magic" != "MZqFpD='" ]; then
 	exit 1
 fi
 
+# Every subcommand the manifest names has to exist in THIS binary. The e2e job
+# asks the same question of slopfix's SOURCE, which answers for master rather
+# than for the build being packaged here, and the two disagree for the whole
+# window between a slopfix merge and its publish. `laziness` shipped through
+# that window: the manifest named it, master defined it, the fetched binary did
+# not, and every Stop in every session answered `unknown command "laziness"`.
+# So the guard that judges a closing message never ran, and the only sign was
+# one line the reader had to notice.
+#
+# The loop reads the manifest rather than a list kept beside it. A list is the
+# copy that goes stale, which is the failure directly above.
+manifest="${plugin_dir}/.claude-plugin/plugin.json"
+if [ ! -f "$manifest" ]; then
+	echo "vendor-slopfix: ${manifest} does not exist, so what this plugin calls is unknown." >&2
+	exit 1
+fi
+named=$(tr -d '\n' <"$manifest" | grep -o 'slopfix\.ape [a-z][a-z-]*' | cut -d' ' -f2 | sort -u)
+if [ -z "$named" ]; then
+	echo "vendor-slopfix: ${manifest} names no slopfix subcommand at all." >&2
+	exit 1
+fi
+for name in $named; do
+	if ! "$binary" "$name" --help >/dev/null 2>&1; then
+		echo "vendor-slopfix: the manifest names '${name}', which this build of slopfix does not define." >&2
+		echo "vendor-slopfix: the hook would run and answer nothing. Publish slopfix first." >&2
+		exit 1
+	fi
+	echo "vendor-slopfix: ${name} is defined"
+done
+
 # The assertion that matters: run the real contract on text whose answer is
 # known, and require the rule to actually fire. Exit status alone proves only
 # that the subcommand parses. A binary that runs and finds nothing in text built
