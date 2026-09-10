@@ -34,7 +34,7 @@ jobs:
           repository: wow-look-at-my/slopfix
           path: .slopfix-src
 
-      # Every subcommand the manifest names has to EXIST, and slopfix's own source is what says so. Building it here instead would fail this job for a lint finding in another repository.
+      # A manifest typo, caught on the branch that makes it. Source is not the artifact, so vendor-slopfix.sh asks the fetched binary the same question.
       - name: Every hook names a subcommand slopfix defines
         uses: wow-look-at-my/actions@typescript#latest
         with:
@@ -56,7 +56,11 @@ jobs:
             // Every subcommand slopfix registers, read off its source. A script naming one that is not there reaches nothing at run time.
             const defined = new Set<string>();
             const cmdDir = ".slopfix-src/cmd";
-            for (const f of fs.readdirSync(cmdDir)) {
+            // A checkout that half-landed reads as a manifest naming nothing real, which is the most misleading verdict this job can reach.
+            let sources: string[] = [];
+            try { sources = fs.readdirSync(cmdDir).filter((f) => f.endsWith(".go")); } catch { /* reported below */ }
+            if (sources.length === 0) core.setFailed(`${cmdDir} holds no Go source, so this run read no slopfix. That is a checkout failure, not a verdict on the manifest.`);
+            for (const f of sources) {
               if (!f.endsWith(".go")) continue;
               const body = fs.readFileSync(path.join(cmdDir, f), "utf-8");
               for (const m of body.matchAll(/\bUse:\s*"([a-z][a-z-]*)/g)) defined.add(m[1]);
