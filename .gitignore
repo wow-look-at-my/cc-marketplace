@@ -39,3 +39,7 @@ plugins/docs/skills/*/reference/
 # rewrites that directory into one fat APE and its launcher, and the slopfix
 # this plugin fetches is what has to be there.
 plugins/common-checks/server/
+
+# comment-truth plugin build outputs
+plugins/comment-truth/comment-truth
+plugins/comment-truth/build/
