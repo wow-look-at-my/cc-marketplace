@@ -1,4 +1,3 @@
-//
 // Sizes are measured in UTF-16 code units to mirror JS String.length.
 // Divergence from the builtin: the file lands under os.TempDir() instead
 // of the session transcript's tool-results dir (an MCP server has neither
@@ -17,7 +16,7 @@ import (
 const (
 	persistedOutputOpen  = "<persisted-output>"
 	persistedOutputClose = "</persisted-output>"
-	persistPreviewChars = 2000
+	persistPreviewChars  = 2000
 )
 
 // utf16Len mirrors JS String.prototype.length (UTF-16 code units).

@@ -57,7 +57,7 @@ func mustMarshalJSON(v any) json.RawMessage {
 }
 
 const (
-	globMaxResults = 25000
+	globMaxResults       = 25000
 	globPersistThreshold = 50000
 	globTruncationLine   = "(Results are truncated. Consider using a more specific path or pattern.)"
 	globNoFilesFound     = "No files found"

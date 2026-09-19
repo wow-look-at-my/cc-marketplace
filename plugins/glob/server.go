@@ -1,4 +1,3 @@
-//
 // This file is tool-agnostic glue. A sibling plugin (e.g. grep) should be
 // able to copy it verbatim and only swap the mcpTool implementation wired
 // up in main.go.

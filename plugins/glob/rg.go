@@ -1,4 +1,3 @@
-//
 // The builtin silently reported "No matches found" / "No files found"
 // for an invalid regex/glob/type; the plugins make those failures
 // visible. Exit 2 WITH stdout (e.g. matches found but some tree entries

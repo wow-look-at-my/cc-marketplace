@@ -1,4 +1,3 @@
-//
 //	names.sort((a, b) => a.localeCompare(b)) // -> collateSortedGolden
 //	Math.sign(a.localeCompare(b)) // -> collateSignGolden
 //
