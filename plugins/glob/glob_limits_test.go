@@ -12,12 +12,6 @@ import (
 	"time"
 )
 
-// TestRealCapTruncationAndPersistence exercises the production constants
-// end-to-end: 25010 files overflow the real 25000-file cap, and the
-// resulting ~350KB text overflows the real 50000-char persistence
-// threshold, so the tool must return a <persisted-output> block whose
-// saved file ends with the verbatim truncation line after exactly 25000
-// paths.
 func TestRealCapTruncationAndPersistence(t *testing.T) {
 	root := t.TempDir()
 	const total = globMaxResults + 10
@@ -52,12 +46,9 @@ func TestRealCapTruncationAndPersistence(t *testing.T) {
 	}
 }
 
-// TestPersistenceThroughToolAtRealThreshold crosses the real 50000-char
-// ceiling with ~3100 files while staying under the file cap: truncation
-// must NOT fire, persistence must.
 func TestPersistenceThroughToolAtRealThreshold(t *testing.T) {
 	root := t.TempDir()
-	const total = 3100 // 3100 * (24-char name + newline) ~= 77.5K chars > 50000
+	const total = 3100
 	for i := 0; i < total; i++ {
 		name := filepath.Join(root, fmt.Sprintf("padded-filename-%04d.txt", i))
 		require.NoError(t, os.WriteFile(name, nil, 0o644))
@@ -105,8 +96,8 @@ func TestTimeoutThroughTool(t *testing.T) {
 
 func TestTimeoutPartialThroughTool(t *testing.T) {
 	root := t.TempDir()
-	// Fake rg emits two absolute paths then hangs: the tool must resolve
-	// the first (last line dropped) relativized against the root.
+	// Fake rg emits absolute paths then hangs: the tool must resolve the
+	// earliest (last line dropped) relativized against the root.
 	fake := writeFakeRg(t, fmt.Sprintf("printf '%s/kept.txt\\n%s/dropped.txt\\n'; exec sleep 5", root, root))
 	g := testTool(t, root)
 	g.resolveRg = fixedRg(fake)
