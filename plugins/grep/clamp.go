@@ -1,10 +1,8 @@
 // clamp.go bounds how much of a single matched or context line the grep
-// tool renders. It supersedes the builtin's --max-columns 500 rule, which
-// replaced any longer line with "[Omitted long matching line]" /
-// "[Omitted long context line]". Per decree a matching line is never
-// dropped -- only bounded: a line wider than clampWidth is rendered as a
-// clampWidth-rune window with an ellipsis marking each cut edge, so the
-// match itself always stays visible.
+// tool renders. Per decree a matching line is never dropped -- only
+// bounded: a line wider than clampWidth is rendered as a clampWidth-rune
+// window with an ellipsis marking each cut edge, so the match itself
+// always stays visible.
 package main
 
 import (
@@ -12,25 +10,17 @@ import (
 	"unicode/utf8"
 )
 
-// clampWidth is the maximum number of runes rendered for one line. The
-// builtin omitted at 500 bytes; this shows the line, capped at ~4096 chars.
+// clampWidth is the maximum number of runes rendered for a single line.
 const clampWidth = 4096
 
-// ellipsis marks an edge of a line that was cut to fit clampWidth. It is a
-// single rune (U+2026 HORIZONTAL ELLIPSIS, built numerically so this source
-// stays ASCII) and counts toward the budget.
+// ellipsis marks an edge of a line that was cut to fit clampWidth.
 const ellipsis = string(rune(0x2026))
 
 // clampLine bounds text to clampWidth runes. A line within budget is
 // returned verbatim. A longer line becomes a clampWidth-rune window:
 //
-//   - When matchByte >= 0 (the byte offset of the first match within text)
-//     the window is centered on the match so it stays visible however far
-//     into the line it sits -- cutting both the front and the back as
-//     needed, each marked with an ellipsis.
-//   - When matchByte < 0 (no known match position, e.g. a context line or
-//     content-mode text) the window anchors at the start and only the back
-//     is cut.
+//	a context line or content-mode text) the window anchors at the start
+//	  and only the back is cut.
 func clampLine(text string, matchByte int) string {
 	if utf8.RuneCountInString(text) <= clampWidth {
 		return text
@@ -38,8 +28,8 @@ func clampLine(text string, matchByte int) string {
 	runes := []rune(text)
 	n := len(runes)
 
-	// Reserve one rune per ellipsis that may be emitted: two when centering
-	// (both edges can be cut), one when anchored at the start (back only).
+	// Reserve a single rune per ellipsis that may be emitted: when
+	// centering (both edges can be cut), a single when anchored at the start (back only).
 	center := matchByte >= 0
 	budget := clampWidth - 1
 	if center {

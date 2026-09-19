@@ -44,7 +44,7 @@ func TestContentCaseInsensitive(t *testing.T) {
 }
 
 // Context lines print as path-N-text: when neither the path nor the text
-// contains a colon, the builtin's first-colon mapping leaves the line
+// contains a colon, the builtin's earliest-colon mapping leaves the line
 // UNTOUCHED, so context lines stay absolute while match lines are
 // relativized. Faithful wart, locked here.
 func TestContentContextLinesKeepAbsolutePaths(t *testing.T) {
@@ -57,7 +57,7 @@ func TestContentContextLinesKeepAbsolutePaths(t *testing.T) {
 }
 
 // A context line whose TEXT contains a colon gets its prefix relativized
-// (first-colon split lands mid-line) — the same faithful wart.
+// (earliest-colon split lands mid-line) — the same faithful wart.
 func TestContentContextLineWithColonInText(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"c.txt", "see: this\nl2 needle\n"})
@@ -132,9 +132,9 @@ func TestContentWeirdFilenameWithColon(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"we:ird.txt", "a needle\n"})
 	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "needle"}))
-	// The first-colon split lands inside the filename, but relativizing
-	// the shorter prefix strips the same root prefix, so the line still
-	// comes out right.
+	// The earliest-colon split lands inside the filename, but
+	// relativizing the shorter prefix strips the same root prefix, so
+	// the line still comes out right.
 	wantText(t, got, "we:ird.txt:1:a needle")
 }
 
@@ -154,8 +154,6 @@ func TestContentUnicodeMatch(t *testing.T) {
 
 func TestContentLongLineShown(t *testing.T) {
 	root := t.TempDir()
-	// 998 content chars: the old --max-columns 500 dropped this as
-	// "[Omitted long matching line]"; it is now shown in full.
 	line := strings.Repeat("y", 994) + "LONG"
 	mkTree(t, root, tf{"long.txt", line + "\n"})
 	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "LONG"}))
@@ -169,7 +167,6 @@ func TestContentHugeLineClamped(t *testing.T) {
 	// mode carries no match column, so the window anchors at the start.
 	mkTree(t, root, tf{"long.txt", strings.Repeat("y", 5000) + "\n"})
 	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "y"}))
-	// budget = clampWidth-1 = 4095; "long.txt:1:" is 11 runes, leaving 4084.
 	wantText(t, got, "long.txt:1:"+strings.Repeat("y", 4084)+ellipsis)
 }
 
@@ -216,9 +213,6 @@ func TestGitignoreRespected(t *testing.T) {
 	assert.True(t, containsLine(got, ".hidden.txt:1:needle hidden"), got)
 }
 
-// A positive glob parameter acts as a ripgrep whitelist: gitignored
-// files that directly match it are searched anyway (builtin parity —
-// identical argv; verified empirically on rg 14.1.0).
 func TestGlobParamWhitelistsGitignoredFiles(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root,
@@ -399,7 +393,7 @@ func TestPathTildeUserNotExpanded(t *testing.T) {
 }
 
 func TestPathWhitespaceTrimmedBeforeResolve(t *testing.T) {
-	// Vq trim() parity: "  sub  " only names a real directory after
+	// Vq trim() parity: " sub " only names a real directory after
 	// trimming, and a whitespace-only path resolves to the root.
 	root := t.TempDir()
 	mkTree(t, root, tf{"sub/inner.txt", "needle\n"})
