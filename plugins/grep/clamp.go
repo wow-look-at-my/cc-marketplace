@@ -18,10 +18,10 @@ const ellipsis = string(rune(0x2026))
 
 // clampLine bounds text to clampWidth runes. A line within budget stays
 // verbatim. A longer line becomes a clampWidth-rune window. An ellipsis
-// marks each cut edge. A matchByte of zero or more is the byte offset of
-// the first match. The window then centers on that match. A negative
-// matchByte gives no match position. The window then starts at the first
-// rune and cuts only the back.
+// marks each cut edge. A matchByte that is not negative gives the byte
+// offset of the match. The window then centers on that match. A negative
+// matchByte gives no match position. The window then starts at the head
+// of the line and cuts only the tail.
 func clampLine(text string, matchByte int) string {
 	if utf8.RuneCountInString(text) <= clampWidth {
 		return text
@@ -29,8 +29,9 @@ func clampLine(text string, matchByte int) string {
 	runes := []rune(text)
 	n := len(runes)
 
-	// Each ellipsis needs one rune of the budget. A centered window can cut
-	// both edges. It reserves two runes. An anchored window reserves one.
+	// Each ellipsis costs a rune of the budget. A centered window can cut
+	// both edges, so it reserves for both. An anchored window cuts the tail
+	// only, so it reserves for that edge.
 	center := matchByte >= 0
 	budget := clampWidth - 1
 	if center {
