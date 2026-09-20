@@ -20,11 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/server/slopfix-lsp --hook"
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook --only counts,tombstones --max-comment-lines ${NO_TOMBSTONES_MAX_COMMENT_LINES:-14}"
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook --max-comment-lines ${NO_TOMBSTONES_MAX_COMMENT_LINES:-14}"
           }
         ]
       },
