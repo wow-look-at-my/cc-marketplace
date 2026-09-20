@@ -1,12 +1,7 @@
 // greptool.go implements the Grep tool: description, input schema,
 // argument parsing (with the builtin's zod coercions), ripgrep argv
-// construction, and path validation. Behavior mirrors the builtin
-// removed from claude-code (version 2.1.116, the last release that
-// registered it by default) except for the redesigned output-mode set:
-// the ambiguous files_with_matches default was replaced by
-// "filenames_with_matches" (paths grouped with their matching lines) and
-// "filenames" (the old name-only listing). See grepmodes.go/grepfwm.go
-// for the per-mode rendering.
+// construction, and path validation. See grepmodes.go/grepfwm.go for the
+// per-mode rendering.
 package main
 
 import (
@@ -23,10 +18,10 @@ import (
 
 const grepToolName = "Grep"
 
-// Output mode names. The builtin's enum was
-// [content, files_with_matches, count] with files_with_matches (a bare
-// newest-first path list) as the default; this plugin deliberately drops
-// that name (no alias) and ships the amended set below.
+// Output mode names. The builtin's enum was [content,
+// files_with_matches, count] with files_with_matches (a bare
+// newest-earliest path list) as the default; this plugin deliberately
+// drops that name (no alias) and ships the amended set below.
 const (
 	modeContent              = "content"
 	modeFilenamesWithMatches = "filenames_with_matches"
@@ -34,29 +29,24 @@ const (
 	modeCount                = "count"
 )
 
-// grepDescription is a streamlined rewrite of the 2.1.116 builtin
-// description (2.1.116:cli.js:113993-114005). Parameters are documented
-// in the schema, not here. The builtin's brace-escaping caveat is gone:
-// it existed because the builtin swallowed rg parse errors as "No
-// matches found", whereas this plugin surfaces them, so a bad pattern
-// explains itself. The tool is alwaysLoad, so every description byte is
-// paid in every prompt.
+// Parameters are documented in the schema, not here. The builtin's
+// brace-escaping caveat is gone: it existed because the builtin
+// swallowed rg parse errors as "No matches found", whereas this plugin
+// surfaces them, so a bad pattern explains itself. The tool is
+// alwaysLoad, so every description byte is paid in every prompt.
 const grepDescription = "A search tool built on ripgrep; patterns use ripgrep's full regex syntax.\n" +
 	"ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command.\n"
 
-// schemaProp is one JSON Schema property entry.
+// schemaProp is a single JSON Schema property entry.
 type schemaProp struct {
 	Type        string   `json:"type"`
 	Enum        []string `json:"enum,omitempty"`
 	Description string   `json:"description"`
 }
 
-// grepSchema is the builtin input schema shape (zod strictObject ->
-// additionalProperties false, required: pattern;
-// 2.1.116:cli.js:286206-286229) with the amended output-mode enum and
-// condensed property descriptions. The output modes and their formats
-// are documented solely on output_mode. Struct field order is the
-// property order the model sees.
+// The output modes and their formats are documented solely on
+// output_mode. Struct field order is the property order the model
+// sees.
 type grepSchema struct {
 	Type                 string          `json:"type"`
 	AdditionalProperties bool            `json:"additionalProperties"`
@@ -113,18 +103,12 @@ func mustMarshalJSON(v any) json.RawMessage {
 }
 
 const (
-	// grepPersistThreshold = min(maxResultSizeChars 20000, persistence
-	// ceiling 50000) (2.1.116:cli.js:286237, 155809).
 	grepPersistThreshold = 20000
-	// defaultHeadLimit mirrors H61 = 250 (2.1.116:cli.js:286189).
-	defaultHeadLimit = 250
+	defaultHeadLimit     = 250
 )
 
-// vcsExclusions mirrors e81 (2.1.116:cli.js:286230).
 var vcsExclusions = []string{".git", ".svn", ".hg", ".bzr", ".jj", ".sl"}
 
-// numericStringRe is the builtin's zod-preprocess coercion pattern for
-// number params (tE, 2.1.116:cli.js:286087-286094).
 var numericStringRe = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
 var grepOutputModes = set.Of[string](modeContent, modeFilenamesWithMatches, modeFilenames, modeCount)
@@ -138,16 +122,14 @@ type grepArgs struct {
 	after      *float64 // -A
 	dashC      *float64 // -C
 	context    *float64
-	lineNums   bool     // -n, default true
-	ignoreCase bool     // -i
-	headLimit  *float64 // nil = default 250; 0 = unlimited
+	lineNums   bool // -n, default true
+	ignoreCase bool // -i
+	headLimit  *float64
 	offset     float64
 	multiline  bool
 
 	// Set by execute, not parsed from input: the search path as supplied
-	// (argv space) and its symlink-resolved form handed to rg. The
-	// formatters rebase rg's output paths from the resolved form back to
-	// the supplied one (see execute).
+	// (argv space) and its symlink-resolved form handed to rg.
 	searchPath   string
 	rgSearchPath string
 	explicitFile bool
@@ -222,7 +204,6 @@ func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rpcError) {
 			return invalid("%s arguments must be an object", grepToolName)
 		}
 	}
-	// Defaults per the builtin destructuring (2.1.116:cli.js:286337).
 	a := &grepArgs{mode: modeFilenamesWithMatches, lineNums: true}
 	seenPattern := false
 	for k, v := range m {
@@ -294,8 +275,6 @@ func isJSONNull(v json.RawMessage) bool {
 	return string(bytes.TrimSpace(v)) == "null"
 }
 
-// coerceNumber accepts a JSON number, or (mirroring zod preprocess tE,
-// 2.1.116:cli.js:286087-286094) a string matching /^-?\d+(\.\d+)?$/.
 func coerceNumber(v json.RawMessage) (float64, bool) {
 	if isJSONNull(v) {
 		return 0, false
@@ -313,8 +292,6 @@ func coerceNumber(v json.RawMessage) (float64, bool) {
 	return 0, false
 }
 
-// coerceBool accepts a JSON boolean, or the exact strings "true"/"false"
-// (zod preprocess cL, 2.1.116:cli.js:284285-284287).
 func coerceBool(v json.RawMessage) (bool, bool) {
 	if isJSONNull(v) {
 		return false, false
@@ -335,8 +312,8 @@ func coerceBool(v json.RawMessage) (bool, bool) {
 	return false, false
 }
 
-// execute runs one Grep search, returning the tool_result text and
-// whether it is an error.
+// execute runs a single Grep search, returning the tool_result
+// text and whether it is an error.
 func (g *grepTool) execute(a *grepArgs) (string, bool) {
 	searchPath := g.root
 	if a.path != "" { // empty string is falsy upstream: same as omitted
@@ -389,26 +366,13 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 	return persistOversize(text, grepToolName, g.persistThreshold, g.tempDir, g.logf), false
 }
 
-// buildRgArgs constructs the rg argv in the builtin's exact order
-// (2.1.116:cli.js:286337-286368) with five amendments: the builtin's
-// --max-columns 500 is dropped (long lines are shown, then clamped in Go
-// per clamp.go, instead of omitted by rg), the mode-flag slot emits --json
-// for filenames_with_matches (rendered in Go from rg's JSON events), count
-// mode gains -H (claude-code's own >=2.1.175 fix for single-file count
-// parsing), the context flags apply to filenames_with_matches as well as
-// content, and an explicit regular-file target in filenames_with_matches
-// mode gains --text so rg reports a binary file's complete raw line
-// consistently across platforms (directory searches retain rg's normal
-// binary skipping). The permission deny-rule and claude-internal cache
-// exclusions the builtin appended are not available to a plugin and are
-// omitted.
+// The permission deny-rule and claude-internal cache exclusions the
+// builtin appended are not available to a plugin and are omitted.
 func buildRgArgs(a *grepArgs) []string {
 	args := []string{"--hidden"}
 	for _, d := range vcsExclusions {
 		args = append(args, "--glob", "!"+d)
 	}
-	// No --max-columns: the builtin capped rg at 500 columns and omitted
-	// longer lines; per decree they are shown, then clamped in Go (clamp.go).
 	// filenames_with_matches always relied on full lines (rg --json ignores it).
 	if a.multiline {
 		args = append(args, "-U", "--multiline-dotall")
@@ -456,10 +420,6 @@ func buildRgArgs(a *grepArgs) []string {
 	return args
 }
 
-// tokenizeGlobParam mirrors the builtin's glob splitting
-// (2.1.116:cli.js:286356-286363): whitespace split; tokens containing
-// both "{" and "}" stay whole; other tokens are comma-split; empties
-// dropped.
 func tokenizeGlobParam(s string) []string {
 	var out []string
 	for _, tok := range strings.Fields(s) {
@@ -476,11 +436,7 @@ func tokenizeGlobParam(s string) []string {
 	return out
 }
 
-// validatePath mirrors the builtin Grep validateInput
-// (2.1.116:cli.js:286270-286293): UNC-ish resolved paths skip
-// validation, ENOENT yields the path-does-not-exist message (with a
-// did-you-mean suggestion), and other stat errors propagate raw. Unlike
-// Glob there is no isDirectory check: file paths are accepted.
+// Unlike Glob there is no isDirectory check: file paths are accepted.
 func (g *grepTool) validatePath(rawPath, resolved string) (string, bool) {
 	if strings.HasPrefix(resolved, `\\`) || strings.HasPrefix(resolved, "//") {
 		return "", true

@@ -14,7 +14,7 @@ import (
 
 const maxOutputBytes = 1 << 20 // 1MB
 
-// jqTools binds the resolved jq binary to the two handlers. It is a value
+// jqTools binds the resolved jq binary to both handlers. It is a value
 // rather than a package variable so a test for the not-installed path can
 // build its own server without mutating state the other tests read.
 type jqTools struct {

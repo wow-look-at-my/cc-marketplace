@@ -11,11 +11,11 @@ import (
 
 // ttl is how long a built index is served before a refresh is due. Repository
 // descriptions and topics change on the scale of weeks, so a day is generous
-// and still costs one background run.
+// and still costs a single background run.
 const ttl = 24 * time.Hour
 
 // refreshFloor stops a stale cache from starting a refresh on every prompt
-// while one is already in flight.
+// while a single is already in flight.
 const refreshFloor = 10 * time.Minute
 
 // readmeBudget caps the extra request per description-less repository. A
@@ -80,9 +80,8 @@ func writeCache(home string, c cache) error {
 }
 
 // covers reports whether a cached index was built for exactly these owners.
-// A different set is as stale as an expired one, however recent it is. An
-// empty owner list means the hook could not tell locally, so it asks nothing
-// of the cache's coverage.
+// An empty owner list means the hook could not tell locally, so it asks
+// nothing of the cache's coverage.
 func (c *cache) covers(owners []string, now time.Time) (fresh bool, sameOwners bool) {
 	if c == nil {
 		return false, false

@@ -1,6 +1,6 @@
 // repo-index suggests repositories that look relevant to a prompt. It injects
-// the link and the repository's own description, once per session, from an
-// index built out of the GitHub API.
+// the link and the repository's own description, a single time per session,
+// from an index built out of the GitHub API.
 package main
 
 import (
@@ -57,9 +57,7 @@ func main() {
 	os.Exit(run(os.Stdin, e))
 }
 
-// run returns the process exit code. Code 1 reports a real fault and leaves
-// the prompt untouched. It never returns 2, which would block the prompt: a
-// suggestion is worth nothing at that price.
+// run returns the process exit code.
 func run(r io.Reader, e env) int {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -140,9 +138,9 @@ func run(r io.Reader, e env) int {
 	return 0
 }
 
-// serveIndex returns the cached index and starts a refresh when one is due. A
-// stale index still suggests: a description from last week beats silence. An
-// absent one suggests nothing, and says so.
+// serveIndex returns the cached index and starts a refresh when a single is
+// due. A stale index still suggests: a description from last week beats
+// silence. An absent a single suggests nothing, and says so.
 func (e env) serveIndex(cwd string) []Repo {
 	cached := readCache(e.home)
 	// A nil client keeps this path off the network entirely: the owner comes
