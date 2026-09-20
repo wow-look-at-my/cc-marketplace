@@ -57,9 +57,7 @@ func readConfig(home, cwd string) ([]string, error) {
 
 var remotePattern = regexp.MustCompile(`(?:github\.com[:/])([^/]+)/`)
 
-// remoteOwner reads the owner out of the checkout's origin remote. This is the
-// zero-config source: work in a repository, and that owner's repositories are
-// what the index covers.
+// remoteOwner reads the owner out of the checkout's origin remote.
 func remoteOwner(cwd string) string {
 	if cwd == "" {
 		return ""

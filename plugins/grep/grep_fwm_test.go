@@ -37,8 +37,6 @@ func TestFwmNewestFirstLinesAscending(t *testing.T) {
 	wantText(t, got, want)
 }
 
-// Without context flags ripgrep prints no chunk separators, and neither
-// does this mode: the 1/3 gap in oldest.txt above renders without "--".
 // With a nonzero context width the separators appear.
 func TestFwmContextAndSeparators(t *testing.T) {
 	root := t.TempDir()
@@ -56,7 +54,6 @@ func TestFwmContextAndSeparators(t *testing.T) {
 		"  6:m2 needle"
 	wantText(t, got, want)
 
-	// -C 0 keeps the printer out of context mode: no separators.
 	got = grepOK(t, g, map[string]any{"pattern": "needle", "-C": 0})
 	wantText(t, got, "Found 1 file\nc.txt:\n  2:m needle\n  6:m2 needle")
 }
@@ -66,7 +63,6 @@ func TestFwmContextPrecedence(t *testing.T) {
 	mkTree(t, root, tf{"p.txt", "a\nb\nc needle\nd\ne\n"})
 	g := testTool(t, root)
 
-	// context wins over -C: width 1, not 0.
 	got := grepOK(t, g, map[string]any{"pattern": "needle", "context": 1, "-C": 0})
 	wantText(t, got, "Found 1 file\np.txt:\n  2-b\n  3:c needle\n  4-d")
 
@@ -108,7 +104,7 @@ func TestFwmCaseInsensitive(t *testing.T) {
 
 func TestFwmWeirdFilenames(t *testing.T) {
 	root := t.TempDir()
-	// Creation order oldest-first; expected output order is the reverse.
+	// Creation order oldest-earliest; expected output order is the reverse.
 	names := []string{
 		"plain.txt",
 		"with space.txt",
@@ -120,7 +116,7 @@ func TestFwmWeirdFilenames(t *testing.T) {
 		"brace{x}.txt",
 		"star*name.txt",
 		"we:ird.txt",
-		"nfd-e\u0301.txt", // NFD: e + U+0301 combining acute accent
+		"nfd-e\u0301.txt",
 		"a/b/c/d/deep.txt",
 		".hidden.txt",
 	}
@@ -137,8 +133,6 @@ func TestFwmWeirdFilenames(t *testing.T) {
 	wantText(t, got, strings.Join(parts, "\n"))
 }
 
-// The two-space indent keeps headers parseable even when a filename
-// contains ":" and the content contains ":" and leading digits.
 func TestFwmColonsEverywhereStayUnambiguous(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"12:34.txt", "5:6 needle here\n"})
@@ -152,7 +146,7 @@ func TestFwmMtimeTieBreaksByPathAscending(t *testing.T) {
 		tf{"zz.txt", "needle\n"},
 		tf{"aa.txt", "needle\n"},
 		tf{"mm.txt", "needle\n"})
-	// Same mtime for all three: order must fall back to ascending path.
+	// Same mtime for each of them: order must fall back to ascending path.
 	tie := time.Now().Add(-time.Hour)
 	for _, n := range []string{"zz.txt", "aa.txt", "mm.txt"} {
 		require.NoError(t, os.Chtimes(filepath.Join(root, n), tie, tie))
@@ -167,7 +161,7 @@ func TestFwmMtimeTieBreaksByPathAscending(t *testing.T) {
 func TestFwmMtimeTieUsesLocaleOrder(t *testing.T) {
 	// The builtin's tie-break was localeCompare, which compares
 	// case-insensitively at primary strength: a.txt sorts before B.txt.
-	// Go byte order would put B.txt first — the collator port (see
+	// Go byte order would put B.txt earliest — the collator port (see
 	// collate.go) pins the builtin's order.
 	root := t.TempDir()
 	mkTree(t, root,
@@ -196,11 +190,9 @@ func TestFwmMultilinePattern(t *testing.T) {
 	wantText(t, got, "Found 1 file\nml.txt:\n  1:one A\n  2:two B")
 }
 
-// TestFwmLongLinesShown: lines the old --max-columns 500 cap would have
-// dropped are now rendered in full (both sit well under clampWidth).
 func TestFwmLongLinesShown(t *testing.T) {
 	root := t.TempDir()
-	longCtx := strings.Repeat("y", 500) // omitted at the old 500 cap; now shown
+	longCtx := strings.Repeat("y", 500)
 	mkTree(t, root,
 		tf{"match.txt", strings.Repeat("x", 495) + "needle\n"},
 		tf{"ctx.txt", longCtx + "\nz needle\n"})
@@ -221,8 +213,6 @@ func TestFwmHugeMatchLineWindowed(t *testing.T) {
 	line := strings.Repeat("a", 5000) + "NEEDLE" + strings.Repeat("b", 5000)
 	mkTree(t, root, tf{"big.txt", line + "\n"})
 	got := grepOK(t, testTool(t, root), map[string]any{"pattern": "NEEDLE"})
-	// budget = clampWidth-2 = 4094; window starts at 5000 - 4094/2 = 2953,
-	// so it holds 2047 a's, NEEDLE, then 2041 b's, ellipsis-fenced.
 	want := "Found 1 file\nbig.txt:\n  1:" + ellipsis +
 		strings.Repeat("a", 2047) + "NEEDLE" + strings.Repeat("b", 2041) + ellipsis
 	wantText(t, got, want)
@@ -341,8 +331,6 @@ func TestFilenamesHiddenIncludedGitExcluded(t *testing.T) {
 	wantText(t, got, "Found 2 files\nseen.txt\n.hidden.txt")
 }
 
-// Files with equal mtimes and a failed-stat entry: rg lists them, the
-// sorter scores unstattable paths as mtime 0 (sorting last).
 func TestSortPathsByMtimeDescUnits(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"old.txt", "x\n"}, tf{"new.txt", "x\n"})
@@ -363,7 +351,6 @@ func TestSortPathsByMtimeDescUnits(t *testing.T) {
 
 func TestExpandEventLinesUnits(t *testing.T) {
 	// Multi-line text (multiline match): consecutive numbers, all match.
-	// matchByte -1 means no recorded column, so every line gets matchCol -1.
 	lines := expandEventLines("one\ntwo\n", 5, true, -1)
 	require.Len(t, lines, 2)
 	assert.Equal(t, fwmLine{num: 5, text: "one", match: true, matchCol: -1}, lines[0])
@@ -379,15 +366,11 @@ func TestExpandEventLinesUnits(t *testing.T) {
 	require.Len(t, lines, 1)
 	assert.Equal(t, "win", lines[0].text)
 
-	// The submatch byte offset is mapped onto whichever sub-line contains
-	// it; the other sub-lines get matchCol -1. In "alpha\nbravo\n" byte 8
-	// lands inside "bravo" (which starts at byte 6), so its column is 2.
 	lines = expandEventLines("alpha\nbravo\n", 10, true, 8)
 	require.Len(t, lines, 2)
 	assert.Equal(t, -1, lines[0].matchCol)
 	assert.Equal(t, 2, lines[1].matchCol)
 
-	// A match at offset 0 on a single line maps directly to column 0.
 	lines = expandEventLines("needle\n", 1, true, 0)
 	require.Len(t, lines, 1)
 	assert.Equal(t, 0, lines[0].matchCol)
@@ -412,8 +395,6 @@ func TestParseFwmEventsUnits(t *testing.T) {
 	assert.Equal(t, fwmLine{num: 3, text: "hit", match: true, matchCol: -1}, groups[0].lines[0])
 	assert.Equal(t, fwmLine{num: 4, text: "ctx", match: false, matchCol: -1}, groups[0].lines[1])
 	assert.Equal(t, "/r/b", groups[1].path)
-	// /r/b's match event carries a submatch at byte 2, so parseFwmEvents
-	// threads that offset through as the line's matchCol.
 	require.Len(t, groups[1].lines, 1)
 	assert.Equal(t, fwmLine{num: 1, text: "other", match: true, matchCol: 2}, groups[1].lines[0])
 }

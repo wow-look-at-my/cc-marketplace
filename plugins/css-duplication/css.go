@@ -11,8 +11,8 @@ import (
 // went unused. This file finds exactly that: rules that share a byte-identical
 // (normalized) body within the SAME at-rule context.
 
-// Rule is one declaration block: where it is, what selects it, and its
-// normalized declarations.
+// Rule is a single declaration block: where it is, what selects it,
+// and its normalized declarations.
 type Rule struct {
 	Selector string
 	Line     int
@@ -83,7 +83,7 @@ func stripComments(src string) string {
 }
 
 // normalizeDecl collapses whitespace and lowercases the property name, so
-// `COLOR:   var(--accent)` and `color: var(--accent)` are one declaration.
+// `COLOR: var(--accent)` and `color: var(--accent)` are a single declaration.
 // The value keeps its case (font names, url()s and custom-property values are
 // case-sensitive).
 func normalizeDecl(decl string) string {
@@ -240,9 +240,6 @@ func ParseRules(src string) []Rule {
 	return rules
 }
 
-// readBlock returns the body between the '{' at open and its matching '}',
-// plus the index of that '}' (or len(s)-1 when unbalanced -- a truncated file
-// must never panic a hook).
 func readBlock(s string, open int) (string, int) {
 	depth := 0
 	var quote byte
@@ -274,10 +271,7 @@ func readBlock(s string, open int) (string, int) {
 }
 
 // FindDuplicates groups rules that share an identical body in the same
-// context. Thresholds keep it quiet: a multi-declaration body is a finding at
-// two copies, a single-declaration body only at three -- one repeated
-// `display: none` is noise, three copies of one block is a base rule waiting
-// to be written.
+// context.
 func FindDuplicates(rules []Rule) []Group {
 	type key struct{ context, body string }
 	order := []key{}
@@ -301,8 +295,8 @@ func FindDuplicates(rules []Rule) []Group {
 		if len(rs[0].Decls) < 2 && len(rs) < 3 {
 			continue
 		}
-		// Identical selectors are a different bug (a rule written twice), and
-		// one the model rarely commits; dedupe so a repeated selector in two
+		// Identical selectors are a different bug (a rule written again), and
+		// a single the model rarely commits; dedupe so a repeated selector in
 		// files' worth of copy-paste does not read as N distinct rules.
 		seen := set.New[string]()
 		uniq := rs[:0:0]
@@ -321,13 +315,6 @@ func FindDuplicates(rules []Rule) []Group {
 		groups = append(groups, Group{Context: k.context, Decls: sorted, Rules: uniq})
 	}
 
-	// Strongest first, because the report is capped: a 4-copy, 2-declaration
-	// block is the base rule someone forgot to write, while three copies of
-	// `margin: 0` on different elements may be nothing. Sorting by copies x
-	// declarations keeps the finding that matters from falling off the end
-	// (measured: on the stylesheet that motivated this plugin, the real
-	// 3-selector link block was pushed out of an unsorted top 5 by
-	// `border-bottom: 0`).
 	sort.SliceStable(groups, func(i, j int) bool {
 		wi := len(groups[i].Rules) * len(groups[i].Decls)
 		wj := len(groups[j].Rules) * len(groups[j].Decls)
