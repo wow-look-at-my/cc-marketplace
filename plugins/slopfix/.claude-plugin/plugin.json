@@ -29,24 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape busy-poll"
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape no-work-loss"
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape auto-allow"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape clean-bash"
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape command check"
           }
         ]
       }
@@ -57,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape auto-allow"
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape command check"
           }
         ]
       }
