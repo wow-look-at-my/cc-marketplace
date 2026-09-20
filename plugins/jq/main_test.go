@@ -18,9 +18,9 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// testJqPath is written once by TestMain and only read afterwards. Tests
-// run in parallel, so a jq path any test can reassign is one every other
-// test reads mid-call.
+// testJqPath is written a single time by TestMain and only read
+// afterwards. Tests run in parallel, so a jq path any test can reassign
+// is a single every other test reads mid-call.
 var testJqPath string
 
 func TestMain(m *testing.M) {
@@ -37,8 +37,8 @@ func TestMain(m *testing.M) {
 // none. jq is MIT licensed.
 const bootstrapJqVersion = "1.7.1"
 
-// ensureJq returns a jq to test against, fetching a pinned one when the
-// machine has none.
+// ensureJq returns a jq to test against, fetching a pinned a single
+// when the machine has none.
 //
 // Letting jqPath stay empty instead turns every tool call into "jq is not
 // installed", which is a valid answer the server really gives -- so the
@@ -93,8 +93,8 @@ func checkRuns(bin string) error {
 }
 
 // jqReleaseAsset names the single-file binary for this platform. jq ships
-// one executable per platform rather than an archive, so there is nothing
-// to unpack.
+// a single executable per platform rather than an archive, so there is
+// nothing to unpack.
 func jqReleaseAsset() (string, error) {
 	switch runtime.GOOS + "/" + runtime.GOARCH {
 	case "linux/amd64":

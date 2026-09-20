@@ -51,12 +51,11 @@ func TestClampLineMatchNearEnd(t *testing.T) {
 }
 
 func TestRuneIndexOfByte(t *testing.T) {
-	// "a" + U+00E9 (2 bytes) + " b": runes a(0) é(1) space(2) b(3).
 	s := "a" + string(rune(0x00e9)) + " b"
 	assert.Equal(t, 0, runeIndexOfByte(s, 0))   // 'a'
 	assert.Equal(t, 1, runeIndexOfByte(s, 1))   // start of the 2-byte rune
 	assert.Equal(t, 2, runeIndexOfByte(s, 3))   // the space, after the 2-byte rune
 	assert.Equal(t, 3, runeIndexOfByte(s, 4))   // 'b'
 	assert.Equal(t, 4, runeIndexOfByte(s, 100)) // past the end clamps to rune length
-	assert.Equal(t, 0, runeIndexOfByte(s, -5))  // negative clamps to 0
+	assert.Equal(t, 0, runeIndexOfByte(s, -5))
 }
