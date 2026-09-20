@@ -1,0 +1,30 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Breaks the livelock where a re-firing Stop gate meets an identical reply: refuses one stop per session when a turn's closing message repeats the one before it, and names the checks to run instead",
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"command": "${CLAUDE_PLUGIN_ROOT}/build/no-repeat-reply",
+						"type": "command"
+					}
+				]
+			}
+		]
+	},
+	"keywords": [
+		"stop",
+		"hook",
+		"livelock",
+		"loop",
+		"repeat",
+		"wedge",
+		"gate",
+		"transcript"
+	],
+	"name": "no-repeat-reply",
+	"version": "1527"
+}
