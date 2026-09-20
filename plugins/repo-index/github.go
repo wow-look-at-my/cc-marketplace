@@ -138,9 +138,9 @@ func (c *client) login() string {
 	return user.Login
 }
 
-// repos lists an owner's repositories. It tries the org endpoint first and
-// falls back to the user endpoint, because the caller cannot know which an
-// owner is without another request.
+// repos lists an owner's repositories. It tries the org endpoint earliest
+// and falls back to the user endpoint, because the caller cannot know
+// which an owner is without another request.
 func (c *client) repos(owner string) ([]repo, error) {
 	orgErr := error(nil)
 	for _, shape := range []string{"/orgs/%s/repos", "/users/%s/repos"} {

@@ -1,7 +1,3 @@
-// server.go implements the MCP protocol layer: newline-delimited JSON-RPC
-// 2.0 over stdio, exactly as claude-code frames it (one JSON object per
-// line, trailing \r tolerated, all logging on stderr — never stdout).
-//
 // This file is tool-agnostic glue. A sibling plugin (e.g. grep) should be
 // able to copy it verbatim and only swap the mcpTool implementation wired
 // up in main.go.
@@ -17,11 +13,8 @@ import (
 	"strings"
 )
 
-// defaultProtocolVersion is used when the client does not send one.
-// claude-code 2.1.207 sends "2025-11-25" and accepts it back.
 const defaultProtocolVersion = "2025-11-25"
 
-// JSON-RPC 2.0 error codes.
 const (
 	codeParseError     = -32700
 	codeInvalidRequest = -32600
@@ -67,9 +60,9 @@ type toolAnnotations struct {
 	ReadOnlyHint bool `json:"readOnlyHint"`
 }
 
-// toolListEntry is one element of the tools/list response. InputSchema is
-// raw JSON so the property order the model sees matches the builtin
-// byte-for-byte (Go maps would alphabetize it).
+// toolListEntry is a single element of the tools/list response.
+// InputSchema is raw JSON so the property order the model sees matches
+// the builtin byte-for-byte (Go maps would alphabetize it).
 type toolListEntry struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
@@ -195,8 +188,6 @@ func (s *server) handleInitialize(req *rpcRequest) {
 			Version string `json:"version"`
 		} `json:"clientInfo"`
 	}
-	// Tolerate absent or malformed params: everything stays zero-valued
-	// and the gate falls back to its unknown-client behavior.
 	_ = json.Unmarshal(req.Params, &params)
 	s.clientName = params.ClientInfo.Name
 	s.clientVersion = params.ClientInfo.Version

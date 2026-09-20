@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The stylesheet this plugin exists because of: no `a` rule, the same block
-// under five selectors, and a session about to write a sixth.
 const dashboardCSS = `
 :root { --accent: #2f81f7; }
 #setup-section a:not(.btn) { color: var(--accent); text-decoration: none; }
@@ -53,7 +51,7 @@ func TestFindsTheRepeatedLinkBlock(t *testing.T) {
 	// which rules are actually identical.
 	require.NotContains(t, sels, "a.gh-slug")
 
-	// Single-declaration hover bodies: four copies, well past the threshold.
+	// Single-declaration hover bodies: copies, well past the threshold.
 	h := groupWith(t, groups, "text-decoration: underline")
 	require.Len(t, h.Rules, 4)
 }

@@ -202,9 +202,9 @@ func TestToolsCallInvalidArguments(t *testing.T) {
 	}
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// One server per subtest: a pipeClient carries a request and
-			// its response on one pipe, so two subtests sharing one read
-			// each other's answers.
+			// A single server per subtest: a pipeClient carries a
+			// request and its response on a single pipe, so subtests
+			// sharing a single read each other's answers.
 			c := startServer(t, testTool(t, t.TempDir()))
 			c.handshake("claude-code", "2.1.207")
 			req := fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"Glob","arguments":%s}}`, 10+i, tc.args)

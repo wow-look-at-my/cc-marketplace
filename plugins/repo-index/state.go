@@ -38,9 +38,7 @@ func readState(dir, sessionID string) map[string]bool {
 	return seen
 }
 
-// writeState records the full set for the session. The error travels to the
-// caller: the once-per-session promise is the whole feature, so a lost record
-// is worth a word on stderr rather than silence.
+// writeState records the full set for the session.
 func writeState(dir, sessionID string, seen map[string]bool) error {
 	path := statePath(dir, sessionID)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
