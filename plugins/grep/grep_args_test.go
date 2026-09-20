@@ -151,7 +151,7 @@ func TestJSSliceUnits(t *testing.T) {
 	assert.Empty(t, jsSlice(items, 3, 1))             // end < start
 	assert.Equal(t, []int{4}, jsSlice(items, -1, 99)) // negative from end
 	assert.Equal(t, []int{0, 1}, jsSlice(items, -99, 2))
-	assert.Equal(t, []int{0, 1}, jsSlice(items, 0, 2.9)) // trunc toward zero
+	assert.Equal(t, []int{0, 1}, jsSlice(items, 0, 2.9)) // trunc toward
 	assert.Equal(t, []int{0, 1, 2}, jsSlice(items, 0, -2))
 }
 
@@ -160,7 +160,7 @@ func TestPaginateUnits(t *testing.T) {
 	lim := func(f float64) *float64 { return &f }
 
 	out, applied := paginate(items, nil, 0)
-	assert.Equal(t, items, out) // default 250 covers everything
+	assert.Equal(t, items, out)
 	assert.Nil(t, applied)
 
 	out, applied = paginate(items, lim(2), 0)
@@ -173,7 +173,6 @@ func TestPaginateUnits(t *testing.T) {
 	assert.Equal(t, items, out)
 	assert.Nil(t, applied)
 
-	// 0 = unlimited, offset still honored.
 	out, applied = paginate(items, lim(0), 1)
 	assert.Equal(t, []string{"b", "c", "d"}, out)
 	assert.Nil(t, applied)

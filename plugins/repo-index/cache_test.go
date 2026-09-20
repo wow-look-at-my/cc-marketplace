@@ -47,7 +47,7 @@ func TestTheIndexIsReadableOnlyByItsOwner(t *testing.T) {
 }
 
 // A temporary file is a real file for as long as it exists. It must not be the
-// one moment the index is world readable.
+// thing moment the index is world readable.
 func TestTheIndexIsNeverBrieflyWorldReadable(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", "")
 	home := t.TempDir()

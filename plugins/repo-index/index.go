@@ -6,30 +6,30 @@ import (
 	"strings"
 )
 
-// Repo is one entry in the built index. Every field comes from GitHub: the
-// description is the repository's own, and the match phrases are its name and
-// its topics. Nothing here is written by hand, so nothing here can disagree
-// with the repository it describes.
+// Repo is a single entry in the built index. Every field comes from GitHub:
+// the description is the repository's own, and the match phrases are its name
+// and its topics. Nothing here is written by hand, so nothing here can
+// disagree with the repository it describes.
 type Repo struct {
 	Name        string `json:"name"`
 	URL         string `json:"url"`
 	Description string `json:"description"`
 	// Match holds identifiers: the repository's name, the parts of it, and
-	// the topics its owner set. A prompt that says one of these means this
+	// the topics its owner set. A prompt that says any of these means this
 	// repository.
 	Match []string `json:"match"`
-	// Terms holds words taken from the description. A prompt that says one of
+	// Terms holds words taken from the description. A prompt that says any of
 	// these may mean this repository, or may just be English, so a term is
 	// worth less than an identifier. See match().
 	Terms []string `json:"terms"`
 }
 
-// maxDescription keeps one entry to about three lines of prompt.
+// maxDescription keeps a single entry to about lines of prompt.
 const maxDescription = 240
 
 // genericTerms are words that would match most prompts, so a repository named
-// after one earns nothing by matching. This list is about English and software
-// in general. It says nothing about any particular repository.
+// after a single earns nothing by matching. This list is about English and
+// software in general. It says nothing about any particular repository.
 var genericTerms = set.Of[string]("api", "app", "apps", "code", "common",
 	"config", "core", "data", "demo", "dev",
 	"docs", "example", "examples", "helper",
@@ -108,13 +108,12 @@ func buildIndex(raw []repo, readme describer, readmeBudget int) ([]Repo, buildSt
 	return out, stats
 }
 
-// maxDerived caps how many words a description contributes, so one wordy
-// README cannot crowd out every other repository.
+// maxDerived caps how many words a description contributes, so a single
+// wordy README cannot crowd out every other repository.
 const maxDerived = 8
 
 // rarityCut is the share of the index a word may appear in and still count as
-// distinctive. A word in one repository's description identifies it; a word in
-// a tenth of them identifies nothing.
+// distinctive.
 const rarityCut = 0.02
 
 // addDistinctiveTerms lets a repository match on the words that only it uses.
@@ -157,10 +156,10 @@ func addDistinctiveTerms(repos []Repo) {
 
 var word = regexp.MustCompile(`[a-z][a-z0-9]{2,}`)
 
-// tokens lowercases the text and keeps every word of three characters or
-// more. There is no length rule beyond that on purpose: rarity already
-// removes the common words, and a short word can be the whole point -- "xsd"
-// is three characters and names exactly one repository.
+// tokens lowercases the text and keeps every word of characters or more.
+// There is no length rule beyond that on purpose: rarity already removes the
+// common words, and a short word can be the whole point -- "xsd" is
+// characters and names exactly a single repository.
 func tokens(text string) []string {
 	var out []string
 	for _, w := range word.FindAllString(strings.ToLower(text), -1) {
@@ -184,7 +183,7 @@ func unique(in []string) []string {
 }
 
 // phrasesFor derives what a prompt must say for this repository to be
-// relevant. It returns two tiers.
+// relevant. It returns tiers.
 //
 // The identifiers are the whole name, the same name spaced, and the topics the
 // owner set. Each of those names this repository and nothing else.
@@ -208,7 +207,7 @@ func phrasesFor(r repo) (identifiers, parts []string) {
 	if len(words) > 1 {
 		keep(strings.Join(words, " "), &identifiers)
 	}
-	// Any run of two adjacent words in the name is still the name, and people
+	// Any run of adjacent words in the name is still the name, and people
 	// shorten names: someone asking about "pr preview" means pr-preview-action.
 	for i := 0; i+1 < len(words); i++ {
 		keep(words[i]+" "+words[i+1], &identifiers)
@@ -227,8 +226,8 @@ func phrasesFor(r repo) (identifiers, parts []string) {
 	return identifiers, parts
 }
 
-// summarize takes the first real sentence of a README: no heading, no badge,
-// no HTML comment, and no markdown link syntax.
+// summarize takes the earliest real sentence of a README: no heading, no
+// badge, no HTML comment, and no markdown link syntax.
 func summarize(readme string) string {
 	if readme == "" {
 		return ""

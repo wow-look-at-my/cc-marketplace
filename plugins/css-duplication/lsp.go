@@ -16,8 +16,8 @@ import (
 
 // A language server, not a hook: diagnostics arrive in context on their own
 // after an edit instead of a message shouted at the end of a tool call. The
-// detector is shared with nothing else to keep the two in agreement -- css.go
-// is the single implementation.
+// detector is shared with nothing else to keep both in agreement -- css.go is
+// the single implementation.
 
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -55,7 +55,7 @@ type relatedInfo struct {
 
 type diagnostic struct {
 	Range              rng           `json:"range"`
-	Severity           int           `json:"severity"` // 2 = Warning
+	Severity           int           `json:"severity"`
 	Source             string        `json:"source"`
 	Message            string        `json:"message"`
 	RelatedInformation []relatedInfo `json:"relatedInformation,omitempty"`
@@ -68,7 +68,7 @@ type textDocumentItem struct {
 
 // Server holds the open documents. A language server is long-lived and is
 // spoken to concurrently in principle, so the map is guarded even though the
-// client drives it from one connection.
+// client drives it from a single connection.
 type Server struct {
 	out io.Writer
 
@@ -87,8 +87,7 @@ const (
 
 // stylesheetExts is deliberately narrow, and matches what .lsp.json registers.
 // A preprocessor's nesting changes what a duplicate body MEANS (`&:hover`
-// under two parents is not a repeated rule), so this parser only claims plain
-// CSS.
+// under parents is not a repeated rule), so this parser only claims plain CSS.
 var stylesheetExts = set.Of[string](".css")
 
 // Serve runs the stdio JSON-RPC loop until the stream ends or `exit` arrives.
@@ -207,9 +206,9 @@ func (s *Server) dispatch(msg rpcMessage) (stop bool, result any, rerr *rpcError
 func initializeResult() map[string]any {
 	return map[string]any{
 		"capabilities": map[string]any{
-			// 1 = full document sync. The detector needs the whole stylesheet
-			// anyway (a duplicate is a relationship between distant rules), so
-			// incremental sync would buy nothing but bookkeeping.
+			// The detector needs the whole stylesheet anyway (a duplicate is a
+			// relationship between distant rules), so incremental sync would
+			// buy nothing but bookkeeping.
 			"textDocumentSync": map[string]any{
 				"openClose": true,
 				"change":    1,
@@ -238,8 +237,8 @@ func (s *Server) publish(uri string) {
 	})
 }
 
-// diagnose is the whole point: one diagnostic per copy, each naming the other
-// selectors carrying the identical block, with the fix in the message.
+// diagnose is the whole point: a single diagnostic per copy, each naming the
+// other selectors carrying the identical block, with the fix in the message.
 func (s *Server) diagnose(uri string) []diagnostic {
 	s.mu.Lock()
 	text, ok := s.docs[uri]
@@ -267,13 +266,10 @@ func (s *Server) diagnose(uri string) []diagnostic {
 				Range:    selectorRange(lines, r),
 				Severity: severityWarning,
 				Source:   diagnosticSource,
-				// Terse on purpose, and said in full exactly ONCE per finding.
-				// The client concatenates diagnostics into one block, keeps ten
-				// per file and truncates at 4000 characters, so restating the
-				// body and the sibling list on every copy would spend a
-				// finding's whole budget on repeating itself. The first copy
-				// carries the detail; the rest point at it, which is also how a
-				// human reads it -- one explanation, several markers.
+				// Terse on purpose, and said in full exactly a single time per
+				// finding. the earliest copy carries the detail; the rest point
+				// at it, which is also how a human reads it -- a single
+				// explanation, several markers.
 				Message:            groupMessage(g, i, body),
 				RelatedInformation: related,
 			})
@@ -283,12 +279,12 @@ func (s *Server) diagnose(uri string) []diagnostic {
 }
 
 // maxNamedSiblings bounds the "also on" list. A table rule can share its body
-// with a dozen selectors, and the tail of that list teaches nothing the count
-// does not -- while it does crowd out the next finding.
+// with a selectors, and the tail of that list teaches nothing the count does
+// not -- while it does crowd out the next finding.
 const maxNamedSiblings = 3
 
-// groupMessage writes the finding once, on its first copy, and makes every
-// later copy a pointer back to it.
+// groupMessage writes the finding a single time, on its earliest copy, and
+// makes every later copy a pointer back to it.
 func groupMessage(g Group, i int, body string) string {
 	if i > 0 {
 		return fmt.Sprintf("same block as line %d -- %d copies; hoist to one rule (/docs:css-cascade)",
@@ -307,17 +303,14 @@ func groupMessage(g Group, i int, body string) string {
 		body, strings.Join(named, ", "), len(g.Rules))
 }
 
-// selectorRange points at the selector text itself when it can be found on its
-// line, and at the whole line otherwise -- a diagnostic with a bogus range is
-// worse than a coarse one.
 func selectorRange(lines []string, r Rule) rng {
 	idx := r.Line - 1
 	if idx < 0 || idx >= len(lines) {
 		return rng{}
 	}
 	line := lines[idx]
-	// A multi-selector rule is stored whitespace-collapsed, so match its first
-	// token rather than the reassembled string.
+	// A multi-selector rule is stored whitespace-collapsed, so match its
+	// earliest token rather than the reassembled string.
 	needle := r.Selector
 	if i := strings.IndexAny(needle, ",\n"); i > 0 {
 		needle = needle[:i]
@@ -378,8 +371,8 @@ func (s *Server) send(msg rpcMessage) {
 	fmt.Fprintf(s.out, "Content-Length: %d\r\n\r\n%s", len(body), body)
 }
 
-// readMessage reads one LSP frame: headers, blank line, then Content-Length
-// bytes of body.
+// readMessage reads a single LSP frame: headers, blank line, then
+// Content-Length bytes of body.
 func readMessage(r *bufio.Reader) ([]byte, error) {
 	length := -1
 	for {

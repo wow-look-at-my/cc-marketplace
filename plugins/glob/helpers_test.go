@@ -79,7 +79,7 @@ func wantText(t *testing.T, got, want string) {
 }
 
 // writeFakeRg writes an executable shell script standing in for ripgrep
-// and returns its path, once the kernel will actually start it.
+// and returns its path, a single time the kernel will actually start it.
 //
 // Writing a file and executing it straight away races every OTHER test in
 // this package that forks. A child between fork and exec holds a copy of
@@ -100,7 +100,7 @@ func writeFakeRg(t *testing.T, script string) string {
 	for {
 		// Start, never Run: the answer is whether the kernel will EXEC this
 		// file, and some of these fakes stream until they are killed. Waiting
-		// for one to finish would hang the test this is meant to protect.
+		// for a single to finish would hang the test this is meant to protect.
 		cmd := exec.Command(p, "--fake-rg-startup-probe")
 		err := cmd.Start()
 		if err == nil {
@@ -176,7 +176,7 @@ func (c *pipeClient) recv() map[string]any {
 	return m
 }
 
-// roundTrip sends a raw request line and decodes the one response.
+// roundTrip sends a raw request line and decodes the thing response.
 func (c *pipeClient) roundTrip(raw string) map[string]any {
 	c.t.Helper()
 	c.send(raw)

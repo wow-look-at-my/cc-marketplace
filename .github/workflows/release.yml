@@ -118,6 +118,12 @@ jobs:
       artifact-metadata: write
     steps:
       - uses: actions/checkout@v7
+      # mvdan.cc/sh runs stringer when the fetch completes it, and a missing generator fails the build.
+      - name: Install the generators a dependency's directives need
+        run: |
+          set -euo pipefail
+          go install golang.org/x/tools/cmd/stringer@v0.49.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - uses: wow-look-at-my/go-toolchain@master
         with:
           working-directory: tools/shellwalk
@@ -150,6 +156,14 @@ jobs:
         id: hash
         # Must match the key prepare computes, shellwalk included, or a cached hit is checked against one hash and saved under another.
         run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod') }}${{ contains(fromJSON('["slopfix"]'), matrix.plugin) && format('-{0}', needs.prepare.outputs.slopfix_commit) || '' }}" >> $GITHUB_OUTPUT
+
+      # A dependency runs its own generators when the fetch completes it, and a missing one fails the build.
+      - name: Install the generators a dependency's directives need
+        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+        run: |
+          set -euo pipefail
+          go install golang.org/x/tools/cmd/stringer@v0.49.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       # see docs/ci-yaml-notes.md#release-build-binary-format-and-action-pin
       - name: Build Go plugin

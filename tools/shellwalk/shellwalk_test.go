@@ -9,8 +9,8 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// argv parses one command and renders its words, so a case reads as the command
-// a session would actually type.
+// argv parses a single command and renders its words, so a case reads as the
+// command a session would actually type.
 func argv(t *testing.T, command string) []Word {
 	t.Helper()
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
@@ -64,7 +64,7 @@ func TestASpellingResolvesToTheProgramItNames(t *testing.T) {
 }
 
 // Each of these left the wrapper's own operand where the program should be
-// before the two plugins shared one implementation.
+// before both plugins shared a single implementation.
 func TestAWrapperValueNeverStandsInForTheProgram(t *testing.T) {
 	cases := map[string]string{
 		"env FOO=1 python3 x.py":       "python3",
