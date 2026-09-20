@@ -6,15 +6,11 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// StripWrappers peels the layers that stand between the words as written and
-// the program that actually runs, so one rule for sed covers `sudo -E env
-// FOO=1 sed`, `xargs sed` and `timeout 5 sed` alike. Enumerating spellings of a
-// program can never be finished; this resolves instead.
+// Enumerating spellings of a program can never be finished; this resolves
+// instead.
 //
 // A wrapper that takes its own VALUE flag has that flag's value dropped with
-// it. Without that, `nice -n 10 sed -i f` leaves `10` where the program should
-// be and the sed behind it is never seen at all -- the same hole `timeout 5
-// python` opens, one operand instead of one flag value.
+// it.
 func StripWrappers(argv []Word) []Word {
 	for len(argv) > 0 {
 		switch CommandName(argv[0].Text) {
@@ -128,7 +124,7 @@ func ResolveProgram(argv []Word) (string, []Word) {
 	return CommandName(eff[0].Text), eff[1:]
 }
 
-// DropN drops the first n words, returning nil rather than a short slice.
+// DropN drops the earliest n words, returning nil rather than a short slice.
 func DropN(argv []Word, n int) []Word {
 	if len(argv) <= n {
 		return nil
