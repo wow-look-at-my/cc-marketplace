@@ -4,9 +4,6 @@ on:
   push:
     # Every branch, no tag: this workflow pushes a plugin/*/v* tag per release, which must not re-enter it.
     branches: ["**"]
-  # The slopfix plugin ships a binary fetched from buildhost, so a slopfix release changes what it would package while nothing here moves. Only this brings that release to installed plugins.
-  schedule:
-    - cron: "17 * * * *"
   workflow_dispatch:
 
 # Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
