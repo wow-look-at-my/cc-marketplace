@@ -4,6 +4,7 @@ on:
   push:
     # Every branch, no tag: this workflow pushes a plugin/*/v* tag per release, which must not re-enter it.
     branches: ["**"]
+  workflow_dispatch:
 
 # Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
 concurrency: {group: 'release-${{ github.ref }}'}
@@ -22,7 +23,7 @@ jobs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
-      slopfix_commit: ${{ steps.slopfix.outputs.commit }}
+      slopfix_version: ${{ steps.slopfix.outputs.version }}
       has_build: ${{ steps.split.outputs.has_build }}
     steps:
       - uses: actions/checkout@v7
@@ -39,12 +40,18 @@ jobs:
       - name: Script tests
         run: npx tsx --test ".github/scripts/**/*.test.ts"
 
-      # Three plugins ship a slopfix binary they fetch at build time. Nothing under their own directories changes when a rule changes there, so the cache key carries slopfix's head instead.
-      - name: Resolve the slopfix commit
+      # The slopfix plugin fetches its binary at build time and commits no copy, so the cache key carries buildhost's published version rather than slopfix's master head: the head moves at merge and buildhost publishes later, so keying on the head rebuilds against a binary that does not exist yet and the vendor script's probes fail the run.
+      - name: Resolve the published slopfix version
         id: slopfix
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: echo "commit=$(gh api repos/wow-look-at-my/slopfix/commits/master --jq .sha)" >> "$GITHUB_OUTPUT"
+        run: |
+          set -eu
+          location=$(curl -fsSI --connect-timeout 30 "https://dl.pazer.build/slopfix?os=linux&arch=amd64" | tr -d '\r' | grep -i '^location:')
+          version=${location##*v=}
+          if [ -z "$version" ] || [ "$version" = "$location" ]; then
+            echo "buildhost named no version in: ${location}" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
@@ -70,8 +77,8 @@ jobs:
             // shellwalk is compiled into no-work-loss and enhanced-auto-allow through a local replace, so a change there must rebuild them.
             const toolHash = await hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod');
 
-            // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when a rule moves there.
-            const slopfix = steps.slopfix.outputs.commit;
+            // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when buildhost publishes a new one.
+            const slopfix = steps.slopfix.outputs.version;
             const upstream: Record<string, string> = {
               'slopfix': slopfix,
             };
@@ -155,7 +162,7 @@ jobs:
       - name: Compute plugin hash
         id: hash
         # Must match the key prepare computes, shellwalk included, or a cached hit is checked against one hash and saved under another.
-        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod') }}${{ contains(fromJSON('["slopfix"]'), matrix.plugin) && format('-{0}', needs.prepare.outputs.slopfix_commit) || '' }}" >> $GITHUB_OUTPUT
+        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod') }}${{ contains(fromJSON('["slopfix"]'), matrix.plugin) && format('-{0}', needs.prepare.outputs.slopfix_version) || '' }}" >> $GITHUB_OUTPUT
 
       # A dependency runs its own generators when the fetch completes it, and a missing one fails the build.
       - name: Install the generators a dependency's directives need
