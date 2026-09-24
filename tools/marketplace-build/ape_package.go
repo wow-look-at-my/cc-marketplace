@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-// A plugin that ships a binary ships exactly ONE: the single file `--targets
-// cosmo` builds, which runs on Linux, macOS and Windows.
 //
 // That file cannot be the command a manifest names. Claude Code execve()s a
 // hook/MCP/LSP command directly, the kernel answers ENOEXEC, and the spawn
@@ -18,14 +16,12 @@ import (
 // client's log). A shell can run it, so the manifest's path holds the launcher
 // below and the binary sits beside it.
 
-// apeMagic is the build output's first eight bytes.
-//
 // The file is identified by these bytes, NEVER by filename: build/ may hold it
 // under a _cosmo_fat name, under a symlink of that name, or only under
-// <name>_linux_amd64, and all three are byte-identical. This is also what keeps
-// the fail-closed check honest -- a plugin built with the per-platform matrix
-// carries ELF/PE binaries in those same names and no magic anywhere, so it
-// fails rather than shipping a package that runs on some platforms only.
+// <name>_linux_amd64, and each of them are byte-identical. This is also what
+// keeps the fail-closed check honest -- a plugin built with the per-platform
+// matrix carries ELF/PE binaries in those same names and no magic anywhere, so
+// it fails rather than shipping a package that runs on some platforms only.
 const apeMagic = "MZqFpD='"
 
 // apeSuffix names the fat build before go-toolchain copies it into the slots.
@@ -55,7 +51,7 @@ func apeName(pluginName string) string { return pluginName + ".ape" }
 //
 // It fails closed when a build/ directory exists but holds no APE: that means
 // the plugin was built with the per-platform matrix instead of `--targets
-// cosmo`, and silently shipping those binaries would restore the six-copy
+// cosmo`, and silently shipping those binaries would restore the copy
 // packages this replaced -- on some platforms only, which is worse than a
 // clean failure.
 func stageBinaries(cookedDir, pluginName string) error {
@@ -150,8 +146,6 @@ func hasBinary(cookedDir string) bool {
 }
 
 // executableFiles lists the files under dir that carry the executable bit.
-// git preserves mode 0755 in a tag's tree and the plugin installer copies it
-// through, so this is what makes the shipped launcher runnable on the far side.
 func executableFiles(dir string) ([]string, error) {
 	var out []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
