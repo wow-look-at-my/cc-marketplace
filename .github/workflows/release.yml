@@ -19,6 +19,8 @@ jobs:
       contents: write
       actions: read
       checks: read
+      deployments: write
+      artifact-metadata: write
     outputs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
@@ -122,6 +124,7 @@ jobs:
       contents: write
       actions: read
       checks: read
+      deployments: write
       artifact-metadata: write
     steps:
       - uses: actions/checkout@v7
@@ -134,7 +137,6 @@ jobs:
       - uses: wow-look-at-my/go-toolchain@master
         with:
           working-directory: tools/shellwalk
-          autorelease: 'false'
 
   build:
     needs: prepare
@@ -147,6 +149,7 @@ jobs:
       contents: write
       actions: read
       checks: read
+      deployments: write
       artifact-metadata: write
     strategy:
       fail-fast: false
@@ -179,8 +182,6 @@ jobs:
         with:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
-          # autorelease defaults true (needs deployments/artifact-metadata write) but plugins publish via orphan tag, not buildhost -- keep it false.
-          autorelease: 'false'
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -246,6 +247,8 @@ jobs:
       contents: write
       actions: read
       checks: read
+      deployments: write
+      artifact-metadata: write
     steps:
       - uses: actions/checkout@v7
 
