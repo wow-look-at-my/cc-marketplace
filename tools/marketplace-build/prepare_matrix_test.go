@@ -45,6 +45,7 @@ func TestIsIncludedInMarketplace_WrongType(t *testing.T) {
 }
 
 func TestRunPrepareMatrix(t *testing.T) {
+	t.Serial()
 	tmpDir := t.TempDir()
 	pluginsDir := filepath.Join(tmpDir, "plugins")
 
@@ -77,6 +78,7 @@ func TestRunPrepareMatrix(t *testing.T) {
 }
 
 func TestRunPrepareMatrix_NoPluginsDir(t *testing.T) {
+	t.Serial()
 	tmpDir := t.TempDir()
 
 	origRoot := repoRoot
