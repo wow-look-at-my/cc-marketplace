@@ -45,9 +45,6 @@ func TestReadPackagedPlugins(t *testing.T) {
 	require.Equal(t, "1.0.0", plugins[1].manifest.Version)
 }
 
-// A plugin whose release output can't be read is a FAILED RELEASE, not one to
-// skip: warning and continuing published a marketplace.json with that plugin
-// missing, so nobody could install it and every check stayed green.
 func TestReadPackagedPlugins_NoManifest(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "broken"), 0755))

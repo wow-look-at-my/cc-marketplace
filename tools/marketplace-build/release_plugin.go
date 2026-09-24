@@ -69,9 +69,9 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("hook validation failed: %w", err)
 	}
 
-	// A plugin that ships a binary ships exactly one, plus the launcher the
-	// manifests already name (see ape_package.go for why the binary cannot be
-	// the command itself).
+	// A plugin that ships a binary ships exactly a single plus the launcher
+	// the manifests already name (see ape_package.go for why the binary
+	// cannot be the command itself).
 	if err := stageBinaries(tmpDir, pluginName); err != nil {
 		return fmt.Errorf("failed to stage plugin binary: %w", err)
 	}
@@ -103,7 +103,7 @@ type releaseMetadata struct {
 }
 
 // releaseVersion returns a monotonically increasing integer version for the
-// current build. Uses GITHUB_RUN_NUMBER when set (CI), otherwise 1.
+// current build.
 func releaseVersion() int {
 	if v := os.Getenv("GITHUB_RUN_NUMBER"); v != "" {
 		var n int
