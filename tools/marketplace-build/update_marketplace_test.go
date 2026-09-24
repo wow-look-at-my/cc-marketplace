@@ -213,6 +213,7 @@ func TestMcpServersFromManifest(t *testing.T) {
 }
 
 func TestRunUpdateMarketplace(t *testing.T) {
+	t.Serial()
 	tmpDir := t.TempDir()
 	claudePluginDir := filepath.Join(tmpDir, ".claude-plugin")
 	require.NoError(t, os.MkdirAll(claudePluginDir, 0755))
@@ -252,6 +253,7 @@ func TestRunUpdateMarketplace(t *testing.T) {
 }
 
 func TestRunUpdateMarketplace_NoInputFlag(t *testing.T) {
+	t.Serial()
 	origInput := updateMarketplaceInput
 	updateMarketplaceInput = ""
 	t.Cleanup(func() { updateMarketplaceInput = origInput })
