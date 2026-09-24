@@ -20,13 +20,14 @@ Diagnostics drain into an attachment on the NEXT turn, so the prompt has to forc
 
 ## go-toolchain-permission-grants
 
-`wow-look-at-my/go-toolchain@master` needs four grants, and fails without them:
+`wow-look-at-my/go-toolchain@master` fails without each of these grants:
 
 - `id-token: write` — OIDC, for secret-server and buildhost.
 - `contents: write` — it submits a dependency-graph snapshot. GitHub rejects the submission under `contents: read`.
 - `actions: read` and `checks: read` — its embedded no-`all-builds` guard scans the run's jobs and the head commit's check runs, and fails closed when it cannot.
+- `deployments: write` and `artifact-metadata: write` — it publishes every executable binary it builds to buildhost, and registers each publish. It has no input to turn that off.
 
-A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list all four.
+A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list every one of them.
 
 ## composite-action-caller-permissions
 
@@ -39,8 +40,6 @@ A composite action cannot request permissions. It runs with whatever the calling
 ## release-build-binary-format-and-action-pin
 
 `targets: cosmo` is not a size optimization. The fat APE is the only native output the pinned action still emits, since the host-native build path was removed from `v1`. One file covers Linux, macOS and Windows, and `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the shipping layout.
-
-`autorelease: 'false'` because plugins publish as git orphan tags, not to buildhost. Leaving it on will demand `deployments`/`artifact-metadata` write for an upload nothing consumes.
 
 ## marketplace-json-replacement-and-a-stale-cache-key
 

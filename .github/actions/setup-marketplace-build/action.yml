@@ -36,8 +36,6 @@ runs:
       if: steps.binary.outputs.exists != 'true'
       with:
         working-directory: "tools/marketplace-build"
-        # An internal CI helper, not a release artifact.
-        autorelease: "false"
 
 
     - name: Install marketplace-build
