@@ -1,0 +1,38 @@
+name: Refresh slopfix
+
+# buildhost rejects a schedule run's OIDC token, so this run only dispatches release.yml. It dispatches release.yml, whose workflow_dispatch token buildhost accepts.
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # release.yml saves a slopfix cache entry keyed on the vendored version, so an entry with this suffix means that version already shipped.
+      - uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const res = await fetch('https://dl.pazer.build/slopfix?os=linux&arch=amd64', { method: 'HEAD', redirect: 'manual' });
+            const version = new URL(res.headers.get('location') ?? '', 'https://x').searchParams.get('v');
+            if (!version) throw new Error(`buildhost named no slopfix version (HTTP ${res.status}, location ${res.headers.get('location')})`);
+
+            const { owner, repo } = context.repo;
+            const caches = await octokit.paginate(octokit.rest.actions.getActionsCacheList, {
+              owner, repo, ref: 'refs/heads/master', key: 'plugin-slopfix-', per_page: 100,
+            });
+            if (caches.some((c) => c.key?.endsWith(`-${version}`))) {
+              core.info(`slopfix v${version} is already released`);
+              return;
+            }
+
+            await octokit.rest.actions.createWorkflowDispatch({
+              owner, repo, workflow_id: 'release.yml', ref: 'master', inputs: { publish: 'true' },
+            });
+            core.info(`dispatched release.yml to ship slopfix v${version}`);
+

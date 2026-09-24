@@ -171,6 +171,8 @@ When you push to any branch, CI will:
 5. Update `marketplace.json` with the new version
 6. Smoke-test the published marketplace by driving real Claude Code to `claude plugin marketplace add` + `install` + `update` **every** plugin (the `smoke-test` job in `release.yml`).
 
+A manual `workflow_dispatch` of `release.yml` builds without publishing unless `publish` is set.
+
 **You do not need to manually edit marketplace.json** - CI handles it automatically.
 
 ## Build & Release Process

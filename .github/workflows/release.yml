@@ -5,6 +5,11 @@ on:
     # Every branch, no tag: this workflow pushes a plugin/*/v* tag per release, which must not re-enter it.
     branches: ["**"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish like a push does. refresh-slopfix.yml sets this.
+        type: boolean
+        default: false
 
 # Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
 concurrency: {group: 'release-${{ github.ref }}'}
@@ -204,7 +209,7 @@ jobs:
 
       # The cooked dir is published as-is; version comes from release-plugin (not auto-increment) so the tag and manifest agree.
       - name: Publish orphan tag
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.publish
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
           source: ${{ steps.release.outputs.source_dir }}
@@ -234,7 +239,7 @@ jobs:
   publish-marketplace:
     needs: [prepare, build]
     if: >-
-      github.event_name == 'push' &&
+      (github.event_name == 'push' || inputs.publish) &&
       needs.prepare.outputs.all_plugins != '[]' &&
       needs.prepare.outputs.all_plugins != '' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
@@ -336,7 +341,7 @@ jobs:
   # see docs/ci-yaml-notes.md#smoke-test-job-rationale
   smoke-test:
     needs: [publish-marketplace]
-    if: ${{ github.event_name == 'push' && needs.publish-marketplace.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || inputs.publish) && needs.publish-marketplace.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
