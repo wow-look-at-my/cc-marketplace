@@ -131,7 +131,6 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 	}
 
 	for _, p := range plugins {
-		displayVersion := strings.SplitN(p.manifest.Version, ".", 2)[0]
 		// A git source, not npm: `claude plugin install` clones the plugin's
 		// orphan tag (`git clone --depth 1 --branch <tag>`), so installing needs
 		// git -- which Claude Code already requires -- and never node or npm.
@@ -142,7 +141,7 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 		// `url` with an explicit https:// URL, NOT `github` with owner/repo.
 		entry := map[string]interface{}{
 			"name":    p.name,
-			"version": displayVersion,
+			"version": p.manifest.Version,
 			"source": map[string]interface{}{
 				"source": "url",
 				"url":    fmt.Sprintf("https://github.com/%s.git", pluginRepo),
