@@ -96,8 +96,6 @@ jobs:
           working-directory: plugins/css-duplication
           # Same build release.yml makes, because the cook below only stages a fat APE.
           targets: cosmo
-          # Major 0 keeps these below release.yml's versions, which share the project.
-          autorelease_args: version=0.${{ github.run_attempt }}.${{ github.run_number }}
 
       - uses: ./.github/actions/setup-marketplace-build
 

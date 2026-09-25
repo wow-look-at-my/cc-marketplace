@@ -182,8 +182,6 @@ jobs:
         with:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
-          # The older plugin projects on buildhost are semver and refuse a release with no version.
-          autorelease_args: version=${{ github.run_number }}.${{ github.run_attempt }}.0
 
       - uses: ./.github/actions/setup-marketplace-build
 
