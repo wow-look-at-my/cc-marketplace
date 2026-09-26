@@ -10,7 +10,7 @@ One job per plugin whose contract is with the client, not with its own input.
 
 ## css-duplication-lsp-job
 
-Builds the language server, cooks the plugin the way a release does, then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
+A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
 
 Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
 
