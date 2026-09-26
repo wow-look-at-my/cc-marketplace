@@ -1,0 +1,130 @@
+---
+description: Read before designing how software gets INTO a container - choosing a base image, deciding whether something must be a layer or a mounted volume, splitting one image into several, or wiring the CI that builds them. Corrects the reflex of treating an image as a file-delivery format and hand-rolling what layer sharing already does. For Dockerfile syntax itself, read /docs:dockerfile.
+---
+
+# Docker images: what layers actually are, and what that means for design
+
+Notes to self. `/docs:dockerfile` covers writing the file. This covers deciding what the images must BE. Written after getting it wrong in a real codebase and being corrected by the person who owned it.
+
+## The failure this exists to prevent
+
+A host ran agent sessions in containers. There was one big runtime image (terminal, tmux, git, toolchains) and six CLI agents. The design I defended:
+
+- build one "payload" image per agent, each `FROM ubuntu`, containing only that agent's binaries under `/agent`.
+- `docker run` each payload image once, purely to `cp -a /agent/.` into a named volume.
+- start the session from the RUNTIME image with that volume mounted read-only at `/agent`.
+
+So the payload image's own filesystem was never a container root. It existed to carry a directory. Asked why the agents were not simply `FROM` the runtime image, I argued layering will save nothing.
+
+What the copy-into-a-volume design cost, none of which is a byte count:
+
+- a marker file (`/agent/.agent-host-image`) and refresh logic, to answer "is the volume's content still the right version?" -- a question a tag answers.
+- a `docker run` per agent per host, before any session can start.
+- a volume per agent that nothing garbage-collects.
+- weight nobody can see. One agent image shipped 831 MiB against ~95 MiB for its siblings. Layering makes that visible as "this child adds 700 MiB".
+
+Splitting those two apart is the smell.
+
+## Layers, and why the sharing argument is not about your bytes
+
+An image is an ordered stack of layers. Each layer has a SHA256 content identifier, and identical layers are one object on disk:
+
+> "Shared image layers are only stored once in `/var/lib/docker/`"
+> "Docker already has all the layers from the first image, so it doesn't need to
+> pull them again."
+> -- docs.docker.com, Storage drivers
+
+Consequences worth holding onto:
+
+- **A child image's cost is its own layers.** `FROM big-base` then one `RUN` transfers and stores that one layer for anyone who has the base.
+- **Sharing is by digest, not by name.** Two images share a layer when the layer is byte-identical, whatever the tags say. Rebuilding a base non-reproducibly gives a new digest, and every child that referenced it stops sharing.
+- **"Layering saves no bytes here" can be TRUE and still not be the argument.** It was true in the case above. It was also irrelevant. The win is that the daemon does the distribution, versioning and identity, and you delete the code that was doing it by hand.
+- **Layer count is not the metric.** Squashing to save a layer trades away sharing and cache hits.
+
+## Image or volume: the actual test
+
+Ask what the bytes ARE, not how they are shaped.
+
+| The bytes are | Where they belong |
+|---|---|
+| Program files, libraries, a CLI, static assets | A layer. Immutable, versioned by tag/digest, shared. |
+| State the container writes and must survive it | A volume. |
+| Config for one deployment | Env vars, secrets, or a mounted file. |
+| A build tool needed to produce the program files | A builder stage that never ships. |
+
+Reaching for a volume to deliver read-only program files is the wrong direction every time. It is the pattern above, and it always re-implements some of: pull, versioning, garbage collection, integrity, and "is this the version I expect?".
+
+The reverse mistake exists too: baking a database's data directory, a cache, or per-deployment credentials into an image. Anything a running container mutates belongs in a volume, because a layer is copy-on-write per container and vanishes with it.
+
+## What a child image inherits, and what will bite you
+
+`FROM` inherits the base's filesystem AND its configuration. That is the point. It is also where a copy-based design's habits break when you convert it:
+
+- Nothing warns you.
+- **`ENV` is inherited, and becomes the container's environment.** A build-time `ENV HOME=/agent` was harmless while the image was only a carrier. The moment it became the image a container RUNS, it redirected every home-directory lookup. Set build-only variables per-`RUN` (`RUN export HOME=/agent && ...`), never as `ENV`.
+- **`LABEL`, `WORKDIR`, `EXPOSE`, `USER`, `VOLUME` are inherited too.** Inherited labels are useful: a child carrying the base's version label is checkable evidence it really was built on that base.
+- **`ARG` is not inherited the way you expect** -- and a global `ARG` (before the first `FROM`) is the ONLY kind usable in a `FROM` line. Declared after a `FROM` it belongs to that stage, resolves empty in the next `FROM`, and the build fails on an invalid reference. `/docs:dockerfile` has the full scoping table. I have gotten this wrong with the correct answer already written down, so read it rather than reasoning it out.
+
+## Parameterizing the base
+
+A child that must build against different bases (a local dev build vs an exact-SHA published one) takes the base as a global ARG:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+ARG BASE_IMAGE=myapp-runtime          # before the first FROM, or it is unusable below
+FROM ${BASE_IMAGE}
+RUN install-one-thing
+```
+
+Built with `--build-arg BASE_IMAGE=registry.example.com/myapp-runtime:<sha>`.
+
+## CI: build order follows FROM
+
+This is where the design change actually shows up in a pipeline. It is easy to get wrong because a matrix looks so tidy:
+
+- **A base and its children cannot build in parallel.** The children need the base to exist first. That means separate jobs with `needs:`, not one matrix.
+- **The child's builder pulls the base from the REGISTRY**. The base has to be pushed, not merely built, before the child starts.
+- Fix the action.
+- **A stale base is a real failure mode.** If children are rebuilt without the base, they silently keep the old runtime.
+
+## Multi-stage: the toolchain never ships
+
+If producing the program files needs a compiler. The compiler goes in a builder stage and the shipped stage copies the result:
+
+```dockerfile
+ARG BASE_IMAGE=myapp-runtime
+FROM ubuntu:24.04 AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends g++ make python3
+RUN build-the-thing --out /opt/thing
+
+FROM ${BASE_IMAGE}
+COPY --from=builder /opt/thing /opt/thing
+```
+
+The builder stage can be `FROM` anything -- nothing it contains is distributed.
+
+## Before writing the design down, check these
+
+- Am I moving read-only program files with anything other than a layer? Stop.
+- Does the "carrier" image I am about to write ever run as a container? If not. It must be a stage or a base, not an image.
+- Did I compare byte counts and conclude layering is pointless? Byte counts are not the argument. Owning distribution code is.
+- Does the child re-install what the base already has? Delete it -- `apt-get install ca-certificates curl` in a child of an image that has them is pure duplication.
+- Will an inherited `ENV`/`ENTRYPOINT` change how this image runs?
+- Is anything mutable baked into a layer, or any program file in a volume?
+
+## Verify, do not recall
+
+Registry manifests give real numbers without pulling anything:
+
+```sh
+curl -sH "Authorization: Bearer $TOKEN" \
+  -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+  "https://registry.example.com/v2/<project>/manifests/<tag>" |
+  jq '{layers: (.layers|length), mib: (([.config.size]+[.layers[].size]|add)/1048576|round)}'
+```
+
+That is how the 831 MiB outlier above was found -- after it had already shipped. `docker history <image>` attributes size per layer once the image is local.
+
+## Keep this file growing
+
+The correction is worth more written down than remembered. Verify against docs.docker.com, the OCI image-spec, or the observed behavior of a real daemon before writing it. A confidently wrong note in this plugin is worse than no note, because it loads automatically.
