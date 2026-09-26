@@ -52,7 +52,7 @@ Add an entry to the `plugins` array:
       "name": "my-plugin",
       "source": "./my-plugin",
       "description": "What this plugin does",
-      "version": "1.0.0",
+      "version": "1540",
       "author": {
         "name": "Author Name"
       },
@@ -75,7 +75,7 @@ Add an entry to the `plugins` array:
 | Field | Description |
 |-------|-------------|
 | `description` | Brief plugin description |
-| `version` | Semantic version |
+| `version` | Release number, set by CI |
 | `author` | Object with `name` and optional `email` |
 | `homepage` | Documentation URL |
 | `repository` | Source code URL |

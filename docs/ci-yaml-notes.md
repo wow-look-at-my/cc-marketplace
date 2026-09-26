@@ -10,7 +10,7 @@ One job per plugin whose contract is with the client, not with its own input.
 
 ## css-duplication-lsp-job
 
-Builds the language server, cooks the plugin the way a release does, then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
+A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
 
 Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
 
@@ -20,13 +20,14 @@ Diagnostics drain into an attachment on the NEXT turn, so the prompt has to forc
 
 ## go-toolchain-permission-grants
 
-`wow-look-at-my/go-toolchain@master` needs four grants, and fails without them:
+`wow-look-at-my/go-toolchain@master` needs these grants, and fails without them:
 
 - `id-token: write` — OIDC, for secret-server and buildhost.
 - `contents: write` — it submits a dependency-graph snapshot. GitHub rejects the submission under `contents: read`.
 - `actions: read` and `checks: read` — its embedded no-`all-builds` guard scans the run's jobs and the head commit's check runs, and fails closed when it cannot.
+- `deployments: write` and `artifact-metadata: write` — every build publishes to buildhost, registers a GitHub Deployment, and records the upload on the linked-artifacts page. The action has no input that turns this off.Without `deployments: write` the build fails at the step that creates the Deployment.
 
-A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list all four.
+A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list every one of them. A job that runs `setup-marketplace-build` needs them too, because that composite action runs go-toolchain on a cache miss.
 
 ## composite-action-caller-permissions
 
@@ -39,9 +40,6 @@ A composite action cannot request permissions. It runs with whatever the calling
 ## release-build-binary-format-and-action-pin
 
 `targets: cosmo` is not a size optimization. The fat APE is the only native output the pinned action still emits, since the host-native build path was removed from `v1`. One file covers Linux, macOS and Windows, and `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the shipping layout.
-
-`autorelease: 'false'` because plugins publish as git orphan tags, not to buildhost. Leaving it on will demand `deployments`/`artifact-metadata` write for an upload nothing consumes.
-
 ## marketplace-json-replacement-and-a-stale-cache-key
 
 `update-marketplace` writes `marketplace.json` from the cooked trees it is given, replacing the file rather than patching it. A plugin whose tree is absent therefore drops out of the published marketplace silently, and the next `claude plugin update` for it 404s. The loop before that step fails the job instead, naming every plugin with no cooked tree.
