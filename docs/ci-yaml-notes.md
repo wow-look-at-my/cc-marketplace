@@ -21,7 +21,7 @@ do not gate publishing, exactly as they did as a separate workflow.
 
 ## css-duplication-lsp-job
 
-Builds the language server, cooks the plugin the way a release does, then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
+A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
 
 Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
 
@@ -31,13 +31,14 @@ Diagnostics drain into an attachment on the NEXT turn, so the prompt has to forc
 
 ## go-toolchain-permission-grants
 
-`wow-look-at-my/go-toolchain@lkgb` needs four grants, and fails without them:
+`wow-look-at-my/go-toolchain` — `@master` on the shellwalk job, `@lkgb` on the plugin builds — needs these grants, and fails without them:
 
 - `id-token: write` — OIDC, for secret-server and buildhost.
 - `contents: write` — it submits a dependency-graph snapshot. GitHub rejects the submission under `contents: read`.
 - `actions: read` and `checks: read` — its embedded no-`all-builds` guard scans the run's jobs and the head commit's check runs, and fails closed when it cannot.
+- `deployments: write` and `artifact-metadata: write` — every build publishes to buildhost, registers a GitHub Deployment, and records the upload on the linked-artifacts page. Without `deployments: write` the build fails at the step that creates the Deployment.
 
-A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list all four.
+A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list every one of them. A job that runs `setup-marketplace-build` needs them too, because that composite action runs go-toolchain on a cache miss. The exception is `autorelease: 'false'`: the e2e LSP build passes it and needs only the first four.
 
 ## composite-action-caller-permissions
 
@@ -57,7 +58,7 @@ tag: the `v1` branch every workflow used to name no longer exists there, and
 `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the
 shipping layout — the APE plus the launcher every manifest already points at.
 
-`autorelease: 'false'` because plugins publish as git orphan tags, not to buildhost. Leaving it on will demand `deployments`/`artifact-metadata` write for an upload nothing consumes.
+`autorelease: 'false'` on the e2e LSP build, because plugins publish as git orphan tags, not to buildhost. Leaving it on will demand `deployments`/`artifact-metadata` write for an upload nothing consumes. The release build leaves it on — the grants above exist for that upload.
 
 ## plugin-tree-hand-off
 
@@ -80,6 +81,7 @@ and fail with `exports is not defined in ES module scope`.
 Do not replace the loop with a fixed set of download steps. The plugin list is
 whatever `prepare-matrix` finds, and a hard-coded list silently drops a plugin
 added later — the exact failure the section below describes.
+
 
 ## marketplace-json-replacement-and-a-stale-cache-key
 
