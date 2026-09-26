@@ -123,6 +123,7 @@ jobs:
       actions: read
       checks: read
       artifact-metadata: write
+      deployments: write
     steps:
       - uses: actions/checkout@v7
       # mvdan.cc/sh runs stringer when the fetch completes it, and a missing generator fails the build.
@@ -134,7 +135,6 @@ jobs:
       - uses: wow-look-at-my/go-toolchain@master
         with:
           working-directory: tools/shellwalk
-          autorelease: 'false'
 
   build:
     needs: prepare
@@ -148,6 +148,7 @@ jobs:
       actions: read
       checks: read
       artifact-metadata: write
+      deployments: write
     strategy:
       fail-fast: false
       matrix:
@@ -179,8 +180,6 @@ jobs:
         with:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
-          # autorelease defaults true (needs deployments/artifact-metadata write) but plugins publish via orphan tag, not buildhost -- keep it false.
-          autorelease: 'false'
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -204,7 +203,7 @@ jobs:
 
       # The cooked dir is published as-is; version comes from release-plugin (not auto-increment) so the tag and manifest agree.
       - name: Publish orphan tag
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
           source: ${{ steps.release.outputs.source_dir }}
@@ -234,7 +233,7 @@ jobs:
   publish-marketplace:
     needs: [prepare, build]
     if: >-
-      github.event_name == 'push' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && needs.prepare.outputs.has_build == 'true')) &&
       needs.prepare.outputs.all_plugins != '[]' &&
       needs.prepare.outputs.all_plugins != '' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
@@ -336,7 +335,7 @@ jobs:
   # see docs/ci-yaml-notes.md#smoke-test-job-rationale
   smoke-test:
     needs: [publish-marketplace]
-    if: ${{ github.event_name == 'push' && needs.publish-marketplace.result == 'success' }}
+    if: ${{ needs.publish-marketplace.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
