@@ -205,7 +205,7 @@ jobs:
 
       # The cooked dir is published as-is; version comes from release-plugin (not auto-increment) so the tag and manifest agree.
       - name: Publish orphan tag
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'push'
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
           source: ${{ steps.release.outputs.source_dir }}
@@ -347,7 +347,7 @@ jobs:
   publish-marketplace:
     needs: [prepare, build]
     if: >-
-      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && needs.prepare.outputs.has_build == 'true')) &&
+      github.event_name == 'push' &&
       needs.prepare.outputs.all_plugins != '[]' &&
       needs.prepare.outputs.all_plugins != '' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
@@ -451,7 +451,7 @@ jobs:
   # see docs/ci-yaml-notes.md#smoke-test-job-rationale
   smoke-test:
     needs: [publish-marketplace]
-    if: ${{ needs.publish-marketplace.result == 'success' }}
+    if: ${{ github.event_name == 'push' && needs.publish-marketplace.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
