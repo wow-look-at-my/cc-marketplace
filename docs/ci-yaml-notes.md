@@ -25,7 +25,7 @@ Diagnostics drain into an attachment on the NEXT turn, so the prompt has to forc
 - `id-token: write` — OIDC, for secret-server and buildhost.
 - `contents: write` — it submits a dependency-graph snapshot. GitHub rejects the submission under `contents: read`.
 - `actions: read` and `checks: read` — its embedded no-`all-builds` guard scans the run's jobs and the head commit's check runs, and fails closed when it cannot.
-- `deployments: write` and `artifact-metadata: write` — every build publishes to buildhost, registers a GitHub Deployment, and records the upload on the linked-artifacts page. The action has no input that turns this off.Without `deployments: write` the build fails at the step that creates the Deployment.
+- `deployments: write` and `artifact-metadata: write` — every build publishes to buildhost, registers a GitHub Deployment, and records the upload on the linked-artifacts page. The action has no input that turns this off. Without `deployments: write` the build fails at the step that creates the Deployment.
 
 A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list every one of them. A job that runs `setup-marketplace-build` needs them too, because that composite action runs go-toolchain on a cache miss.
 
