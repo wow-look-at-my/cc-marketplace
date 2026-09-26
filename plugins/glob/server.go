@@ -121,7 +121,7 @@ func newServer(in io.Reader, out io.Writer, logf func(string, ...any), name stri
 		out:     out,
 		logf:    logf,
 		name:    name,
-		version: "1.0.0",
+		version: "1",
 		tools:   tools,
 		gateEnv: gateEnv,
 		// Before initialize we have no clientInfo; the gate treats an
