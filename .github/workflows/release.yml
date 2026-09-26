@@ -126,7 +126,6 @@ jobs:
       checks: read
       deployments: write
       artifact-metadata: write
-      deployments: write
     steps:
       - uses: actions/checkout@v7
       # mvdan.cc/sh runs stringer when the fetch completes it, and a missing generator fails the build.
@@ -152,7 +151,6 @@ jobs:
       checks: read
       deployments: write
       artifact-metadata: write
-      deployments: write
     strategy:
       fail-fast: false
       matrix:
