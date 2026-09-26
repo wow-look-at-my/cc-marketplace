@@ -160,7 +160,7 @@ func connect(t *testing.T) *mcp.ClientSession {
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "jq",
-		Version: "1.0.0",
+		Version: "1",
 	}, nil)
 
 	jqTools{path: testJqPath}.register(server)
@@ -365,7 +365,7 @@ func TestJqFileNotFound(t *testing.T) {
 
 func TestJqNoJqInstalled(t *testing.T) {
 	// A server registered with no jq, so nothing another test reads changes.
-	server := mcp.NewServer(&mcp.Implementation{Name: "jq", Version: "1.0.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "jq", Version: "1"}, nil)
 	jqTools{}.register(server)
 
 	ctx := context.Background()
