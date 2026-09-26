@@ -156,7 +156,7 @@ func errorResult(msg string) *mcp.CallToolResult {
 func newServer(tools jqTools) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "jq",
-		Version: "1.0.0",
+		Version: "1",
 	}, nil)
 
 	tools.register(server)

@@ -12,16 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// release-plugin is the whole publishing pipeline for one plugin: cook, check
-// the hooks survived, reduce build/ to the APE and its launcher, and write the
-// manifest the marketplace job reads back. Its pieces are unit-tested
-// individually; these drive the command itself, because the ORDER is the part
-// that breaks -- staging before cooking would delete the binaries it just
-// copied, and writing the manifest before staging would describe a layout that
-// no longer exists.
+// release-plugin is the whole publishing pipeline for a single plugin: cook,
+// check the hooks survived, reduce build/ to the APE and its launcher, and
+// write the manifest the marketplace job reads back. Its pieces are
+// unit-tested individually; these drive the command itself, because the ORDER
+// is the part that breaks -- staging before cooking would delete the binaries
+// it just copied, and writing the manifest before staging would describe a
+// layout that no longer exists.
 
-// fakeRepo builds a repo root holding one plugin and points the package's
-// cached repoRoot at it. Returns the plugin's source directory.
+// fakeRepo builds a repo root holding a single plugin and points the
+// package's cached repoRoot at it. Returns the plugin's source directory.
 func fakeRepo(t *testing.T, name string, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -188,8 +188,7 @@ func TestRunReleasePluginFailsWhenGitDoes(t *testing.T) {
 	}
 }
 
-// Outside CI there is no run number; the release still has to produce a valid
-// version rather than a zero or a crash.
+// Outside CI there is no run number, and the release still gets a valid version.
 func TestReleaseVersionFallsBackOutsideCI(t *testing.T) {
 	t.Setenv("GITHUB_RUN_NUMBER", "")
 	require.Equal(t, 1, releaseVersion())

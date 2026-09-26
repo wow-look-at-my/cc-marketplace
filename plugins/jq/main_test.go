@@ -33,7 +33,6 @@ func connect(t *testing.T) *mcp.ClientSession {
 func connectWith(t *testing.T, tools jqTools) *mcp.ClientSession {
 	t.Helper()
 
-
 	server := newServer(tools)
 
 
@@ -239,7 +238,6 @@ func TestJqNoJqInstalled(t *testing.T) {
 	// An empty path reaches only these handlers, so the tests running
 	// beside this one keep the binary they resolved.
 	session := connectWith(t, jqTools{path: ""})
-
 
 	ctx := context.Background()
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
