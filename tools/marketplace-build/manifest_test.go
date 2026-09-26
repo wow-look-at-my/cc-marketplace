@@ -20,7 +20,7 @@ func readManifest(t *testing.T, dir string) pluginReleaseManifest {
 
 // The manifest is what update-marketplace mirrors into marketplace.json, so
 // the cooked plugin.json and .mcp.json have to travel inside it -- otherwise
-// that job needs a second copy of the tree.
+// that job needs another copy of the tree.
 func TestWriteReleaseManifestCarriesTheCookedManifests(t *testing.T) {
 	cooked := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(cooked, ".claude-plugin"), 0o755))
@@ -75,7 +75,7 @@ func TestWriteReleaseManifestReportsAnUnwritableDir(t *testing.T) {
 	require.Error(t, writeReleaseManifest(filepath.Join(t.TempDir(), "nope"), "glob", "7", "glob#7"))
 }
 
-// The round trip is the contract between the two jobs: release-plugin writes
+// The round trip is the contract between both jobs: release-plugin writes
 // it, update-marketplace reads it back out of the uploaded directory.
 func TestManifestRoundTripsThroughReadPackagedPlugins(t *testing.T) {
 	input := t.TempDir()

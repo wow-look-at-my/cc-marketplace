@@ -7,8 +7,8 @@ import (
 	"sync"
 )
 
-// maxSuggestions caps one prompt's injection. A wall of repos costs the model
-// more attention than it repays.
+// maxSuggestions caps a single prompt's injection. A wall of repos costs the
+// model more attention than it repays.
 const maxSuggestions = 3
 
 // Hit is a repo the prompt matched, with the phrases that matched it.
@@ -38,18 +38,16 @@ func phrasePattern(phrase string) *regexp.Regexp {
 	return re
 }
 
-// identifierWeight is what one name or topic hit is worth. It is the whole
-// threshold on its own: naming a repository is enough to mean it.
+// identifierWeight is what a single name or topic hit is worth. It is the
+// whole threshold on its own: naming a repository is enough to mean it.
 const identifierWeight = 2
 
-// threshold is the score a repository needs before it costs an injection. One
-// description word never reaches it, so a prompt about writing a haiku does
-// not pull in every repository whose README happens to say "write".
+// threshold is the score a repository needs before it costs an injection. a
+// single description word never reaches it, so a prompt about writing a haiku
+// does not pull in every repository whose README happens to say "write".
 const threshold = 2
 
-// match scores every repo against the prompt. An identifier hit counts double
-// a description word, and several hits beat one, so the repository a prompt
-// actually names ranks above one that shares a word with it.
+// match scores every repo against the prompt.
 func match(prompt string, repos []Repo) []Hit {
 	var hits []Hit
 	for _, r := range repos {
@@ -75,7 +73,7 @@ func match(prompt string, repos []Repo) []Hit {
 	return hits
 }
 
-// sortByName keeps the output stable when two repos score the same.
+// sortByName keeps the output stable when repos score the same.
 func sortByName(hits []Hit) {
 	sort.SliceStable(hits, func(a, b int) bool {
 		if hits[a].Score != hits[b].Score {
@@ -86,7 +84,7 @@ func sortByName(hits []Hit) {
 }
 
 // render writes the block that goes into the prompt. It states the repo, the
-// link, and one description, and nothing else.
+// link, and a single description, and nothing else.
 func render(hits []Hit) string {
 	var b strings.Builder
 	b.WriteString("Repositories that look relevant to this request. ")

@@ -1,5 +1,3 @@
-// Command glob is a stdio MCP server restoring the builtin Glob tool that
-// claude-code disabled in 2.1.117, with behavior mirroring 2.1.116.
 package main
 
 import (

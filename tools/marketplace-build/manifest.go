@@ -8,11 +8,6 @@ import (
 	"sort"
 )
 
-// pluginReleaseManifest is what a cooked plugin carries for the marketplace
-// job: which orphan tag now serves it, and the cooked manifests
-// update-marketplace mirrors into marketplace.json so it needs no second copy
-// of the tree.
-//
 // It replaced an npm-tarball manifest. Distribution is a git tag now, so there
 // is no tarball path, no package name and no registry URL -- the tag IS the
 // artifact.
