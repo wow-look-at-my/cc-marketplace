@@ -188,8 +188,7 @@ func TestRunReleasePluginFailsWhenGitDoes(t *testing.T) {
 	}
 }
 
-// Outside CI there is no run number; the release still has to produce a valid
-// version rather than a empty or a crash.
+// Outside CI there is no run number, and the release still gets a valid version.
 func TestReleaseVersionFallsBackOutsideCI(t *testing.T) {
 	t.Setenv("GITHUB_RUN_NUMBER", "")
 	require.Equal(t, 1, releaseVersion())

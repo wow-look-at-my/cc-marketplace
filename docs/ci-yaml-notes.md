@@ -10,7 +10,7 @@ One job per plugin whose contract is with the client, not with its own input.
 
 ## css-duplication-lsp-job
 
-Builds the language server, cooks the plugin the way a release does, then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
+A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
 
 Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
 
@@ -20,14 +20,14 @@ Diagnostics drain into an attachment on the NEXT turn, so the prompt has to forc
 
 ## go-toolchain-permission-grants
 
-`wow-look-at-my/go-toolchain@master` fails without each of these grants:
+`wow-look-at-my/go-toolchain@master` needs these grants, and fails without them:
 
 - `id-token: write` — OIDC, for secret-server and buildhost.
 - `contents: write` — it submits a dependency-graph snapshot. GitHub rejects the submission under `contents: read`.
 - `actions: read` and `checks: read` — its embedded no-`all-builds` guard scans the run's jobs and the head commit's check runs, and fails closed when it cannot.
-- `deployments: write` and `artifact-metadata: write` — it publishes every executable binary it builds to buildhost, and registers each publish. It has no input to turn that off.
+- `deployments: write` and `artifact-metadata: write` — every build publishes to buildhost, registers a GitHub Deployment, and records the upload on the linked-artifacts page. The action has no input that turns this off. Without `deployments: write` the build fails at the step that creates the Deployment.
 
-A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list every one of them.
+A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list every one of them. A job that runs `setup-marketplace-build` needs them too, because that composite action runs go-toolchain on a cache miss.
 
 ## composite-action-caller-permissions
 

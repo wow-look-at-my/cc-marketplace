@@ -69,9 +69,6 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("hook validation failed: %w", err)
 	}
 
-	// A plugin that ships a binary ships exactly a single plus the launcher
-	// the manifests already name (see ape_package.go for why the binary
-	// cannot be the command itself).
 	if err := stageBinaries(tmpDir, pluginName); err != nil {
 		return fmt.Errorf("failed to stage plugin binary: %w", err)
 	}

@@ -155,7 +155,7 @@ func main() {
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "jq",
-		Version: "1.0.0",
+		Version: "1",
 	}, nil)
 
 	jqTools{path: path}.register(server)

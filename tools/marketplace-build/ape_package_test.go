@@ -43,8 +43,6 @@ func TestApeName(t *testing.T) {
 	require.Equal(t, "glob.ape", apeName("glob"))
 }
 
-// The shipping layout is exactly files: the APE under its stable name, and the
-// launcher at the path every manifest already points at.
 func TestStageBinariesShipsTheApeAndItsLauncher(t *testing.T) {
 	cooked := writeBuildDir(t, "glob"+apeSuffix)
 	require.NoError(t, stageBinaries(cooked, "glob"))

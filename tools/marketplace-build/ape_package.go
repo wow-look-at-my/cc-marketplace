@@ -16,12 +16,7 @@ import (
 // client's log). A shell can run it, so the manifest's path holds the launcher
 // below and the binary sits beside it.
 
-// The file is identified by these bytes, NEVER by filename: build/ may hold it
-// under a _cosmo_fat name, under a symlink of that name, or only under
-// <name>_linux_amd64, and each of them are byte-identical. This is also what
-// keeps the fail-closed check honest -- a plugin built with the per-platform
-// matrix carries ELF/PE binaries in those same names and no magic anywhere, so
-// it fails rather than shipping a package that runs on some platforms only.
+// The file is identified by these bytes, NEVER by filename.
 const apeMagic = "MZqFpD='"
 
 // apeSuffix names the fat build before go-toolchain copies it into the slots.
@@ -49,11 +44,7 @@ func apeName(pluginName string) string { return pluginName + ".ape" }
 // layout: the fat APE plus its launcher, and nothing else. Plugins that ship no
 // binary (a skills- or hooks-script-only plugin) are left untouched.
 //
-// It fails closed when a build/ directory exists but holds no APE: that means
-// the plugin was built with the per-platform matrix instead of `--targets
-// cosmo`, and silently shipping those binaries would restore the copy
-// packages this replaced -- on some platforms only, which is worse than a
-// clean failure.
+// It fails closed when a build/ directory exists but holds no APE.
 func stageBinaries(cookedDir, pluginName string) error {
 	buildDir := filepath.Join(cookedDir, "build")
 	entries, err := os.ReadDir(buildDir)
