@@ -74,6 +74,7 @@ jobs:
               else failures.push(`the manifest names "${name}", which slopfix does not define`);
             }
             if (failures.length > 0) core.setFailed(`hooks that reach nothing:\n${failures.join("\n")}`);
+<<<<<<< HEAD
 
   # see docs/ci-yaml-notes.md#css-duplication-lsp-job
   css-duplication-lsp:
@@ -191,3 +192,5 @@ jobs:
             } else {
               core.info("OK: server started, published diagnostics, delivered them, and shut down cleanly");
             }
+=======
+>>>>>>> origin/master
