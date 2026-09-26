@@ -167,7 +167,7 @@ When you push to any branch, CI will:
 1. Detect plugins with `mh.include_in_marketplace: true`
 2. Run `just prebuild` (if available), then the go-toolchain (if `.go` files exist), then `just postbuild` (if available)
 3. Run tests
-4. Create an orphan tag with the built plugin: `plugin/{plugin}/v{version}`
+4. Create an orphan tag with the built plugin: `{plugin}#{version}`
 5. Update `marketplace.json` with the new version
 6. Smoke-test the published marketplace by driving real Claude Code to `claude plugin marketplace add` + `install` + `update` **every** plugin (the `smoke-test` job in `release.yml`).
 
@@ -177,8 +177,8 @@ When you push to any branch, CI will:
 
 Plugins are built and released automatically on push:
 
-- **Tag naming:** `{branch}/{plugin}/v{version}` (e.g., `master/my-plugin/v1.2.3`)
-- **Version bumping:** Patch version auto-increments (1.0.0 → 1.0.1)
+- **Tag naming:** `{plugin}#{version}` (e.g., `my-plugin#1540`), plus the moving `{plugin}#latest`
+- **Versioning:** The version is one integer, the release run number. There is no semver.
 - **Branch isolation:** Each branch has independent version series
 - **Cleanup:** When a branch is deleted, all its tags are removed
 
