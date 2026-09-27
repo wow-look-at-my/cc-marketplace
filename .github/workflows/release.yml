@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish like a push does. refresh-slopfix.yml sets this.
+        description: Publish like a push does. slopfix's CI sets this after each master publish.
         type: boolean
         default: false
 
