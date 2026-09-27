@@ -360,7 +360,9 @@ jobs:
 
   publish-marketplace:
     needs: [prepare, build]
+    # Without !cancelled() the implicit success() skips this job whenever build was skipped, i.e. whenever every plugin came from the cache.
     if: >-
+      !cancelled() && needs.prepare.result == 'success' &&
       (github.event_name == 'push' || inputs.publish) &&
       needs.prepare.outputs.all_plugins != '[]' &&
       needs.prepare.outputs.all_plugins != '' &&
