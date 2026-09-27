@@ -18,22 +18,12 @@ The `claude-code-source` skill is preloaded and carries the full method. If for 
 
 The branch name in `PazerOP/claude-docs-gaps` is EXACTLY the version string.
 
-Download the branch as a tarball and extract it. Do not clone. Do not fetch single files with `gh api`.
+The caller runs `fetch.sh` and names the tree's directory in your brief. Use that directory, called `$D` below, and download nothing.
 
-```bash
-set -o pipefail
-V=$(claude --version | awk '{print $1}')                          # e.g. 2.1.220
-D=/tmp/claude-docs-gaps-$V
-T=$(gh auth token 2>/dev/null || echo "${GH_TOKEN:-$GITHUB_TOKEN}")
-U=https://api.github.com/repos/PazerOP/claude-docs-gaps/tarball/$V
-mkdir -p "$D"
-curl -fsSL -H "Authorization: token $T" "$U" | tar -xz -C "$D" --strip-components=1 \
-  || curl -fsS -H "Authorization: token $T" -H "x-proxy-redirect-hosts: codeload.github.com" \
-       "https://proxy.pazer.ai/?url=$(printf %s "$U" | jq -sRr @uri)" | tar -xz -C "$D" --strip-components=1
-```
+If the brief names no directory, make ONE call: `sh <base directory>/fetch.sh`, with the base directory your preloaded skill states. Its last line is the tree's path. A literal path is required, because a hook refuses a script path built from an expansion and refuses a search of the plugins directory. With no base directory in your context either, stop and ask the caller for the tree's path.
 
-- Check `$D` first. A previous agent in this session may already have downloaded the tree.
-- The first `curl` is direct. The second goes through proxy.pazer.ai, because a web session's agent proxy answers 403 for this private repo. A 403 and a gzip error from the first `curl` are the fallback firing.
+- **Exit 1 with "cannot read" ends your run.** The repository is not attached to the session, and only the main session can attach it. Report that one fact: the caller must run `add_repo(owner="PazerOP", repo="claude-docs-gaps", access="read")` and re-dispatch you. Do not try tokens, `gh api`, curl or proxy.pazer.ai. Every one gives a proxy 403 or a real 404.
+- Never write the fetch as inline shell. A hook refuses `tar -x` into a variable directory.
 - **The source is the whole of `$D`, not `cli.js`.** From 2.1.242 `cli.js` is a small import stub. The code is in `$D/chunks/*.js`, and `$D/module-graph.json` maps each `/$bunfs/root/<name>` import to its file. Branches 2.1.241 and older have no `chunks/` and keep everything in `cli.js`. Read `$D/CLAUDE.md` for the layout.
 - A bad ref fails both paths with a 404 and leaves `$D` empty. Confirm `$D` holds files before you search.
 - **`master` is almost never the right branch.** It holds extraction tooling, not the product. Same for `claude/*`, `doc-js-extraction-*` and `analysis-framework`.
