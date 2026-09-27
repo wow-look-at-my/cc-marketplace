@@ -78,7 +78,9 @@ The rules are Go now. The plugin reaches them by running the binary rather than 
 
 The same script serves `no-counts-in-docs` and `no-tombstones`. Each names the rules it drives through the `hook` contract. Each rule gets the same treatment. The script runs it on text built to violate the rule and requires a verdict.
 
-**The `prepare` job resolves slopfix's head commit into the cache key.** Nothing under these plugins' own directories changes when a rule changes in slopfix. Without it a cached build serves a checker that CI no longer runs.
+**The `prepare` job puts buildhost's published slopfix version into the cache key.** Nothing under these plugins' own directories changes when a rule changes in slopfix. Without it a cached build serves a checker that CI no longer runs.
+
+**A slopfix publish ships here without a push to this repository.** slopfix's own CI dispatches `release.yml` with `publish: true` after each master publish. The new version then misses the cache key, so only this plugin rebuilds. The dispatch token is `CC_MARKETPLACE_DISPATCH_TOKEN` in secret-server, which slopfix's workflow reads.
 
 ### What `src/checks.ts` adds
 
