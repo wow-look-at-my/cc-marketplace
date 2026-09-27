@@ -1,0 +1,4 @@
+#!/bin/sh
+# Claude Code execve()s this path, and the binary beside it is not ELF and has
+# no shebang, so exec'ing it straight is ENOEXEC. A shell can run it.
+exec "$(dirname "$0")/finish-your-todos.ape" "$@"
