@@ -10,6 +10,10 @@ on:
         description: Publish like a push does. slopfix's CI sets this after each master publish.
         type: boolean
         default: false
+      plugins:
+        description: Space-separated plugins to rebuild. Every other plugin is published from its cached tree. Empty rebuilds whatever misses the cache.
+        type: string
+        default: ''
 
 # Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
 concurrency: {group: 'release-${{ github.ref }}'}
@@ -30,6 +34,7 @@ jobs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
+      cache_keys: ${{ steps.split.outputs.cache_keys }}
       slopfix_version: ${{ steps.slopfix.outputs.version }}
       has_build: ${{ steps.split.outputs.has_build }}
     steps:
@@ -71,6 +76,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NODE_PATH: ${{ github.workspace }}/node_modules
           CACHE_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/heads/{0}', github.ref_name) }}
+          WANTED: ${{ inputs.plugins }}
         with:
           steps: ${{ toJSON(steps) }}
           script: |
@@ -78,11 +84,15 @@ jobs:
             const plugins: string[] = JSON.parse(steps.matrix.outputs.plugins);
             const repo = process.env.GITHUB_REPOSITORY;
             const ref = process.env.CACHE_REF;
+            const wanted = (process.env.WANTED ?? '').split(/\s+/).filter(Boolean);
+            const unknown = wanted.filter((p) => !plugins.includes(p));
+            if (unknown.length > 0) throw new Error(`no marketplace plugin is named: ${unknown.join(' ')}`);
 
             const buildPlugins: string[] = [];
             const cachedPlugins: string[] = [];
+            const keys: Record<string, string> = {};
             // shellwalk is compiled into no-work-loss and enhanced-auto-allow through a local replace, so a change there must rebuild them.
-            const toolHash = await hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod');
+            const tools = ['tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod'];
 
             // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when buildhost publishes a new one.
             const slopfix = steps.slopfix.outputs.version;
@@ -91,8 +101,15 @@ jobs:
             };
 
             for (const plugin of plugins) {
-              const hash = await hashFiles(`plugins/${plugin}/**`);
-              const key = `plugin-${plugin}-${hash}-${toolHash}${upstream[plugin] ? `-${upstream[plugin]}` : ''}`;
+              const hash = await hashFiles([`plugins/${plugin}/**`, ...tools].join('\n'));
+              const key = `plugin-${plugin}-${hash}${upstream[plugin] ? `-${upstream[plugin]}` : ''}`;
+              keys[plugin] = key;
+
+              if (wanted.includes(plugin)) {
+                buildPlugins.push(plugin);
+                core.info(`${plugin}: named, rebuilding`);
+                continue;
+              }
 
               let cached = false;
               try {
@@ -110,12 +127,14 @@ jobs:
                 core.info(`${plugin}: cached`);
               } else {
                 buildPlugins.push(plugin);
-                core.info(`${plugin}: needs build`);
+                if (wanted.length > 0) core.warning(`${plugin}: not named, but no cached tree exists to publish, so it is rebuilt`);
+                else core.info(`${plugin}: needs build`);
               }
             }
 
             core.setOutput('build_plugins', JSON.stringify(buildPlugins));
             core.setOutput('cached_plugins', JSON.stringify(cachedPlugins));
+            core.setOutput('cache_keys', JSON.stringify(keys));
             core.setOutput('has_build', String(buildPlugins.length > 0));
 
 
@@ -166,11 +185,6 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
-
-      - name: Compute plugin hash
-        id: hash
-        # Must match the key prepare computes, shellwalk included, or a cached hit is checked against one hash and saved under another.
-        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod') }}${{ contains(fromJSON('["slopfix"]'), matrix.plugin) && format('-{0}', needs.prepare.outputs.slopfix_version) || '' }}" >> $GITHUB_OUTPUT
 
       # A dependency runs its own generators when the fetch completes it, and a missing one fails the build.
       - name: Install the generators a dependency's directives need
@@ -235,7 +249,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
-          key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
+          key: ${{ fromJSON(needs.prepare.outputs.cache_keys)[matrix.plugin] }}
 
   # see docs/ci-yaml-notes.md#css-duplication-lsp-job
   css-duplication-lsp:
@@ -249,17 +263,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Compute plugin hash
-        id: hash
-        # The build job's key for this plugin, so the restore below finds the tree that job cooked.
-        run: echo "value=${{ hashFiles('plugins/css-duplication/**', 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod') }}" >> $GITHUB_OUTPUT
-
       # The release's own cooked tree, never a second build. A second build publishes a second release.
       - name: Restore the plugin the build job cooked
         uses: actions/cache/restore@v6
         with:
           path: /tmp/packaged-css-duplication
-          key: plugin-css-duplication-${{ steps.hash.outputs.value }}
+          key: ${{ fromJSON(needs.prepare.outputs.cache_keys)['css-duplication'] }}
           fail-on-cache-miss: true
 
       - uses: ./.github/actions/setup-claude-code
@@ -376,6 +385,25 @@ jobs:
         with:
           pattern: packaged-*
           path: /tmp/all-plugin-artifacts
+
+      # A plugin this run did not rebuild still belongs in marketplace.json, so its cooked tree comes back from the cache the build that made it saved.
+      - name: Restore the cooked trees of plugins this run did not rebuild
+        if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
+        uses: wow-look-at-my/actions@typescript#latest
+        env:
+          NODE_PATH: ${{ github.workspace }}/node_modules
+          CACHED: ${{ needs.prepare.outputs.cached_plugins }}
+          KEYS: ${{ needs.prepare.outputs.cache_keys }}
+        with:
+          script: |
+            const cache = require('@actions/cache');
+            const keys: Record<string, string> = JSON.parse(process.env.KEYS!);
+            for (const plugin of JSON.parse(process.env.CACHED!) as string[]) {
+              const path = `/tmp/packaged-${plugin}`;
+              const hit = await cache.restoreCache([path], keys[plugin]);
+              if (!hit) throw new Error(`${plugin}: no cached tree under ${keys[plugin]}, and publishing without it drops it from marketplace.json`);
+              await exec.exec('cp', ['-r', path, `/tmp/all-plugin-artifacts/packaged-${plugin}`]);
+            }
 
       - name: Prepare combined input
         env:
