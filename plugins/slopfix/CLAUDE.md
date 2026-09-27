@@ -8,7 +8,7 @@ A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted
 
 What each subcommand DOES is slopfix's own documentation. Read `slopfix --help`, or that repository. A table here is a copy that drifts. The copy nobody updates is this one. The manifest is the list of which events reach which subcommand. It is the only such list.
 
-These replace the plugins. Those are ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking and enhanced-auto-allow. They are also link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with homes drifts. The second copy is the nobody updates.
+These replace the plugins. Those are ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking and enhanced-auto-allow. They are also link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
 
 **There are no `.go` files here, and there must not be.** A manifest that names a subcommand needs no Go. The `plugin-e2e` workflow drives `clean-bash` end to end. That is the only place the manifest and the binary are exercised together.
 
