@@ -179,10 +179,7 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
-    # The shared resource is one moving tag, `<plugin>#latest`, which every branch force-pushes. Keying the group to the plugin serialises exactly that, so two branches releasing different plugins still run at once.
-    concurrency:
-      group: release-tag-${{ matrix.plugin }}
-      cancel-in-progress: false
+    # Never put a cross-branch concurrency group here. A second waiting job cancels the first, so one branch cancels another branch's build. orphan-release moves `<plugin>#latest` only from the default branch's tip.
     steps:
       - uses: actions/checkout@v7
 
