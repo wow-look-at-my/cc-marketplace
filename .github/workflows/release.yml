@@ -393,12 +393,12 @@ jobs:
         if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
         uses: wow-look-at-my/actions@typescript#latest
         env:
-          NODE_PATH: ${{ github.workspace }}/node_modules
           CACHED: ${{ needs.prepare.outputs.cached_plugins }}
           KEYS: ${{ needs.prepare.outputs.cache_keys }}
         with:
           script: |
-            const cache = require('@actions/cache');
+            // @actions/cache exports no require entry. A file path skips that check, and node24 can require an ES module.
+            const cache = require(`${process.env.GITHUB_WORKSPACE}/node_modules/@actions/cache/lib/cache.js`);
             const keys: Record<string, string> = JSON.parse(process.env.KEYS!);
             for (const plugin of JSON.parse(process.env.CACHED!) as string[]) {
               const path = `/tmp/packaged-${plugin}`;
