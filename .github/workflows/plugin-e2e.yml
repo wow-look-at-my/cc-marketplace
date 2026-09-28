@@ -51,6 +51,10 @@ jobs:
                 }
               }
             }
+            const servers = JSON.parse(fs.readFileSync(`${root}/.lsp.json`, "utf-8"));
+            for (const server of Object.values(servers) as any[]) {
+              if (server.command.endsWith("/slopfix.ape")) registered.add(server.args[0]);
+            }
             if (registered.size === 0) core.setFailed("the manifest names no slopfix subcommand at all");
 
             // Every subcommand slopfix registers, read off its source. A script naming one that is not there reaches nothing at run time.
