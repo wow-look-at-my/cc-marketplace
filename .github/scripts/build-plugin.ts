@@ -47,15 +47,13 @@ if (existsSync(justfilePath)) {
 
 function hasRecipe(recipe: string): boolean {
   if (!existsSync(justfilePath)) return false;
-  try {
-    const summary = execSync("just --summary", {
-      cwd: pluginPath,
-      encoding: "utf8",
-    });
-    return summary.split(/\s+/).includes(recipe);
-  } catch {
-    return false;
-  }
+  // A justfile that cannot read throws. Read as "no recipe", it skips the
+  // plugin's prebuild.
+  const summary = execSync("just --summary", {
+    cwd: pluginPath,
+    encoding: "utf8",
+  });
+  return summary.split(/\s+/).includes(recipe);
 }
 
 for (const recipe of ["prebuild", "postbuild"]) {
