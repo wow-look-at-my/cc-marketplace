@@ -83,6 +83,7 @@ whatever `prepare-matrix` finds, and a hard-coded list silently drops a plugin
 added later — the exact failure the section below describes.
 
 
+
 ## marketplace-json-replacement-and-a-stale-cache-key
 
 `update-marketplace` writes `marketplace.json` from the cooked trees it is given, replacing the file rather than patching it. A plugin whose tree is absent therefore drops out of the published marketplace silently, and the next `claude plugin update` for it 404s. The loop before that step fails the job instead, naming every plugin with no cooked tree.

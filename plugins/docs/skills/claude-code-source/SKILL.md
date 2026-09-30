@@ -10,32 +10,25 @@ Two rules. The second one is the whole point of this skill.
 
 ## 1. Get the right version's branch into /tmp
 
-The branch name is EXACTLY the version string. Take it from the running CLI. Download the branch as a tarball and extract it. Do not clone. Do not fetch single files with `gh api`.
+One call does all of it. Run `fetch.sh` from this skill's base directory, the path printed above as "Base directory for this skill":
 
 ```bash
-set -o pipefail
-V=$(claude --version | awk '{print $1}')        # e.g. 2.1.220
-D=/tmp/claude-docs-gaps-$V
-T=$(gh auth token 2>/dev/null || echo "${GH_TOKEN:-$GITHUB_TOKEN}")
-U=https://api.github.com/repos/PazerOP/claude-docs-gaps/tarball/$V
-mkdir -p "$D"
-curl -fsSL -H "Authorization: token $T" "$U" | tar -xz -C "$D" --strip-components=1 \
-  || curl -fsS -H "Authorization: token $T" -H "x-proxy-redirect-hosts: codeload.github.com" \
-       "https://proxy.pazer.ai/?url=$(printf %s "$U" | jq -sRr @uri)" | tar -xz -C "$D" --strip-components=1
+sh <base directory>/fetch.sh            # the running version
+sh <base directory>/fetch.sh 2.1.220    # a named version
 ```
+
+It prints the tree's path as its last line. Use that path, called `$D` below, for every search. It reuses a tree already in `/tmp`. It shallow-clones exactly one branch in about 2 s. A version with no branch reads the highest branch below it and says so on stderr. Say that version in your report.
+
+Never paste the fetch as inline shell. Claude Code substitutes skill arguments into this file's text, so a positional parameter written here arrives as a word of the caller's arguments. An inline `awk` field reference therefore breaks. `tar -x` into a variable directory is also refused by a hook. The script has neither problem.
+
+**Run it yourself, before you dispatch the subagent, and put the printed path in the brief.** The subagent then downloads nothing. It cannot run `add_repo` if the fetch fails, and a hook refuses it any search for the script.
+
+**When it exits 1 with "cannot read"**. The repository is not attached to the session. Only the MAIN session can fix that, with `add_repo(owner="PazerOP", repo="claude-docs-gaps", access="read")`. A subagent must stop at once and report exactly that. Every other route gives a proxy 403 or a real 404. Trying tokens, `gh api`, proxy.pazer.ai or the tarball URL wastes the whole run.
 
 **The source is the whole of `$D`, not `cli.js`.** From 2.1.242 the shipped binary splits its JavaScript into chunks. On those branches `cli.js` is a small import stub and the code lives in `$D/chunks/*.js`. `$D/module-graph.json` maps each `/$bunfs/root/<name>` import to its file. Search `cli.js` and `chunks/` together, every time. Branches 2.1.241 and older have no `chunks/`. There the whole bundle is in `cli.js`. The branch's own `CLAUDE.md` describes its layout. Read it first.
 
-Check whether `$D` already holds the tree before you download. A previous agent in this session may already have it.
-
-- **The repo is private. The token is required.** Use the `api.github.com/.../tarball/<ref>` URL. It accepts a PAT and redirects to `codeload.github.com`. The `github.com/<owner>/<repo>/archive/...` URL returns 404 for a PAT.
-- **The fallback is proxy.pazer.ai.** Its reference is `https://proxy.pazer.ai/llms.txt`. A web session's agent proxy answers 403 for a repo outside the session's scope. proxy.pazer.ai passes the `Authorization` header through. `x-proxy-redirect-hosts` lets that header follow the redirect to codeload. Without it the proxy answers 400.
-- The first `curl` prints a 403 and a gzip error in a web session. That is the fallback firing, not a failure. A bad ref fails both paths with a 404.
-- Measured through the proxy: 2.1.220 is a 7.4 MB tarball in ~2 s, with everything in `cli.js`. 2.1.283 is a 13 MB tarball in ~2.4 s. It extracts to 52 MB: 2,136 files under `chunks/` and a 557-line `cli.js` stub.
-
 - **`master` IS ALMOST NEVER THE RIGHT BRANCH.** It holds the extraction tooling, not the product of the version you are running. Same for the `claude/*`, `doc-js-extraction-*` and `analysis-framework` branches. Reaching for `master` is the default mistake. Name the version explicitly.
-- Use the version you are **actually running** unless the question is about a different one ("when did X change?", "does the user's older build have Y?"). Version-specific questions need two downloads and a comparison — the version list is the changelog you diff against. Get it with `gh api repos/PazerOP/claude-docs-gaps/git/matching-refs/heads/2. --jq '.[].ref'`. The `branches` endpoint stopped at 100 names here and missed every recent version.
-- No branch for your exact version (a build newer than the last extraction)? The download 404s and tells you so. There is no need to probe for the branch first. Take the highest branch below it and SAY which version you actually read. Never silently answer from a different build.
+- Use the version you are **actually running** unless the question is about a different one ("when did X change?", "does the user's older build have Y?"). Version-specific questions need fetches and a comparison. `git ls-remote --heads https://github.com/PazerOP/claude-docs-gaps '2.*'` lists every version.
 - **Cheap first stop before any search**: the `docs/` directory the tarball extracted (`$D/docs`, when the branch has one), and the `docs-aggregate` branch's `INDEX.md`, hold prior investigations. If someone already wrote up the subsystem, read that instead of re-deriving it — then confirm the specific claim you care about in the source.
 
 ## 2. Search it ONLY from a Sonnet subagent -- never in main context

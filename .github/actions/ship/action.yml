@@ -1,0 +1,26 @@
+name: Ship in the marketplace
+description: Dispatch release.yml with publish, so the marketplace re-packages a plugin whose upstream just published.
+
+# The calling repository needs CC_MARKETPLACE_DISPATCH_TOKEN (actions:write on this repo) entitled to it in secret-server.
+
+inputs:
+  plugins:
+    description: Space-separated plugins to rebuild and publish. Every other plugin is republished from its cached tree.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: wow-look-at-my/actions@secret-server#latest
+
+    - uses: wow-look-at-my/actions@typescript#latest
+      env:
+        PLUGINS: ${{ inputs.plugins }}
+      with:
+        script: |
+          const token = process.env.CC_MARKETPLACE_DISPATCH_TOKEN;
+          if (!token) throw new Error(`secret-server vended no CC_MARKETPLACE_DISPATCH_TOKEN to ${process.env.GITHUB_REPOSITORY}, so cc-marketplace never ships this build. Entitle ${process.env.GITHUB_REPOSITORY} on ${process.env.GITHUB_REF} to a token with actions:write on wow-look-at-my/cc-marketplace.`);
+          await getOctokit(token).rest.actions.createWorkflowDispatch({
+            owner: 'wow-look-at-my', repo: 'cc-marketplace', workflow_id: 'release.yml', ref: 'master', inputs: { publish: 'true', plugins: process.env.PLUGINS! },
+          });
+          core.info(`dispatched cc-marketplace release.yml for ${process.env.PLUGINS}`);
