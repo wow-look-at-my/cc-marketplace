@@ -1,9 +1,6 @@
-// grepmodes.go ports the builtin's pagination helpers and per-mode
-// post-processing/result-text builders (Q46/l46 at
-// 2.1.116:cli.js:286174-286187, mode branches at 286373-286444, text
-// builders at 286308-286335). The content, count, and filenames modes
-// are byte-parity ports (filenames is the builtin's files_with_matches);
-// the amended filenames_with_matches mode lives in grepfwm.go.
+// The content, count, and filenames modes are byte-parity ports
+// (filenames is the builtin's files_with_matches); the amended
+// filenames_with_matches mode lives in grepfwm.go.
 package main
 
 import (
@@ -15,10 +12,6 @@ import (
 	"strings"
 )
 
-// paginate ports Q46: head_limit 0 means unlimited (only the offset
-// applies and no limit is reported); otherwise the window is
-// [offset, offset+limit) with the default limit 250, and the limit is
-// reported as applied only when items beyond the window existed.
 // JS Array.prototype.slice semantics are preserved via jsSlice so
 // out-of-contract inputs (floats, negatives) behave identically.
 func paginate[T any](items []T, headLimit *float64, offset float64) ([]T, *float64) {
@@ -36,9 +29,6 @@ func paginate[T any](items []T, headLimit *float64, offset float64) ([]T, *float
 	return out, nil
 }
 
-// jsSlice mirrors JS Array.prototype.slice(start, end): fractional
-// indices truncate toward zero, negative indices count from the end, and
-// everything clamps to [0, len].
 func jsSlice[T any](items []T, start, end float64) []T {
 	s := clampIndex(start, len(items))
 	e := clampIndex(end, len(items))
@@ -87,7 +77,6 @@ func jsNumString(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
-// plural ports O6 (2.1.116:cli.js:33699-33701).
 func plural(n int, word string) string {
 	if n == 1 {
 		return word
@@ -96,7 +85,7 @@ func plural(n int, word string) string {
 }
 
 // formatContent ports the content branch: paginate the raw rg lines,
-// relativize the prefix before the FIRST colon of each line, clamp any
+// relativize the prefix before the earliest colon of each line, clamp any
 // over-long line to clampWidth (clamp.go) so a huge line is bounded rather
 // than dropped, join; empty content becomes "No matches found"; a
 // pagination note is appended when a limit was applied or a positive
@@ -123,8 +112,7 @@ func (g *grepTool) formatContent(lines []string, a *grepArgs) string {
 // formatCount ports the count branch: paginate the path:count lines,
 // relativize the prefix before the LAST colon, sum the parseable counts,
 // and always append the "Found N total occurrences across M files."
-// trailer. The argv passes -c -H (the >=2.1.175 fix), so single-file
-// searches keep their filename prefix and parse correctly.
+// trailer.
 func (g *grepTool) formatCount(lines []string, a *grepArgs) string {
 	items, appliedLimit := paginate(lines, a.headLimit, a.offset)
 	mapped := make([]string, len(items))
@@ -152,9 +140,9 @@ func (g *grepTool) formatCount(lines []string, a *grepArgs) string {
 }
 
 // formatFilenames ports the builtin's files_with_matches branch
-// verbatim: stat every path, sort newest-first (ties: ascending path
-// compare), paginate the PATHS, relativize, and render "Found N files"
-// over the list. This plugin exposes it under the name "filenames".
+// verbatim: stat every path, sort newest-earliest (ties: ascending
+// path compare), paginate the PATHS, relativize, and render "Found N
+// files" over the list. This plugin exposes it under the name "filenames".
 func (g *grepTool) formatFilenames(lines []string, a *grepArgs) string {
 	sorted := sortPathsByMtimeDesc(lines)
 	items, appliedLimit := paginate(sorted, a.headLimit, a.offset)
@@ -178,19 +166,12 @@ func (g *grepTool) displayPath(p string, a *grepArgs) string {
 	return relativizePath(rebasePath(p, a.rgSearchPath, a.searchPath), g.root)
 }
 
-// displayColonPrefix applies the builtin's line mapping: when a colon
-// exists past position 0, the prefix before it is mapped through
-// displayPath and the rest of the line (colon included) is kept verbatim.
-// A line with no colon (a context line whose path and text both lack one)
-// is left UNTOUCHED by the builtin's first-colon mapping, so context
-// lines stay ABSOLUTE while match lines are relativized -- the faithful
-// wart locked by TestContentContextLinesKeepAbsolutePaths. rg emits those
-// absolute lines in resolved-space spelling (a.rgSearchPath is resolved so
-// slash-containing globs match through a symlinked root); rebase back to
-// the caller's spelling so the absolute form comes out the way the caller
-// supplied it, not rg's resolved form. Relative/no-colon lines and absolute
-// lines outside the resolved root pass through unchanged (rebasePath is a
-// no-op for them), so the wart holds in every case.
+// rg emits those absolute lines in resolved-space spelling (a.rgSearchPath
+// is resolved so slash-containing globs match through a symlinked root);
+// rebase back to the caller's spelling so the absolute form comes out the
+// way the caller supplied it, not rg's resolved form. Relative/no-colon
+// lines and absolute lines outside the resolved root pass through unchanged
+// (rebasePath is a no-op for them), so the wart holds in every case.
 func (g *grepTool) displayColonPrefix(line string, a *grepArgs, colon int) string {
 	if colon > 0 {
 		return g.displayPath(line[:colon], a) + line[colon:]
@@ -198,9 +179,6 @@ func (g *grepTool) displayColonPrefix(line string, a *grepArgs, colon int) strin
 	return rebasePath(line, a.rgSearchPath, a.searchPath)
 }
 
-// jsParseInt mirrors parseInt(s, 10): optional leading whitespace and
-// sign, then a digit run (trailing garbage ignored); no digits means no
-// number.
 func jsParseInt(s string) (int, bool) {
 	s = strings.TrimLeft(s, " \t\n\r\f\v")
 	neg := false
@@ -225,10 +203,6 @@ func jsParseInt(s string) (int, bool) {
 	return n, true
 }
 
-// sortPathsByMtimeDesc ports the files_with_matches comparator
-// (2.1.116:cli.js:286432-286436): newest mtime first (millisecond
-// precision, matching JS mtimeMs; failed stats sort as 0) with ties
-// broken by ascending localeCompare order on the path (see collate.go).
 // The stable sort mirrors JS Array.prototype.sort, so paths that collate
 // equal keep rg's emission order.
 func sortPathsByMtimeDesc(paths []string) []string {

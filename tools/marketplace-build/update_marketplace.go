@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -131,7 +130,6 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 	}
 
 	for _, p := range plugins {
-		displayVersion := strings.SplitN(p.manifest.Version, ".", 2)[0]
 		// A git source, not npm: `claude plugin install` clones the plugin's
 		// orphan tag (`git clone --depth 1 --branch <tag>`), so installing needs
 		// git -- which Claude Code already requires -- and never node or npm.
@@ -139,16 +137,10 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 		// given marketplace.json always resolves to the same tree; the moving
 		// `#latest` pointer exists for humans.
 		//
-		// "url" with an explicit https:// URL, not "source": "github": the CLI
-		// resolves a github-source entry to `git@github.com:<repo>.git` (SSH)
-		// unconditionally unless CLAUDE_CODE_REMOTE or
-		// CLAUDE_CODE_PLUGIN_PREFER_HTTPS is set in the caller's env, so any
-		// plain CI runner or script with no SSH key fails to install every
-		// plugin published this way. A "url" entry clones the given URL
-		// verbatim with no SSH branch at all -- correct for a public repo.
+		// `url` with an explicit https:// URL, NOT `github` with owner/repo.
 		entry := map[string]interface{}{
 			"name":    p.name,
-			"version": displayVersion,
+			"version": p.manifest.Version,
 			"source": map[string]interface{}{
 				"source": "url",
 				"url":    fmt.Sprintf("https://github.com/%s.git", pluginRepo),

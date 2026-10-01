@@ -1,0 +1,50 @@
+# CI YAML notes
+
+Rationale the workflow files point at, kept here so a `.yml` stays readable. Each heading is the anchor a `# see docs/ci-yaml-notes.md#...` comment names.
+
+## plugin-e2e-workflow-rationale
+
+`plugin-e2e.yml` drives a real `claude` process with a plugin loaded. The Go and bash unit suites assert what a hook or a server DOES with a given input. They cannot assert that Claude Code registers it, spawns it, and uses its answer. Every defect this workflow has caught lived in that gap: a malformed JSON-RPC response only vscode-jsonrpc rejects.
+
+One job per plugin whose contract is with the client, not with its own input.
+
+## css-duplication-lsp-job
+
+A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
+
+Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
+
+Diagnostics drain into an attachment on the NEXT turn, so the prompt has to force a turn after the edit. Asking for a read-back of the edited file does not. The model already knows what it wrote, and one that answered "no re-read was needed" made this job red. So the prompt asks for a line the model cannot know. That line is a nonce written to `ticket.txt` at run time. The run step fails when the answer omits the nonce, which names the declined read rather than blaming the server.
+
+`--model sonnet` is deliberate on both jobs. Each asserts the behavior of a hook or a server, which no model tier changes, and each runs on every push.
+
+## go-toolchain-permission-grants
+
+`wow-look-at-my/go-toolchain@master` needs these grants, and fails without them:
+
+- `id-token: write` — OIDC, for secret-server and buildhost.
+- `contents: write` — it submits a dependency-graph snapshot. GitHub rejects the submission under `contents: read`.
+- `actions: read` and `checks: read` — its embedded no-`all-builds` guard scans the run's jobs and the head commit's check runs, and fails closed when it cannot.
+- `deployments: write` and `artifact-metadata: write` — every build publishes to buildhost, registers a GitHub Deployment, and records the upload on the linked-artifacts page. The action has no input that turns this off. Without `deployments: write` the build fails at the step that creates the Deployment.
+
+A job-level `permissions:` block REPLACES the workflow-level one, so a job that declares its own must list every one of them. A job that runs `setup-marketplace-build` needs them too, because that composite action runs go-toolchain on a cache miss.
+
+## composite-action-caller-permissions
+
+A composite action cannot request permissions. It runs with whatever the calling job was granted.
+
+## marketplace-build-cache-miss
+
+`setup-marketplace-build` builds only when its cache misses, so a warm entry hides a break in that path for months. The install step is the backstop: it fails naming the missing file rather than letting a later step discover it.
+
+## release-build-binary-format-and-action-pin
+
+`targets: cosmo` is not a size optimization. The fat APE is the only native output the pinned action still emits, since the host-native build path was removed from `v1`. One file covers Linux, macOS and Windows, and `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the shipping layout.
+
+## marketplace-json-replacement-and-a-stale-cache-key
+
+`update-marketplace` writes `marketplace.json` from the cooked trees it is given, replacing the file rather than patching it. A plugin whose tree is absent therefore drops out of the published marketplace silently, and the next `claude plugin update` for it 404s. The loop before that step fails the job instead, naming every plugin with no cooked tree.
+
+## smoke-test-job-rationale
+
+Installs and updates EVERY plugin from the marketplace this run just published, through real Claude Code. Each entry points at an orphan tag this run pushed. A tag that was never pushed, or one holding the wrong tree, fails here rather than for the first person who installs it.

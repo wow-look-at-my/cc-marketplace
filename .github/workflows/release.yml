@@ -2,33 +2,68 @@ name: Release Plugins
 
 on:
   push:
+    # Every branch, no tag: this workflow pushes a plugin/*/v* tag per release, which must not re-enter it.
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish like a push does. slopfix's CI sets this after each master publish.
+        type: boolean
+        default: false
+      plugins:
+        description: Space-separated plugins to rebuild. Every other plugin is published from its cached tree. Empty rebuilds whatever misses the cache.
+        type: string
+        default: ''
 
-concurrency:
-  group: release-${{ github.ref }}
+# Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
+concurrency: {group: 'release-${{ github.ref }}'}
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # setup-marketplace-build runs go-toolchain on a cache miss, so every job
-    # using it needs go-toolchain's full permission set (see that action's own
-    # notes). A composite cannot request permissions, and the miss only happens
-    # when tools/marketplace-build changes -- which is why an incomplete set
-    # here stayed green until the day someone edited the tool.
+    # see docs/ci-yaml-notes.md#composite-action-caller-permissions
     permissions:
       id-token: write
       contents: write
       actions: read
       checks: read
+      deployments: write
+      artifact-metadata: write
     outputs:
       all_plugins: ${{ steps.matrix.outputs.plugins }}
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
+      cache_keys: ${{ steps.split.outputs.cache_keys }}
+      slopfix_version: ${{ steps.slopfix.outputs.version }}
       has_build: ${{ steps.split.outputs.has_build }}
     steps:
       - uses: actions/checkout@v7
 
+      - uses: wow-look-at-my/actions@common-checks#latest
+
       - uses: ./.github/actions/setup-marketplace-build
+
+      # tsconfig.json covers .github/scripts; nothing ran it, so it had drifted to failing on every file.
+      - name: Typecheck scripts
+        run: npx tsc --noEmit
+
+      # Here, not in the plugin matrix: these cover the scripts, and a skipped check can never go red.
+      - name: Script tests
+        run: npx tsx --test ".github/scripts/**/*.test.ts"
+
+      # The slopfix plugin fetches its binary at build time and commits no copy, so the cache key carries buildhost's published version rather than slopfix's master head: the head moves at merge and buildhost publishes later, so keying on the head rebuilds against a binary that does not exist yet and the vendor script's probes fail the run.
+      - name: Resolve the published slopfix version
+        id: slopfix
+        run: |
+          set -eu
+          location=$(curl -fsSI --connect-timeout 30 "https://dl.pazer.build/slopfix?os=linux&arch=amd64" | tr -d '\r' | grep -i '^location:')
+          version=${location##*v=}
+          if [ -z "$version" ] || [ "$version" = "$location" ]; then
+            echo "buildhost named no version in: ${location}" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
@@ -41,6 +76,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NODE_PATH: ${{ github.workspace }}/node_modules
           CACHE_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/heads/{0}', github.ref_name) }}
+          WANTED: ${{ inputs.plugins }}
         with:
           steps: ${{ toJSON(steps) }}
           script: |
@@ -48,14 +84,32 @@ jobs:
             const plugins: string[] = JSON.parse(steps.matrix.outputs.plugins);
             const repo = process.env.GITHUB_REPOSITORY;
             const ref = process.env.CACHE_REF;
+            const wanted = (process.env.WANTED ?? '').split(/\s+/).filter(Boolean);
+            const unknown = wanted.filter((p) => !plugins.includes(p));
+            if (unknown.length > 0) throw new Error(`no marketplace plugin is named: ${unknown.join(' ')}`);
 
             const buildPlugins: string[] = [];
             const cachedPlugins: string[] = [];
-            const toolHash = await hashFiles('tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod');
+            const keys: Record<string, string> = {};
+            // shellwalk is compiled into no-work-loss and enhanced-auto-allow through a local replace, so a change there must rebuild them.
+            const tools = ['tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod'];
+
+            // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when buildhost publishes a new one.
+            const slopfix = steps.slopfix.outputs.version;
+            const upstream: Record<string, string> = {
+              'slopfix': slopfix,
+            };
 
             for (const plugin of plugins) {
-              const hash = await hashFiles(`plugins/${plugin}/**`);
-              const key = `plugin-${plugin}-${hash}-${toolHash}`;
+              const hash = await hashFiles([`plugins/${plugin}/**`, ...tools].join('\n'));
+              const key = `plugin-${plugin}-${hash}${upstream[plugin] ? `-${upstream[plugin]}` : ''}`;
+              keys[plugin] = key;
+
+              if (wanted.includes(plugin)) {
+                buildPlugins.push(plugin);
+                core.info(`${plugin}: named, rebuilding`);
+                continue;
+              }
 
               let cached = false;
               try {
@@ -73,14 +127,40 @@ jobs:
                 core.info(`${plugin}: cached`);
               } else {
                 buildPlugins.push(plugin);
-                core.info(`${plugin}: needs build`);
+                if (wanted.length > 0) core.warning(`${plugin}: not named, but no cached tree exists to publish, so it is rebuilt`);
+                else core.info(`${plugin}: needs build`);
               }
             }
 
             core.setOutput('build_plugins', JSON.stringify(buildPlugins));
             core.setOutput('cached_plugins', JSON.stringify(cachedPlugins));
+            core.setOutput('cache_keys', JSON.stringify(keys));
             core.setOutput('has_build', String(buildPlugins.length > 0));
 
+
+  # The plugins that embed shellwalk compile it but never run its own suite, and a shared parser nothing tests is where the drift goes next.
+  shellwalk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      # see docs/ci-yaml-notes.md#go-toolchain-permission-grants
+      contents: write
+      actions: read
+      checks: read
+      deployments: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7
+      # mvdan.cc/sh runs stringer when the fetch completes it, and a missing generator fails the build.
+      - name: Install the generators a dependency's directives need
+        run: |
+          set -euo pipefail
+          go install golang.org/x/tools/cmd/stringer@v0.49.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - uses: wow-look-at-my/go-toolchain@master
+        with:
+          working-directory: tools/shellwalk
 
   build:
     needs: prepare
@@ -89,51 +169,43 @@ jobs:
     timeout-minutes: 15
     permissions:
       id-token: write
-      # go-toolchain submits the module graph to GitHub's dependency graph,
-      # which the API gates behind contents: write. Its no-all-builds guard
-      # scans the run's jobs and the head commit's check runs, and fails closed
-      # without the two read grants.
+      # see docs/ci-yaml-notes.md#go-toolchain-permission-grants
       contents: write
       actions: read
       checks: read
+      deployments: write
       artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
         plugin: ${{ fromJson(needs.prepare.outputs.build_plugins) }}
+    # Never put a cross-branch concurrency group here. A second waiting job cancels the first, so one branch cancels another branch's build. orphan-release moves `<plugin>#latest` only from the default branch's tip.
     steps:
       - uses: actions/checkout@v7
 
-      - name: Compute plugin hash
-        id: hash
-        run: echo "value=${{ hashFiles(format('plugins/{0}/**', matrix.plugin), 'tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod') }}" >> $GITHUB_OUTPUT
+      # A dependency runs its own generators when the fetch completes it, and a missing one fails the build.
+      - name: Install the generators a dependency's directives need
+        if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
+        run: |
+          set -euo pipefail
+          go install golang.org/x/tools/cmd/stringer@v0.49.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - uses: ./.github/actions/setup-marketplace-build
-
-      # One fat APE, not the os x arch matrix: a plugin ships exactly one binary
-      # now, and release-plugin FAILS CLOSED on a build/ holding per-platform
-      # binaries instead (ape_package.go) rather than shipping a package that
-      # works on some platforms and silently not others.
-      #
-      # @v1, not @latest: `latest` is a frozen orphan tag from 2026-05 that
-      # predates the `targets` input, and an unknown `with:` key is a WARNING,
-      # not an error -- so `targets: cosmo` was silently dropped and the default
-      # matrix ran. v1 is the ref the org documents and every other repo uses.
+      # see docs/ci-yaml-notes.md#release-build-binary-format-and-action-pin
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
-        uses: wow-look-at-my/go-toolchain@v1
+        uses: wow-look-at-my/go-toolchain@master
         with:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
-          upload-artifacts: 'false'
-          # A plugin is distributed as an orphan tag, never a buildhost release, so
-          # nothing here should publish. autorelease defaults TRUE and fires on
-          # every branch push -- and its GitHub Deployment + storage record are
-          # hard failures without deployments/artifact-metadata write.
-          autorelease: 'false'
 
+      - uses: ./.github/actions/setup-marketplace-build
+
+      # GITHUB_TOKEN: the docs plugin's prebuild re-vendors the Docker reference, and 60 anonymous requests an hour is not enough.
       - name: Build
         run: npx tsx .github/scripts/build-plugin.ts ${{ matrix.plugin }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Test
         run: npx tsx .github/scripts/test-plugin.ts ${{ matrix.plugin }}
@@ -147,13 +219,9 @@ jobs:
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      # The cooked directory IS the artifact now: publishing is an orphan tag
-      # holding exactly this tree, which `claude plugin install` shallow-clones.
-      # The version comes from release-plugin rather than the action's own
-      # auto-increment, because the manifest inside this tree already records
-      # the tag and marketplace.json pins it -- the two must agree.
+      # The cooked dir is published as-is; version comes from release-plugin (not auto-increment) so the tag and manifest agree.
       - name: Publish orphan tag
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.publish
         uses: wow-look-at-my/actions@orphan-release#latest
         with:
           source: ${{ steps.release.outputs.source_dir }}
@@ -161,9 +229,7 @@ jobs:
           version: ${{ steps.release.outputs.version }}
           message: ${{ steps.release.outputs.message }}
 
-      # Hand the cooked tree to publish-marketplace under a stable path: it is
-      # what update-marketplace reads manifest.json out of, and the cook dir's
-      # own name is a random mkdtemp suffix.
+      # Stable path for publish-marketplace: update-marketplace reads manifest.json from here, not the cook dir's random mkdtemp name.
       - name: Stage the cooked tree
         run: |
           rm -rf "/tmp/packaged-${{ matrix.plugin }}"
@@ -180,12 +246,121 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: /tmp/packaged-${{ matrix.plugin }}
-          key: plugin-${{ matrix.plugin }}-${{ steps.hash.outputs.value }}
+          key: ${{ fromJSON(needs.prepare.outputs.cache_keys)[matrix.plugin] }}
+
+  # see docs/ci-yaml-notes.md#css-duplication-lsp-job
+  css-duplication-lsp:
+    needs: [prepare, build]
+    # build is skipped when no plugin changed. The cooked tree is still in the cache then.
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.build.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      # The release's own cooked tree, never a second build. A second build publishes a second release.
+      - name: Restore the plugin the build job cooked
+        uses: actions/cache/restore@v6
+        with:
+          path: /tmp/packaged-css-duplication
+          key: ${{ fromJSON(needs.prepare.outputs.cache_keys)['css-duplication'] }}
+          fail-on-cache-miss: true
+
+      - uses: ./.github/actions/setup-claude-code
+
+      - name: Run Claude Code with the plugin loaded
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_WOW }}
+          LSP_DEBUG_LOG: ${{ runner.temp }}/lsp-debug.log
+          PLUGIN_DIR: /tmp/packaged-css-duplication
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const pluginDir = process.env.PLUGIN_DIR!;
+
+            // the fixture starts already duplicated; the edit below adds one more copy, triggering didChange/didSave and the server's diagnostics
+            const work = path.join(process.env.RUNNER_TEMP!, "lsp-e2e");
+            fs.mkdirSync(work, { recursive: true });
+            fs.writeFileSync(path.join(work, "style.css"),
+              ".crumbs a { color: #2f81f7; text-decoration: none; }\n" +
+              ".footer a { color: #2f81f7; text-decoration: none; }\n" +
+              ".badge { border-radius: 999px; }\n");
+
+            // Diagnostics drain into an attachment on a LATER turn, and one turn is not enough: the model issued the edit and the follow-up read in ONE batch, so the single drain that covered both ran 15ms before the server published, and nothing drained again. The ticket names the file holding the nonce, so its target cannot be known until it has been read, and the chain costs two sequential turns whatever the model would rather batch. Those turns only help when they come AFTER the edit, which is why the prompt numbers its steps: a run that read both files first and edited last published its diagnostics with nothing left to drain them.
+            const nonce: string = require("crypto").randomUUID();
+            fs.writeFileSync(path.join(work, "pointer.txt"), `${nonce}\n`);
+            fs.writeFileSync(path.join(work, "ticket.txt"), "pointer.txt\n");
+
+            // --model sonnet: this asserts a SERVER's behavior, unaffected by model tier, and runs on every push
+            const res = await exec.getExecOutput("claude", [
+              "-p", "Do these steps in this order, and do not start a later step until the earlier one is done. STEP 1: edit style.css to add a rule for selector .nav a with color #2f81f7 and no text-decoration. Do nothing else in that step. STEP 2: read ticket.txt, which contains the name of another file. STEP 3: read that other file, and reply with the exact line IT contains.",
+              "--model", "sonnet",
+              "--plugin-dir", pluginDir,
+              "--allowedTools", "Read,Edit,Write",
+              "--permission-mode", "bypassPermissions",
+              "--debug", "lsp",
+              "--debug-file", process.env.LSP_DEBUG_LOG!,
+            ], { cwd: work, ignoreReturnCode: true });
+            core.info(`claude exited ${res.exitCode}`);
+            core.info(res.stdout.slice(0, 2000));
+
+            // Without the nonce in the answer the run never walked the chain, and the assertion below would blame the server for a prompt the model declined
+            if (!res.stdout.includes(nonce)) core.setFailed(`the run never followed ticket.txt to pointer.txt, so no turn followed the edit (expected ${nonce} in the answer)`);
+
+      - name: Assert the server started, delivered diagnostics, and shut down clean
+        env:
+          LSP_DEBUG_LOG: ${{ runner.temp }}/lsp-debug.log
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const log = fs.readFileSync(process.env.LSP_DEBUG_LOG!, "utf-8");
+            core.startGroup("LSP debug lines");
+            core.info(log.split("\n").filter((l) => /lsp|diagnostic/i.test(l)).join("\n").slice(0, 8000));
+            core.endGroup();
+
+            const failures: string[] = [];
+            const must: Array<[string, RegExp]> = [
+              ["the plugin's .lsp.json was loaded", /Loaded 1 LSP server\(s\) from plugin: css-duplication/],
+              ["the server process started", /Starting LSP server instance: plugin:css-duplication/],
+              ["the initialize handshake completed", /LSP server plugin:css-duplication.* initialized/],
+              ["the server published diagnostics", /Received diagnostics from plugin:css-duplication[^\n]*: [1-9]\d* diagnostic\(s\)/],
+              ["the diagnostics were registered for delivery", /Registered [1-9]\d* diagnostic file\(s\) from plugin:css-duplication/],
+              ["the diagnostics reached the model", /Returning [1-9]\d* diagnostic attachment\(s\)/],
+            ];
+            for (const [what, re] of must) {
+              if (!re.test(log)) failures.push(`MISSING: ${what} (/${re.source}/)`);
+            }
+            // A registration with no drain after it means the edit was the LAST thing the run did, so no turn followed it. That is a prompt-ordering failure, not a server one, and saying so stops the next reader debugging the wrong half.
+            const registeredAt = log.lastIndexOf("diagnostic file(s) from plugin:css-duplication");
+            const drainedAt = log.lastIndexOf("Returning ");
+            if (registeredAt >= 0 && drainedAt < registeredAt) {
+              failures.push("the edit was the run's LAST action, so no turn followed it to drain the diagnostics: the steps ran out of order");
+            }
+
+            // the bug this job guards: a response with neither `result` nor `error` is malformed JSON-RPC, and only a real client rejects it
+            const mustNot: Array<[string, RegExp]> = [
+              ["the LSP session failed to stop", /Failed to stop LSP server|stop failed/],
+              ["the server crashed", /LSP server .*css-duplication.* (crashed|exited unexpectedly)/],
+            ];
+            for (const [what, re] of mustNot) {
+              const m = log.match(re);
+              if (m) failures.push(`UNEXPECTED: ${what} -- ${m[0]}`);
+            }
+
+            if (failures.length > 0) {
+              core.setFailed(`css-duplication LSP e2e failed:\n${failures.join("\n")}`);
+            } else {
+              core.info("OK: server started, published diagnostics, delivered them, and shut down cleanly");
+            }
 
   publish-marketplace:
     needs: [prepare, build]
+    # Without !cancelled() the implicit success() skips this job whenever build was skipped, i.e. whenever every plugin came from the cache.
     if: >-
-      github.event_name == 'push' &&
+      !cancelled() && needs.prepare.result == 'success' &&
+      (github.event_name == 'push' || inputs.publish) &&
       needs.prepare.outputs.all_plugins != '[]' &&
       needs.prepare.outputs.all_plugins != '' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
@@ -197,6 +372,8 @@ jobs:
       contents: write
       actions: read
       checks: read
+      deployments: write
+      artifact-metadata: write
     steps:
       - uses: actions/checkout@v7
 
@@ -207,6 +384,25 @@ jobs:
         with:
           pattern: packaged-*
           path: /tmp/all-plugin-artifacts
+
+      # A plugin this run did not rebuild still belongs in marketplace.json, so its cooked tree comes back from the cache the build that made it saved.
+      - name: Restore the cooked trees of plugins this run did not rebuild
+        if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
+        uses: wow-look-at-my/actions@typescript#latest
+        env:
+          CACHED: ${{ needs.prepare.outputs.cached_plugins }}
+          KEYS: ${{ needs.prepare.outputs.cache_keys }}
+        with:
+          script: |
+            // @actions/cache exports no require entry. A file path skips that check, and node24 can require an ES module.
+            const cache = require(`${process.env.GITHUB_WORKSPACE}/node_modules/@actions/cache/lib/cache.js`);
+            const keys: Record<string, string> = JSON.parse(process.env.KEYS!);
+            for (const plugin of JSON.parse(process.env.CACHED!) as string[]) {
+              const path = `/tmp/packaged-${plugin}`;
+              const hit = await cache.restoreCache([path], keys[plugin]);
+              if (!hit) throw new Error(`${plugin}: no cached tree under ${keys[plugin]}, and publishing without it drops it from marketplace.json`);
+              await exec.exec('cp', ['-r', path, `/tmp/all-plugin-artifacts/packaged-${plugin}`]);
+            }
 
       - name: Prepare combined input
         env:
@@ -219,12 +415,7 @@ jobs:
             cp -r "$d" "/tmp/combined-plugins/$plugin"
           done
 
-          # marketplace.json's plugins array is REPLACED from this input, so a
-          # plugin missing here silently vanishes from the marketplace -- users
-          # can no longer install it and every check stays green. Fail instead.
-          # (prepare's build/cached split looks for a cache key that never
-          # matches the one `Save plugin cache` writes, so every plugin is
-          # rebuilt every run today; this is what catches the day that changes.)
+          # see docs/ci-yaml-notes.md#marketplace-json-replacement-and-a-stale-cache-key
           missing=""
           for plugin in $(echo "$ALL_PLUGINS" | jq -r '.[]'); do
             [ -d "/tmp/combined-plugins/$plugin" ] || missing="$missing $plugin"
@@ -251,16 +442,11 @@ jobs:
         run: |
           set -euo pipefail
           BRANCH="${REF//\//-}"
-          # buildhost dispatches each service by Host subdomain, so static
-          # sites live at sites.<domain>/<project>/branch/<branch> (not a
-          # /sites/ path on the apex). The OIDC audience is the buildhost
-          # instance identity (apex domain).
+          # buildhost routes by Host subdomain -- sites live at sites.<domain>/... not /sites/ on the apex; OIDC audience is the apex domain identity.
           AUDIENCE="https://pazer.build"
           SITE_URL="https://sites.pazer.build/cc-marketplace/branch/${BRANCH}"
 
-          # Mint a GitHub Actions OIDC token scoped to buildhost -- no static
-          # secret. The cc-marketplace repo's token auto-provisions the public
-          # cc-marketplace project on first upload.
+          # Mint an OIDC token scoped to buildhost, no static secret -- it auto-provisions the public cc-marketplace project on first upload.
           TOKEN=$(curl -sS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r '.value')
           if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
@@ -294,16 +480,10 @@ jobs:
           echo "Giving up after 4 attempts" >&2
           exit 1
 
-  # End-to-end smoke test: drive real Claude Code against the marketplace we
-  # just published and actually install + update every plugin. This is the only
-  # job that exercises the install path users take (the demo workflow loads a
-  # local --plugin-dir, and the build job only runs `claude plugin validate` on
-  # a cooked dir). Every entry now names a git ref, so this is what proves each
-  # orphan tag was really pushed and really holds an installable plugin -- a tag
-  # the build job failed to push is a 404 here rather than in production.
+  # see docs/ci-yaml-notes.md#smoke-test-job-rationale
   smoke-test:
     needs: [publish-marketplace]
-    if: ${{ github.event_name == 'push' && needs.publish-marketplace.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || inputs.publish) && needs.publish-marketplace.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -315,25 +495,21 @@ jobs:
         uses: wow-look-at-my/actions@typescript#latest
         with:
           script: |
-            // Drive real Claude Code against the marketplace this run published and
-            // install + update every plugin. Each entry points at an orphan tag this
-            // run pushed, so a tag that was never pushed -- or holds the wrong tree --
-            // fails here instead of for the first user who installs it.
+            // installs every plugin from the marketplace this run published; each entry points at an orphan tag this run pushed, so a tag that was never pushed -- or holds the wrong tree -- fails here instead of for the first user who installs it
             const branch = (env.GITHUB_REF_NAME ?? "").split("/").join("-");
             const runNumber = env.GITHUB_RUN_NUMBER ?? "";
             const mktUrl = `https://sites.pazer.build/cc-marketplace/branch/${branch}/marketplace.json`;
 
-            // -L is load-bearing: buildhost redirects /branch/<b>/ to the
-            // canonical /@<b>/, and without it curl returns the redirect body,
-            // which parses as no version at all and never converges.
+            // -L is load-bearing: buildhost redirects /branch/<b>/ to /@<b>/; without it curl returns the redirect body, which parses as no version and never converges
             async function fetchJson(url: string): Promise<any> {
               const r = await exec.getExecOutput("curl", ["-fsSL", "-m", "25", url], { silent: true, ignoreReturnCode: true });
               if (r.exitCode !== 0) return null;
               try { return JSON.parse(r.stdout); } catch { return null; }
             }
 
-            // Wait for the marketplace this run published (metadata.version mirrors
-            // the run number, see update_marketplace.go) to go live on buildhost.
+            // nothing here makes cloning work over SSH, deliberately -- a published plugin must install for someone with no GitHub account, so SSH is forced to fail rather than let a runner with a key silently mask a source that requires one
+            await $`git config --global core.sshCommand ${'false'}`;
+            // waits for the marketplace this run published (metadata.version mirrors the run number, see update_marketplace.go) to go live on buildhost
             let mkt: any = null;
             for (let attempt = 1; attempt <= 30; attempt++) {
               const j = await fetchJson(mktUrl);
@@ -343,6 +519,19 @@ jobs:
               await new Promise<void>((res) => setTimeout(() => res(), 5000));
             }
             if (!mkt) throw new Error(`marketplace did not reach v${runNumber} at ${mktUrl}`);
+
+            // every published source must be anonymously cloneable; the install below would also catch a regression, but only as a confusing clone failure -- this names it explicitly
+            const bad = (mkt.plugins ?? [])
+              .map((pl: any) => [pl.name, pl.source] as const)
+              .filter(([, s]: any) => !s || s.source !== 'url' || typeof s.url !== 'string' || !s.url.startsWith('https://'));
+            if (bad.length > 0) {
+              throw new Error(
+                `these plugins are not installable without a GitHub account: ` +
+                  bad.map(([n, s]: any) => `${n} -> ${JSON.stringify(s)}`).join(', ') +
+                  ` (a 'github' source clones over ssh; publish 'url' with an https:// URL)`,
+              );
+            }
+            core.info(`OK: all ${mkt.plugins.length} sources are anonymous https clones`);
 
             const mktName: string = mkt.name;
             const plugins: string[] = (mkt.plugins ?? []).map((p: any) => String(p.name));
@@ -367,13 +556,7 @@ jobs:
 
             await $`claude plugin list`;
 
-            // Every entry must name a git ref this run pushed. An entry that
-            // still carries a registry URL would mean update-marketplace fell
-            // back to the old npm shape, which installs from somewhere this run
-            // never published to. "url" (an explicit https:// URL, no SSH
-            // branch) is the source shape update-marketplace emits; "github"
-            // would mean it regressed to the SSH-cloning shape that fails on
-            // every runner with no key.
+            // every entry must name a git ref this run pushed: "url" (an explicit https:// URL, no SSH) is what update-marketplace emits; "github" would mean it regressed to the SSH-cloning shape that fails on a runner with no key
             const wrong = (mkt.plugins ?? []).filter((p: any) => p?.source?.source !== "url" || !p?.source?.ref);
             if (wrong.length > 0) {
               throw new Error(`not a url git source: ${wrong.map((p: any) => p.name).join(" ")}`);

@@ -3,31 +3,13 @@
 // bare paths; this mode returns each file's matching lines too, grouped
 // under a per-file header. ripgrep runs with --json so the grouping is
 // unambiguous even for paths containing ":" or content that looks like a
-// path; the events are grouped per file, files are ordered newest-first
-// exactly like the filenames mode, lines ascend within a file, and
-// head_limit/offset paginate the flattened stream of match/context LINES
-// across all files (file headers and "--" separators are not counted).
-// A file whose lines are entirely cut by pagination is omitted.
-//
-// Rendered shape (locked by tests; the two-space indent disambiguates
-// headers from content, except for the pathological case of a filename
-// that itself begins with two spaces — its header renders like a
-// content line):
-//
-//	Found 2 files
-//	newest.go:
-//	  3:matched line
-//	  4-context line
-//	  --
-//	  9:another match
-//	older:colon.txt:
-//	  1:hello
+// path; the events are grouped per file, files are ordered
+// newest-earliest exactly like the filenames mode, lines ascend within a
+// file, and head_limit/offset paginate the flattened stream of
+// match/context LINES across all files (file headers and "--" separators
+// are not counted). A file whose lines are entirely cut by pagination is omitted.
 //
 // With "-n": false the indent stays but the N:/N- prefixes are dropped.
-// "--" separators appear between non-contiguous chunks within a file
-// only when a context flag with a nonzero width is in effect, exactly
-// like ripgrep's own printer (verified: -C 0 and flagless runs emit no
-// separators).
 package main
 
 import (
@@ -42,10 +24,8 @@ type fwmLine struct {
 	num   int64
 	text  string
 	match bool
-	// matchCol is the byte offset of the first match within text, or -1
-	// for a context line or a line with no recorded match. It steers the
-	// clamp window (clamp.go) so a match stays visible even far into a
-	// very long line.
+	// It steers the clamp window (clamp.go) so a match stays visible
+	// even far into a very long line.
 	matchCol int
 }
 
@@ -79,8 +59,8 @@ type rgJSONEvent struct {
 		Lines      rgJSONText `json:"lines"`
 		LineNumber *int64     `json:"line_number"`
 		// Submatches carries each match's byte offsets within Lines.text;
-		// only match events populate it. The first entry's Start steers
-		// the clamp window for an over-long matching line.
+		// only match events populate it. the earliest entry's Start
+		// steers the clamp window for an over-long matching line.
 		Submatches []struct {
 			Start int64 `json:"start"`
 		} `json:"submatches"`
@@ -121,13 +101,10 @@ func parseFwmEvents(lines []string) []*fwmGroup {
 	return groups
 }
 
-// expandEventLines splits one event's text (spanning several lines for
-// multiline-mode matches) into individually numbered lines. Trailing
+// expandEventLines splits a single event's text (spanning several lines
+// for multiline-mode matches) into individually numbered lines. Trailing
 // \r\n / \n terminators are stripped from the rendered text (matching the
-// shared runner's handling of rg's standard output). matchByte is the
-// first submatch's byte offset within the whole event text (-1 for a
-// context event); it is mapped onto whichever sub-line contains it so the
-// clamp window can keep that match visible.
+// shared runner's handling of rg's standard output).
 func expandEventLines(text string, firstNum int64, match bool, matchByte int) []fwmLine {
 	if text == "" {
 		return nil
@@ -212,7 +189,7 @@ func (g *grepTool) formatFilenamesWithMatches(rawLines []string, a *grepArgs) st
 // contextSeparatorsEnabled reports whether ripgrep's printer would be in
 // context mode for the given flags: the effective flag (context beats -C
 // beats -B/-A, the same precedence the argv uses) must carry a width
-// greater than zero.
+// greater than empty.
 func contextSeparatorsEnabled(a *grepArgs) bool {
 	switch {
 	case a.context != nil:

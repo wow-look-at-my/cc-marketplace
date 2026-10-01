@@ -1,9 +1,10 @@
 module grep
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/stretchr/testify v1.11.1
+	github.com/wow-look-at-my/go-containers v0.0.0 // go-toolchain:auto-branch
 	golang.org/x/text v0.40.0
 )
 

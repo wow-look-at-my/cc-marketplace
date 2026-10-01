@@ -32,22 +32,19 @@ func makePackagedPlugin(t *testing.T, root, name, version, pluginJSON, mcpJSON s
 
 func TestReadPackagedPlugins(t *testing.T) {
 	dir := t.TempDir()
-	makePackagedPlugin(t, dir, "alpha", "5.0.0", `{"name":"alpha"}`, "")
-	makePackagedPlugin(t, dir, "beta", "1.0.0", `{"name":"beta"}`, "")
+	makePackagedPlugin(t, dir, "alpha", "5", `{"name":"alpha"}`, "")
+	makePackagedPlugin(t, dir, "beta", "1", `{"name":"beta"}`, "")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "stray.txt"), []byte("nope"), 0644))
 
 	plugins, err := readPackagedPlugins(dir)
 	require.NoError(t, err)
 	require.Len(t, plugins, 2)
 	require.Equal(t, "alpha", plugins[0].name)
-	require.Equal(t, "5.0.0", plugins[0].manifest.Version)
+	require.Equal(t, "5", plugins[0].manifest.Version)
 	require.Equal(t, "beta", plugins[1].name)
-	require.Equal(t, "1.0.0", plugins[1].manifest.Version)
+	require.Equal(t, "1", plugins[1].manifest.Version)
 }
 
-// A plugin whose release output can't be read is a FAILED RELEASE, not one to
-// skip: warning and continuing published a marketplace.json with that plugin
-// missing, so nobody could install it and every check stayed green.
 func TestReadPackagedPlugins_NoManifest(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "broken"), 0755))
@@ -125,7 +122,7 @@ func TestBuildPluginsArray(t *testing.T) {
 	})
 
 	dir := t.TempDir()
-	makePackagedPlugin(t, dir, "alpha", "3.0.0",
+	makePackagedPlugin(t, dir, "alpha", "3",
 		`{"name":"alpha","description":"Alpha plugin","version":"3","keywords":["test"],"author":{"name":"Dev"}}`, "")
 
 	plugins, err := readPackagedPlugins(dir)
@@ -155,13 +152,19 @@ func TestBuildPluginsArray(t *testing.T) {
 	// immutable per-release tag, never the moving "#latest" pointer. "url"
 	// with an explicit https:// URL, not "github": a github-source entry
 	// resolves to an SSH clone unless the caller's env opts into https, so a
-	// plain CI runner or script with no SSH key fails to install it.
+	// plain CI runner or script with no SSH key fails to install it. A public
+	// plugin must install with no GitHub account -- the "github" source type
+	// clones over SSH, which needs a key the installing machine may not have
+	// (no Actions runner does). This is the assertion that keeps anonymous
+	// installs working.
 	src := p["source"].(map[string]interface{})
 	require.Equal(t, "url", src["source"])
 	require.Equal(t, "https://github.com/test-owner/test-repo.git", src["url"])
-	require.Equal(t, "alpha#3.0.0", src["ref"])
+	require.Equal(t, "alpha#3", src["ref"])
+	require.NotContains(t, src, "repo", "the owner/repo shorthand is what resolved to ssh")
 	require.NotContains(t, src, "package", "no npm package name survives")
 	require.NotContains(t, src, "registry", "no npm registry survives")
+	require.NotContains(t, fmt.Sprint(src), "git@", "no ssh URL may ever reach a published source")
 }
 
 func TestBuildPluginsArray_WithMCP(t *testing.T) {
@@ -173,7 +176,7 @@ func TestBuildPluginsArray_WithMCP(t *testing.T) {
 	})
 
 	dir := t.TempDir()
-	makePackagedPlugin(t, dir, "beta", "1.0.0",
+	makePackagedPlugin(t, dir, "beta", "1",
 		`{"name":"beta"}`,
 		`{"mcpServers":{"myserver":{"command":"./server"}}}`)
 
@@ -207,6 +210,7 @@ func TestMcpServersFromManifest(t *testing.T) {
 }
 
 func TestRunUpdateMarketplace(t *testing.T) {
+	t.Serial()
 	tmpDir := t.TempDir()
 	claudePluginDir := filepath.Join(tmpDir, ".claude-plugin")
 	require.NoError(t, os.MkdirAll(claudePluginDir, 0755))
@@ -225,7 +229,7 @@ func TestRunUpdateMarketplace(t *testing.T) {
 	t.Cleanup(func() { repoRoot = origRoot })
 
 	packagedDir := t.TempDir()
-	makePackagedPlugin(t, packagedDir, "alpha", "1.0.0", `{"name":"alpha","description":"Alpha"}`, "")
+	makePackagedPlugin(t, packagedDir, "alpha", "1", `{"name":"alpha","description":"Alpha"}`, "")
 
 	mockGit(t, func(args ...string) (string, error) {
 		if args[0] == "rev-parse" && args[1] == "--abbrev-ref" {
@@ -246,6 +250,7 @@ func TestRunUpdateMarketplace(t *testing.T) {
 }
 
 func TestRunUpdateMarketplace_NoInputFlag(t *testing.T) {
+	t.Serial()
 	origInput := updateMarketplaceInput
 	updateMarketplaceInput = ""
 	t.Cleanup(func() { updateMarketplaceInput = origInput })

@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// writeBuildDir lays out a cooked plugin's build/ with the given files, each
-// mode 0755 like a real build output.
 func writeBuildDir(t *testing.T, names ...string) string {
 	t.Helper()
 	cooked := t.TempDir()
@@ -45,8 +43,6 @@ func TestApeName(t *testing.T) {
 	require.Equal(t, "glob.ape", apeName("glob"))
 }
 
-// The shipping layout is exactly two files: the APE under its stable name, and
-// the launcher at the path every manifest already points at.
 func TestStageBinariesShipsTheApeAndItsLauncher(t *testing.T) {
 	cooked := writeBuildDir(t, "glob"+apeSuffix)
 	require.NoError(t, stageBinaries(cooked, "glob"))
@@ -191,8 +187,6 @@ func TestStageBinariesRejectsAnEmptyBuildDir(t *testing.T) {
 	require.Error(t, stageBinaries(cooked, "glob"))
 }
 
-// Directories under build/ are not binaries and must not be mistaken for the
-// byproducts the stager deletes (os.Remove would fail on a non-empty one).
 func TestStageBinariesSkipsSubdirectories(t *testing.T) {
 	cooked := writeBuildDir(t, "glob"+apeSuffix)
 	nested := filepath.Join(cooked, "build", "cache", "deep")
@@ -223,8 +217,6 @@ func TestHasBinary(t *testing.T) {
 	require.False(t, hasBinary(onlyDirs), "a directory is not a binary")
 }
 
-// git preserves mode 0755 in a tag's tree and the installer copies it through,
-// so this list is what decides whether the shipped launcher runs at all.
 func TestExecutableFilesListsOnlyExecutableFilesByRelativeSlashPath(t *testing.T) {
 	cooked := writeBuildDir(t, "glob"+apeSuffix)
 	require.NoError(t, stageBinaries(cooked, "glob"))

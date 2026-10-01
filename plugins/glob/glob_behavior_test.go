@@ -13,7 +13,7 @@ import (
 
 func TestWeirdFilenames(t *testing.T) {
 	root := t.TempDir()
-	// Oldest-first creation order = expected output order.
+	// Oldest-earliest creation order = expected output order.
 	names := []string{
 		"plain.txt",
 		"with space.txt",
@@ -26,7 +26,7 @@ func TestWeirdFilenames(t *testing.T) {
 		"star*name.txt",
 		"日本語ファイル.txt",
 		"emoji-😀.txt",
-		"combining-e\u0301.txt", // NFD: e + U+0301 combining acute accent
+		"combining-e\u0301.txt",
 		"a/b/c/d/e/f/deep.txt",
 		".hidden.txt",
 		".dotdir/inside.txt",
@@ -41,7 +41,7 @@ func TestWeirdFilenames(t *testing.T) {
 func TestMtimeAscendingOrder(t *testing.T) {
 	root := t.TempDir()
 	// Creation order c, a, b — mtimes assigned in that order, so the
-	// result must be c, a, b (oldest first), not alphabetical.
+	// result must be c, a, b (oldest earliest), not alphabetical.
 	mkFiles(t, root, "c.go", "a.go", "b.go")
 	got, _ := runGlob(t, testTool(t, root), "*.go")
 	wantText(t, got, "c.go\na.go\nb.go")
@@ -59,12 +59,7 @@ func TestGitignoreNotRespectedAndGitIncluded(t *testing.T) {
 	}
 }
 
-// The CLAUDE_CODE_GLOB_NO_IGNORE / _HIDDEN overrides act on DIRECTORY
-// traversal only: ripgrep treats a positive --glob as a whitelist that
-// overrides hidden/ignore filtering for directly-matching FILES (verified
-// empirically on rg 14.1.0), so a top-level ignored or hidden file that
-// matches the pattern is returned regardless. The builtin passes the
-// identical argv and shares the quirk.
+// The builtin passes the identical argv and shares the quirk.
 func TestEnvNoIgnoreOverride(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, ".git/config", "ignoreddir/within.txt", "ignored.txt", "kept.txt")
@@ -139,8 +134,7 @@ func TestInvalidGlobSurfacesRgStderr(t *testing.T) {
 	// rg exits 2 with nothing on stdout for an unparseable glob. The
 	// builtin silently resolved "No files found"; this plugin surfaces
 	// rg's stderr as a tool error instead (deliberate deviation shared
-	// with the grep sibling — see rg.go). The assertion is substring-
-	// based because rg 13 omits the "rg: " message prefix that 14+ add.
+	// with the grep sibling — see rg.go).
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt")
 	got, isErr := runGlob(t, testTool(t, root), "{unclosed")
@@ -153,8 +147,7 @@ func TestInvalidGlobSurfacesRgStderr(t *testing.T) {
 }
 
 func TestEmptyPatternMatchesEverything(t *testing.T) {
-	// Empirical rg 14.x behavior: --glob '' is inert, so every file
-	// matches. The builtin passed the empty string through identically.
+	// The builtin passed the empty string through identically.
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt", "b/c.txt")
 	got, _ := runGlob(t, testTool(t, root), "")
@@ -315,10 +308,7 @@ func TestSplitAbsolutePatternNodeDirnameParity(t *testing.T) {
 
 func TestAbsolutePatternTrailingSlash(t *testing.T) {
 	// "<root>/sub/" must search <root> for glob "sub" (Node dirname
-	// semantics), not <root>/sub for glob "sub". The fixture makes the
-	// two behaviors observably different: a FILE named "sub" lives under
-	// a/, while sub/ is a directory (a bare-name glob never matches a
-	// directory's contents, verified rg 13/14/15).
+	// semantics), not <root>/sub for glob "sub".
 	root := t.TempDir()
 	mkFiles(t, root, "a/sub", "sub/inner.txt")
 	got, isErr := runGlob(t, testTool(t, root), root+"/sub/")
@@ -331,7 +321,7 @@ func TestMtimeTieOrdersByLocaleCollation(t *testing.T) {
 	// With --sort=modified gone (the sort now happens in Go), equal
 	// mtimes order by the localeCompare-parity collator: primary
 	// strength is case-insensitive, so a.txt sorts before B.txt (byte
-	// order would put B.txt first).
+	// order would put B.txt earliest).
 	root := t.TempDir()
 	mkFiles(t, root, "B.txt", "a.txt", "sub/C.txt")
 	tie := time.Now().Add(-time.Hour)
@@ -374,7 +364,7 @@ func TestPathTildeUserNotExpanded(t *testing.T) {
 }
 
 func TestPathWhitespaceTrimmedBeforeResolve(t *testing.T) {
-	// Vq trim() parity: "  sub  " only names a real directory after
+	// Vq trim() parity: " sub " only names a real directory after
 	// trimming, and a whitespace-only path resolves to the root.
 	root := t.TempDir()
 	mkFiles(t, root, "sub/inner.txt")

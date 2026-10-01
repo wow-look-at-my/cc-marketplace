@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "fs";
 import { basename, dirname, join } from "path";
 
 const pluginName = process.argv[2];
@@ -47,15 +47,13 @@ if (existsSync(justfilePath)) {
 
 function hasRecipe(recipe: string): boolean {
   if (!existsSync(justfilePath)) return false;
-  try {
-    const summary = execSync("just --summary", {
-      cwd: pluginPath,
-      encoding: "utf8",
-    });
-    return summary.split(/\s+/).includes(recipe);
-  } catch {
-    return false;
-  }
+  // A justfile that cannot read throws. Read as "no recipe", it skips the
+  // plugin's prebuild.
+  const summary = execSync("just --summary", {
+    cwd: pluginPath,
+    encoding: "utf8",
+  });
+  return summary.split(/\s+/).includes(recipe);
 }
 
 for (const recipe of ["prebuild", "postbuild"]) {
@@ -79,17 +77,38 @@ interface PluginJson {
 
 const platformBinaryPattern = /^(.+)_(linux|darwin)_(amd64|arm64)$/;
 
+// The first eight bytes of what `--targets cosmo` leaves in build/. The
+// launcher at the manifest's path is written later, by `marketplace-build
+// release-plugin`, so the unsuffixed file does not exist yet. Match on these
+// bytes and NEVER on filename -- see tools/marketplace-build/ape_package.go.
+const apeMagic = "MZqFpD='";
+
+function isApe(path: string): boolean {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    const buf = Buffer.alloc(apeMagic.length);
+    return readSync(fd, buf, 0, buf.length, 0) === buf.length && buf.toString("latin1") === apeMagic;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
 function hookBinaryExists(rel: string): boolean {
   const abs = join(pluginPath, rel);
   if (existsSync(abs)) return true;
-  // Go-toolchain emits per-platform binaries (e.g. hook_linux_amd64) instead of
-  // a single unsuffixed file. Accept the hook path if any sibling matches.
+  // Go-toolchain emits per-platform binaries (e.g. hook_linux_amd64) or one fat
+  // build instead of a single unsuffixed file. Accept the hook path if a
+  // sibling is either.
   const dir = dirname(abs);
   const base = basename(abs);
   if (!existsSync(dir)) return false;
   for (const entry of readdirSync(dir)) {
     const m = entry.match(platformBinaryPattern);
     if (m && m[1] === base) return true;
+    if (entry.startsWith(base) && isApe(join(dir, entry))) return true;
   }
   return false;
 }

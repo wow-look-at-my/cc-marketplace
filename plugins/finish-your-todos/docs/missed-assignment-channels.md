@@ -1,8 +1,6 @@
 # The channels an assignment can arrive on, and which ones fire a hook
 
-The entry gate arms on `UserPromptSubmit`. That event does **not** see every
-user message, and the gaps are not edge cases — they were the majority of one
-session's assignments.
+The entry gate arms on `UserPromptSubmit`. That event does **not** see every user message. The gaps are not edge cases — they were the majority of one session's assignments.
 
 ## What fires `UserPromptSubmit`
 
@@ -20,17 +18,11 @@ Two of those rows caused real losses.
 
 ## Gap 1: mid-turn messages fire nothing at all
 
-A message sent while a turn is running is not submitted, it is **enqueued**. The
-queue is drained inside the running turn and each entry becomes a
-`queued_command` attachment. No `UserPromptSubmit` is dispatched anywhere on
-that path.
+A message sent while a turn is running is not submitted. It is **enqueued**. The queue is drained inside the running turn and each entry becomes a `queued_command` attachment. No `UserPromptSubmit` is dispatched anywhere on that path.
 
-This is not rare. On a bridge/web surface *every* inbound user message goes
-through the queue, so any message that arrives while the session is busy — which
-is nearly all of them, for a session doing work — was invisible to the gate.
+This is not rare. On a bridge/web surface *every* inbound user message goes through the queue, so any message that arrives while the session is busy.
 
-In the session that prompted this fix, five such messages arrived. Every one
-carried an instruction. None reached the gate:
+In the session that prompted this fix, five such messages arrived. Every one carried an instruction. None reached the gate:
 
 ```
 also auto-allow the add repo and add repo root tool
@@ -42,9 +34,7 @@ it's perfectly valid and expected that i give you new tasks mid-turn
 
 The last one is the user stating the design intent outright.
 
-**The fix:** `PreToolUse` fires on every tool call regardless of how the message
-arrived, and every hook payload carries `transcript_path`. The gate re-reads the
-transcript there and arms on anything not yet accounted for.
+**The fix:** `PreToolUse` fires on every tool call regardless of how the message arrived, and every hook payload carries `transcript_path`. The gate re-reads the transcript there and arms on anything not yet accounted for.
 
 ### The record to read
 
@@ -55,41 +45,23 @@ The authoritative shape is the attachment, not the rendered prose:
   "type":"queued_command","commandMode":"prompt","prompt":"<the user's raw text>"}}
 ```
 
-`prompt` is the raw text with no wrapper to strip, and `commandMode` separates a
-typed message (`prompt`) from a harness-injected one (`task-notification`).
+`prompt` is the raw text with no wrapper to strip, and `commandMode` separates a typed message (`prompt`) from a harness-injected one (`task-notification`).
 
-Verified against a live transcript. Note the rendered form lands inside a
-`tool_result` block, not a `text` block — reading only `text` blocks finds
-nothing, which is how the first attempt at this silently matched zero messages.
+Verified against a live transcript.
 
 ### System envelopes ride the same queue
 
-Webhook events, background-task completions and reminders are queued exactly
-like a typed message. Arming on those would refuse every tool call over a PR
-notification nobody asked for, which is the fastest possible way to get the
-whole plugin turned off. They are filtered by envelope prefix
-(`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …)
-*and* by `commandMode`.
+Webhook events, background-task completions and reminders are queued exactly like a typed message. They are filtered by envelope prefix (`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …) *and* by `commandMode`.
 
 ### Arming at most once
 
-A high-water mark (the last interjection's uuid) is stored beside the debt, in
-its own file. It cannot live in the debt file: that is deleted every time a task
-is filed, so a settled interjection would arm again on the very next tool call
-and the session would never move.
+A high-water mark (the last interjection's uuid) is stored beside the debt, in its own file. It cannot live in the debt file. That is deleted every time a task is filed. A settled interjection will arm again on the very next tool call and the session will never move.
 
 ## Gap 2: `/goal <work>` was skipped on the leading slash
 
-The hook only ever sees the raw `/name args` — the expansion is invisible to it.
-The classifier skipped anything starting with `/` as "the CLI's own control
-surface", which is true of the command word and false of its arguments. Every
-assignment handed over as `/goal fix the thing` was dropped.
+The hook only ever sees the raw `/name args` — the expansion is invisible to it. The classifier skipped anything starting with `/` as "the CLI's own control surface", which is true of the command word and false of its arguments. Every assignment handed over as `/goal fix the thing` was dropped.
 
-Command arguments get a **stricter** rule than prose, because they are just as
-often parameters. Prose that is not a question is almost always an instruction;
-`/effort high` and `/loop 5m /babysit-prs` are not. So arguments arm when they
-contain an imperative, or when they read as a sentence rather than a setting
-(five words or more), and a question still needs an imperative to arm.
+Command arguments get a **stricter** rule than prose, because they are just as often parameters. Prose that is not a question is almost always an instruction. `/effort high` and `/loop 5m /babysit-prs` are not. So arguments arm when they contain an imperative, or when they read as a sentence rather than a setting (five words or more). A question still needs an imperative to arm.
 
 | input | arms | why |
 |---|---|---|
@@ -104,10 +76,6 @@ contain an imperative, or when they read as a sentence rather than a setting
 
 ## What is still not covered
 
-- A local command returning text (`/effort high`) fires nothing, so no hook can
-  see it. Not a loss: those are settings, not assignments.
-- Subagent prompts fire `SubagentStart`, not this event. Out of scope — a
-  subagent's work is the parent's task.
-- A scheduled prompt folded mid-turn is caught by the transcript pass like any
-  other queued entry; one drained at idle goes through `UserPromptSubmit`
-  normally.
+- A local command returning text (`/effort high`) fires nothing, so no hook can see it. Not a loss. Those are settings, not assignments.
+- Subagent prompts fire `SubagentStart`, not this event. Out of scope — a subagent's work is the parent's task.
+- A scheduled prompt folded mid-turn is caught by the transcript pass like any other queued entry. One drained at idle goes through `UserPromptSubmit` normally.

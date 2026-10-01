@@ -74,7 +74,7 @@ func TestServerHandshakeAdvertisesSyncAndDiagnostics(t *testing.T) {
 // NEITHER is malformed, and vscode-jsonrpc (what Claude Code uses) rejects it
 // with "The received response has neither a result nor an error property".
 // This is asserted on the RAW JSON on purpose: unmarshalling into a struct
-// silently turns a missing key into a zero value, which is exactly why the
+// silently turns a missing key into a unset value, which is exactly why the
 // original shutdown bug survived a green test suite and only showed up when a
 // real client tried to stop the server.
 func TestEveryResponseCarriesResultOrError(t *testing.T) {
@@ -119,8 +119,8 @@ func TestDidOpenPublishesOneDiagnosticPerCopy(t *testing.T) {
 	diags := publishedFor(t, drain(t, &out), uri)
 	require.NotEmpty(t, diags)
 
-	// Every copy gets its own marker -- a single diagnostic on one arbitrary
-	// rule would leave the others looking fine.
+	// Every copy gets its own marker -- a single diagnostic on a single
+	// arbitrary rule would leave the others looking fine.
 	var lead, pointers int
 	for _, d := range diags {
 		require.Equal(t, severityWarning, d.Severity)
@@ -139,9 +139,7 @@ func TestDidOpenPublishesOneDiagnosticPerCopy(t *testing.T) {
 	require.NotZero(t, pointers, "the other copies point back at it")
 }
 
-// The client concatenates diagnostics into ONE block and truncates it at 4000
-// characters (10 per file, 30 overall), so a chatty message costs the findings
-// below it their place. This pins the budget rather than trusting prose.
+// This pins the budget rather than trusting prose.
 func TestDiagnosticMessagesStayInsideTheInjectionBudget(t *testing.T) {
 	uri := "file:///repo/dashboard.css"
 	s := NewServer(&bytes.Buffer{})
@@ -155,7 +153,7 @@ func TestDiagnosticMessagesStayInsideTheInjectionBudget(t *testing.T) {
 		require.Less(t, len(d.Message), 200, "one diagnostic must not eat the block: %q", d.Message)
 		total += len(d.Message)
 	}
-	// What a client would actually inject: the first ten of this file.
+	// What a client would actually inject: the earliest of this file.
 	injected := 0
 	for i, d := range diags {
 		if i == 10 {
@@ -166,9 +164,6 @@ func TestDiagnosticMessagesStayInsideTheInjectionBudget(t *testing.T) {
 	require.Less(t, injected, 4000, "the ten diagnostics a client injects must fit its 4000-char cap")
 }
 
-// Ranking has to hold at the diagnostic level too, because only the first ten
-// of a file survive: the strongest finding must not be crowded out by copies
-// of a weaker one.
 func TestStrongestFindingsAreEmittedFirst(t *testing.T) {
 	uri := "file:///repo/x.css"
 	src := `
@@ -197,7 +192,6 @@ func TestDiagnosticRangePointsAtTheSelector(t *testing.T) {
 	diags := s.diagnose(uri)
 	require.Len(t, diags, 2)
 
-	// Line 3 of the file, 0-based line 2, starting at column 0.
 	require.Equal(t, 2, diags[0].Range.Start.Line)
 	require.Equal(t, 0, diags[0].Range.Start.Character)
 	require.Equal(t, len(".crumbs a"), diags[0].Range.End.Character)

@@ -18,8 +18,6 @@ func countArgs(kv map[string]any) map[string]any {
 func TestCountSingleFileKeepsFilenamePrefix(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"a.txt", "needle one\nplain\nneedle two\n"})
-	// The -H fix: without it a single-file target produced a bare "2"
-	// the parser scored as 0 files / 0 matches (the 2.1.116 bug).
 	got := grepOK(t, testTool(t, root), countArgs(map[string]any{"pattern": "needle", "path": "a.txt"}))
 	wantText(t, got, "a.txt:2\n\nFound 2 total occurrences across 1 file.")
 }
@@ -88,8 +86,6 @@ func TestCountPagination(t *testing.T) {
 	got := grepOK(t, g, countArgs(map[string]any{"pattern": "x", "head_limit": 2}))
 	wantText(t, got, "a:1\nb:2\n\nFound 3 total occurrences across 2 files. with pagination = limit: 2")
 
-	// Q46 quirk: the limit is only "applied" when items existed beyond
-	// the window (3 - 1 is not > 2), so only the offset is reported.
 	got = grepOK(t, g, countArgs(map[string]any{"pattern": "x", "head_limit": 2, "offset": 1}))
 	wantText(t, got, "b:2\nc:3\n\nFound 5 total occurrences across 2 files. with pagination = offset: 1")
 
@@ -97,7 +93,6 @@ func TestCountPagination(t *testing.T) {
 	got = grepOK(t, g, countArgs(map[string]any{"pattern": "x", "head_limit": 3}))
 	wantText(t, got, "a:1\nb:2\nc:3\n\nFound 6 total occurrences across 3 files.")
 
-	// 0 = unlimited.
 	got = grepOK(t, g, countArgs(map[string]any{"pattern": "x", "head_limit": 0}))
 	wantText(t, got, "a:1\nb:2\nc:3\n\nFound 6 total occurrences across 3 files.")
 
@@ -105,7 +100,7 @@ func TestCountPagination(t *testing.T) {
 	got = grepOK(t, g, countArgs(map[string]any{"pattern": "x", "offset": 2}))
 	wantText(t, got, "c:3\n\nFound 3 total occurrences across 1 file. with pagination = offset: 2")
 
-	// Offset past the end: empty body, zero totals, offset note kept.
+	// Offset past the end: empty body, empty totals, offset note kept.
 	got = grepOK(t, g, countArgs(map[string]any{"pattern": "x", "offset": 9}))
 	wantText(t, got, "No matches found\n\nFound 0 total occurrences across 0 files. with pagination = offset: 9")
 }

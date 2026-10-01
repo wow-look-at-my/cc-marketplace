@@ -3,11 +3,14 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -33,16 +36,14 @@ func testTool(t *testing.T, root string) *grepTool {
 	}
 }
 
-// tf is one fixture file: a slash-relative name and its content.
+// tf is a single fixture file: a slash-relative name and its content.
 type tf struct {
 	name    string
 	content string
 }
 
-// mkTree creates the fixture files with strictly increasing mtimes in
-// argument order (index 0 oldest). Grep's filenames/filenames_with_matches
-// modes sort newest FIRST, so the expected file order is the REVERSE of
-// the argument order.
+// Grep's filenames/filenames_with_matches modes sort newest so the
+// expected file order is the REVERSE of the argument order.
 func mkTree(t *testing.T, root string, files ...tf) {
 	t.Helper()
 	base := time.Now().Add(-2 * time.Hour)
@@ -89,12 +90,40 @@ func containsLine(text, line string) bool {
 }
 
 // writeFakeRg writes an executable shell script standing in for ripgrep
-// and returns its path.
+// and returns its path, a single time the kernel will actually start it.
+//
+// Writing a file and executing it straight away races every OTHER test in
+// this package that forks. A child between fork and exec holds a copy of
+// every open descriptor, this file's write descriptor included, so the
+// kernel refuses to exec it and answers ETXTBSY. The tests run in parallel,
+// so the window is real: it surfaced in CI as a runner test asserting on
+// ripgrep's stderr and reading "text file busy" instead.
+//
+// The window is the writer's, not the reader's, and it closes on its own.
+// Probing until the file starts is what makes that wait explicit. There is
+// no attempt cap: a file that never becomes executable is a real defect, and
+// the test's own deadline is what must report it.
 func writeFakeRg(t *testing.T, script string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "fake-rg")
 	require.NoError(t, os.WriteFile(p, []byte("#!/bin/sh\n"+script+"\n"), 0o755))
-	return p
+
+	for {
+		// Start, never Run: the answer is whether the kernel will EXEC this
+		// file, and some of these fakes stream until they are killed. Waiting
+		// for a single to finish would hang the test this is meant to protect.
+		cmd := exec.Command(p, "--fake-rg-startup-probe")
+		err := cmd.Start()
+		if err == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return p
+		}
+		if !errors.Is(err, syscall.ETXTBSY) {
+			return p
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // fixedRg returns a resolver that always yields path.
@@ -157,7 +186,7 @@ func (c *pipeClient) recv() map[string]any {
 	return m
 }
 
-// roundTrip sends a raw request line and decodes the one response.
+// roundTrip sends a raw request line and decodes the thing response.
 func (c *pipeClient) roundTrip(raw string) map[string]any {
 	c.t.Helper()
 	c.send(raw)
