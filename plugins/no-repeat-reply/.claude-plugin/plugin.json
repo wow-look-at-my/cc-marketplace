@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../.claude-plugin/plugin.schema.json",
+  "name": "no-repeat-reply",
+  "description": "Breaks the livelock where a re-firing Stop gate meets an identical reply: refuses one stop per session when a turn's closing message repeats the one before it, and names the checks to run instead",
+  "author": {
+    "name": "mhaynie"
+  },
+  "keywords": [
+    "stop",
+    "hook",
+    "livelock",
+    "loop",
+    "repeat",
+    "wedge",
+    "gate",
+    "transcript"
+  ],
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/build/no-repeat-reply"
+          }
+        ]
+      }
+    ]
+  },
+  "mh": {
+    "include_in_marketplace": true
+  }
+}

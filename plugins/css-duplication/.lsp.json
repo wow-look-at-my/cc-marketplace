@@ -1,0 +1,8 @@
+{
+  "css-duplication": {
+    "command": "${CLAUDE_PLUGIN_ROOT}/build/css-duplication",
+    "extensionToLanguage": {
+      ".css": "css"
+    }
+  }
+}

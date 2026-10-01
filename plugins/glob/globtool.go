@@ -1,0 +1,424 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+const globToolName = "Glob"
+
+// Parameters are documented in the schema, not here. The tool is
+// alwaysLoad, so every description byte is paid in every prompt.
+const globDescription = `- Finds files by glob pattern
+- Returns matching file paths sorted by modification time`
+
+// schemaProp is a single JSON Schema property entry.
+type schemaProp struct {
+	Type        string   `json:"type"`
+	Enum        []string `json:"enum,omitempty"`
+	Description string   `json:"description"`
+}
+
+// Struct field order is the property order the model sees.
+type globSchema struct {
+	Type                 string          `json:"type"`
+	AdditionalProperties bool            `json:"additionalProperties"`
+	Required             []string        `json:"required"`
+	Properties           globSchemaProps `json:"properties"`
+}
+
+type globSchemaProps struct {
+	Pattern schemaProp `json:"pattern"`
+	Path    schemaProp `json:"path"`
+}
+
+var globInputSchemaCompact = mustMarshalJSON(globSchema{
+	Type:     "object",
+	Required: []string{"pattern"},
+	Properties: globSchemaProps{
+		Pattern: schemaProp{Type: "string", Description: "The glob pattern to match files against, e.g. \"**/*.js\" or \"src/**/*.ts\""},
+		Path:    schemaProp{Type: "string", Description: "The directory to search in. Defaults to the current working directory."},
+	},
+})
+
+func mustMarshalJSON(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+const (
+	globMaxResults       = 25000
+	globPersistThreshold = 50000
+	globTruncationLine   = "(Results are truncated. Consider using a more specific path or pattern.)"
+	globNoFilesFound     = "No files found"
+	cwdNote              = "Note: your current working directory is"
+)
+
+type globTool struct {
+	root             string // default search root (session-cwd equivalent)
+	maxResults       int
+	persistThreshold int
+	timeout          time.Duration
+	timeoutLabel     int
+	maxOutput        int
+	tempDir          string // persist dir; "" = os.TempDir()
+	resolveRg        func() (string, error)
+	logf             func(string, ...any)
+}
+
+// resolveSymlinks is EvalSymlinks that falls back to the input unchanged
+// when resolution fails (nonexistent path, permission error).
+func resolveSymlinks(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
+}
+
+// rebasePath maps p from resolved space back to argv space: when p sits
+// under resolved, its prefix is swapped for orig. Everything the tool
+// reports stays in the form the caller supplied (see execute).
+func rebasePath(p, resolved, orig string) string {
+	if resolved == orig || !strings.HasPrefix(p, resolved) {
+		return p
+	}
+	rest := p[len(resolved):]
+	if rest != "" && rest[0] != filepath.Separator {
+		return p // prefix match mid-component, not a child path
+	}
+	return orig + rest
+}
+
+// newGlobTool builds the production tool: root = $CLAUDE_PROJECT_DIR
+// (injected into every plugin MCP server by claude-code) falling back to
+// the process cwd.
+func newGlobTool(logf func(string, ...any)) *globTool {
+	root := os.Getenv("CLAUDE_PROJECT_DIR")
+	if root == "" {
+		if wd, err := os.Getwd(); err == nil {
+			root = wd
+		} else {
+			root = "."
+		}
+	}
+	timeout, label := defaultRgTimeout()
+	return &globTool{
+		root:             root,
+		maxResults:       globMaxResults,
+		persistThreshold: globPersistThreshold,
+		timeout:          timeout,
+		timeoutLabel:     label,
+		maxOutput:        rgOutputCapBytes,
+		resolveRg:        resolveRipgrep,
+		logf:             logf,
+	}
+}
+
+func (g *globTool) Name() string { return globToolName }
+
+func (g *globTool) ListEntry() toolListEntry {
+	return toolListEntry{
+		Name:        globToolName,
+		Description: globDescription,
+		InputSchema: globInputSchemaCompact,
+		Annotations: &toolAnnotations{ReadOnlyHint: true},
+		Meta:        map[string]any{"anthropic/alwaysLoad": true},
+	}
+}
+
+// Call validates the arguments against the schema (JSON-RPC-level
+// failures) and executes the search (operational failures become
+// isError results).
+func (g *globTool) Call(raw json.RawMessage) (*toolResult, *rpcError) {
+	pattern, path, rpcErr := parseGlobArgs(raw)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	text, isErr := g.execute(pattern, path)
+	return &toolResult{Text: text, IsError: isErr}, nil
+}
+
+func parseGlobArgs(raw json.RawMessage) (pattern, path string, rpcErr *rpcError) {
+	invalid := func(format string, args ...any) (string, string, *rpcError) {
+		return "", "", &rpcError{Code: codeInvalidParams, Message: fmt.Sprintf(format, args...)}
+	}
+	var m map[string]json.RawMessage
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &m); err != nil {
+			return invalid("%s arguments must be an object", globToolName)
+		}
+	}
+	seenPattern := false
+	for k, v := range m {
+		switch k {
+		case "pattern":
+			// Explicit null check: Unmarshal treats JSON null as a no-op
+			// on Go scalars (an unchecked {"pattern": null} would list the
+			// whole tree), but zod rejects null for these fields.
+			if isJSONNull(v) || json.Unmarshal(v, &pattern) != nil {
+				return invalid("%s pattern must be a string", globToolName)
+			}
+			seenPattern = true
+		case "path":
+			if isJSONNull(v) || json.Unmarshal(v, &path) != nil {
+				return invalid("%s path must be a string", globToolName)
+			}
+		default:
+			// additionalProperties: false
+			return invalid("%s does not accept an argument named %q", globToolName, k)
+		}
+	}
+	if !seenPattern {
+		return invalid("%s requires the pattern argument", globToolName)
+	}
+	return pattern, path, nil
+}
+
+func isJSONNull(v json.RawMessage) bool {
+	return string(bytes.TrimSpace(v)) == "null"
+}
+
+// execute runs a single Glob search, returning the tool_result
+// text and whether it is an error.
+func (g *globTool) execute(pattern, path string) (string, bool) {
+	searchPath := g.root
+	if path != "" { // empty string is falsy upstream: same as omitted
+		resolved, err := resolveAgainst(path, g.root)
+		if err != nil {
+			return err.Error(), true
+		}
+		if msg, ok := g.validateDir(path, resolved); !ok {
+			return msg, true
+		}
+		searchPath = resolved
+	}
+
+	pat := pattern
+	if filepath.IsAbs(pat) {
+		if base, rel := splitAbsolutePattern(pat); base != "" {
+			searchPath, pat = base, rel
+		}
+	}
+	// rg roots its --glob matcher at the child's RESOLVED cwd but builds
+	// candidate paths from the search-path ARGV, so an unresolved
+	// (symlinked) argv makes every slash-containing glob silently match
+	// nothing (macOS /var -> /private/var, any symlinked project dir).
+	// Hand rg the resolved form; output is rebased back below so results
+	// keep the caller-supplied spelling.
+	rgSearchPath := resolveSymlinks(searchPath)
+
+	rgPath, err := g.resolveRg()
+	if err != nil {
+		return err.Error(), true
+	}
+
+	// The gitignore/hidden defaults are env-overridable exactly like the
+	// builtin.
+	args := []string{"--files", "--glob", pat}
+	if envTruthyDefault("CLAUDE_CODE_GLOB_NO_IGNORE", "true") {
+		args = append(args, "--no-ignore")
+	}
+	if envTruthyDefault("CLAUDE_CODE_GLOB_HIDDEN", "true") {
+		args = append(args, "--hidden")
+	}
+	args = append(args, rgSearchPath)
+
+	runner := &rgRunner{timeout: g.timeout, timeoutLabel: g.timeoutLabel, maxOutput: g.maxOutput}
+	lines, err := runner.run(rgPath, args, g.root)
+	if err != nil {
+		return err.Error(), true
+	}
+
+	files := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if !filepath.IsAbs(l) {
+			l = filepath.Join(searchPath, l)
+		}
+		files = append(files, rebasePath(l, rgSearchPath, searchPath))
+	}
+	sortFilesByMtimeAsc(files)
+	truncated := len(files) > g.maxResults
+	if truncated {
+		files = files[:g.maxResults]
+	}
+	for i, f := range files {
+		files[i] = relativizePath(f, g.root)
+	}
+
+	var text string
+	if len(files) == 0 {
+		text = globNoFilesFound
+	} else {
+		text = strings.Join(files, "\n")
+		if truncated {
+			text += "\n" + globTruncationLine
+		}
+	}
+	return persistOversize(text, globToolName, g.persistThreshold, g.tempDir, g.logf), false
+}
+
+// Messages interpolate the RAW path argument and the default root.
+func (g *globTool) validateDir(rawPath, resolved string) (string, bool) {
+	if strings.HasPrefix(resolved, `\\`) || strings.HasPrefix(resolved, "//") {
+		return "", true
+	}
+	st, err := os.Stat(resolved)
+	if err != nil {
+		if os.IsNotExist(err) {
+			msg := fmt.Sprintf("Directory does not exist: %s. %s %s.", rawPath, cwdNote, g.root)
+			if s := didYouMean(resolved, g.root); s != "" {
+				msg += fmt.Sprintf(" Did you mean %s?", s)
+			}
+			return msg, false
+		}
+		return err.Error(), false
+	}
+	if !st.IsDir() {
+		return fmt.Sprintf("Path is not a directory: %s", rawPath), false
+	}
+	return "", true
+}
+
+// Divergences: no unicode NFC normalization (the builtin NFC-normalizes;
+// stdlib-only here), an unresolvable home directory leaves "~" literal
+// instead of throwing, and the literal strings "undefined" and "null"
+// resolve to root (models emit them for "no path"; the builtin instead
+// begged the model not to in the schema description).
+func resolveAgainst(p, root string) (string, error) {
+	if strings.ContainsRune(p, 0) {
+		return "", errors.New("Path contains null bytes")
+	}
+	p = strings.TrimSpace(p)
+	if p == "" || p == "undefined" || p == "null" {
+		return root, nil
+	}
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			if p == "~" {
+				return home, nil
+			}
+			return filepath.Join(home, p[2:]), nil
+		}
+	}
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p), nil
+	}
+	return filepath.Join(root, p), nil
+}
+
+// Failed stats sort as time empty (grep-sibling parity). Equal mtimes
+// tie-break by ascending localeCompare order (see collate.go); the
+// builtin left equal-mtime order to rg's walk order, which was
+// deterministic but unspecified.
+func sortFilesByMtimeAsc(files []string) {
+	type entry struct {
+		path  string
+		mtime time.Time
+	}
+	entries := make([]entry, len(files))
+	for i, p := range files {
+		var mt time.Time
+		if st, err := os.Stat(p); err == nil {
+			mt = st.ModTime()
+		}
+		entries[i] = entry{p, mt}
+	}
+	col := newPathCollator()
+	sort.SliceStable(entries, func(i, j int) bool {
+		if !entries[i].mtime.Equal(entries[j].mtime) {
+			return entries[i].mtime.Before(entries[j].mtime)
+		}
+		return col.CompareString(entries[i].path, entries[j].path) < 0
+	})
+	for i, e := range entries {
+		files[i] = e.path
+	}
+}
+
+// Without a metachar the split is Node dirname/basename — which ignore
+// trailing slashes ("/foo/bar/" splits into "/foo" + "bar", NOT
+// "/foo/bar" + "bar" as Go's filepath.Dir/Base would). (The Windows
+// drive-letter special case is omitted: this plugin ships linux/darwin
+// binaries only.)
+func splitAbsolutePattern(pat string) (base, rel string) {
+	idx := strings.IndexAny(pat, "*?[{")
+	if idx < 0 {
+		return splitNodeDirBase(pat)
+	}
+	slash := strings.LastIndex(pat[:idx], "/")
+	if slash < 0 {
+		return "", pat
+	}
+	base = pat[:slash]
+	if base == "" {
+		base = "/" // metachar in the earliest component after the root
+	}
+	return base, pat[slash+1:]
+}
+
+// splitNodeDirBase mirrors Node path.posix dirname/basename on the
+// absolute inputs the no-metachar branch sees: trailing separators are
+// ignored, and "/" itself splits into "/" + "" (an empty glob is inert
+// in rg, matching everything — faithful to the builtin).
+func splitNodeDirBase(p string) (dir, base string) {
+	trimmed := strings.TrimRight(p, "/")
+	if trimmed == "" { // p was all slashes
+		return "/", ""
+	}
+	return filepath.Dir(trimmed), filepath.Base(trimmed)
+}
+
+func relativizePath(abs, root string) string {
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return abs
+	}
+	return rel
+}
+
+func didYouMean(resolved, root string) string {
+	sep := string(filepath.Separator)
+	parent := filepath.Dir(root)
+	n := resolved
+	if rp, err := filepath.EvalSymlinks(filepath.Dir(resolved)); err == nil {
+		n = filepath.Join(rp, filepath.Base(resolved))
+	}
+	prefix := parent
+	if parent != sep {
+		prefix = parent + sep
+	}
+	if !strings.HasPrefix(n, prefix) || strings.HasPrefix(n, root+sep) || n == root {
+		return ""
+	}
+	rel, err := filepath.Rel(parent, n)
+	if err != nil {
+		return ""
+	}
+	candidate := filepath.Join(root, rel)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return ""
+}
+
+func envTruthyDefault(name, fallback string) bool {
+	v := os.Getenv(name)
+	if v == "" {
+		v = fallback
+	}
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}

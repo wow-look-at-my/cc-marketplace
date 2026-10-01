@@ -41,9 +41,21 @@ type transcriptMessage struct {
 // contentBlock is one block inside an assistant message's content array. Only
 // tool_use blocks carry a tool name and input.
 type contentBlock struct {
-	Type  string          `json:"type"`
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input"`
+	Type string `json:"type"`
+	Name string `json:"name"`
+	// ID pairs a tool_use with the tool_result that answers it, which is how a
+	// TaskCreate's subject is matched to the id its result reports.
+	ID        string          `json:"id"`
+	ToolUseID string          `json:"tool_use_id"`
+	Content   json.RawMessage `json:"content"`
+	Input     json.RawMessage `json:"input"`
+}
+
+// transcriptRecord is one transcript line reduced to the content blocks the
+// gate cares about, so the file is read once and both the TodoWrite and the
+// task-tool reconstruction work from the same pass.
+type transcriptRecord struct {
+	Blocks []contentBlock
 }
 
 // todoWriteInput is the input object of a TodoWrite tool call.
@@ -60,10 +72,11 @@ type TodoItem struct {
 	ActiveForm string `json:"activeForm"`
 }
 
-// latestTodos returns the todo list from the most recent TodoWrite call in the
-// transcript, or nil if the file can't be read or no TodoWrite call is present.
-// Each TodoWrite call replaces the whole list, so the last one wins.
-func latestTodos(path string) []TodoItem {
+// readTranscript reads the JSONL transcript once, returning each line's content
+// blocks in file order. A line that is not a message, or whose content is a
+// plain string rather than an array of blocks, carries no tool calls and is
+// skipped.
+func readTranscript(path string) []transcriptRecord {
 	if path == "" {
 		return nil
 	}
@@ -73,7 +86,7 @@ func latestTodos(path string) []TodoItem {
 	}
 	defer f.Close()
 
-	var todos []TodoItem
+	var records []transcriptRecord
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -93,7 +106,18 @@ func latestTodos(path string) []TodoItem {
 			// Content is a plain string (not an array of blocks); no tool calls.
 			continue
 		}
-		for _, b := range blocks {
+		records = append(records, transcriptRecord{Blocks: blocks})
+	}
+	return records
+}
+
+// latestTodos returns the todo list from the most recent TodoWrite call. Each
+// call replaces the whole list, so the last one wins. Environments with the
+// task tools instead of TodoWrite yield nothing here; see latestTasks.
+func latestTodos(records []transcriptRecord) []TodoItem {
+	var todos []TodoItem
+	for _, rec := range records {
+		for _, b := range rec.Blocks {
 			if b.Type != "tool_use" || b.Name != "TodoWrite" {
 				continue
 			}
@@ -146,7 +170,7 @@ func blockReason(inProgress, pending []TodoItem) string {
 	}
 
 	b.WriteString("\nStopping now would leave the user's request half-finished -- exactly the kind of accidental abandonment this guard exists to catch. Keep going and complete these tasks.\n")
-	b.WriteString("\nThe only legitimate way past this point is a todo list with no pending or in-progress items. If a task is genuinely done, mark it completed with TodoWrite. If a task is no longer applicable, remove it with TodoWrite. Reflect reality in the list -- do not just stop on top of unfinished work.")
+	b.WriteString("\nThe only legitimate way past this point is a task list with no pending or in-progress items. If a task is genuinely done, mark it completed (TaskUpdate status completed, or TodoWrite). If it is no longer applicable, delete it the same way. Reflect reality in the list -- do not just stop on top of unfinished work.")
 	return b.String()
 }
 
@@ -167,23 +191,51 @@ func evaluate(input []byte) (int, string) {
 		return 0, ""
 	}
 
-	inProgress, pending := incompleteTodos(latestTodos(hi.TranscriptPath))
+	// Both sources, one pass. An environment has one or the other -- TodoWrite
+	// or the task tools -- but reading both means the gate does not silently
+	// stop guarding when the tool surface changes underneath it, which is
+	// exactly what happened when the task tools replaced TodoWrite.
+	records := readTranscript(hi.TranscriptPath)
+	inProgress, pending := incompleteTodos(latestTodos(records))
+	taskInProgress, taskPending := incompleteTasks(latestTasks(records))
+	inProgress = append(inProgress, taskInProgress...)
+	pending = append(pending, taskPending...)
 	if len(inProgress)+len(pending) == 0 {
 		return 0, ""
 	}
 	return 2, blockReason(inProgress, pending)
 }
 
-// run reads the hook payload from r and returns the exit code and stderr message.
-func run(r io.Reader) (int, string) {
+// run reads the hook payload from r and returns the exit code, the stderr
+// message (a Stop block reports that way) and the stdout payload (the
+// entry-side hooks answer in JSON).
+//
+// One binary serves all three events, dispatched on hook_event_name: they share
+// the debt marker and the task-tool vocabulary, so splitting them into separate
+// programs is what let half this plugin drift into another language.
+func run(r io.Reader) (code int, stderr, stdout string) {
 	input, _ := io.ReadAll(r)
-	return evaluate(input)
+	payload := parsePayload(input)
+
+	switch payload.EventName {
+	case "UserPromptSubmit":
+		return 0, "", promptArm(payload)
+	case "PreToolUse":
+		return 0, "", todoGate(payload)
+	default:
+		// Stop, and anything unrecognized: an unknown event must not block.
+		c, msg := evaluate(input)
+		return c, msg, ""
+	}
 }
 
 func main() {
-	code, msg := run(os.Stdin)
-	if msg != "" {
-		fmt.Fprint(os.Stderr, msg)
+	code, stderr, stdout := run(os.Stdin)
+	if stdout != "" {
+		fmt.Print(stdout)
+	}
+	if stderr != "" {
+		fmt.Fprint(os.Stderr, stderr)
 	}
 	os.Exit(code)
 }

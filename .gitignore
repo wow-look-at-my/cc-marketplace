@@ -11,6 +11,7 @@ plugins/cleanup-bash-cmds/cleanup-bash-cmds
 plugins/detect-permission-seeking/detect-permission-seeking
 plugins/jq/jq-mcp
 plugins/no-overwrites/no-overwrites
+plugins/no-work-loss/no-work-loss
 plugins/prompt-url-fetch/prompt-url-fetch
 plugins/recommend-go-toolchain/recommend-go-toolchain
 .go-binary
@@ -28,3 +29,13 @@ Thumbs.db
 *.swo
 coverage.out
 build/
+
+# The upstream Docker reference, refetched by the docs plugin's prebuild on
+# every build. Same rule as above: the build never reads the committed copy, so
+# a copy in the tree only goes stale and gets linted as prose this repo wrote.
+plugins/docs/skills/*/reference/
+
+# The bundled server and its launcher. Not build/, because release-plugin
+# rewrites that directory into one fat APE and its launcher, and the slopfix
+# this plugin fetches is what has to be there.
+plugins/common-checks/server/

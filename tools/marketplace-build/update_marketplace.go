@@ -5,16 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 var updateMarketplaceInput string
-var updateMarketplaceBaseURL string
 
 func init() {
-	updateMarketplaceCmd.Flags().StringVar(&updateMarketplaceBaseURL, "base-url", "", "Base URL for npm registry (defaults to GitHub Pages URL)")
 }
 
 func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
@@ -52,13 +49,12 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	// Update plugins array
 	owner, repo, err := GetRepoInfo()
 	if err != nil {
-		return fmt.Errorf("failed to get repo info (set --base-url if not in a git repo): %w", err)
+		return fmt.Errorf("failed to get repo info: %w", err)
 	}
-	pagesRegistry := updateMarketplaceBaseURL
-	if pagesRegistry == "" {
-		pagesRegistry = fmt.Sprintf("https://%s.github.io/%s", owner, repo)
-	}
-	plugins := buildPluginsArray(packagedPlugins, marketplace, pagesRegistry, owner)
+	// Plugins are cloned from this repo's own orphan tags, so the entries carry
+	// owner/repo rather than a registry URL.
+	pluginRepo := fmt.Sprintf("%s/%s", owner, repo)
+	plugins := buildPluginsArray(packagedPlugins, marketplace, pluginRepo, owner)
 	marketplace["plugins"] = plugins
 
 	// Marketplace version mirrors the build's run number for monotonicity.
@@ -109,17 +105,17 @@ func writeSummary(path string, plugins []packagedPlugin, owner, repo, branch str
 
 	fmt.Fprintf(f, "## Marketplace Updated\n\n")
 	fmt.Fprintf(f, "**Branch:** `%s`\n\n", branch)
-	fmt.Fprintf(f, "| Plugin | Package | Version |\n")
-	fmt.Fprintf(f, "|--------|---------|--------|\n")
+	fmt.Fprintf(f, "| Plugin | Tag | Version |\n")
+	fmt.Fprintf(f, "|--------|-----|--------|\n")
 
 	for _, p := range plugins {
-		fmt.Fprintf(f, "| %s | `%s` | `%s` |\n", p.name, p.manifest.Name, p.manifest.Version)
+		fmt.Fprintf(f, "| %s | `%s` | `%s` |\n", p.name, p.manifest.Tag, p.manifest.Version)
 	}
 }
 
 // buildPluginsArray creates the plugins array for marketplace.json from the
 // packaged plugin artifacts produced by `package-plugin`.
-func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]interface{}, pagesRegistry, owner string) []interface{} {
+func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]interface{}, pluginRepo, owner string) []interface{} {
 	var out []interface{}
 
 	existingPlugins := make(map[string]map[string]interface{})
@@ -134,15 +130,21 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 	}
 
 	for _, p := range plugins {
-		displayVersion := strings.SplitN(p.manifest.Version, ".", 2)[0]
+		// A git source, not npm: `claude plugin install` clones the plugin's
+		// orphan tag (`git clone --depth 1 --branch <tag>`), so installing needs
+		// git -- which Claude Code already requires -- and never node or npm.
+		// The ref is the IMMUTABLE per-release tag rather than `#latest`, so a
+		// given marketplace.json always resolves to the same tree; the moving
+		// `#latest` pointer exists for humans.
+		//
+		// `url` with an explicit https:// URL, NOT `github` with owner/repo.
 		entry := map[string]interface{}{
 			"name":    p.name,
-			"version": displayVersion,
+			"version": p.manifest.Version,
 			"source": map[string]interface{}{
-				"source":   "npm",
-				"package":  p.manifest.Name,
-				"version":  p.manifest.Version,
-				"registry": pagesRegistry,
+				"source": "url",
+				"url":    fmt.Sprintf("https://github.com/%s.git", pluginRepo),
+				"ref":    p.manifest.Tag,
 			},
 		}
 

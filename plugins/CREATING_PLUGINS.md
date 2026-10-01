@@ -4,11 +4,11 @@ This guide walks through creating a Claude Code plugin from scratch.
 
 ## Quick Start
 
-1. Copy the `example-plugin/` folder and rename it to your plugin name
-2. Rename all `.template.` files (remove `.template.` from names)
-3. Edit `plugin.json` with your plugin's metadata
-4. Add your commands, agents, or skills
-5. Add the plugin to `../.claude-plugin/marketplace.json`
+1. Create `your-plugin/.claude-plugin/plugin.json` with your plugin's metadata
+2. Add your commands, agents, or skills
+3. Add the plugin to `../.claude-plugin/marketplace.json`
+
+A prose or shell rule does not belong here. It goes in [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix), and `slopfix/`'s manifest reaches it by naming the check. Read `slopfix/CLAUDE.md` before adding a guard.
 
 ## Plugin Directory Structure
 
@@ -77,7 +77,7 @@ argument-hint: [args]
 Instructions Claude follows when user runs /command-name.
 ```
 
-See `example-plugin/commands/command.template.md` for a full example.
+The frontmatter fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#slash-commands).
 
 ### Agents (`agents/`)
 
@@ -94,7 +94,7 @@ model: sonnet
 You are a code reviewer. Analyze code and provide feedback.
 ```
 
-See `example-plugin/agents/agent.template.md` for a full example.
+The frontmatter fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#agents).
 
 ### Skills (`skills/`)
 
@@ -108,7 +108,7 @@ skills/
     └── examples/        # Example outputs (optional)
 ```
 
-See `example-plugin/skills/example-skill/SKILL.template.md` for a full example.
+The frontmatter fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#skills).
 
 ### MCP Servers (`.mcp.json`)
 
@@ -128,11 +128,11 @@ External tools and data sources:
 }
 ```
 
-See `example-plugin/.mcp.template.json` for a full example.
+The server fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#mcp-servers).
 
 ### Build Script (`justfile`)
 
-If your plugin needs custom steps before or after the build, create a `justfile` with only the recipes you need. Only include `prebuild` and/or `postbuild` if they do real work — don't add a justfile at all if neither is needed.
+If your plugin needs custom steps before or after the build, create a `justfile` with only the recipes you need. Only include `prebuild` and/or `postbuild` if they do real work — do not add a justfile at all if neither is needed.
 
 ```just
 [private]
@@ -145,11 +145,11 @@ prebuild:
 
 The marketplace builder runs in this order:
 
-1. **go-toolchain** (CI runs `wow-look-at-my/go-toolchain@latest` action if any `.go` files are found — builds cross-platform binaries for linux/darwin × amd64/arm64)
+1. **go-toolchain** (CI runs `wow-look-at-my/go-toolchain@master` action if any `.go` files are found — builds cross-platform binaries for linux/darwin × amd64/arm64)
 2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
-See `example-plugin/justfile.template` for examples.
+`docs/justfile` and `slopfix/justfile` are the two real ones in this repo.
 
 ## Step 3: Enable Marketplace Inclusion
 
@@ -167,22 +167,20 @@ When you push to any branch, CI will:
 1. Detect plugins with `mh.include_in_marketplace: true`
 2. Run `just prebuild` (if available), then the go-toolchain (if `.go` files exist), then `just postbuild` (if available)
 3. Run tests
-4. Create an orphan tag with the built plugin: `plugin/{plugin}/v{version}`
+4. Create an orphan tag with the built plugin: `{plugin}#{version}`
 5. Update `marketplace.json` with the new version
-6. Smoke-test the published marketplace by driving real Claude Code to `claude
-   plugin marketplace add` + `install` + `update` **every** plugin (the
-   `smoke-test` job in `release.yml`). Because Claude installs all plugins into a
-   single shared npm prefix, one unreachable tarball fails the run — this guards
-   against a plugin's published artifact going missing (e.g. a stale registry URL).
+6. Smoke-test the published marketplace by driving real Claude Code to `claude plugin marketplace add` + `install` + `update` **every** plugin (the `smoke-test` job in `release.yml`).
 
-**You don't need to manually edit marketplace.json** - CI handles it automatically.
+A manual `workflow_dispatch` of `release.yml` builds without publishing unless `publish` is set.
+
+**You do not need to manually edit marketplace.json** - CI handles it automatically.
 
 ## Build & Release Process
 
 Plugins are built and released automatically on push:
 
-- **Tag naming:** `{branch}/{plugin}/v{version}` (e.g., `master/my-plugin/v1.2.3`)
-- **Version bumping:** Patch version auto-increments (1.0.0 → 1.0.1)
+- **Tag naming:** `{plugin}#{version}` (e.g., `my-plugin#1540`), plus the moving `{plugin}#latest`
+- **Versioning:** The version is one integer, the release run number. There is no semver.
 - **Branch isolation:** Each branch has independent version series
 - **Cleanup:** When a branch is deleted, all its tags are removed
 

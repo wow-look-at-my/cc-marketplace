@@ -1,0 +1,80 @@
+name: plugin e2e
+
+on:
+  push:
+    # Every branch, no tag: the plugin/*/v* tags the release workflow pushes must not start this one.
+    branches: ["**"]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # The Bash cleaner's rule moved to slopfix, so this drives the manifest against the real binary, which no unit test covers.
+  slopfix-clean-bash:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # Against the slopfix this branch is written for, not the published one: a check that has not shipped yet would otherwise fail here for the whole time between the two merges.
+      - name: Check out the slopfix this branch expects
+        uses: actions/checkout@v7
+        with:
+          repository: wow-look-at-my/slopfix
+          ref: ${{ github.ref_name }}
+          path: .slopfix-src
+        continue-on-error: true
+
+      # A branch of that name may not exist, and master is then what this plugin ships against.
+      - name: Fall back to slopfix master
+        if: hashFiles('.slopfix-src/go.mod') == ''
+        uses: actions/checkout@v7
+        with:
+          repository: wow-look-at-my/slopfix
+          path: .slopfix-src
+
+      # A manifest typo, caught on the branch that makes it. Source is not the artifact, so vendor-slopfix.sh asks the fetched binary the same question.
+      - name: Every hook names a subcommand slopfix defines
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const root = "plugins/slopfix";
+            const manifest = JSON.parse(fs.readFileSync(`${root}/.claude-plugin/plugin.json`, "utf-8"));
+
+            const registered = new Set<string>();
+            for (const entries of Object.values(manifest.hooks) as any[]) {
+              for (const entry of entries) {
+                for (const h of entry.hooks) {
+                  const m = /slopfix\.ape\s+([a-z][a-z-]*)/.exec(h.command);
+                  if (m) registered.add(m[1]);
+                }
+              }
+            }
+            const servers = JSON.parse(fs.readFileSync(`${root}/.lsp.json`, "utf-8"));
+            for (const server of Object.values(servers) as any[]) {
+              if (server.command.endsWith("/slopfix.ape")) registered.add(server.args[0]);
+            }
+            if (registered.size === 0) core.setFailed("the manifest names no slopfix subcommand at all");
+
+            // Every subcommand slopfix registers, read off its source. A script naming one that is not there reaches nothing at run time.
+            const defined = new Set<string>();
+            const cmdDir = ".slopfix-src/cmd";
+            // A checkout that half-landed reads as a manifest naming nothing real, which is the most misleading verdict this job can reach.
+            let sources: string[] = [];
+            try { sources = fs.readdirSync(cmdDir).filter((f) => f.endsWith(".go")); } catch { /* reported below */ }
+            if (sources.length === 0) core.setFailed(`${cmdDir} holds no Go source, so this run read no slopfix. That is a checkout failure, not a verdict on the manifest.`);
+            for (const f of sources) {
+              if (!f.endsWith(".go")) continue;
+              const body = fs.readFileSync(path.join(cmdDir, f), "utf-8");
+              for (const m of body.matchAll(/\bUse:\s*"([a-z][a-z-]*)/g)) defined.add(m[1]);
+              for (const m of body.matchAll(/\bregister\(\s*"([a-z][a-z-]*)"/g)) defined.add(m[1]);
+            }
+            core.info(`slopfix defines: ${[...defined].sort().join(", ")}`);
+
+            const failures: string[] = [];
+            for (const name of [...registered].sort()) {
+              if (defined.has(name)) core.info(`OK ${name}`);
+              else failures.push(`the manifest names "${name}", which slopfix does not define`);
+            }
+            if (failures.length > 0) core.setFailed(`hooks that reach nothing:\n${failures.join("\n")}`);

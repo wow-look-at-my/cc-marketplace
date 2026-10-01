@@ -1,36 +1,36 @@
 # finish-your-todos
 
-A Claude Code **Stop hook** that refuses to let the assistant end its turn while
-its TodoWrite list still has unfinished items. It's a guard against the common
-failure mode where Claude wraps up and stops even though the todo list it created
-clearly still has work left in it.
+Enforces the task list at both ends of a turn.
 
-## What it does
+Claude already receives a system reminder about keeping a task list on most turns. It reads them and carries on: one observed session took five separate assignments and filed **zero** tasks, then lost track of most of them. A reminder is text, and text is skippable. These are refusals.
 
-When Claude tries to stop, the hook:
+| Hook | When | What it does |
+|---|---|---|
+| `UserPromptSubmit` | you assign work | Records that a task is owed for this session |
+| `PreToolUse` (`*`) | every tool call | Picks up assignments `UserPromptSubmit` never saw, then **denies** everything except the task tools until the task is filed |
+| `Stop` | end of turn | **Blocks** the stop while any task is `pending` or `in_progress` |
 
-1. Reads the conversation transcript and finds the most recent `TodoWrite` call
-   (each call carries the complete list, so the latest one is the current state).
-2. Counts items whose status is `pending` or `in_progress`.
-3. If any remain, it **blocks the stop** (exit code 2) and feeds Claude a message
-   naming the unfinished tasks, so Claude keeps working instead of stopping.
-4. If every item is `completed` (or no todo list was ever created), it allows the
-   stop.
+`UserPromptSubmit` does not see every user message, which is why the entry gate reads the transcript as well. A message sent **while a turn is running** is enqueued rather than submitted and fires no prompt hook at all. Those were most of them. Slash commands arrive raw too (`/goal fix the thing`, never the expansion). An assignment can hide in the arguments. Both channels are covered from `PreToolUse`. See [docs/missed-assignment-channels.md](docs/missed-assignment-channels.md).
 
-### How to legitimately stop
+## The entry gate
 
-The only way past the guard is a todo list with no pending or in-progress items.
-That means Claude must either actually finish the work, or -- if a task is genuinely
-done or no longer applicable -- update the list with `TodoWrite` (mark it
-`completed` or remove it). The guard forces the todo list to reflect reality
-rather than being abandoned mid-task.
+When a prompt looks like an assignment, the next tool call is refused with a message quoting the assignment and naming the way out. `TaskCreate` files the work. `TaskUpdate` covers work that maps onto a task already on the list. Both settle the debt, and the refused call then goes through unchanged.
+
+`TaskList` and `TaskGet` stay callable while blocked. The list can be checked for duplicates first. There is deliberately no "declare that there is no task" escape. An escape hatch is the hole the plugin exists to close.
+
+**What counts as an assignment** is biased toward yes, because a false positive costs one `TaskCreate` and a false negative costs the whole point. Pure questions ("why is this failing?"), bare acknowledgements ("ok", "thanks"), and slash commands pass through. A question carrying an instruction ("why is that failing? fix it") arms the gate — the instruction is the part that gets forgotten. So does an auxiliary opener without a question mark ("do the thing", "can you add a test"), which is an instruction, not a question.
+
+## The exit gate
+
+When Claude tries to stop. The hook reads the transcript and blocks (exit 2) while anything is unfinished, naming what is left.
+
+It understands **both** task surfaces: `TodoWrite`, where each call carries the whole list. Each later update rewrites that task's status).
+
+The only way past is a list with nothing pending or in progress: finish the work, or mark it completed/deleted so the list reflects reality.
 
 ### Loop protection
 
-The hook honors the `stop_hook_active` flag from the Stop payload. Once a stop is
-already being retried because of a previous block, the hook steps aside and allows
-it. A single firm nudge turns an *accidental* stop into a deliberate one, and a
-genuinely stuck session can never hang forever.
+The Stop hook honors `stop_hook_active`. Once a stop is already being retried because of a previous block, the hook steps aside. A single firm nudge turns an *accidental* stop into a deliberate one. A stuck session can never hang.
 
 ## Installation
 
@@ -40,7 +40,6 @@ genuinely stuck session can never hang forever.
 
 ## Notes
 
-- If no `TodoWrite` list exists in the session, the hook does nothing -- it never
-  blocks a session that isn't using todos.
-- It fails open: an unreadable transcript, malformed payload, or unrecognized
-  status allows the stop rather than blocking it.
+- Everything fails open. Unparseable stdin, a missing session id, an unreadable transcript, or an unrecognized status allows the action rather than blocking it. A broken guard must never wedge a session.
+- Per-session state lives in a temp file keyed by session id, so parallel sessions never collide.
+- A session that never gets an assignment and never files a task is never touched by either hook.
