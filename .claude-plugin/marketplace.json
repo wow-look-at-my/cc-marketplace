@@ -34,18 +34,6 @@
       ]
     },
     {
-      "name": "cleanup-bash-cmds",
-      "source": "./cleanup-bash-cmds",
-      "description": "Rewrites Bash commands to remove unnecessary 2>&1, || true, trailing | head, | tail, | grep, and set -e",
-      "category": "development",
-      "keywords": [
-        "bash",
-        "cleanup",
-        "rewrite",
-        "hook"
-      ]
-    },
-    {
       "name": "css-duplication",
       "source": "./css-duplication",
       "description": "Language server that flags identical CSS declaration blocks as diagnostics while you edit, so a rule copied under a new selector gets hoisted into the cascade instead of shipped",
@@ -72,6 +60,20 @@
         "tasks",
         "autonomy",
         "hook"
+      ]
+    },
+    {
+      "name": "slopfix",
+      "source": "./slopfix",
+      "description": "The org's slop guards in one plugin: the common-checks gate as a language server and a write refusal, the counts and tombstones repairs, and the permission-seeking, blame-language, busy-poll and link-refs guards",
+      "category": "development",
+      "keywords": [
+        "lint",
+        "prose",
+        "markdown",
+        "lsp",
+        "hook",
+        "enforcement"
       ]
     },
     {
@@ -111,6 +113,19 @@
         "dockerfile",
         "docker-compose",
         "skills"
+      ]
+    },
+    {
+      "name": "repo-index",
+      "source": "./plugins/repo-index",
+      "description": "Suggests the repository that already solves the job: matches each prompt against an index generated from the GitHub API and injects the link and description, at most once per session",
+      "category": "development",
+      "keywords": [
+        "repo",
+        "index",
+        "discovery",
+        "suggest",
+        "hook"
       ]
     }
   ]

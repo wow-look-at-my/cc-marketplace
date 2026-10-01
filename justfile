@@ -8,6 +8,8 @@ build:
 test:
 	cd tools/marketplace-build && go test -coverprofile=coverage.out ./...
 	if [ ! -d node_modules ]; then npm ci; fi
+	npx tsc --noEmit
+	npx tsx --test ".github/scripts/**/*.test.ts"
 	npx tsx .github/scripts/test-plugins.ts
 
 release *args:

@@ -34,7 +34,6 @@ func TestContentPagination(t *testing.T) {
 	got = grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "head_limit": 4}))
 	wantText(t, got, "n.txt:1:needle 1\nn.txt:2:needle 2\nn.txt:3:needle 3\nn.txt:4:needle 4")
 
-	// 0 = unlimited; with an offset only the offset is reported.
 	got = grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "head_limit": 0}))
 	wantText(t, got, "n.txt:1:needle 1\nn.txt:2:needle 2\nn.txt:3:needle 3\nn.txt:4:needle 4")
 	got = grepOK(t, g, contentArgs(map[string]any{"pattern": "needle", "head_limit": 0, "offset": 3}))
@@ -56,7 +55,7 @@ func TestContentDefaultHeadLimit250(t *testing.T) {
 	g.persistThreshold = 1 << 20 // keep the pagination text inline
 	got := grepOK(t, g, contentArgs(map[string]any{"pattern": "needle"}))
 	lines := strings.Split(got, "\n")
-	require.Equal(t, 250+2, len(lines)) // 250 results + blank + note
+	require.Equal(t, 250+2, len(lines))
 	assert.Equal(t, "big.txt:1:needle 1", lines[0])
 	assert.Equal(t, "big.txt:250:needle 250", lines[249])
 	assert.Equal(t, "[Showing results with pagination = limit: 250]", lines[251])
@@ -70,7 +69,7 @@ func TestFwmPagination(t *testing.T) {
 		tf{"a.txt", "needle a1\nneedle a2\nneedle a3\n"}) // newest
 	g := testTool(t, root)
 
-	// Limit cuts mid-file: file b keeps only its first line.
+	// Limit cuts mid-file: file b keeps only its earliest line.
 	got := grepOK(t, g, map[string]any{"pattern": "needle", "head_limit": 4})
 	wantText(t, got, "Found 2 files limit: 4\na.txt:\n  1:needle a1\n  2:needle a2\n  3:needle a3\nb.txt:\n  1:needle b1")
 
@@ -78,14 +77,14 @@ func TestFwmPagination(t *testing.T) {
 	got = grepOK(t, g, map[string]any{"pattern": "needle", "head_limit": 3})
 	wantText(t, got, "Found 1 file limit: 3\na.txt:\n  1:needle a1\n  2:needle a2\n  3:needle a3")
 
-	// Offset skips into the first file; headers are not counted.
+	// Offset skips into the earliest file; headers are not counted.
 	got = grepOK(t, g, map[string]any{"pattern": "needle", "offset": 1})
 	wantText(t, got, "Found 2 files offset: 1\na.txt:\n  2:needle a2\n  3:needle a3\nb.txt:\n  1:needle b1\n  2:needle b2")
 
 	got = grepOK(t, g, map[string]any{"pattern": "needle", "head_limit": 2, "offset": 1})
 	wantText(t, got, "Found 1 file limit: 2, offset: 1\na.txt:\n  2:needle a2\n  3:needle a3")
 
-	// Exactly all lines: no note. 0 = unlimited.
+	// Exactly all lines: no note.
 	want := "Found 2 files\na.txt:\n  1:needle a1\n  2:needle a2\n  3:needle a3\nb.txt:\n  1:needle b1\n  2:needle b2"
 	got = grepOK(t, g, map[string]any{"pattern": "needle", "head_limit": 5})
 	wantText(t, got, want)
@@ -104,7 +103,7 @@ func TestFwmDefaultHeadLimit250(t *testing.T) {
 	g.persistThreshold = 1 << 20
 	got := grepOK(t, g, map[string]any{"pattern": "needle"})
 	lines := strings.Split(got, "\n")
-	require.Equal(t, 1+1+250, len(lines)) // Found + header + 250 lines
+	require.Equal(t, 1+1+250, len(lines))
 	assert.Equal(t, "Found 1 file limit: 250", lines[0])
 	assert.Equal(t, "big.txt:", lines[1])
 	assert.Equal(t, "  250:needle 250", lines[251])
@@ -126,8 +125,6 @@ func TestFilenamesPagination(t *testing.T) {
 	got := grepOK(t, g, fn(map[string]any{"pattern": "needle", "head_limit": 2}))
 	wantText(t, got, "Found 2 files limit: 2\nf3.txt\nf2.txt")
 
-	// Q46 quirk: 3 - 1 is not > 2, so the limit is not reported as
-	// applied; only the offset appears.
 	got = grepOK(t, g, fn(map[string]any{"pattern": "needle", "head_limit": 2, "offset": 1}))
 	wantText(t, got, "Found 2 files offset: 1\nf2.txt\nf1.txt")
 
@@ -145,10 +142,6 @@ func TestFilenamesPagination(t *testing.T) {
 
 // persistedPathRe lives in persist_test.go (shared with its unit tests).
 
-// TestPersistEndToEnd crosses the real 20000-char threshold in content
-// mode: the tool must return a <persisted-output> block whose saved file
-// holds the full formatted text (250 default-limited lines + pagination
-// note) and whose preview matches the split rules.
 func TestPersistEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	long := strings.Repeat("z", 90)
@@ -239,8 +232,8 @@ func TestTimeoutThroughTool(t *testing.T) {
 
 func TestTimeoutPartialThroughTool(t *testing.T) {
 	root := t.TempDir()
-	// Fake rg emits two content lines then hangs: the tool must resolve
-	// the first (last line dropped) through content formatting.
+	// Fake rg emits content lines then hangs: the tool must resolve the
+	// earliest (last line dropped) through content formatting.
 	fake := writeFakeRg(t, fmt.Sprintf("printf '%s/kept.txt:1:hit\\n%s/dropped.txt:9:gone\\n'; exec sleep 5", root, root))
 	g := testTool(t, root)
 	g.resolveRg = fixedRg(fake)

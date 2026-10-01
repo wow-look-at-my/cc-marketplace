@@ -1,5 +1,5 @@
 // css-duplication: a language server that reports the same declaration block
-// written under more than one selector.
+// written under more than a single selector.
 //
 // A language server rather than a hook on purpose: diagnostics land in context
 // by themselves after an edit, anchored to the offending selector, and clear

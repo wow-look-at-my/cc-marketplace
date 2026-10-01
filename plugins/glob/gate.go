@@ -1,13 +1,7 @@
 // gate.go decides whether the tool is exposed to the connected client.
 //
-// claude-code shipped a builtin Glob through 2.1.116 and disabled it by
-// default starting with 2.1.117 (the definitions remain behind opt-ins
-// through at least 2.1.207). Exposing a second Glob to an old client is
-// harmless-but-redundant, so the gate hides the tool only when it is sure
-// the builtin is present: clientInfo.name == "claude-code" AND the version
-// parses AND it is < 2.1.117. Unknown clients, missing or garbage
-// versions, and >= 2.1.117 all expose the tool. A gated-off server answers
-// tools/list with an empty list, which claude-code fully supports.
+// A gated-off server answers tools/list with an empty list, which
+// claude-code fully supports.
 //
 // A sibling plugin copies this file verbatim and changes only gateEnvVar.
 package main
@@ -21,8 +15,6 @@ import (
 // (default auto). It is checked before the clientInfo rule.
 const gateEnvVar = "CC_GLOB_PLUGIN"
 
-// builtinRemovedIn is the first claude-code version whose builtin was
-// disabled by default (spec: 2.1.117:cli.js:114098-114102).
 var builtinRemovedIn = semver{2, 1, 117}
 
 type semver struct {
@@ -39,9 +31,7 @@ func (v semver) less(o semver) bool {
 	return v.patch < o.patch
 }
 
-// parseSemver extracts a numeric major.minor.patch prefix. Any suffix
-// ("-beta.1", "+build", trailing junk) is ignored; anything without three
-// leading numeric components fails.
+// parseSemver extracts a numeric major.minor.patch prefix.
 func parseSemver(s string) (semver, bool) {
 	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
 	var parts [3]int

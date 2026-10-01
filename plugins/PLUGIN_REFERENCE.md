@@ -28,7 +28,7 @@ Located at `.claude-plugin/plugin.json` in your plugin directory.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `version` | string | Semantic version (e.g., `"1.0.0"`) |
+| `version` | string | Set by CI to the release number (e.g., `"1540"`). Do not write it by hand |
 | `description` | string | Brief explanation of purpose |
 | `author` | object | See Author Object below |
 | `homepage` | string | Documentation URL |
@@ -70,7 +70,7 @@ Paths are relative to plugin root and must start with `./`.
 ```json
 {
   "name": "code-quality",
-  "version": "2.0.0",
+"version": "1540",
   "description": "Code quality tools",
   "author": {
     "name": "DevTools Team",
@@ -144,7 +144,7 @@ Located in `agents/` directory. Each `.md` file defines a subagent.
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
 | `name` | Yes | string | Unique identifier (lowercase, hyphens) |
-| `description` | Yes | string | When Claude should use this agent |
+| `description` | Yes | string | When Claude must use this agent |
 | `tools` | No | string\|array | Available tools (inherits all if omitted) |
 | `disallowedTools` | No | string\|array | Tools to remove from available set |
 | `model` | No | string | `sonnet`, `opus`, `haiku`, or `inherit` |

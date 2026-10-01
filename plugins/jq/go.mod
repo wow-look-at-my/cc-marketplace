@@ -1,10 +1,11 @@
 module jq-mcp
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/stretchr/testify v1.11.1
+	github.com/wow-look-at-my/go-containers v0.0.0 // go-toolchain:auto-branch
 )
 
 require (

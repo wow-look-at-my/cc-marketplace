@@ -16,9 +16,9 @@ func TestUTF16Len(t *testing.T) {
 	}{
 		{"", 0},
 		{"abc", 3},
-		{"h\u00e9llo", 5},   // precomposed e-acute is one UTF-16 unit
-		{"e\u0301", 2},      // e + combining acute: two units
-		{"日本語", 3},          // BMP CJK: one unit each
+		{"h\u00e9llo", 5},   // precomposed e-acute is a single UTF-16
+		{"e\u0301", 2},      // e + combining acute: units
+		{"日本語", 3},          // BMP CJK: a single unit
 		{"😀", 2},            // astral plane: surrogate pair
 		{"a😀b", 4},          //
 		{"\U0001F600ok", 4}, // explicit astral escape
@@ -64,7 +64,7 @@ func TestHumanSize(t *testing.T) {
 		{500, "500 bytes"},
 		{1023, "1023 bytes"},
 		{1024, "1KB"},
-		{2000, "2KB"},     // 1.953 -> "2.0" -> ".0" stripped
+		{2000, "2KB"},
 		{25000, "24.4KB"}, // the spec's own example rendering
 		{51200, "50KB"},
 		{51300, "50.1KB"},
@@ -128,7 +128,7 @@ func TestPersistOversizeFormat(t *testing.T) {
 	for i := 0; i < 300; i++ {
 		lines = append(lines, strings.Repeat("p", 20))
 	}
-	text := strings.Join(lines, "\n") // 300*20 + 299 = 6299 chars
+	text := strings.Join(lines, "\n")
 	got := persistOversize(text, "Grep", 5000, dir, discardLogf)
 
 	m := persistedPathRe.FindStringSubmatch(got)
@@ -141,8 +141,6 @@ func TestPersistOversizeFormat(t *testing.T) {
 
 	assert.True(t, strings.HasPrefix(m[1], dir))
 
-	// Preview: first 2000 UTF-16 units, snapped to the last newline
-	// (every 21st char here, so the snap lands at 1994).
 	preview, hasMore := splitPreview(text, persistPreviewChars)
 	require.True(t, hasMore)
 
@@ -181,13 +179,10 @@ func TestPersistOversizeWriteFailureFallsBack(t *testing.T) {
 }
 
 func TestPersistOversizeCountsUTF16Units(t *testing.T) {
-	// 60 emoji = 120 UTF-16 units but 240 bytes; a threshold of 200
-	// (bytes would exceed it) must NOT trigger persistence.
 	text := strings.Repeat("😀", 60)
 	got := persistOversize(text, "Grep", 200, t.TempDir(), discardLogf)
 	assert.Equal(t, text, got)
 
-	// 120 units > 100 threshold: persists.
 	got = persistOversize(text, "Grep", 100, t.TempDir(), discardLogf)
 	assert.NotEqual(t, text, got)
 

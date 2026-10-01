@@ -1,9 +1,3 @@
-// persist.go ports claude-code's oversized-tool_result persistence
-// (2.1.116:cli.js:164596-164679; format function verified byte-for-byte
-// against 2.1.207's Ret/PBr/La): when the built result text exceeds the
-// persistence ceiling, the full text is written to a file and the tool
-// result becomes a <persisted-output> block with a ~2000-char preview.
-//
 // Sizes are measured in UTF-16 code units to mirror JS String.length.
 // Divergence from the builtin: the file lands under os.TempDir() instead
 // of the session transcript's tool-results dir (an MCP server has neither
@@ -22,8 +16,7 @@ import (
 const (
 	persistedOutputOpen  = "<persisted-output>"
 	persistedOutputClose = "</persisted-output>"
-	// persistPreviewChars mirrors bzt = 2000 (preview size, UTF-16 units).
-	persistPreviewChars = 2000
+	persistPreviewChars  = 2000
 )
 
 // utf16Len mirrors JS String.prototype.length (UTF-16 code units).
@@ -38,8 +31,7 @@ func utf16Len(s string) int {
 	return n
 }
 
-// utf16Slice mirrors JS String.prototype.slice(0, n) by UTF-16 code
-// units. When n lands in the middle of a surrogate pair, the pair is
+// When n lands in the middle of a surrogate pair, the pair is
 // dropped (Go strings cannot hold a lone surrogate).
 func utf16Slice(s string, n int) string {
 	if n <= 0 {
@@ -59,8 +51,6 @@ func utf16Slice(s string, n int) string {
 	return s
 }
 
-// humanSize ports La (2.1.207:cli.js:18863-18870): "<n> bytes" under 1KB,
-// then one-decimal KB/MB/GB with a trailing ".0" stripped.
 func humanSize(n int) string {
 	kb := float64(n) / 1024
 	if kb < 1 {
@@ -80,9 +70,6 @@ func trimDotZero(f float64) string {
 	return strings.TrimSuffix(strconv.FormatFloat(f, 'f', 1, 64), ".0")
 }
 
-// splitPreview ports PBr (2.1.207:cli.js:202490-202496): take the first
-// `limit` UTF-16 units; if the last newline inside sits past 50% of the
-// limit, snap the cut to it.
 func splitPreview(s string, limit int) (preview string, hasMore bool) {
 	if utf16Len(s) <= limit {
 		return s, false
@@ -94,12 +81,9 @@ func splitPreview(s string, limit int) (preview string, hasMore bool) {
 	return head, true
 }
 
-// persistOversize returns text unchanged while it fits within threshold
-// UTF-16 units; otherwise it writes the full text to a temp file and
-// returns the <persisted-output> block (format per Ret,
-// 2.1.207:cli.js:202443-202460). On a write failure the full text is
-// returned unchanged (divergence: the builtin has no such failure path
-// worth mirroring; losing output would be worse).
+// On a write failure the full text is returned unchanged (divergence:
+// the builtin has no such failure path worth mirroring; losing output
+// would be worse).
 func persistOversize(text, filePrefix string, threshold int, tempDir string, logf func(string, ...any)) string {
 	size := utf16Len(text)
 	if size <= threshold {

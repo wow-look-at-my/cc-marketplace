@@ -200,10 +200,13 @@ func TestToolsCallInvalidArguments(t *testing.T) {
 		{"unexpected extra key", `{"pattern":"*","bogus":1}`},
 		{"arguments not an object", `"str"`},
 	}
-	c := startServer(t, testTool(t, t.TempDir()))
-	c.handshake("claude-code", "2.1.207")
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// A single server per subtest: a pipeClient carries a
+			// request and its response on a single pipe, so subtests
+			// sharing a single read each other's answers.
+			c := startServer(t, testTool(t, t.TempDir()))
+			c.handshake("claude-code", "2.1.207")
 			req := fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"Glob","arguments":%s}}`, 10+i, tc.args)
 			code := errorCode(t, c.roundTrip(req))
 			assert.Equal(t, codeInvalidParams, code)

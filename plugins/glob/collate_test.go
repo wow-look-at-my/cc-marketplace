@@ -1,15 +1,12 @@
-// collate_test.go pins newPathCollator to golden vectors generated
-// with Node v22.22.2 (Intl default locale en-US):
-//
-//	names.sort((a, b) => a.localeCompare(b))   // -> collateSortedGolden
-//	Math.sign(a.localeCompare(b))              // -> collateSignGolden
+//	names.sort((a, b) => a.localeCompare(b)) // -> collateSortedGolden
+//	Math.sign(a.localeCompare(b)) // -> collateSignGolden
 //
 // The generator lives in the session notes; the vectors are frozen
 // here so the test needs no node at run time. The set deliberately
 // mixes case, digits, punctuation classes, accents, non-latin
 // scripts, an astral-plane emoji, and path-shaped strings, and
-// contains no two distinct strings that collate equal (ties would
-// make the golden order depend on sort stability).
+// contains no distinct strings that collate equal (ties would make
+// the golden order depend on sort stability).
 package main
 
 import (

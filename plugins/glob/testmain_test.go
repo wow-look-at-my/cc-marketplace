@@ -16,10 +16,8 @@ import (
 	"time"
 )
 
-// The behavior tests exercise a real ripgrep. CI runners may not ship
-// one, so TestMain bootstraps a pinned release binary into a cache dir
-// and prepends it to PATH (mirroring cleanup-bash-cmds' pinned-shfmt
-// bootstrap). On machines that already have rg this is a no-op.
+// The behavior tests exercise a real ripgrep. On machines that already
+// have rg this is a no-op.
 const (
 	bootstrapRgVersion = "14.1.0"
 	bootstrapAttempts  = 3
@@ -94,7 +92,7 @@ func downloadRipgrep(dest string) error {
 	return lastErr
 }
 
-// fetchTarMember downloads a .tar.gz and extracts one member to dest.
+// fetchTarMember downloads a .tar.gz and extracts a single member to dest.
 func fetchTarMember(url, member, dest string) error {
 	client := &http.Client{Timeout: 2 * time.Minute}
 	resp, err := client.Get(url)

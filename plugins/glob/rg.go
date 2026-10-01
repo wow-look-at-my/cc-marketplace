@@ -1,17 +1,6 @@
-// rg.go resolves and runs the ripgrep binary with the exact spawn
-// semantics of claude-code 2.1.116's shared runner (LQ,
-// 2.1.116:cli.js:148544-148675): 20s timeout (60s on WSL, env
-// CLAUDE_CODE_GLOB_TIMEOUT_SECONDS override — the GLOB name is the
-// builtin's; it governed Grep too), 20MB output caps, exit 1 = no
-// matches, one -j 1 retry on EAGAIN, and timeout-with-partial-output
-// resolving the parsed lines minus the last (possibly truncated) one.
-//
-// ONE deliberate divergence from the builtin, shared by both sibling
-// plugins: exit code 2 with NO stdout surfaces rg's stderr (capped at
-// rgStderrErrLimit) as an error instead of resolving empty. The builtin
-// silently reported "No matches found" / "No files found" for an
-// invalid regex/glob/type; the plugins make those failures visible.
-// Exit 2 WITH stdout (e.g. matches found but some tree entries
+// The builtin silently reported "No matches found" / "No files found"
+// for an invalid regex/glob/type; the plugins make those failures
+// visible. Exit 2 WITH stdout (e.g. matches found but some tree entries
 // unreadable) still resolves the partial results like the builtin did.
 //
 // This file is tool-agnostic and copied verbatim between the grep and
@@ -33,12 +22,8 @@ import (
 	"unicode/utf8"
 )
 
-// rgOutputCapBytes mirrors DeH = 20000000 (2.1.116:cli.js:148704).
 const rgOutputCapBytes = 20_000_000
 
-// ripgrepNotFoundMsg is modeled on claude-code >= 2.1.175's ENOENT message
-// (2.1.207:cli.js:279130), with the embedded-binary escape replaced by the
-// override this plugin actually supports.
 const ripgrepNotFoundMsg = "ripgrep not found on PATH. Install it (brew install ripgrep / apt install ripgrep / winget install BurntSushi.ripgrep.MSVC) or set RIPGREP_PATH to a ripgrep binary."
 
 // resolveRipgrep returns the ripgrep binary to run: the RIPGREP_PATH
@@ -57,10 +42,7 @@ func resolveRipgrep() (string, error) {
 }
 
 // defaultRgTimeout returns the effective spawn timeout and the seconds
-// value baked into the timeout error message. Faithful quirk: the message
-// always reports the 20/60 default even when the env var overrides the
-// actual timeout (the original interpolates `wsl ? 60 : 20`, not the
-// effective value).
+// value baked into the timeout error message.
 func defaultRgTimeout() (time.Duration, int) {
 	label := 20
 	if isWSL() {
@@ -103,8 +85,6 @@ type rgRunner struct {
 func (r *rgRunner) run(rgPath string, args []string, dir string) ([]string, error) {
 	lines, retryEAGAIN, err := r.runOnce(rgPath, args, dir)
 	if retryEAGAIN {
-		// One retry with single-threaded rg, mirroring the EAGAIN
-		// workaround (2.1.116:cli.js:148540-148543, 148646-148654).
 		lines, _, err = r.runOnce(rgPath, append([]string{"-j", "1"}, args...), dir)
 	}
 	return lines, err
@@ -120,8 +100,6 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 	stderr := &cappedBuffer{max: r.maxOutput}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	// After a kill, don't let stray descendants holding the pipes delay
-	// the (partial) result: give I/O one second to drain, then move on.
 	cmd.WaitDelay = time.Second
 
 	runErr := cmd.Run()
@@ -156,11 +134,6 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 		if exitErr.ExitCode() == 1 {
 			return nil, false, nil // no matches
 		}
-		// Exit 2: EAGAIN earns one -j 1 retry; with stdout, resolve the
-		// partial results like the builtin; with NOTHING on stdout,
-		// surface rg's stderr (invalid regex/glob/type) as the failure
-		// instead of the builtin's silent no-results text (deliberate
-		// deviation, see the file comment).
 		if stderrIndicatesEAGAIN(stderr.String()) {
 			return nil, true, nil
 		}
@@ -203,9 +176,6 @@ func truncateErrText(s string) string {
 	return s[:cut] + rgStderrTruncNote
 }
 
-// parseRgLines mirrors the shared runner's line handling: whole output
-// trimmed, split on \n, \r stripped per line, empty lines dropped
-// (2.1.116:cli.js:148617-148630).
 func parseRgLines(s string) []string {
 	var out []string
 	for _, l := range strings.Split(strings.TrimSpace(s), "\n") {

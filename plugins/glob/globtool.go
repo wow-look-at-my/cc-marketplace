@@ -1,7 +1,3 @@
-// globtool.go implements the Glob tool with the exact behavior of the
-// builtin removed from claude-code: description, input schema, ripgrep
-// argv, sorting, truncation, and result formatting all mirror version
-// 2.1.116 (the last release that registered the builtin by default).
 package main
 
 import (
@@ -18,27 +14,19 @@ import (
 
 const globToolName = "Glob"
 
-// globDescription is a streamlined rewrite of the 2.1.116 builtin
-// description (2.1.116:cli.js:114088-114093): same facts, minus the
-// marketing filler and the Agent-tool bullet. Parameters are documented
-// in the schema, not here. The tool is alwaysLoad, so every description
-// byte is paid in every prompt.
+// Parameters are documented in the schema, not here. The tool is
+// alwaysLoad, so every description byte is paid in every prompt.
 const globDescription = `- Finds files by glob pattern
 - Returns matching file paths sorted by modification time`
 
-// schemaProp is one JSON Schema property entry.
+// schemaProp is a single JSON Schema property entry.
 type schemaProp struct {
 	Type        string   `json:"type"`
 	Enum        []string `json:"enum,omitempty"`
 	Description string   `json:"description"`
 }
 
-// globSchema is the builtin input schema shape
-// (2.1.116:cli.js:286491-286496; zod strictObject -> additionalProperties
-// false, required: pattern) with the path description condensed: the
-// builtin's anti-"undefined" lecture is gone because resolveAgainst now
-// maps those literals to the root instead. Struct field order is the
-// property order the model sees.
+// Struct field order is the property order the model sees.
 type globSchema struct {
 	Type                 string          `json:"type"`
 	AdditionalProperties bool            `json:"additionalProperties"`
@@ -69,12 +57,7 @@ func mustMarshalJSON(v any) json.RawMessage {
 }
 
 const (
-	// globMaxResults is the effective 2.1.116 limit: the executor passes
-	// globLimits.maxResults = 25000 (2.1.116:cli.js:304000). The "limited
-	// to 100 files" text in the old internal OUTPUT schema was stale.
-	globMaxResults = 25000
-	// globPersistThreshold = min(maxResultSizeChars 100000, ceiling
-	// 50000) (2.1.116:cli.js:286508, 155809).
+	globMaxResults       = 25000
 	globPersistThreshold = 50000
 	globTruncationLine   = "(Results are truncated. Consider using a more specific path or pattern.)"
 	globNoFilesFound     = "No files found"
@@ -205,8 +188,8 @@ func isJSONNull(v json.RawMessage) bool {
 	return string(bytes.TrimSpace(v)) == "null"
 }
 
-// execute runs one Glob search, returning the tool_result text and
-// whether it is an error.
+// execute runs a single Glob search, returning the tool_result
+// text and whether it is an error.
 func (g *globTool) execute(pattern, path string) (string, bool) {
 	searchPath := g.root
 	if path != "" { // empty string is falsy upstream: same as omitted
@@ -220,8 +203,6 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 		searchPath = resolved
 	}
 
-	// An absolute pattern overrides the search root (a81,
-	// 2.1.116:cli.js:286040-286056).
 	pat := pattern
 	if filepath.IsAbs(pat) {
 		if base, rel := splitAbsolutePattern(pat); base != "" {
@@ -241,10 +222,8 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 		return err.Error(), true
 	}
 
-	// argv per N57 (2.1.116:cli.js:286057-286078), except --sort=modified:
-	// the mtime sort happens in Go (sortFilesByMtimeAsc below) so the
-	// order is identical on every ripgrep version. The gitignore/hidden
-	// defaults are env-overridable exactly like the builtin.
+	// The gitignore/hidden defaults are env-overridable exactly like the
+	// builtin.
 	args := []string{"--files", "--glob", pat}
 	if envTruthyDefault("CLAUDE_CODE_GLOB_NO_IGNORE", "true") {
 		args = append(args, "--no-ignore")
@@ -288,12 +267,7 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 	return persistOversize(text, globToolName, g.persistThreshold, g.tempDir, g.logf), false
 }
 
-// validateDir mirrors the builtin validateInput
-// (2.1.116:cli.js:286538-286561): UNC-ish resolved paths skip validation,
-// ENOENT yields the directory-does-not-exist message (with a did-you-mean
-// suggestion), other stat errors propagate raw, and non-directories yield
-// the not-a-directory message. Messages interpolate the RAW path argument
-// and the default root.
+// Messages interpolate the RAW path argument and the default root.
 func (g *globTool) validateDir(rawPath, resolved string) (string, bool) {
 	if strings.HasPrefix(resolved, `\\`) || strings.HasPrefix(resolved, "//") {
 		return "", true
@@ -315,19 +289,11 @@ func (g *globTool) validateDir(rawPath, resolved string) (string, bool) {
 	return "", true
 }
 
-// resolveAgainst ports the builtin's Vq path preprocessing
-// (2.1.116:cli.js:35597-35615) against root (the session-cwd
-// equivalent): null bytes are rejected with the builtin's exact error,
-// the input is whitespace-trimmed (whitespace-only resolves to root), a
-// bare "~" or "~/..." prefix expands to the home directory ("~user" is
-// NOT expanded -- the builtin didn't support it either, resolving it as a
-// literal name against root), absolute paths pass through cleaned, and
-// anything else joins onto root like Node path.resolve. Divergences: no
-// unicode NFC normalization (the builtin NFC-normalizes; stdlib-only
-// here), an unresolvable home directory leaves "~" literal instead
-// of throwing, and the literal strings "undefined" and "null" resolve to
-// root (models emit them for "no path"; the builtin instead begged the
-// model not to in the schema description).
+// Divergences: no unicode NFC normalization (the builtin NFC-normalizes;
+// stdlib-only here), an unresolvable home directory leaves "~" literal
+// instead of throwing, and the literal strings "undefined" and "null"
+// resolve to root (models emit them for "no path"; the builtin instead
+// begged the model not to in the schema description).
 func resolveAgainst(p, root string) (string, error) {
 	if strings.ContainsRune(p, 0) {
 		return "", errors.New("Path contains null bytes")
@@ -350,16 +316,10 @@ func resolveAgainst(p, root string) (string, error) {
 	return filepath.Join(root, p), nil
 }
 
-// sortFilesByMtimeAsc orders the absolute paths oldest-first by mtime,
-// replacing the builtin's rg --sort=modified: rg 13 sorted each
-// directory independently (a subtree's files were emitted at the
-// position of the DIRECTORY's mtime) while rg 14+ sort files globally,
-// so sorting here pins the builtin's (rg 14-era) global order on every
-// ripgrep version — and lets rg walk in parallel instead of --sort's
-// forced single thread. Failed stats sort as time zero (grep-sibling
-// parity). Equal mtimes tie-break by ascending localeCompare order (see
-// collate.go); the builtin left equal-mtime order to rg's walk order,
-// which was deterministic but unspecified.
+// Failed stats sort as time empty (grep-sibling parity). Equal mtimes
+// tie-break by ascending localeCompare order (see collate.go); the
+// builtin left equal-mtime order to rg's walk order, which was
+// deterministic but unspecified.
 func sortFilesByMtimeAsc(files []string) {
 	type entry struct {
 		path  string
@@ -385,14 +345,11 @@ func sortFilesByMtimeAsc(files []string) {
 	}
 }
 
-// splitAbsolutePattern mirrors a81 (2.1.116:cli.js:286040-286056): split
-// an absolute pattern at the first glob metachar [*?[{]; the base dir is
-// everything before the last separator preceding it and the rest is the
-// relative pattern. Without a metachar the split is Node
-// dirname/basename — which ignore trailing slashes ("/foo/bar/" splits
-// into "/foo" + "bar", NOT "/foo/bar" + "bar" as Go's filepath.Dir/Base
-// would). (The Windows drive-letter special case is omitted: this
-// plugin ships linux/darwin binaries only.)
+// Without a metachar the split is Node dirname/basename — which ignore
+// trailing slashes ("/foo/bar/" splits into "/foo" + "bar", NOT
+// "/foo/bar" + "bar" as Go's filepath.Dir/Base would). (The Windows
+// drive-letter special case is omitted: this plugin ships linux/darwin
+// binaries only.)
 func splitAbsolutePattern(pat string) (base, rel string) {
 	idx := strings.IndexAny(pat, "*?[{")
 	if idx < 0 {
@@ -404,7 +361,7 @@ func splitAbsolutePattern(pat string) (base, rel string) {
 	}
 	base = pat[:slash]
 	if base == "" {
-		base = "/" // metachar in the first component after the root slash
+		base = "/" // metachar in the earliest component after the root
 	}
 	return base, pat[slash+1:]
 }
@@ -421,10 +378,6 @@ func splitNodeDirBase(p string) (dir, base string) {
 	return filepath.Dir(trimmed), filepath.Base(trimmed)
 }
 
-// relativizePath mirrors QZH (2.1.116:cli.js:35616-35619): root-relative
-// when under root, absolute otherwise (including the faithful quirk that
-// any relative form starting with ".." — even a "..foo" sibling name —
-// falls back to absolute).
 func relativizePath(abs, root string) string {
 	rel, err := filepath.Rel(root, abs)
 	if err != nil || strings.HasPrefix(rel, "..") {
@@ -433,9 +386,6 @@ func relativizePath(abs, root string) string {
 	return rel
 }
 
-// didYouMean ports Vde (2.1.207:cli.js:44437-44455): when the missing
-// path resolved into the parent of root but outside root, re-root it
-// under root and suggest that absolute path if it exists.
 func didYouMean(resolved, root string) string {
 	sep := string(filepath.Separator)
 	parent := filepath.Dir(root)
@@ -461,10 +411,6 @@ func didYouMean(resolved, root string) string {
 	return ""
 }
 
-// envTruthyDefault mirrors yH(process.env.X || fallback)
-// (2.1.116:cli.js:1666-1671): the value (or fallback when unset/empty)
-// counts as truthy only when it is one of 1/true/yes/on,
-// case-insensitively.
 func envTruthyDefault(name, fallback string) bool {
 	v := os.Getenv(name)
 	if v == "" {

@@ -33,8 +33,6 @@ func TestRunnerTimeoutWithoutOutput(t *testing.T) {
 }
 
 func TestRunnerTimeoutLabelIsWSLConstantNotEffectiveTimeout(t *testing.T) {
-	// Faithful quirk: the message reports the 20/60 default even when the
-	// effective timeout differs.
 	fake := writeFakeRg(t, "exec sleep 5")
 	r := &rgRunner{timeout: 100 * time.Millisecond, timeoutLabel: 60, maxOutput: rgOutputCapBytes}
 	_, err := r.run(fake, nil, t.TempDir())
@@ -73,7 +71,9 @@ func TestRunnerOutputCapKillsAndResolvesPartial(t *testing.T) {
 func TestRunnerExitOneMeansNoMatches(t *testing.T) {
 	fake := writeFakeRg(t, "exit 1")
 	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
-	assert.False(t, err != nil || len(lines) != 0)
+	require.NoError(t, err)
+
+	assert.Empty(t, lines)
 
 }
 
@@ -143,8 +143,6 @@ func TestTruncateErrTextUnits(t *testing.T) {
 }
 
 func TestRunnerEAGAINRetriesSingleThreaded(t *testing.T) {
-	// First invocation fails with the EAGAIN signature; the retry must
-	// prepend -j 1, which the fake detects to succeed.
 	fake := writeFakeRg(t, `if [ "$1" = "-j" ] && [ "$2" = "1" ]; then echo retried.txt; else echo 'rg: Resource temporarily unavailable (os error 11)' >&2; exit 2; fi`)
 	lines, err := testRunner(5*time.Second).run(fake, []string{"--files"}, t.TempDir())
 	require.Nil(t, err)
@@ -156,7 +154,9 @@ func TestRunnerEAGAINRetriesSingleThreaded(t *testing.T) {
 func TestRunnerEAGAINRetriesOnlyOnce(t *testing.T) {
 	fake := writeFakeRg(t, "echo 'rg: os error 11' >&2; exit 2")
 	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
-	assert.False(t, err != nil || len(lines) != 0)
+	require.NoError(t, err)
+
+	assert.Empty(t, lines)
 
 }
 
@@ -173,7 +173,9 @@ func TestResolveRipgrepPrefersOverride(t *testing.T) {
 	fake := writeFakeRg(t, "exit 0")
 	t.Setenv("RIPGREP_PATH", fake)
 	got, err := resolveRipgrep()
-	assert.False(t, err != nil || got != fake)
+	require.NoError(t, err)
+
+	assert.Equal(t, fake, got)
 
 }
 
