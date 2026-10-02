@@ -13,8 +13,8 @@
 # the build.
 #
 # buildhost still serves the retired `slopfmt` project name, so naming it fetches
-# a binary frozen before the rename instead of failing. The `report` probe below
-# is what refuses one: that subcommand exists only in slopfix.
+# a binary frozen before the rename instead of failing. The `check --json` probe
+# below is what refuses one: only slopfix writes a finding's ID under "id".
 set -eu
 
 plugin_dir=${1:?usage: vendor-slopfix.sh <plugin-dir> [hook-rule...]}
@@ -104,15 +104,15 @@ check_probe() {
 	rule=$1
 	path=$2
 	probe=$3
-	if ! answer=$(printf '%s' "$probe" | "$binary" report --path "$path" 2>&1); then
-		echo "vendor-slopfix: the fetched slopfix cannot answer 'report --path ${path}':" >&2
+	if ! answer=$(printf '%s' "$probe" | "$binary" check --json --path "$path" 2>&1); then
+		echo "vendor-slopfix: the fetched slopfix cannot answer 'check --json --path ${path}':" >&2
 		echo "  ${answer}" >&2
 		echo "vendor-slopfix: the plugin calls a subcommand this build of slopfix does not have." >&2
 		echo "vendor-slopfix: publish slopfix first -- a plugin whose checker cannot run must not ship." >&2
 		exit 1
 	fi
 	case "$answer" in
-	*"\"$rule\""*) ;;
+	*"\"id\":\"$rule\""*) ;;
 	*)
 		echo "vendor-slopfix: '${rule}' reported nothing on text that violates it." >&2
 		echo "  path:   ${path}" >&2
@@ -126,7 +126,7 @@ check_probe() {
 
 # One probe per rule family. A workflow rule and a prose rule reach slopfix down
 # different paths, so one probe proves only half of it. Both run for every
-# plugin, because `report` is also what proves this is a post-rename build.
+# plugin, because the "id" key is also what proves this is a post-rename build.
 check_probe "yaml/comment-block" ".github/workflows/ci.yml" "$probe_workflow"
 check_probe "ste/contraction" "docs/probe.md" "$probe_markdown"
 

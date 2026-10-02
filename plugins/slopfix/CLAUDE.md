@@ -6,15 +6,15 @@ The slopfix plugin lives at `plugins/slopfix/`. It carries **no rule of its own*
 
 A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs the binary directly. **There is no `hooks/` directory and no shell script of any kind.** `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
 
-What each subcommand DOES is slopfix's own documentation. Read `slopfix --help`, or that repository. A table here is a copy that drifts. The copy nobody updates is this one. The manifest is the list of which events reach which subcommand. It is the only such list.
+Every event execs `slopfix.ape hook`. The binary reads the event off the payload and runs each guard that serves it, so the manifest only decides which events reach slopfix. What each guard DOES is slopfix's own documentation. Read `slopfix hook --help`, or that repository. A table here is a copy that drifts.
 
 These replace the plugins. Those are ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking and enhanced-auto-allow. They are also link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
 
-**There are no `.go` files here, and there must not be.** A manifest that names a subcommand needs no Go. The `plugin-e2e` workflow drives `clean-bash` end to end. That is the only place the manifest and the binary are exercised together.
+**There are no `.go` files here, and there must not be.** A manifest that names a subcommand needs no Go. The `plugin-e2e` workflow checks each subcommand the manifest names against slopfix's source.
 
 ### The language server half
 
-`.lsp.json` runs `bin/slopfix.ape lsp`. The server publishes, for each open file a build reads. The findings `slopfix report` gives it, on the lines they sit on. The PreToolUse `hook` subcommand judges the write itself. The two are one binary, so neither can drift from the other or from CI.
+`.lsp.json` runs `bin/slopfix.ape lsp`. The server publishes, for each open file a build reads. The findings `slopfix check` gives it, on the lines they sit on. The PreToolUse `hook` judges the write itself. The two are one binary, so neither can drift from the other or from CI.
 
 Scope, ranking, the per-file cap and the diagnostic text are all decided in slopfix's `langserver` package. A file outside every work tree, or under `$HOME/.claude`, gets nothing, because no build reads it. `--max-per-file` sets the cap.
 
@@ -34,9 +34,9 @@ Everything that kept a hand-maintained list in step with upstream is deleted. Th
 
 `bin/` carries slopfix itself, fetched by `.github/scripts/vendor-slopfix.sh` at build time. The sibling plugins settled this shape and their CLAUDE.md files record why. A plugin that names its binary as a bare word travels on a separate track from that binary. One calling a subcommand its installed binary predates then reports nothing at all. Swallowing that failure is worse. It leaves a guard that installs, reports success and does nothing.
 
-**The fetch is a GATE, not a download.** It checks the APE prologue first. Then it runs `report` on a workflow and on a document built to violate a rule. Each must come back with a verdict. Exit status alone proves only that the subcommand parses.
+**The fetch is a GATE, not a download.** It checks the APE prologue first. Then it runs `check --json` on a workflow and on a document built to violate a rule. Each must come back with a verdict. Exit status alone proves only that the subcommand parses.
 
-`report` doubles as the proof that this is a post-rename build. buildhost still serves the old `slopfmt` project name. A fetch of that name succeeds and hands back a binary frozen before the rename. That build has no `report` at all. It cannot pass this gate quietly. `SLOPFIX_URL` points the fetch elsewhere, for a build against a slopfix that has not published.
+The verdict doubles as the proof that this is a post-rename build. buildhost still serves the old `slopfmt` project name. A fetch of that name succeeds and hands back a binary frozen before the rename. That build never writes a finding's ID under `"id"`. It cannot pass this gate quietly. `SLOPFIX_URL` points the fetch elsewhere, for a build against a slopfix that has not published.
 
 The same script serves `no-counts-in-docs` and `no-tombstones`. Each names the rules it drives through the `hook` contract. Each rule gets the same treatment. The script runs it on text built to violate the rule and requires a verdict.
 
@@ -82,6 +82,6 @@ The layer below that IS verified. slopfix's `langserver` tests drive the server 
 
 - **Registration**: `plugins/slopfix/.lsp.json` runs `bin/slopfix.ape lsp`
 - **Hooks**: `plugins/slopfix/.claude-plugin/plugin.json`
-- **Fetching**: `.github/scripts/vendor-slopfix.sh` -- the download, the APE check, the `report` probes, and the per-rule `hook` probes the sibling plugins name. It also requires this binary to define every subcommand `plugin.json` and `.lsp.json` name. That is the check the `plugin-e2e` job cannot make. The job asks slopfix's SOURCE at master, and master is not the build being packaged. `laziness` and `blame-language` passed it while the fetched binary defined neither. Every Stop and every message then answered `unknown command`, and those guards ran nowhere. `SLOPFIX_URL` is how a manifest lands ahead of a publish
+- **Fetching**: `.github/scripts/vendor-slopfix.sh` -- the download, the APE check, the `check --json` probes, and the per-rule `hook` probes the sibling plugins name. It also requires this binary to define every subcommand `plugin.json` and `.lsp.json` name. That is the check the `plugin-e2e` job cannot make. The job asks slopfix's SOURCE at master, and master is not the build being packaged. `laziness` and `blame-language` passed it while the fetched binary defined neither. Every Stop and every message then answered `unknown command`, and those guards ran nowhere. `SLOPFIX_URL` is how a manifest lands ahead of a publish
 
 Adding a rule to slopfix needs no edit here. That is the point of the arrangement. The plugin runs the default set, so a new rule arrives with the next build's fetch.
