@@ -68,7 +68,6 @@ jobs:
               if (!f.endsWith(".go")) continue;
               const body = fs.readFileSync(path.join(cmdDir, f), "utf-8");
               for (const m of body.matchAll(/\bUse:\s*"([a-z][a-z-]*)/g)) defined.add(m[1]);
-              for (const m of body.matchAll(/\bregister\(\s*"([a-z][a-z-]*)"/g)) defined.add(m[1]);
             }
             core.info(`slopfix defines: ${[...defined].sort().join(", ")}`);
 
