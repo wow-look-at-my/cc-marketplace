@@ -1,0 +1,16 @@
+{
+	"author": {
+		"name": "mhaynie"
+	},
+	"description": "Answers a Bash cat, head, tail or sed -n line read with the Read tool, so the model gets Read's numbered lines without a blocked call or a second turn",
+	"keywords": [
+		"bash",
+		"read",
+		"cat",
+		"sed",
+		"rewrite",
+		"tool.call"
+	],
+	"name": "bash-read",
+	"version": "1685"
+}
