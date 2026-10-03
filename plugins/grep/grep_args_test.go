@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"rgmcp"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +15,7 @@ func parseErr(t *testing.T, args string) string {
 	t.Helper()
 	_, rpcErr := parseGrepArgs(json.RawMessage(args))
 	require.NotNil(t, rpcErr, "expected an invalid-params error for %s", args)
-	assert.Equal(t, codeInvalidParams, rpcErr.Code)
+	assert.Equal(t, rgmcp.CodeInvalidParams, rpcErr.Code)
 	return rpcErr.Message
 }
 
