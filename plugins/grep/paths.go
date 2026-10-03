@@ -63,8 +63,7 @@ func rebasePath(p, resolved, orig string) string {
 }
 
 // Non-path inputs (a "--" separator line, a bare line number) fail
-// filepath.Rel and pass through unchanged, which matches what Node
-// path.relative hands back for them.
+// filepath.Rel and pass through unchanged.
 func relativizePath(abs, root string) string {
 	rel, err := filepath.Rel(root, abs)
 	if err != nil || strings.HasPrefix(rel, "..") {

@@ -17,8 +17,8 @@ import (
 // write the manifest the marketplace job reads back. Its pieces are
 // unit-tested individually; these drive the command itself, because the ORDER
 // is the part that breaks -- staging before cooking would delete the binaries
-// it just copied, and writing the manifest before staging would describe a
-// layout that no longer exists.
+// it copied, and writing the manifest before staging would describe a layout
+// that no longer exists.
 
 // fakeRepo builds a repo root holding a single plugin and points the
 // package's cached repoRoot at it. Returns the plugin's source directory.
@@ -40,8 +40,7 @@ func fakeRepo(t *testing.T, name string, files map[string]string) string {
 	repoRoot = root
 	t.Cleanup(func() { repoRoot = orig })
 
-	// The cooked tree goes to os.MkdirTemp and is deliberately never cleaned up
-	// (the workflow uploads it), so keep it inside the test's own temp dir.
+	// The cooked tree goes to os.MkdirTemp and is deliberately never cleaned up (the workflow uploads it).
 	t.Setenv("TMPDIR", t.TempDir())
 	return src
 }

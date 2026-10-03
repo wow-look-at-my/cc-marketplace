@@ -57,15 +57,13 @@ func TestToolsListEntryShape(t *testing.T) {
 	c.send(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
 	raw := c.recvRaw()
 
-	// The compacted schema must appear byte-for-byte in the wire output
-	// (RawMessage embeds it verbatim, preserving property order).
+	// The compacted schema must appear byte-for-byte in the wire output.
 	assert.Contains(t, raw, string(globInputSchemaCompact))
 
 	descJSON, _ := json.Marshal(globDescription)
 	assert.Contains(t, raw, string(descJSON))
 
-	// The description reaching the model must stay under claude-code's
-	// 2048-char prompt-truncation cap.
+	// The description reaching the model must stay under claude-code's 2048-char prompt-truncation cap.
 	assert.LessOrEqual(t, len(globDescription), 2048)
 
 	pi, di := strings.Index(raw, `"The glob pattern`), strings.Index(raw, `"The directory to search in`)
@@ -202,9 +200,7 @@ func TestToolsCallInvalidArguments(t *testing.T) {
 	}
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// A single server per subtest: a pipeClient carries a
-			// request and its response on a single pipe, so subtests
-			// sharing a single read each other's answers.
+			// A single server per subtest: a pipeClient carries a request and its response on a single pipe.
 			c := startServer(t, testTool(t, t.TempDir()))
 			c.handshake("claude-code", "2.1.207")
 			req := fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"Glob","arguments":%s}}`, 10+i, tc.args)
@@ -260,8 +256,7 @@ func TestUnknownNotificationsTolerated(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	c.send(`{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}`)
 	c.send(`{"jsonrpc":"2.0","method":"totally/unknown"}`)
-	// No responses for either; the next request must be answered with its
-	// own id, proving nothing was emitted in between.
+	// No responses for either; the next request must be answered with its own id, proving nothing was emitted in between.
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":77,"method":"ping"}`)
 	id, ok := resp["id"].(float64)
 	assert.False(t, !ok || int(id) != 77)

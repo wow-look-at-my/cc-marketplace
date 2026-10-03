@@ -20,9 +20,7 @@ func writeBuildDir(t *testing.T, names ...string) string {
 	return cooked
 }
 
-// apeBytes is a stand-in fat APE: the real prologue plus a per-name payload, so
-// a test can tell which file's bytes were shipped. The magic is what
-// stageBinaries identifies -- fixtures that skip it are not APEs.
+// apeBytes is a stand-in fat APE: the real prologue plus a per-name payload.
 func apeBytes(name string) []byte { return []byte(apeMagic + "payload:" + name) }
 
 // elfBytes is what a plain per-platform (non-cosmo) build leaves behind.
@@ -134,11 +132,11 @@ func TestStageBinariesFailsClosedWithoutAnApe(t *testing.T) {
 	require.Contains(t, err.Error(), "--targets cosmo", "and the fix")
 }
 
-// What CI actually produces, which neither earlier fixture did: go-toolchain
-// DROPS the _cosmo_fat name there ("buildhost rejects os=cosmo uploads; the
-// slot copies carry the APE"), so the only copies of the fat binary left are
-// under per-platform names -- byte-identical to it. Keying on the filename
-// mistook this for a per-platform matrix build and failed every plugin.
+// What CI produces, which neither earlier fixture did: go-toolchain DROPS the
+// _cosmo_fat name there ("buildhost rejects os=cosmo uploads; the slot copies
+// carry the APE"), so the only copies of the fat binary left are under
+// per-platform names -- byte-identical to it. Keying on the filename mistook
+// this for a per-platform matrix build and failed every plugin.
 func TestStageBinariesShipsTheApeWhenOnlySlotCopiesRemain(t *testing.T) {
 	cooked := writeBuildDir(t)
 	build := filepath.Join(cooked, "build")

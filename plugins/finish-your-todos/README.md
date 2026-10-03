@@ -2,7 +2,7 @@
 
 Enforces the task list at both ends of a turn.
 
-Claude already receives a system reminder about keeping a task list on most turns. It reads them and carries on: one observed session took five separate assignments and filed **zero** tasks, then lost track of most of them. A reminder is text, and text is skippable. These are refusals.
+Claude already receives a system reminder about keeping a task list on most turns. It reads them and carries on: one observed session took separate assignments and filed **zero** tasks, then lost track of most of them. A reminder is text, and text is skippable. These are refusals.
 
 | Hook | When | What it does |
 |---|---|---|
@@ -26,7 +26,7 @@ When Claude tries to stop. The hook reads the transcript and blocks (exit 2) whi
 
 It understands **both** task surfaces: `TodoWrite`, where each call carries the whole list. Each later update rewrites that task's status).
 
-The only way past is a list with nothing pending or in progress: finish the work, or mark it completed/deleted so the list reflects reality.
+The only way past is a list with nothing pending or in progress. Finish the work, or mark it completed/deleted so the list reflects reality.
 
 ### Loop protection
 

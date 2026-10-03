@@ -45,8 +45,7 @@ type output struct {
 }
 
 func main() {
-	// Every failure path stays silent and allows the call. This hook adds a
-	// reminder; it must never be the reason a session cannot do its work.
+	// Every failure path stays silent and allows the call.
 	defer func() { _ = recover() }()
 
 	var p payload
@@ -73,9 +72,7 @@ func decide(p payload) (output, bool) {
 		return output{}, false
 	}
 
-	// A reminder repeated on every edit is nagging, and a reader learns to
-	// skim past it. Each skill is named once per session; after that the model
-	// has either loaded it or decided not to.
+	// A reminder repeated on every edit is nagging, and a reader learns to skim past it.
 	var fresh []topic
 	for _, t := range topics {
 		if claim(p.SessionID, t.Skill) {
@@ -119,11 +116,10 @@ func message(topics []topic, p payload) string {
 // silence each other, and it lives in the temp directory because it is worth
 // nothing once the machine restarts. An unwritable temp directory means the
 // reminder is sent every time rather than never: over-reminding is the lesser
-// failure of the two.
+// failure of both.
 func claim(sessionID, skill string) bool {
 	// With no session to key on, every session would share one marker and all
-	// but the first would go silent. Speak instead: a repeat is visible, and a
-	// hook that has quietly stopped working is not.
+	// but the first would go silent.
 	if sessionID == "" {
 		return true
 	}

@@ -42,8 +42,7 @@ func TestUTF16Slice(t *testing.T) {
 		{"abcdef", 99, "abcdef"},
 		{"日本語", 2, "日本"},
 		{"a😀b", 3, "a😀"},
-		// Cut lands mid-surrogate-pair: the pair is dropped (JS would keep
-		// a lone surrogate, which Go strings cannot represent).
+		// Cut lands mid-surrogate-pair.
 		{"a😀b", 2, "a"},
 		{"😀😀", 2, "😀"},
 	}
@@ -156,8 +155,7 @@ func TestPersistOversizeFormat(t *testing.T) {
 }
 
 func TestPersistOversizeNoEllipsisWhenPreviewComplete(t *testing.T) {
-	// Threshold below the preview size: the whole text fits in the
-	// preview, so the "..." line is omitted (hasMore false).
+	// Threshold below the preview size: the whole text fits in the preview, so the "..." line is omitted (hasMore false).
 	text := strings.Repeat("z", 150)
 	got := persistOversize(text, "Grep", 100, t.TempDir(), discardLogf)
 	assert.NotContains(t, got, "\n...\n")

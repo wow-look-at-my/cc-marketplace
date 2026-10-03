@@ -8,7 +8,7 @@ Notes to self. `/docs:dockerfile` covers writing the file. This covers deciding 
 
 ## The failure this exists to prevent
 
-A host ran agent sessions in containers. There was one big runtime image (terminal, tmux, git, toolchains) and six CLI agents. The design I defended:
+A host ran agent sessions in containers. There was one big runtime image (terminal, tmux, git, toolchains) and CLI agents. The design I defended:
 
 - build one "payload" image per agent, each `FROM ubuntu`, containing only that agent's binaries under `/agent`.
 - `docker run` each payload image once, purely to `cp -a /agent/.` into a named volume.
@@ -37,7 +37,7 @@ An image is an ordered stack of layers. Each layer has a SHA256 content identifi
 Consequences worth holding onto:
 
 - **A child image's cost is its own layers.** `FROM big-base` then one `RUN` transfers and stores that one layer for anyone who has the base.
-- **Sharing is by digest, not by name.** Two images share a layer when the layer is byte-identical, whatever the tags say. Rebuilding a base non-reproducibly gives a new digest, and every child that referenced it stops sharing.
+- **Sharing is by digest, not by name.** Images share a layer when the layer is byte-identical, whatever the tags say. Rebuilding a base non-reproducibly gives a new digest, and every child that referenced it stops sharing.
 - **"Layering saves no bytes here" can be TRUE and still not be the argument.** It was true in the case above. It was also irrelevant. The win is that the daemon does the distribution, versioning and identity, and you delete the code that was doing it by hand.
 - **Layer count is not the metric.** Squashing to save a layer trades away sharing and cache hits.
 
@@ -80,12 +80,12 @@ Built with `--build-arg BASE_IMAGE=registry.example.com/myapp-runtime:<sha>`.
 
 ## CI: build order follows FROM
 
-This is where the design change actually shows up in a pipeline. It is easy to get wrong because a matrix looks so tidy:
+This is where the design change shows up in a pipeline. It is easy to get wrong because a matrix looks so tidy:
 
 - **A base and its children cannot build in parallel.** The children need the base to exist first. That means separate jobs with `needs:`, not one matrix.
 - **The child's builder pulls the base from the REGISTRY**. The base has to be pushed, not merely built, before the child starts.
 - Fix the action.
-- **A stale base is a real failure mode.** If children are rebuilt without the base, they silently keep the old runtime.
+- **A stale base is a real failure mode.** If children are rebuilt without the base, they silently keep the runtime.
 
 ## Multi-stage: the toolchain never ships
 

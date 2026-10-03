@@ -132,9 +132,7 @@ func TestContentWeirdFilenameWithColon(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"we:ird.txt", "a needle\n"})
 	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "needle"}))
-	// The earliest-colon split lands inside the filename, but
-	// relativizing the shorter prefix strips the same root prefix, so
-	// the line still comes out right.
+	// The earliest-colon split lands inside the filename, but relativizing the shorter prefix strips the same root prefix.
 	wantText(t, got, "we:ird.txt:1:a needle")
 }
 
@@ -162,9 +160,7 @@ func TestContentLongLineShown(t *testing.T) {
 
 func TestContentHugeLineClamped(t *testing.T) {
 	root := t.TempDir()
-	// A line far past clampWidth is clamped, never dropped: the path:line:
-	// prefix and as much content as fits are kept, then an ellipsis. Text
-	// mode carries no match column, so the window anchors at the start.
+	// A line far past clampWidth is clamped, never dropped: the path:line: prefix and as much content as fits are kept.
 	mkTree(t, root, tf{"long.txt", strings.Repeat("y", 5000) + "\n"})
 	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "y"}))
 	wantText(t, got, "long.txt:1:"+strings.Repeat("y", 4084)+ellipsis)
@@ -205,8 +201,7 @@ func TestGitignoreRespected(t *testing.T) {
 		tf{"kept.txt", "needle kept\n"},
 		tf{".hidden.txt", "needle hidden\n"})
 	got := grepOK(t, testTool(t, root), contentArgs(map[string]any{"pattern": "needle"}))
-	// Gitignored files and the .git dir are excluded; hidden files are
-	// searched (--hidden). Opposite of the sibling glob plugin's default.
+	// Gitignored files and the .git dir are excluded; hidden files are searched (--hidden).
 	assert.NotContains(t, got, "secret")
 	assert.NotContains(t, got, ".git/config")
 	assert.True(t, containsLine(got, "kept.txt:1:needle kept"), got)
@@ -346,8 +341,7 @@ func TestPathDoesNotExist(t *testing.T) {
 }
 
 func TestPathDidYouMeanSuggestion(t *testing.T) {
-	// EvalSymlinks so the suggester's realpath step cannot diverge on
-	// hosts whose temp dir sits behind a symlink (e.g. macOS /var).
+	// EvalSymlinks so the suggester's realpath step cannot diverge on hosts whose temp dir sits behind a symlink.
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 	root := base + "/proj"
@@ -368,8 +362,7 @@ func TestUNCishResolvedPathSkipsValidation(t *testing.T) {
 }
 
 func TestPathTildeExpansion(t *testing.T) {
-	// Vq parity: "~" and "~/sub" expand to the home directory. Results
-	// outside the root come back absolute.
+	// Vq parity: "~" and "~/sub" expand to the home directory. Results outside the root come back absolute.
 	root := t.TempDir()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -384,8 +377,7 @@ func TestPathTildeExpansion(t *testing.T) {
 }
 
 func TestPathTildeUserNotExpanded(t *testing.T) {
-	// The builtin's Vq only expanded "~" and "~/..."; "~user" resolves
-	// as a literal name against the root.
+	// The builtin's Vq only expanded "~" and "~/..."; "~user" resolves as a literal name against the root.
 	root := t.TempDir()
 	got, isErr := runGrep(t, testTool(t, root), map[string]any{"pattern": "x", "path": "~nobody"})
 	require.True(t, isErr)
@@ -393,8 +385,7 @@ func TestPathTildeUserNotExpanded(t *testing.T) {
 }
 
 func TestPathWhitespaceTrimmedBeforeResolve(t *testing.T) {
-	// Vq trim() parity: " sub " only names a real directory after
-	// trimming, and a whitespace-only path resolves to the root.
+	// Vq trim() parity: " sub " only names a real directory after trimming.
 	root := t.TempDir()
 	mkTree(t, root, tf{"sub/inner.txt", "needle\n"})
 	g := testTool(t, root)

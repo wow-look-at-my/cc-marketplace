@@ -78,29 +78,15 @@ func wantText(t *testing.T, got, want string) {
 
 }
 
-// writeFakeRg writes an executable shell script standing in for ripgrep
-// and returns its path, a single time the kernel will actually start it.
-//
-// Writing a file and executing it straight away races every OTHER test in
-// this package that forks. A child between fork and exec holds a copy of
-// every open descriptor, this file's write descriptor included, so the
-// kernel refuses to exec it and answers ETXTBSY. The tests run in parallel,
-// so the window is real: it surfaced in CI on the sibling grep plugin, whose
-// runner test read "text file busy" instead of ripgrep's stderr.
-//
-// The window is the writer's, not the reader's, and it closes on its own.
-// Probing until the file starts is what makes that wait explicit. There is
-// no attempt cap: a file that never becomes executable is a real defect, and
-// the test's own deadline is what must report it.
+// writeFakeRg writes an executable shell script standing in for ripgrep and
+// returns its path, a single time the kernel will start it.
 func writeFakeRg(t *testing.T, script string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "fake-rg")
 	require.NoError(t, os.WriteFile(p, []byte("#!/bin/sh\n"+script+"\n"), 0o755))
 
 	for {
-		// Start, never Run: the answer is whether the kernel will EXEC this
-		// file, and some of these fakes stream until they are killed. Waiting
-		// for a single to finish would hang the test this is meant to protect.
+		// Start, never Run: the answer is whether the kernel will EXEC this file.
 		cmd := exec.Command(p, "--fake-rg-startup-probe")
 		err := cmd.Start()
 		if err == nil {

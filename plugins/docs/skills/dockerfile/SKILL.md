@@ -30,7 +30,7 @@ Second directive worth knowing: `# check=error=true` turns build-check warnings 
 
 ## ADD - the one I get wrong every time
 
-The reflex is `RUN curl -O ...tar.gz && tar xzf ... && rm ...tar.gz`. Then, when told to use `ADD`, the follow-up mistake is insisting "ADD doesn't unpack tarballs." Both are wrong. What the reference actually says:
+The reflex is `RUN curl -O ...tar.gz && tar xzf ... && rm ...tar.gz`. Then, when told to use `ADD`, the follow-up mistake is insisting "ADD does not unpack tarballs." Both are wrong. What the reference actually says:
 
 - **A local tar archive is extracted by default.** Recognized formats: gzip, bzip2, xz, or uncompressed. It behaves like `tar -x` and unions with whatever is already at the destination.
 - Format is detected **from the file contents, not the filename**. An empty file named `foo.tar.gz` is just copied, with no decompression error.
