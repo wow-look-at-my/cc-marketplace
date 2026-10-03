@@ -40,6 +40,10 @@ plugins/docs/skills/*/reference/
 # this plugin fetches is what has to be there.
 plugins/common-checks/server/
 
+# comment-truth plugin build outputs
+plugins/comment-truth/comment-truth
+plugins/comment-truth/build/
+
 # The slopfix binary carries its plugin's hooks module, and the build writes it here.
 plugins/slopfix/hooks/register.ts
 plugins/slopfix/hooks/register.test.ts
