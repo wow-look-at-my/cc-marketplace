@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"rgmcp"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -152,8 +154,8 @@ func TestPersistEndToEnd(t *testing.T) {
 	g := testTool(t, root)
 	got := grepOK(t, g, contentArgs(map[string]any{"pattern": "needle"}))
 
-	require.True(t, strings.HasPrefix(got, persistedOutputOpen+"\n"), got[:80])
-	require.True(t, strings.HasSuffix(got, persistedOutputClose))
+	require.True(t, strings.HasPrefix(got, rgmcp.PersistedOutputOpen+"\n"), got[:80])
+	require.True(t, strings.HasSuffix(got, rgmcp.PersistedOutputClose))
 
 	m := persistedPathRe.FindStringSubmatch(got)
 	require.NotNil(t, m)
@@ -164,13 +166,13 @@ func TestPersistEndToEnd(t *testing.T) {
 	assert.True(t, strings.HasSuffix(text, "[Showing results with pagination = limit: 250]"))
 	assert.Equal(t, 250+2, len(strings.Split(text, "\n")))
 
-	preview, hasMore := splitPreview(text, persistPreviewChars)
+	preview, hasMore := rgmcp.SplitPreview(text, rgmcp.PersistPreviewChars)
 	require.True(t, hasMore)
-	want := persistedOutputOpen + "\n" +
-		fmt.Sprintf("Output too large (%s). Full output saved to: %s\n\n", humanSize(utf16Len(text)), m[1]) +
+	want := rgmcp.PersistedOutputOpen + "\n" +
+		fmt.Sprintf("Output too large (%s). Full output saved to: %s\n\n", rgmcp.HumanSize(rgmcp.UTF16Len(text)), m[1]) +
 		"Preview (first 2KB):\n" +
 		preview + "\n...\n" +
-		persistedOutputClose
+		rgmcp.PersistedOutputClose
 	assert.Equal(t, want, got)
 }
 
@@ -182,7 +184,7 @@ func TestPersistFwmEndToEnd(t *testing.T) {
 	}
 	mkTree(t, root, tf{"big.txt", b.String()})
 	got := grepOK(t, testTool(t, root), map[string]any{"pattern": "needle"})
-	require.True(t, strings.HasPrefix(got, persistedOutputOpen))
+	require.True(t, strings.HasPrefix(got, rgmcp.PersistedOutputOpen))
 	m := persistedPathRe.FindStringSubmatch(got)
 	require.NotNil(t, m)
 	saved, err := os.ReadFile(m[1])
@@ -194,7 +196,7 @@ func TestInlineJustUnderPersistThreshold(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"a.txt", "needle\n"})
 	g := testTool(t, root)
-	g.persistThreshold = utf16Len("Found 1 file\na.txt:\n  1:needle") // exactly at threshold
+	g.persistThreshold = rgmcp.UTF16Len("Found 1 file\na.txt:\n  1:needle") // exactly at threshold
 	got := grepOK(t, g, map[string]any{"pattern": "needle"})
 	wantText(t, got, "Found 1 file\na.txt:\n  1:needle")
 }
@@ -253,11 +255,11 @@ func TestEAGAINRetryThroughTool(t *testing.T) {
 
 func TestRipgrepMissingThroughTool(t *testing.T) {
 	g := testTool(t, t.TempDir())
-	g.resolveRg = resolveRipgrep
+	g.resolveRg = rgmcp.ResolveRipgrep
 	t.Setenv("PATH", t.TempDir())
 	got, isErr := runGrep(t, g, map[string]any{"pattern": "x"})
 	require.True(t, isErr)
-	wantText(t, got, ripgrepNotFoundMsg)
+	wantText(t, got, rgmcp.RipgrepNotFoundMsg)
 }
 
 func TestNewGrepToolDefaults(t *testing.T) {

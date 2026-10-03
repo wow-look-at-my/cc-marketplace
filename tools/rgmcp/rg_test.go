@@ -1,25 +1,34 @@
-package main
+package rgmcp
 
 import (
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"rgmcp/testkit"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func testRunner(timeout time.Duration) *rgRunner {
-	return &rgRunner{timeout: timeout, timeoutLabel: 20, maxOutput: rgOutputCapBytes}
+func TestMain(m *testing.M) {
+	os.Exit(testkit.RunWithRipgrep(m))
+}
+
+var writeFakeRg = testkit.WriteFakeRg
+
+func testRunner(timeout time.Duration) *RgRunner {
+	return &RgRunner{Timeout: timeout, TimeoutLabel: 20, MaxOutput: RgOutputCapBytes}
 }
 
 func TestRunnerTimeoutWithoutOutput(t *testing.T) {
 	fake := writeFakeRg(t, "exec sleep 5")
 	r := testRunner(200 * time.Millisecond)
 	start := time.Now()
-	lines, err := r.run(fake, []string{"--files"}, t.TempDir())
+	lines, err := r.Run(fake, []string{"--files"}, t.TempDir())
 	elapsed := time.Since(start)
 	assert.LessOrEqual(t, elapsed, 3*time.Second)
 
@@ -34,8 +43,8 @@ func TestRunnerTimeoutWithoutOutput(t *testing.T) {
 
 func TestRunnerTimeoutLabelIsWSLConstantNotEffectiveTimeout(t *testing.T) {
 	fake := writeFakeRg(t, "exec sleep 5")
-	r := &rgRunner{timeout: 100 * time.Millisecond, timeoutLabel: 60, maxOutput: rgOutputCapBytes}
-	_, err := r.run(fake, nil, t.TempDir())
+	r := &RgRunner{Timeout: 100 * time.Millisecond, TimeoutLabel: 60, MaxOutput: RgOutputCapBytes}
+	_, err := r.Run(fake, nil, t.TempDir())
 	assert.False(t, err == nil || !strings.Contains(err.Error(), "timed out after 60 seconds"))
 
 }
@@ -43,7 +52,7 @@ func TestRunnerTimeoutLabelIsWSLConstantNotEffectiveTimeout(t *testing.T) {
 func TestRunnerTimeoutWithPartialOutputDropsLastLine(t *testing.T) {
 	fake := writeFakeRg(t, "printf 'a.txt\\nb.txt\\n'; exec sleep 5")
 	r := testRunner(300 * time.Millisecond)
-	lines, err := r.run(fake, []string{"--files"}, t.TempDir())
+	lines, err := r.Run(fake, []string{"--files"}, t.TempDir())
 	require.Nil(t, err)
 
 	assert.False(t, len(lines) != 1 || lines[0] != "a.txt")
@@ -52,9 +61,9 @@ func TestRunnerTimeoutWithPartialOutputDropsLastLine(t *testing.T) {
 
 func TestRunnerOutputCapKillsAndResolvesPartial(t *testing.T) {
 	fake := writeFakeRg(t, "while :; do echo 0123456789abcdef; done")
-	r := &rgRunner{timeout: 30 * time.Second, timeoutLabel: 20, maxOutput: 4096}
+	r := &RgRunner{Timeout: 30 * time.Second, TimeoutLabel: 20, MaxOutput: 4096}
 	start := time.Now()
-	lines, err := r.run(fake, nil, t.TempDir())
+	lines, err := r.Run(fake, nil, t.TempDir())
 	elapsed := time.Since(start)
 	assert.LessOrEqual(t, elapsed, 15*time.Second)
 
@@ -70,7 +79,7 @@ func TestRunnerOutputCapKillsAndResolvesPartial(t *testing.T) {
 
 func TestRunnerExitOneMeansNoMatches(t *testing.T) {
 	fake := writeFakeRg(t, "exit 1")
-	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	lines, err := testRunner(5*time.Second).Run(fake, nil, t.TempDir())
 	require.NoError(t, err)
 
 	assert.Empty(t, lines)
@@ -80,7 +89,7 @@ func TestRunnerExitOneMeansNoMatches(t *testing.T) {
 func TestRunnerExitTwoResolvesStdout(t *testing.T) {
 	// Exit 2 WITH stdout (e.g. matches found but part of the tree was unreadable) keeps the builtin behavior.
 	fake := writeFakeRg(t, "echo half-result; echo 'rg: some error' >&2; exit 2")
-	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	lines, err := testRunner(5*time.Second).Run(fake, nil, t.TempDir())
 	require.Nil(t, err)
 
 	assert.False(t, len(lines) != 1 || lines[0] != "half-result")
@@ -90,7 +99,7 @@ func TestRunnerExitTwoResolvesStdout(t *testing.T) {
 func TestRunnerExitTwoNoOutputSurfacesStderr(t *testing.T) {
 	// Deliberate deviation from the builtin: exit 2 with NOTHING on stdout surfaces rg's stderr instead.
 	fake := writeFakeRg(t, "printf 'rg: error parsing glob:\\nbroken\\n' >&2; exit 2")
-	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	lines, err := testRunner(5*time.Second).Run(fake, nil, t.TempDir())
 	assert.Nil(t, lines)
 
 	require.NotNil(t, err)
@@ -102,7 +111,7 @@ func TestRunnerExitTwoNoOutputSurfacesStderr(t *testing.T) {
 func TestRunnerExitTwoSilentResolvesEmpty(t *testing.T) {
 	// Exit 2 with neither stdout nor stderr still resolves empty.
 	fake := writeFakeRg(t, "exit 2")
-	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	lines, err := testRunner(5*time.Second).Run(fake, nil, t.TempDir())
 	assert.Nil(t, err)
 
 	assert.Empty(t, lines)
@@ -112,7 +121,7 @@ func TestRunnerExitTwoSilentResolvesEmpty(t *testing.T) {
 func TestRunnerExitTwoStderrSurfacedTextIsCapped(t *testing.T) {
 	// A pathological exit-2 run (megabytes of warnings ending in an error) must not blow up the MCP result.
 	fake := writeFakeRg(t, "head -c 6000 /dev/zero | tr '\\0' x >&2; exit 2")
-	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	lines, err := testRunner(5*time.Second).Run(fake, nil, t.TempDir())
 	assert.Nil(t, lines)
 
 	require.NotNil(t, err)
@@ -139,7 +148,7 @@ func TestTruncateErrTextUnits(t *testing.T) {
 
 func TestRunnerEAGAINRetriesSingleThreaded(t *testing.T) {
 	fake := writeFakeRg(t, `if [ "$1" = "-j" ] && [ "$2" = "1" ]; then echo retried.txt; else echo 'rg: Resource temporarily unavailable (os error 11)' >&2; exit 2; fi`)
-	lines, err := testRunner(5*time.Second).run(fake, []string{"--files"}, t.TempDir())
+	lines, err := testRunner(5*time.Second).Run(fake, []string{"--files"}, t.TempDir())
 	require.Nil(t, err)
 
 	assert.False(t, len(lines) != 1 || lines[0] != "retried.txt")
@@ -148,7 +157,7 @@ func TestRunnerEAGAINRetriesSingleThreaded(t *testing.T) {
 
 func TestRunnerEAGAINRetriesOnlyOnce(t *testing.T) {
 	fake := writeFakeRg(t, "echo 'rg: os error 11' >&2; exit 2")
-	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	lines, err := testRunner(5*time.Second).Run(fake, nil, t.TempDir())
 	require.NoError(t, err)
 
 	assert.Empty(t, lines)
@@ -157,7 +166,7 @@ func TestRunnerEAGAINRetriesOnlyOnce(t *testing.T) {
 
 func TestRunnerCRLFAndBlankLineParsing(t *testing.T) {
 	fake := writeFakeRg(t, "printf 'one\\r\\n\\r\\ntwo\\n\\n'")
-	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
+	lines, err := testRunner(5*time.Second).Run(fake, nil, t.TempDir())
 	require.Nil(t, err)
 
 	assert.False(t, len(lines) != 2 || lines[0] != "one" || lines[1] != "two")
@@ -167,7 +176,7 @@ func TestRunnerCRLFAndBlankLineParsing(t *testing.T) {
 func TestResolveRipgrepPrefersOverride(t *testing.T) {
 	fake := writeFakeRg(t, "exit 0")
 	t.Setenv("RIPGREP_PATH", fake)
-	got, err := resolveRipgrep()
+	got, err := ResolveRipgrep()
 	require.NoError(t, err)
 
 	assert.Equal(t, fake, got)
@@ -176,13 +185,13 @@ func TestResolveRipgrepPrefersOverride(t *testing.T) {
 
 func TestResolveRipgrepBadOverride(t *testing.T) {
 	t.Setenv("RIPGREP_PATH", filepath.Join(t.TempDir(), "missing"))
-	_, err := resolveRipgrep()
+	_, err := ResolveRipgrep()
 	assert.False(t, err == nil || !strings.Contains(err.Error(), "RIPGREP_PATH"))
 
 }
 
 func TestResolveRipgrepFallsBackToPath(t *testing.T) {
-	got, err := resolveRipgrep()
+	got, err := ResolveRipgrep()
 	require.Nil(t, err)
 
 	_, statErr := os.Stat(got)
@@ -192,20 +201,20 @@ func TestResolveRipgrepFallsBackToPath(t *testing.T) {
 
 func TestResolveRipgrepNotFoundMessage(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := resolveRipgrep()
+	_, err := ResolveRipgrep()
 	require.NotNil(t, err)
 
-	assert.Equal(t, ripgrepNotFoundMsg, err.Error())
+	assert.Equal(t, RipgrepNotFoundMsg, err.Error())
 
 	assert.Contains(t, err.Error(), "brew install ripgrep")
 
 }
 
 func TestRunnerSpawnFailure(t *testing.T) {
-	_, err := testRunner(5*time.Second).run(filepath.Join(t.TempDir(), "gone"), nil, t.TempDir())
+	_, err := testRunner(5*time.Second).Run(filepath.Join(t.TempDir(), "gone"), nil, t.TempDir())
 	require.NotNil(t, err)
 
-	assert.Equal(t, ripgrepNotFoundMsg, err.Error())
+	assert.Equal(t, RipgrepNotFoundMsg, err.Error())
 
 }
 
@@ -213,7 +222,7 @@ func TestDefaultRgTimeout(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", "")
 	t.Setenv("WSL_DISTRO_NAME", "")
 	t.Setenv("WSL_INTEROP", "")
-	d, label := defaultRgTimeout()
+	d, label := DefaultRgTimeout()
 	if isWSL() {
 		// Host genuinely is WSL (via /proc/version): expect the 60s pair.
 		assert.False(t, d != 60*time.Second || label != 60)
@@ -223,13 +232,13 @@ func TestDefaultRgTimeout(t *testing.T) {
 	}
 
 	t.Setenv("CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", "7")
-	d, label2 := defaultRgTimeout()
+	d, label2 := DefaultRgTimeout()
 	assert.Equal(t, 7*time.Second, d)
 
 	assert.Equal(t, label, label2)
 
 	t.Setenv("CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", "not-a-number")
-	d, _ = defaultRgTimeout()
+	d, _ = DefaultRgTimeout()
 	assert.Equal(t, time.Duration(label)*time.Second, d)
 
 }
