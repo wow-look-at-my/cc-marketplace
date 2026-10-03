@@ -1,0 +1,13 @@
+{
+	"slopfix": {
+		"args": [
+			"lsp"
+		],
+		"command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape",
+		"extensionToLanguage": {
+			".md": "markdown",
+			".yaml": "yaml",
+			".yml": "yaml"
+		}
+	}
+}
