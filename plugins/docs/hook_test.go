@@ -85,7 +85,7 @@ func TestTheSameSkillIsNamedOncePerSession(t *testing.T) {
 	assert.Empty(t, strings.TrimSpace(second), "the second call says nothing")
 }
 
-// Two skills are tracked apart: naming one must not silence the other.
+// Skills are tracked apart: naming one must not silence the other.
 func TestNamingOneSkillDoesNotSilenceTheOther(t *testing.T) {
 	binary, temp := buildHook(t), t.TempDir()
 

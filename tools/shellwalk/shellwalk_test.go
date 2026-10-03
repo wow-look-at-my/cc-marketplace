@@ -10,7 +10,7 @@ import (
 )
 
 // argv parses a single command and renders its words, so a case reads as the
-// command a session would actually type.
+// command a session would type.
 func argv(t *testing.T, command string) []Word {
 	t.Helper()
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
@@ -50,8 +50,7 @@ func TestACommandLookupRunsNothing(t *testing.T) {
 	}
 }
 
-// The negative control: without a lookup flag, `command` is the wrapper it
-// always was and the program behind it still resolves.
+// The.
 func TestCommandWithoutALookupFlagStillResolvesTheProgram(t *testing.T) {
 	assert.Equal(t, "sed", program(t, `command sed -i f`))
 	assert.Equal(t, "sed", program(t, `command -p sed -i f`))

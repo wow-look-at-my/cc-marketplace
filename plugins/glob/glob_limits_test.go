@@ -96,8 +96,7 @@ func TestTimeoutThroughTool(t *testing.T) {
 
 func TestTimeoutPartialThroughTool(t *testing.T) {
 	root := t.TempDir()
-	// Fake rg emits absolute paths then hangs: the tool must resolve the
-	// earliest (last line dropped) relativized against the root.
+	// Fake rg emits absolute paths then hangs.
 	fake := writeFakeRg(t, fmt.Sprintf("printf '%s/kept.txt\\n%s/dropped.txt\\n'; exec sleep 5", root, root))
 	g := testTool(t, root)
 	g.resolveRg = fixedRg(fake)
@@ -136,8 +135,7 @@ func TestRelativizePathQuirks(t *testing.T) {
 	got = relativizePath("/other/f.txt", "/root")
 	assert.Equal(t, "/other/f.txt", got)
 
-	// Faithful quirk: a sibling name beginning with ".." falls back to
-	// the absolute path even though it is under the root.
+	// Faithful quirk: a sibling name beginning with ".." falls back to the absolute path even though it is under the root.
 	got = relativizePath("/root/..foo", "/root")
 	assert.Equal(t, "/root/..foo", got)
 
@@ -172,8 +170,7 @@ func TestResolveAgainst(t *testing.T) {
 	_, err = resolveAgainst("bad\x00path", "/root")
 	require.EqualError(t, err, "Path contains null bytes")
 
-	// Without a resolvable home, "~" stays literal (documented
-	// divergence: the builtin's os.homedir() cannot fail on POSIX).
+	// Without a resolvable home, "~" stays literal.
 	t.Setenv("HOME", "")
 	got, err = resolveAgainst("~", "/root")
 	require.NoError(t, err)
@@ -198,10 +195,7 @@ func TestNewGlobToolDefaults(t *testing.T) {
 }
 
 func TestUNCishResolvedPathSkipsValidation(t *testing.T) {
-	// The builtin skips stat validation when the RESOLVED path starts
-	// with \\ or // (Windows UNC shapes). On POSIX, resolution collapses
-	// a leading // (both Node and Go), so the branch is only reachable
-	// with a backslash form — test it at the validateDir layer.
+	// The builtin skips stat validation when the RESOLVED path starts with \\ or // (Windows UNC shapes).
 	g := testTool(t, t.TempDir())
 	msg, ok := g.validateDir(`\\host\share`, `\\host\share`)
 	assert.True(t, ok, msg)

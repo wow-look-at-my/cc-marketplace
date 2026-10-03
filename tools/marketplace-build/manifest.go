@@ -8,9 +8,8 @@ import (
 	"sort"
 )
 
-// It replaced an npm-tarball manifest. Distribution is a git tag now, so there
-// is no tarball path, no package name and no registry URL -- the tag IS the
-// artifact.
+// . Distribution is a git tag now, so there is no tarball path, no package
+// name and no registry URL -- the tag IS the artifact.
 type pluginReleaseManifest struct {
 	Name       string                 `json:"name"`
 	Version    string                 `json:"version"`
@@ -45,10 +44,9 @@ func writeReleaseManifest(cookedDir, name, version, tag string) error {
 // readPackagedPlugins enumerates subdirectories of inputDir as released
 // plugins, each holding the manifest.json release-plugin wrote.
 //
-// Every failure here is FATAL, deliberately. This used to warn and skip, which
-// meant a plugin whose manifest failed to write silently vanished from
-// marketplace.json -- users could no longer install it and every check stayed
-// green, which is the exact shape of failure a release pipeline must not have.
+// Every failure here is FATAL, deliberately..json -- users could no longer
+// install it and every check stayed green, which is the exact shape of
+// failure a release pipeline must not have.
 func readPackagedPlugins(inputDir string) ([]packagedPlugin, error) {
 	entries, err := os.ReadDir(inputDir)
 	if err != nil {

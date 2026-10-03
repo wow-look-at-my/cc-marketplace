@@ -6,10 +6,7 @@ import (
 	"strings"
 )
 
-// A stylesheet's real defect is almost never a syntax error -- it is the same
-// declaration block written again under a new selector because the cascade
-// went unused. This file finds exactly that: rules that share a byte-identical
-// (normalized) body within the SAME at-rule context.
+// A stylesheet's real defect is almost never a syntax error.
 
 // Rule is a single declaration block: where it is, what selects it,
 // and its normalized declarations.
@@ -27,9 +24,8 @@ type Group struct {
 	Rules   []Rule
 }
 
-// declBlockAtRules hold declarations rather than nested rules, so their bodies
-// are parsed like an ordinary rule. Anything else starting with '@' is a
-// container whose body is scanned for nested rules.
+// declBlockAtRules hold declarations rather than nested rules, so their
+// bodies are parsed like an ordinary rule.
 var declBlockAtRules = set.Of[string](
 	"@font-face",
 	"@page",
@@ -203,9 +199,7 @@ func ParseRules(src string) []Rule {
 			case '{':
 				raw := s[start:i]
 				prelude := strings.TrimSpace(raw)
-				// The line the SELECTOR starts on, not the line the previous
-				// rule ended on: blank lines between rules sit in `raw` too, so
-				// only the newlines inside the trimmed selector count back.
+				// The line the SELECTOR starts on, not the line the rule ended on.
 				trimmed := strings.TrimLeft(raw, " \t\r\n")
 				preludeLine := line - strings.Count(trimmed, "\n")
 				body, end := readBlock(s, i)
@@ -295,9 +289,7 @@ func FindDuplicates(rules []Rule) []Group {
 		if len(rs[0].Decls) < 2 && len(rs) < 3 {
 			continue
 		}
-		// Identical selectors are a different bug (a rule written again), and
-		// a single the model rarely commits; dedupe so a repeated selector in
-		// files' worth of copy-paste does not read as N distinct rules.
+		// Identical selectors are a different bug (a rule written again), and a single the model rarely commits.
 		seen := set.New[string]()
 		uniq := rs[:0:0]
 		for _, r := range rs {

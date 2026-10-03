@@ -11,8 +11,7 @@ import (
 	"strings"
 )
 
-// gateEnvVar is the escape hatch: CC_GREP_PLUGIN=always|never|auto
-// (default auto). It is checked before the clientInfo rule.
+// gateEnvVar is the escape hatch: CC_GREP_PLUGIN=always|never|auto (default auto).
 const gateEnvVar = "CC_GREP_PLUGIN"
 
 var builtinRemovedIn = semver{2, 1, 117}

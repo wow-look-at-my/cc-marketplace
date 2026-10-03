@@ -65,8 +65,7 @@ func getRepoRoot() string {
 	return repoRoot
 }
 
-// runGit runs a git command and returns stdout.
-// This is a variable so tests can replace it with a mock.
+// runGit runs a git command and returns stdout. This is a variable so tests can replace it with a mock.
 var runGit = runGitReal
 
 func runGitReal(args ...string) (string, error) {
