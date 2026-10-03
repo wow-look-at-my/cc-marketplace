@@ -89,8 +89,8 @@ jobs:
             if (unknown.length > 0) throw new Error(`no marketplace plugin is named: ${unknown.join(' ')}`);
 
             const keys: Record<string, string> = {};
-            // shellwalk is compiled into no-work-loss and enhanced-auto-allow through a local replace, so a change there must rebuild them.
-            const tools = ['tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod'];
+            // A plugin compiles a shared module under tools/ through a local replace, so a change there must rebuild it.
+            const tools = ['tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod', 'tools/rgmcp/**/*.go', 'tools/rgmcp/go.mod'];
 
             // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when buildhost publishes a new one.
             const slopfix = steps.slopfix.outputs.version;
@@ -137,8 +137,12 @@ jobs:
             core.setOutput('has_build', String(buildPlugins.length > 0));
 
 
-  # The plugins that embed shellwalk compile it but never run its own suite, and a shared parser nothing tests is where the drift goes next.
-  shellwalk:
+  # A plugin build compiles a shared module but never runs its own suite, and shared code that nothing tests is where the drift goes next.
+  shared-modules:
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [shellwalk, rgmcp]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -159,7 +163,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - uses: wow-look-at-my/go-toolchain@master
         with:
-          working-directory: tools/shellwalk
+          working-directory: tools/${{ matrix.module }}
 
   build:
     needs: prepare
@@ -217,6 +221,10 @@ jobs:
 
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
+
+      - name: Hooks module tests
+        if: ${{ hashFiles(format('plugins/{0}/hooks/*.test.ts', matrix.plugin)) != '' }}
+        run: claude plugin test plugins/${{ matrix.plugin }}
 
       # The cooked dir is published as-is; version comes from release-plugin (not auto-increment) so the tag and manifest agree.
       - name: Publish orphan tag
