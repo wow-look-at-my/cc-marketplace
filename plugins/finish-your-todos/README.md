@@ -2,7 +2,7 @@
 
 Enforces the task list at both ends of a turn.
 
-Claude already receives a system reminder about keeping a task list on most turns. It reads them and carries on: one observed session took five separate assignments and filed **zero** tasks, then lost track of most of them. A reminder is text, and text is skippable. These are refusals.
+Claude already receives a system reminder about keeping a task list on most turns. It reads them and carries on: one observed session took separate assignments and filed **zero** tasks, then lost track of most of them. A reminder is text, and text is skippable. These are refusals.
 
 | Hook | When | What it does |
 |---|---|---|

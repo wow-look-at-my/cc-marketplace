@@ -11,8 +11,7 @@ import (
 	"strings"
 )
 
-// gateEnvVar is the escape hatch: CC_GLOB_PLUGIN=always|never|auto
-// (default auto). It is checked before the clientInfo rule.
+// gateEnvVar is the escape hatch: CC_GLOB_PLUGIN=always|never|auto (default auto).
 const gateEnvVar = "CC_GLOB_PLUGIN"
 
 var builtinRemovedIn = semver{2, 1, 117}

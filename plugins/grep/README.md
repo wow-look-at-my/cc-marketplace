@@ -1,6 +1,6 @@
 # grep
 
-Brings back the **Grep** tool that Claude Code removed in 2.1.117, as a plugin. Works like the old builtin, with a better default output mode.
+Brings back the **Grep** tool that Claude Code removed in 2.1.117, as a plugin. Works like the builtin, with a better default output mode.
 
 ## Install
 
@@ -38,23 +38,23 @@ notes.txt:
   1:needle: found
 ```
 
-The old builtin's default only returned bare filenames, which forced a second search to see the matches.
+The builtin's default only returned bare filenames, which forced a second search to see the matches.
 
 - Match lines render `N:text`, context lines `N-text`, and an indented `--` separates non-contiguous chunks within a file (only when a context flag with nonzero width is in effect, mirroring ripgrep's own printer). With `"-n": false` the two-space indent stays but the `N:`/`N-` prefixes are dropped.
-- Parsing rule: after the `Found N files` header, every line starting with two spaces belongs to the current file. Any other line is the next file's header (strip the one trailing `:`).
-- `head_limit`/`offset` paginate the flattened stream of match/context lines across all files (headers and `--` separators are not counted). A file whose lines are entirely cut is omitted. Default `head_limit` is 250 lines. `0` means unlimited.
-- A matching line is never dropped. The builtin's `--max-columns 500` cap replaced any longer line with `[Omitted long matching line]`. This plugin instead shows the line, bounded to ~4096 characters. A line wider than that renders as a 4096-rune window with an ellipsis (`…`) marking each cut edge.
+- Parsing rule: after the `Found N files` header, every line starting with multiple spaces belongs to the current file. Any other line is the next file's header (strip the one trailing `:`).
+- `head_limit`/`offset` paginate the flattened stream of match/context lines across all files (headers and `--` separators are not counted). A file whose lines are entirely cut is omitted. Default `head_limit` is many lines. `0` means unlimited.
+- A matching line is never dropped. The builtin's `--max-columns 500` cap replaced any longer line with `[Omitted long matching line]`. This plugin instead shows the line, bounded to many characters. A line wider than that renders as a 4096-rune window with an ellipsis (`…`) marking each cut edge.
 
-`.gitignore` is respected (the opposite of the glob plugin). Searches time out after 20 seconds (`CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`).
+`.gitignore` is respected (the opposite of the glob plugin). Searches time out after several seconds (`CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`).
 
 - Runs ripgrep with `--hidden` and explicit `!` exclusions for `.git .svn .hg .bzr .jj .sl`. `.gitignore` IS respected (no `--no-ignore`) — note this is the opposite of the sibling glob plugin's default. (The builtin's `--max-columns 500` is dropped so long lines are shown, then clamped in Go.
 - `path` may be a file or a directory. It is whitespace-trimmed and accepts `~` / `~/sub` (expanded to the home directory) like the builtin's path resolution. Missing paths return `Path does not exist: ... Note: your current working directory is ...` with a did-you-mean suggestion when a re-rooted candidate exists.
 - `filenames_with_matches` and `filenames` order files newest-first. Equal mtimes tie-break by the builtin's localeCompare (ported via ICU root collation — case-insensitive at primary strength, so `a.txt` sorts before `B.txt`).
 - Context precedence: `context` beats `-C` beats `-B`/`-A`. `-n` defaults to true. Patterns starting with `-` are passed via `-e`.
-- Searches time out after 20 seconds (60 on WSL), overridable via `CLAUDE_CODE_GLOB_TIMEOUT_SECONDS` (the builtin's env var — it governed both Grep and Glob). Output is capped at 20MB per stream. A timeout or cap kill with partial output returns the complete lines seen so far.
-- Results over 20000 characters (UTF-16 units, matching the builtin's maxResultSizeChars) are written to a temp file and replaced by a `<persisted-output>` block with a ~2KB preview.
+- Searches time out after several seconds (60 on WSL), overridable via `CLAUDE_CODE_GLOB_TIMEOUT_SECONDS` (the builtin's env var — it governed both Grep and Glob). Output is capped at 20MB per stream. A timeout or cap kill with partial output returns the complete lines seen so far.
+- Results many characters (UTF-16 units, matching the builtin's maxResultSizeChars) are written to a temp file and replaced by a `<persisted-output>` block with a ~2KB preview.
 
-Differences from the old builtin:
+Differences from the builtin:
 
 - Invalid regex/glob returns ripgrep's actual error message instead of a silent "No matches found".
 - The ambiguous `type` parameter is gone. Use `glob`.

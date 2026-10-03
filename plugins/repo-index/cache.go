@@ -9,17 +9,13 @@ import (
 	"time"
 )
 
-// ttl is how long a built index is served before a refresh is due. Repository
-// descriptions and topics change on the scale of weeks, so a day is generous
-// and still costs a single background run.
+// ttl is how long a built index is served before a refresh is due.
 const ttl = 24 * time.Hour
 
-// refreshFloor stops a stale cache from starting a refresh on every prompt
-// while a single is already in flight.
+// refreshFloor stops a stale cache from starting a refresh on every prompt while a single is already in flight.
 const refreshFloor = 10 * time.Minute
 
-// readmeBudget caps the extra request per description-less repository. A
-// refresh that hits the cap says so.
+// readmeBudget caps the extra request per description-less repository. A refresh that hits the cap says so.
 const readmeBudget = 200
 
 type cache struct {
@@ -105,8 +101,7 @@ func claimRefresh(home string, now time.Time) bool {
 	if err := os.WriteFile(path, []byte(now.UTC().Format(time.RFC3339)), 0o600); err != nil {
 		return false
 	}
-	// The floor is measured against the caller's clock, so the lock must carry
-	// that clock rather than the filesystem's.
+	// The floor is measured against the caller's clock, so the lock must carry that clock rather than the filesystem's.
 	_ = os.Chtimes(path, now, now)
 	return true
 }

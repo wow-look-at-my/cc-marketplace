@@ -405,8 +405,6 @@ jobs:
             }
 
       - name: Prepare combined input
-        env:
-          ALL_PLUGINS: ${{ needs.prepare.outputs.all_plugins }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/combined-plugins
@@ -417,7 +415,7 @@ jobs:
 
           # see docs/ci-yaml-notes.md#marketplace-json-replacement-and-a-stale-cache-key
           missing=""
-          for plugin in $(echo "$ALL_PLUGINS" | jq -r '.[]'); do
+          for plugin in $(echo "${{ needs.prepare.outputs.all_plugins }}" | jq -r '.[]'); do
             [ -d "/tmp/combined-plugins/$plugin" ] || missing="$missing $plugin"
           done
           if [ -n "$missing" ]; then
@@ -438,7 +436,6 @@ jobs:
       - name: Publish marketplace site to buildhost
         env:
           REF: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           BRANCH="${REF//\//-}"
@@ -462,7 +459,7 @@ jobs:
               -X PUT "${SITE_URL}" \
               -H "Authorization: Bearer ${TOKEN}" \
               -H "Content-Type: application/gzip" \
-              -H "X-Git-Commit: ${SHA}" \
+              -H "X-Git-Commit: ${{ github.sha }}" \
               --data-binary @/tmp/site.tar.gz) || true
             if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 300 ]; then
               echo "Published site to ${SITE_URL}/"

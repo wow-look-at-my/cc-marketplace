@@ -149,7 +149,7 @@ The marketplace builder runs in this order:
 2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
-`docs/justfile` and `slopfix/justfile` are the two real ones in this repo.
+`docs/justfile` and `slopfix/justfile` are the real ones in this repo.
 
 ## Step 3: Enable Marketplace Inclusion
 
@@ -229,7 +229,7 @@ claude plugin install your-plugin
 
 - Start simple - add one command or agent first
 - Use `allowed-tools` in skills to restrict what Claude can do
-- Keep skill instructions under 500 lines for best performance
+- Keep skill instructions a bounded number of lines for best performance
 - Use `${CLAUDE_PLUGIN_ROOT}` for paths in MCP configs and hooks
 
 ## Next Steps

@@ -1,7 +1,6 @@
-// greptool.go implements the Grep tool: description, input schema,
-// argument parsing (with the builtin's zod coercions), ripgrep argv
-// construction, and path validation. See grepmodes.go/grepfwm.go for the
-// per-mode rendering.
+// greptool.go implements the Grep tool: description, input schema, argument
+// parsing (with the builtin's zod coercions), ripgrep argv construction, and
+// path validation. See grepmodes.go/grepfwm.go for the per-mode rendering.
 package main
 
 import (
@@ -18,10 +17,7 @@ import (
 
 const grepToolName = "Grep"
 
-// Output mode names. The builtin's enum was [content,
-// files_with_matches, count] with files_with_matches (a bare
-// newest-earliest path list) as the default; this plugin deliberately
-// drops that name (no alias) and ships the amended set below.
+// Output mode names.
 const (
 	modeContent              = "content"
 	modeFilenamesWithMatches = "filenames_with_matches"
@@ -29,11 +25,7 @@ const (
 	modeCount                = "count"
 )
 
-// Parameters are documented in the schema, not here. The builtin's
-// brace-escaping caveat is gone: it existed because the builtin
-// swallowed rg parse errors as "No matches found", whereas this plugin
-// surfaces them, so a bad pattern explains itself. The tool is
-// alwaysLoad, so every description byte is paid in every prompt.
+// Parameters are documented in the schema, not here.
 const grepDescription = "A search tool built on ripgrep; patterns use ripgrep's full regex syntax.\n" +
 	"ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command.\n"
 
@@ -44,9 +36,8 @@ type schemaProp struct {
 	Description string   `json:"description"`
 }
 
-// The output modes and their formats are documented solely on
-// output_mode. Struct field order is the property order the model
-// sees.
+// The output modes and their formats are documented solely on output_mode.
+// Struct field order is the property order the model sees.
 type grepSchema struct {
 	Type                 string          `json:"type"`
 	AdditionalProperties bool            `json:"additionalProperties"`
@@ -128,8 +119,7 @@ type grepArgs struct {
 	offset     float64
 	multiline  bool
 
-	// Set by execute, not parsed from input: the search path as supplied
-	// (argv space) and its symlink-resolved form handed to rg.
+	// Set by execute, not parsed from input: the search path as supplied (argv space) and its symlink-resolved form handed.
 	searchPath   string
 	rgSearchPath string
 	explicitFile bool
@@ -182,9 +172,8 @@ func (g *grepTool) ListEntry() toolListEntry {
 	}
 }
 
-// Call validates the arguments against the schema (JSON-RPC-level
-// failures) and executes the search (operational failures become
-// isError results).
+// Call validates the arguments against the schema (JSON-RPC-level failures)
+// and executes the search (operational failures become isError results).
 func (g *grepTool) Call(raw json.RawMessage) (*toolResult, *rpcError) {
 	args, rpcErr := parseGrepArgs(raw)
 	if rpcErr != nil {
@@ -326,12 +315,7 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 		}
 		searchPath = resolved
 	}
-	// rg roots its --glob matcher at the child's RESOLVED cwd but builds
-	// candidate paths from the search-path ARGV, so an unresolved
-	// (symlinked) argv makes every slash-containing glob silently match
-	// nothing (macOS /var -> /private/var, any symlinked project dir).
-	// Hand rg the resolved form; the formatters rebase output paths back
-	// so results keep the caller-supplied spelling.
+	// rg roots its --glob matcher at the child's RESOLVED cwd but builds candidate paths from the search-path ARGV.
 	a.searchPath = searchPath
 	a.rgSearchPath = resolveSymlinks(searchPath)
 	if a.path != "" {

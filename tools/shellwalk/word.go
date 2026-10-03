@@ -1,11 +1,12 @@
 // Package shellwalk holds the shell-reading vocabulary that no-work-loss and
 // enhanced-auto-allow both need: what a word says, which program a spelling
-// actually names, and whether an invocation names a script of its own.
+// names, and whether an invocation names a script of its own.
 //
 // Both plugins keep their own segmentation and their own verdicts -- a single
 // fails closed, the other fails open, deliberately. What they must NOT keep
-// separately is the answer to "which program does this run", because a wrapper
-// or a spelling either plugin misreads is a rule the other still enforces.
+// separately is the answer to "which program does this run", because a
+// wrapper or a spelling either plugin misreads is a rule the other still
+// enforces.
 package shellwalk
 
 import (
@@ -15,10 +16,8 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// Word is a single argv element: the text it expands to, and whether that text
-// is the whole story. Static is false when a part could expand to anything --
-// a parameter, a substitution, a glob. A caller granting permission must treat
-// a non-static word as unknown; a caller refusing may still read Text.
+// Word is a single argv element: the text it expands to, and whether that
+// text is the whole story.
 type Word struct {
 	Text   string
 	Static bool

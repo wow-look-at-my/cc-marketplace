@@ -12,7 +12,7 @@ This skill's `reference/` folder holds the **complete upstream Compose file refe
 
 The rest of this file is only the short list of things I get wrong. It does not enumerate the service fields, and Compose has far more of them than I remember.
 
-**Grep the reference before stating any specific fact** - whether a field exists, what it accepts, what it defaults to, how two fields interact. Guessing a Compose field name from training data produces something plausible that Compose rejects:
+**Grep the reference before stating any specific fact** - whether a field exists, what it accepts, what it defaults to, how fields interact. Guessing a Compose field name from training data produces something plausible that Compose rejects:
 
 ```sh
 grep -n "^### healthcheck" -A 60 reference/services.md   # one field, in full
@@ -37,7 +37,7 @@ A line reading `> Version-gated feature: "..."` marks a field that needs a recen
 
 1. **Do not write `version:`.** The top-level `version` property is *obsolete*. Compose always validates against the newest schema regardless of it, and emits a warning telling you it is obsolete. `version: "3.8"` at the top of a file is a tell that the output came from 2019 training data. Delete it from files being edited too.
 2. **The file is `compose.yaml`.** That is the preferred name, then `compose.yml`. `docker-compose.yaml` / `docker-compose.yml` are supported for backward compatibility only, and `compose.yaml` wins if both exist. When creating a new file, create `compose.yaml`. When editing an existing `docker-compose.yml`, leave the name alone - renaming is not the task.
-3. **The command is `docker compose`, two words.** `docker-compose` is Compose v1 (Python, 2014). Compose file format 1 (no `services:` key) does not run at all on v2/v5.
+3. **The command is `docker compose`, a couple of words.** `docker-compose` is Compose v1 (Python, 2014). Compose file format 1 (no `services:` key) does not run at all on v2/v5.
 
 ## `docker compose restart` does not apply file changes. Ever.
 
@@ -67,7 +67,7 @@ Short syntax waits for the dependency to be **started**, not healthy, not ready:
 depends_on: [db]     # db has been created/started. That is all.
 ```
 
-To actually wait, use long syntax with a condition:
+To wait, use long syntax with a condition:
 
 ```yaml
 services:
@@ -139,7 +139,7 @@ Not a bind-mount hack, not a wrapper entrypoint - these exist as first-class key
 
 ## Merging, overriding, and modularizing
 
-Three different mechanisms, routinely confused:
+Different mechanisms, routinely confused:
 
 - **Multiple `-f` files / `compose.override.yaml`** - merged. Mappings merge, sequences **append**. Exceptions: `command`, `entrypoint`, and `healthcheck.test` are *replaced*, not appended. `ports`/`volumes`/`secrets`/`configs` merge by unique key (`target` for the last three. `{ip, target, published, protocol}` for ports).
 - **`!reset` / `!override` YAML tags** - `ports: !reset []` clears an inherited value. `ports: !override [...]` replaces instead of appending. Without `!override`, both the base and the override ports end up published.
@@ -188,7 +188,7 @@ volumes:
     driver_opts: {type: none, o: bind, device: /srv/app-data}   # absolute, must exist
 ```
 
-- `external: true` means "already exists, don't create it, error if absent" - and then every attribute except `name` is rejected.
+- `external: true` means "already exists, do not create it, error if absent" - and then every attribute except `name` is rejected.
 
 ## Build
 

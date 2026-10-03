@@ -47,20 +47,17 @@ func TestToolsListEntryShape(t *testing.T) {
 	c.send(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
 	raw := c.recvRaw()
 
-	// The compacted schema must appear byte-for-byte in the wire output
-	// (RawMessage embeds it verbatim, preserving property order).
+	// The compacted schema must appear byte-for-byte in the wire output.
 	assert.Contains(t, raw, string(grepInputSchemaCompact))
 
 	descJSON, err := json.Marshal(grepDescription)
 	require.NoError(t, err)
 	assert.Contains(t, raw, string(descJSON))
 
-	// The description reaching the model must stay under claude-code's
-	// 2048-char prompt-truncation cap.
+	// The description reaching the model must stay under claude-code's 2048-char prompt-truncation cap.
 	assert.LessOrEqual(t, len(grepDescription), 2048)
 
-	// Property order on the wire: pattern before output_mode before
-	// multiline.
+	// Property order on the wire: pattern before output_mode before multiline.
 	pi := strings.Index(raw, `"The regular expression pattern`)
 	oi := strings.Index(raw, `"Output mode.`)
 	mi := strings.Index(raw, `"Patterns match single lines only`)
@@ -200,8 +197,7 @@ func TestUnknownNotificationsTolerated(t *testing.T) {
 	c := startServer(t, testTool(t, t.TempDir()))
 	c.send(`{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}`)
 	c.send(`{"jsonrpc":"2.0","method":"totally/unknown"}`)
-	// No responses for either; the next request must be answered with its
-	// own id, proving nothing was emitted in between.
+	// No responses for either; the next request must be answered with its own id, proving nothing was emitted in between.
 	resp := c.roundTrip(`{"jsonrpc":"2.0","id":77,"method":"ping"}`)
 	id, ok := resp["id"].(float64)
 	require.True(t, ok)
