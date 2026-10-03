@@ -4,13 +4,22 @@ The slopfix plugin lives at `plugins/slopfix/`. It carries **no rule of its own*
 
 ### How a check is wired
 
-A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs the binary directly. **There is no `hooks/` directory and no shell script of any kind.** `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
+A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs the binary directly. **There is no shell script of any kind.** `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
 
 Every event execs `slopfix.ape hook`. The binary reads the event off the payload and runs each guard that serves it, so the manifest only decides which events reach slopfix. What each guard DOES is slopfix's own documentation. Read `slopfix hook --help`, or that repository. A table here is a copy that drifts.
 
 These replace the plugins. Those are ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking and enhanced-auto-allow. They are also link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
 
 **There are no `.go` files here, and there must not be.** A manifest that names a subcommand needs no Go. The `plugin-e2e` workflow checks each subcommand the manifest names against slopfix's source.
+
+### The tool.call module: a Bash read becomes Read
+
+A command hook can deny a Bash call or rewrite its `command`. However, it cannot change the tool. A hooks module's `tool.call` hook can answer the call itself, so `hooks/register.ts` is the one place this plugin has code. It carries no rule. It sends the command and the session's directory to `slopfix.ape read-plan` and gets back the Read inputs and a note. It runs each Read through `$.tool.call`, so permissions and Read hooks see it. Then it returns the text as Bash's `{ stdout, stderr, interrupted }` and the note as `context`. Several files share the result, each under a `==> path <==` header, because a call has one result.
+
+- **slopfix decides what maps.** Which spellings of `cat`, `head`, `tail` and `sed -n` map, and the note's words, live in slopfix's `bashclean/readplan.go`. A command it does not map, or any Read that fails, goes to `next(e)` and runs as written.
+- **The clean-bash deny never sees a mapped call.** Core raises PreToolUse beneath every `tool.call` hook. The `file_read` deny still fires for each command left to Bash.
+- **A slopfix that cannot answer throws.** The engine reports the skipped hook and the command runs as Bash.
+- **Tests**: `hooks/register.test.ts`, run by `claude plugin test plugins/slopfix`. They stub `process.run` at the slopfix boundary. slopfix's own `dats/read-plan.dats` holds the mapping's contract. The release workflow runs the module tests for any plugin with a `hooks/*.test.ts`. `vendor-slopfix.sh` and the `plugin-e2e` job both read the subcommand the module names.
 
 ### The language server half
 
@@ -82,6 +91,7 @@ The layer below that IS verified. slopfix's `langserver` tests drive the server 
 
 - **Registration**: `plugins/slopfix/.lsp.json` runs `bin/slopfix.ape lsp`
 - **Hooks**: `plugins/slopfix/.claude-plugin/plugin.json`
+- **Hooks module**: `plugins/slopfix/hooks/register.ts`, registered by `plugins/slopfix/hooks/hooks.json`
 - **Fetching**: `.github/scripts/vendor-slopfix.sh` -- the download, the APE check, the `check --json` probes, and the per-rule `hook` probes the sibling plugins name. It also requires this binary to define every subcommand `plugin.json` and `.lsp.json` name. That is the check the `plugin-e2e` job cannot make. The job asks slopfix's SOURCE at master, and master is not the build being packaged. `laziness` and `blame-language` passed it while the fetched binary defined neither. Every Stop and every message then answered `unknown command`, and those guards ran nowhere. `SLOPFIX_URL` is how a manifest lands ahead of a publish
 
 Adding a rule to slopfix needs no edit here. That is the point of the arrangement. The plugin runs the default set, so a new rule arrives with the next build's fetch.
