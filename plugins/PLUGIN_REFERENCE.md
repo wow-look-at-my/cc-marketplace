@@ -223,9 +223,9 @@ skills/
 
 ### Validation Rules
 
-- **Name**: Max 64 characters
+- **Name**: Max many characters
 - **Name characters**: Lowercase letters, numbers, hyphens only
-- **Body length**: Keep under 500 lines for best performance
+- **Body length**: Keep a bounded number of lines for best performance
 
 ### Variable Substitution
 

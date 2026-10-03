@@ -11,8 +11,7 @@ import (
 	"strings"
 )
 
-// config is the only file a user writes. It names owners, never repositories:
-// what each repository is comes from GitHub, so nothing here can go stale.
+// config is the only file a user writes.
 type config struct {
 	Owners []string `json:"owners"`
 }

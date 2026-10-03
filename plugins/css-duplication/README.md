@@ -19,7 +19,7 @@ Preprocessor sources (`.scss`, `.less`) are deliberately ignored — nesting cha
 
 A language server, registered by `.lsp.json` and started automatically for `.css` files. One warning per duplicated rule, anchored to the selector. The first copy spells out the shared body and the other selectors carrying it, the rest point back at it. Diagnostics refresh on open/change/save and clear themselves the moment the block is hoisted. Nothing has to be dismissed. Served both ways over stdio JSON-RPC — pushed via `textDocument/publishDiagnostics` and pulled via `textDocument/diagnostic`.
 
-Two things worth knowing before installing:
+Things worth knowing before installing:
 
 - Only one LSP server can claim `.css` — if another plugin already registers one, whichever loads first wins and the other never starts.
 - The binary is built from this directory and launched from `${CLAUDE_PLUGIN_ROOT}`. Nothing needs to be on `PATH`.
