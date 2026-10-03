@@ -7,7 +7,7 @@ When your message contains a question mark, this plugin blocks Claude from actin
 One Go binary serves multiple hooks, keyed by per-session marker files:
 
 - **UserPromptSubmit** — if your prompt contains `?`, it arms the block and adds a note telling Claude what is blocked. A prompt with no `?` disarms it.
-- **PreToolUse** — while armed, tool calls are denied with a reason to answer you first. Exits: `Read`, `Grep` and `Glob` are always exempt (including the MCP versions this marketplace ships), and the block lifts outright once Claude has actually written a reply. So the guard is **text-scoped, not turn-scoped**: Claude can say "checking now", run the command, and give you the real answer, all in one turn. A question whose answer needs a tool is still answerable.
+- **PreToolUse** — while armed, tool calls are denied with a reason to answer you first. Exits: `Read`, `Grep` and `Glob` are always exempt (including the MCP versions this marketplace ships), and the block lifts outright once Claude has actually written a reply. So the guard is **text-scoped, not turn-scoped**. In one turn, Claude can say "checking now", run the command, and give you the real answer. A question whose answer needs a tool is still answerable.
 - **Stop** — when Claude finishes its reply the block lifts. If your message had interrupted a turn that was still running. This stop is refused **once** so Claude resumes the interrupted work instead of treating "I answered" as "I finished".
 
 So a question costs Claude a reply before it acts — not its ability to look, and not the whole turn. Interrupting mid-task no longer silently drops whatever it was doing either.

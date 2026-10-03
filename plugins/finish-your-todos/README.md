@@ -26,7 +26,7 @@ When Claude tries to stop. The hook reads the transcript and blocks (exit 2) whi
 
 It understands **both** task surfaces: `TodoWrite`, where each call carries the whole list. Each later update rewrites that task's status).
 
-The only way past is a list with nothing pending or in progress: finish the work, or mark it completed/deleted so the list reflects reality.
+The only way past is a list with nothing pending or in progress. Finish the work, or mark it completed/deleted so the list reflects reality.
 
 ### Loop protection
 

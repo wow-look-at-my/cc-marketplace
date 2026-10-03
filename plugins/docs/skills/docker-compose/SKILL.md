@@ -57,7 +57,7 @@ The loop to never run again: edit `compose.yaml`, run `docker compose restart`, 
 - Changed the Dockerfile rather than the Compose file? Rebuild first: `docker compose build web && docker compose up --no-deps -d web`. `up` alone will not rebuild an image whose source changed.
 - `--no-recreate` is the opposite request - keep existing containers, ignore changes.
 
-Legitimate uses for `restart` are narrow: bouncing a process that has wedged, or re-reading a config file the app itself loads from a mounted volume. Neither involves having edited `compose.yaml`. If the compose file changed, `restart` is the wrong verb.
+Legitimate uses for `restart` are narrow. One is bouncing a process that has wedged. The other is re-reading a config file the app itself loads from a mounted volume. Neither involves having edited `compose.yaml`. If the compose file changed, `restart` is the wrong verb.
 
 ## `depends_on` does not do what it looks like it does
 
