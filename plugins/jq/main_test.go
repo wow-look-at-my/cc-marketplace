@@ -18,9 +18,7 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// testJqPath is written a single time by TestMain and only read
-// afterwards. Tests run in parallel, so a jq path any test can reassign
-// is a single every other test reads mid-call.
+// testJqPath is written a single time by TestMain and only read afterwards.
 var testJqPath string
 
 func TestMain(m *testing.M) {
@@ -33,20 +31,18 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// bootstrapJqVersion pins the jq the suite fetches when the machine has
-// none. jq is MIT licensed.
+// bootstrapJqVersion pins the jq the suite fetches when the machine has none. jq is MIT licensed.
 const bootstrapJqVersion = "1.7.1"
 
-// ensureJq returns a jq to test against, fetching a pinned a single
-// when the machine has none.
+// ensureJq returns a jq to test against, fetching a pinned a single when the
+// machine has none.
 //
 // Letting jqPath stay empty instead turns every tool call into "jq is not
-// installed", which is a valid answer the server really gives -- so the
-// suite does not error, it just asserts that answer against tests written
-// for a working jq, and reports a runner without jq as a bug in this
-// plugin. The runner image is not this suite's contract to depend on; the
-// sibling grep and glob plugins bootstrap a pinned ripgrep for the same
-// reason.
+// installed", which is a valid answer the server gives -- so the suite does
+// not error, it asserts that answer against tests written for a working jq,
+// and reports a runner without jq as a bug in this plugin. The runner image
+// is not this suite's contract to depend on; the sibling grep and glob
+// plugins bootstrap a pinned ripgrep for the same reason.
 func ensureJq() (string, error) {
 	if path, err := exec.LookPath("jq"); err == nil {
 		return path, nil
@@ -78,12 +74,7 @@ func ensureJq() (string, error) {
 	return bin, nil
 }
 
-// checkRuns proves the fetched binary executes before any test depends on
-// it. Without this a download that lands something unusable -- an error page
-// served as the asset, a truncated body, a binary for the wrong platform --
-// is discovered as a tool call returning an error, which every jq test then
-// reports as its own assertion failing. That sends the reader to the test
-// rather than to the download.
+// checkRuns proves the fetched binary executes before any test depends on it.
 func checkRuns(bin string) error {
 	out, err := exec.Command(bin, "--version").CombinedOutput()
 	if err != nil {
@@ -118,9 +109,7 @@ func downloadExecutable(url, dest string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
-	// Written beside the destination and renamed, so a download killed part
-	// way through never leaves a truncated binary that later runs treat as
-	// a cache hit.
+	// Written beside the destination and renamed, so a download killed part way through never leaves a truncated binary that later runs treat.
 	tmp, err := os.CreateTemp(filepath.Dir(dest), "jq-download-")
 	if err != nil {
 		return err
@@ -140,7 +129,7 @@ func downloadExecutable(url, dest string) error {
 }
 
 // contentText joins a tool result's text blocks so an assertion can quote
-// what jq actually said. Without it a failure reads only "Should be false".
+// what jq said. Without it a failure reads only "Should be false".
 func contentText(result *mcp.CallToolResult) string {
 	var parts []string
 	for _, c := range result.Content {
@@ -181,7 +170,7 @@ func connect(t *testing.T) *mcp.ClientSession {
 func TestInitialize(t *testing.T) {
 	session := connect(t)
 
-	// The client is already initialized via Connect, so just verify we can list tools
+	// The client is already initialized via Connect, so verify we can list tools
 	result, err := session.ListTools(context.Background(), nil)
 	require.NoError(t, err)
 	assert.True(t, len(result.Tools) >= 2)

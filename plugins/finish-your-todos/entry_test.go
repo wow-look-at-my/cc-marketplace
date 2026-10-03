@@ -8,8 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The debt marker lives under os.TempDir(); t.Setenv("TMPDIR") gives each test
-// its own so they neither collide nor leak into a real session's state.
+// The debt marker lives under os.TempDir().
 func isolate(t *testing.T) {
 	t.Helper()
 	t.Setenv("TMPDIR", t.TempDir())
@@ -89,9 +88,9 @@ func TestQuestionWithImperativeArms(t *testing.T) {
 }
 
 // Bare commands and settings-shaped arguments stay out. `/goal do the thing`
-// sits on the settings side of that line rather than the assignment side: four
-// words with no imperative reads like a parameter, and the argument rule errs
-// toward silence for short command input.
+// sits on the settings side of that line rather than the assignment side: a
+// few words with no imperative reads like a parameter, and the argument rule
+// errs toward silence for short command input.
 func TestAcksAndSettingsCommandsDoNotArm(t *testing.T) {
 	for _, p := range []string{"ok", "thanks!", "lgtm", "go ahead", "  ", "/compact", "/goal do the thing", "/effort high"} {
 		t.Run(p, func(t *testing.T) {
@@ -102,10 +101,7 @@ func TestAcksAndSettingsCommandsDoNotArm(t *testing.T) {
 	}
 }
 
-// ...but a command carrying real work DOES arm now. It used to be skipped on
-// the leading "/" alone, and since the hook only ever sees the raw `/name args`
-// and never the expansion, that skipped every assignment handed over as
-// `/goal <work>` -- a whole session of them, unfiled and forgotten.
+// ...but a command carrying real work DOES arm now.
 func TestSlashCommandCarryingWorkArms(t *testing.T) {
 	for _, p := range []string{
 		"/goal fix the flaky test",
@@ -203,8 +199,8 @@ func TestFailsOpen(t *testing.T) {
 	}
 }
 
-// The dispatch itself: one binary, three events, and an unrecognized event must
-// not block.
+// The dispatch itself: one binary, events, and an unrecognized event must not
+// block.
 func TestRunDispatchesByEvent(t *testing.T) {
 	isolate(t)
 

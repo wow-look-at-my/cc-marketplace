@@ -22,6 +22,6 @@ Your final text is the deliverable and the only thing the caller sees. It must c
 - The concrete shapes: JSON/config field names, accepted enum values, defaults.
 - Anything that **contradicts the public docs**, called out explicitly.
 - **Inferences labelled as inferences.** Distinguish what the source shows from what you concluded.
-- **"The source does not clearly show this" wherever that is the truth.** A clear negative is a useful answer. A confident wrong answer is worse than nothing here, because the caller cannot cheaply check it — that is the whole reason they delegated.
+- **"The source does not show this" wherever that is the truth.** A clear negative is a useful answer. A confident wrong answer is worse than nothing here, because the caller cannot cheaply check it — that is the whole reason they delegated.
 
 Do not paste large regions of the bundle into your report. Do not write into any repository. `/tmp` is yours.

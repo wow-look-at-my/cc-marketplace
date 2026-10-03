@@ -7,8 +7,7 @@ import (
 	"sync"
 )
 
-// maxSuggestions caps a single prompt's injection. A wall of repos costs the
-// model more attention than it repays.
+// maxSuggestions caps a single prompt's injection. A wall of repos costs the model more attention than it repays.
 const maxSuggestions = 3
 
 // Hit is a repo the prompt matched, with the phrases that matched it.
@@ -38,13 +37,10 @@ func phrasePattern(phrase string) *regexp.Regexp {
 	return re
 }
 
-// identifierWeight is what a single name or topic hit is worth. It is the
-// whole threshold on its own: naming a repository is enough to mean it.
+// identifierWeight is what a single name or topic hit is worth.
 const identifierWeight = 2
 
-// threshold is the score a repository needs before it costs an injection. a
-// single description word never reaches it, so a prompt about writing a haiku
-// does not pull in every repository whose README happens to say "write".
+// threshold is the score a repository needs before it costs an injection. a single description word never reaches it.
 const threshold = 2
 
 // match scores every repo against the prompt.

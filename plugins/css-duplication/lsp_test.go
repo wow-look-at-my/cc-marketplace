@@ -75,8 +75,8 @@ func TestServerHandshakeAdvertisesSyncAndDiagnostics(t *testing.T) {
 // with "The received response has neither a result nor an error property".
 // This is asserted on the RAW JSON on purpose: unmarshalling into a struct
 // silently turns a missing key into a unset value, which is exactly why the
-// original shutdown bug survived a green test suite and only showed up when a
-// real client tried to stop the server.
+// shutdown bug survived a green test suite and only showed up when a real
+// client tried to stop the server.
 func TestEveryResponseCarriesResultOrError(t *testing.T) {
 	var out bytes.Buffer
 	in := frame(t, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}}) +
@@ -119,8 +119,7 @@ func TestDidOpenPublishesOneDiagnosticPerCopy(t *testing.T) {
 	diags := publishedFor(t, drain(t, &out), uri)
 	require.NotEmpty(t, diags)
 
-	// Every copy gets its own marker -- a single diagnostic on a single
-	// arbitrary rule would leave the others looking fine.
+	// Every copy gets its own marker.
 	var lead, pointers int
 	for _, d := range diags {
 		require.Equal(t, severityWarning, d.Severity)
@@ -153,7 +152,7 @@ func TestDiagnosticMessagesStayInsideTheInjectionBudget(t *testing.T) {
 		require.Less(t, len(d.Message), 200, "one diagnostic must not eat the block: %q", d.Message)
 		total += len(d.Message)
 	}
-	// What a client would actually inject: the earliest of this file.
+	// What a client would inject: the earliest of this file.
 	injected := 0
 	for i, d := range diags {
 		if i == 10 {
