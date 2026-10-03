@@ -52,4 +52,4 @@ Requests go through the `gh` CLI when it is installed. An existing `gh auth logi
 
 ## Limits
 
-At most three repositories are added per prompt. Any beyond that are named on stderr. The cap is never silent.
+A bounded number of repositories are added per prompt. Any beyond that are named on stderr. The cap is never silent.

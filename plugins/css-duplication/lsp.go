@@ -17,7 +17,7 @@ import (
 // A language server, not a hook: diagnostics arrive in context on their own
 // after an edit instead of a message shouted at the end of a tool call. The
 // detector is shared with nothing else to keep both in agreement -- css.go is
-// the single implementation.
+// the implementation.
 
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -66,9 +66,7 @@ type textDocumentItem struct {
 	Text string `json:"text"`
 }
 
-// Server holds the open documents. A language server is long-lived and is
-// spoken to concurrently in principle, so the map is guarded even though the
-// client drives it from a single connection.
+// Server holds the open documents.
 type Server struct {
 	out io.Writer
 
@@ -86,8 +84,6 @@ const (
 )
 
 // stylesheetExts is deliberately narrow, and matches what .lsp.json registers.
-// A preprocessor's nesting changes what a duplicate body MEANS (`&:hover`
-// under parents is not a repeated rule), so this parser only claims plain CSS.
 var stylesheetExts = set.Of[string](".css")
 
 // Serve runs the stdio JSON-RPC loop until the stream ends or `exit` arrives.
@@ -103,7 +99,7 @@ func (s *Server) Serve(in io.Reader) error {
 		}
 		var msg rpcMessage
 		if err := json.Unmarshal(body, &msg); err != nil {
-			continue // a malformed frame is not worth killing the server over
+			continue
 		}
 		stop, result, rerr := s.dispatch(msg)
 		if len(msg.ID) > 0 { // a request: it must be answered, even with null
@@ -207,8 +203,7 @@ func initializeResult() map[string]any {
 	return map[string]any{
 		"capabilities": map[string]any{
 			// The detector needs the whole stylesheet anyway (a duplicate is a
-			// relationship between distant rules), so incremental sync would
-			// buy nothing but bookkeeping.
+			// relationship between distant rules).
 			"textDocumentSync": map[string]any{
 				"openClose": true,
 				"change":    1,
@@ -266,10 +261,7 @@ func (s *Server) diagnose(uri string) []diagnostic {
 				Range:    selectorRange(lines, r),
 				Severity: severityWarning,
 				Source:   diagnosticSource,
-				// Terse on purpose, and said in full exactly a single time per
-				// finding. the earliest copy carries the detail; the rest point
-				// at it, which is also how a human reads it -- a single
-				// explanation, several markers.
+				// Terse on purpose, and said in full exactly a single time per finding.
 				Message:            groupMessage(g, i, body),
 				RelatedInformation: related,
 			})
@@ -278,9 +270,7 @@ func (s *Server) diagnose(uri string) []diagnostic {
 	return out
 }
 
-// maxNamedSiblings bounds the "also on" list. A table rule can share its body
-// with a selectors, and the tail of that list teaches nothing the count does
-// not -- while it does crowd out the next finding.
+// maxNamedSiblings bounds the "also on" list.
 const maxNamedSiblings = 3
 
 // groupMessage writes the finding a single time, on its earliest copy, and
@@ -309,8 +299,7 @@ func selectorRange(lines []string, r Rule) rng {
 		return rng{}
 	}
 	line := lines[idx]
-	// A multi-selector rule is stored whitespace-collapsed, so match its
-	// earliest token rather than the reassembled string.
+	// A multi-selector rule is stored whitespace-collapsed.
 	needle := r.Selector
 	if i := strings.IndexAny(needle, ",\n"); i > 0 {
 		needle = needle[:i]
@@ -341,13 +330,7 @@ func (s *Server) notify(method string, params any) {
 	s.send(rpcMessage{JSONRPC: "2.0", Method: method, Params: raw})
 }
 
-// respond answers a request. `result` is written even when it is nil, as an
-// explicit JSON null: a success response carrying NEITHER result nor error is
-// malformed, and a real client rejects it -- vscode-jsonrpc fails the request
-// with "The received response has neither a result nor an error property",
-// which is how `shutdown` was breaking after a clean, fully working session.
-// Struct tags cannot express this (`omitempty` drops the null, dropping it is
-// the bug), so the response is assembled by hand.
+// respond answers a request.
 func (s *Server) respond(id json.RawMessage, result any, rerr *rpcError) {
 	out := map[string]any{"jsonrpc": "2.0", "id": id}
 	if rerr != nil {

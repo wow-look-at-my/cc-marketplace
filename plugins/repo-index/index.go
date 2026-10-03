@@ -8,19 +8,14 @@ import (
 
 // Repo is a single entry in the built index. Every field comes from GitHub:
 // the description is the repository's own, and the match phrases are its name
-// and its topics. Nothing here is written by hand, so nothing here can
-// disagree with the repository it describes.
+// and its topics.
 type Repo struct {
 	Name        string `json:"name"`
 	URL         string `json:"url"`
 	Description string `json:"description"`
-	// Match holds identifiers: the repository's name, the parts of it, and
-	// the topics its owner set. A prompt that says any of these means this
-	// repository.
+	// Match holds identifiers: the repository's name, the parts of it, and the topics its owner set.
 	Match []string `json:"match"`
-	// Terms holds words taken from the description. A prompt that says any of
-	// these may mean this repository, or may just be English, so a term is
-	// worth less than an identifier. See match().
+	// Terms holds words taken from the description.
 	Terms []string `json:"terms"`
 }
 
@@ -48,10 +43,7 @@ var (
 	spaces       = regexp.MustCompile(`\s+`)
 )
 
-// buildIndex turns raw repositories into index entries. A repository is
-// dropped when it is archived, a fork, has nothing to say about itself, or
-// has no phrase specific enough to match on. The counts travel back to the
-// caller so a refresh can report what it left out.
+// buildIndex turns raw repositories into index entries.
 type buildStats struct {
 	Archived    int
 	Forks       int
@@ -108,12 +100,10 @@ func buildIndex(raw []repo, readme describer, readmeBudget int) ([]Repo, buildSt
 	return out, stats
 }
 
-// maxDerived caps how many words a description contributes, so a single
-// wordy README cannot crowd out every other repository.
+// maxDerived caps how many words a description contributes.
 const maxDerived = 8
 
-// rarityCut is the share of the index a word may appear in and still count as
-// distinctive.
+// rarityCut is the share of the index a word may appear in and still count as distinctive.
 const rarityCut = 0.02
 
 // addDistinctiveTerms lets a repository match on the words that only it uses.
@@ -157,9 +147,6 @@ func addDistinctiveTerms(repos []Repo) {
 var word = regexp.MustCompile(`[a-z][a-z0-9]{2,}`)
 
 // tokens lowercases the text and keeps every word of characters or more.
-// There is no length rule beyond that on purpose: rarity already removes the
-// common words, and a short word can be the whole point -- "xsd" is
-// characters and names exactly a single repository.
 func tokens(text string) []string {
 	var out []string
 	for _, w := range word.FindAllString(strings.ToLower(text), -1) {
@@ -208,7 +195,7 @@ func phrasesFor(r repo) (identifiers, parts []string) {
 		keep(strings.Join(words, " "), &identifiers)
 	}
 	// Any run of adjacent words in the name is still the name, and people
-	// shorten names: someone asking about "pr preview" means pr-preview-action.
+	// shorten names.
 	for i := 0; i+1 < len(words); i++ {
 		keep(words[i]+" "+words[i+1], &identifiers)
 	}

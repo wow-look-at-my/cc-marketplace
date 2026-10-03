@@ -17,9 +17,7 @@ const defaultAPI = "https://api.github.com"
 
 // apiBase picks the host this process talks to when it cannot go through gh.
 // GH_HOST names a GitHub state mirror, and every gh call in this environment
-// already rides it. A direct request that ignores it spends real GitHub API
-// quota for an answer the mirror holds. gh builds "https://<host>/api/v3" for a
-// non-dotcom host, so this builds the same base.
+// already rides it.
 func apiBase() string {
 	if api := os.Getenv("GITHUB_API_URL"); api != "" {
 		return strings.TrimSuffix(api, "/")
@@ -47,9 +45,7 @@ type client struct {
 	api   string
 	token string
 	http  *http.Client
-	// viaGH sends the request through the gh CLI instead of this process. The
-	// CLI already holds the user's credential and knows their host, and some
-	// networks reach GitHub only through it.
+	// viaGH sends the request through the gh CLI instead of this process.
 	viaGH bool
 }
 

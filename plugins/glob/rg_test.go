@@ -78,8 +78,7 @@ func TestRunnerExitOneMeansNoMatches(t *testing.T) {
 }
 
 func TestRunnerExitTwoResolvesStdout(t *testing.T) {
-	// Exit 2 WITH stdout (e.g. matches found but part of the tree was
-	// unreadable) keeps the builtin behavior: the partial results win.
+	// Exit 2 WITH stdout (e.g. matches found but part of the tree was unreadable) keeps the builtin behavior.
 	fake := writeFakeRg(t, "echo half-result; echo 'rg: some error' >&2; exit 2")
 	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
 	require.Nil(t, err)
@@ -89,8 +88,7 @@ func TestRunnerExitTwoResolvesStdout(t *testing.T) {
 }
 
 func TestRunnerExitTwoNoOutputSurfacesStderr(t *testing.T) {
-	// Deliberate deviation from the builtin: exit 2 with NOTHING on
-	// stdout surfaces rg's stderr instead of resolving empty.
+	// Deliberate deviation from the builtin: exit 2 with NOTHING on stdout surfaces rg's stderr instead.
 	fake := writeFakeRg(t, "printf 'rg: error parsing glob:\\nbroken\\n' >&2; exit 2")
 	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
 	assert.Nil(t, lines)
@@ -112,9 +110,7 @@ func TestRunnerExitTwoSilentResolvesEmpty(t *testing.T) {
 }
 
 func TestRunnerExitTwoStderrSurfacedTextIsCapped(t *testing.T) {
-	// A pathological exit-2 run (megabytes of warnings ending in an
-	// error) must not blow up the MCP result: the surfaced error text
-	// caps at rgStderrErrLimit plus the truncation note.
+	// A pathological exit-2 run (megabytes of warnings ending in an error) must not blow up the MCP result.
 	fake := writeFakeRg(t, "head -c 6000 /dev/zero | tr '\\0' x >&2; exit 2")
 	lines, err := testRunner(5*time.Second).run(fake, nil, t.TempDir())
 	assert.Nil(t, lines)
@@ -134,8 +130,7 @@ func TestTruncateErrTextUnits(t *testing.T) {
 	exact := strings.Repeat("y", rgStderrErrLimit)
 	assert.Equal(t, exact, truncateErrText(exact))
 
-	// A multi-byte rune straddling the cap is dropped whole: the cut
-	// backs up to the previous rune boundary.
+	// A multi-byte rune straddling the cap is dropped whole: the cut backs up to the rune boundary.
 	s := strings.Repeat("x", rgStderrErrLimit-1) + "\u00e9zz"
 	got := truncateErrText(s)
 	assert.Equal(t, strings.Repeat("x", rgStderrErrLimit-1)+rgStderrTruncNote, got)

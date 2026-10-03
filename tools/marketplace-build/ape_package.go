@@ -9,28 +9,16 @@ import (
 	"strings"
 )
 
-//
-// That file cannot be the command a manifest names. Claude Code execve()s a
-// hook/MCP/LSP command directly, the kernel answers ENOEXEC, and the spawn
-// fails ("undefined is not an object (evaluating 'this.#handle')" in the
-// client's log). A shell can run it, so the manifest's path holds the launcher
-// below and the binary sits beside it.
+// That file cannot be the command a manifest names.
 
 // The file is identified by these bytes, NEVER by filename.
 const apeMagic = "MZqFpD='"
 
 // apeSuffix names the fat build before go-toolchain copies it into the slots.
-// Only used to prefer it when several files carry the magic, and to name it in
-// the failure message.
 const apeSuffix = "_cosmo_fat"
 
 // launcherScript is written at build/<name>, the path every plugin manifest
 // already points at (hooks, .mcp.json and .lsp.json alike).
-//
-// `exec` matters: the launcher must not linger as a parent process, because an
-// LSP client tracks the pid it spawned and an MCP server's stdio must be the
-// binary's own. $0 is followed rather than assumed so a plugin cache directory
-// with spaces in its path still works.
 const launcherScript = `#!/bin/sh
 # Claude Code execve()s this path, and the binary beside it is not ELF and has
 # no shebang, so exec'ing it straight is ENOEXEC. A shell can run it.
@@ -74,16 +62,14 @@ func stageBinaries(cookedDir, pluginName string) error {
 			buildDir, strings.Join(names, ", "), apeMagic)
 	}
 
-	// Read the bytes BEFORE deleting anything, and read through the name: the
-	// chosen entry may be a symlink into a slot copy that is about to go.
+	// Read the bytes BEFORE deleting anything, and read through the name.
 	data, err := os.ReadFile(filepath.Join(buildDir, ape))
 	if err != nil {
 		return fmt.Errorf("read APE %s: %w", ape, err)
 	}
 
 	// Everything in build/ is a byproduct: the slot copies (identical to the
-	// APE), the debug sidecar, the aarch64 ELF, checksums, the profile. The
-	// chosen entry goes too -- it is rewritten under the staged name below.
+	// APE), the debug sidecar, the aarch64 ELF, checksums, the profile.
 	for _, name := range names {
 		if err := os.Remove(filepath.Join(buildDir, name)); err != nil {
 			return fmt.Errorf("drop build byproduct %s: %w", name, err)

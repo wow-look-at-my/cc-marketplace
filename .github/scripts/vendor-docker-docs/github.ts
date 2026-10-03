@@ -1,16 +1,9 @@
-// The network half: reading files out of a GitHub repository at one pinned
-// commit. This is the entire network surface, so a test supplies its own Client
-// and never touches the network.
+// The network half: reading files out of a GitHub repository at one pinned commit.
 
 import type { Upstream } from "./transform.ts";
 
 export interface Client {
-  /**
-   * Turns a branch name into the commit it points at right now, so every file
-   * in one run comes from the same tree and the recorded provenance is exact.
-   * It asks for only the two fields it reads, so a caller with no docs plan of
-   * its own does not have to invent a blob URL and a license to call it.
-   */
+  /** Turns a branch name into the commit it points at right now. */
   resolve(src: Pick<Upstream, "repo" | "ref">): Promise<string>;
   /** Reads one file from a repository at a pinned commit. */
   get(repo: string, commit: string, path: string): Promise<string>;
@@ -18,11 +11,7 @@ export interface Client {
 
 const API = "https://api.github.com";
 
-/**
- * The GitHub REST client. It sends a token when one is in the environment:
- * unauthenticated requests are limited to 60 per hour, and one run reads more
- * files than that once includes are counted.
- */
+/** The GitHub REST client. */
 export class GitHubClient implements Client {
   #cache = new Map<string, string>();
 
@@ -41,8 +30,7 @@ export class GitHubClient implements Client {
     const response = await fetch(url, { headers: this.#headers(accept) });
     if (response.ok) return response;
 
-    // A rate limit reads as a permissions problem unless it is named, and it is
-    // the failure an unauthenticated run actually hits.
+    // A rate limit reads as a permissions problem unless it is named.
     const remaining = response.headers.get("x-ratelimit-remaining");
     const limited = response.status === 403 && remaining === "0";
     const hint = limited

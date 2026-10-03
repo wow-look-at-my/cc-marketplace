@@ -136,9 +136,8 @@ func (g *globTool) ListEntry() toolListEntry {
 	}
 }
 
-// Call validates the arguments against the schema (JSON-RPC-level
-// failures) and executes the search (operational failures become
-// isError results).
+// Call validates the arguments against the schema (JSON-RPC-level failures)
+// and executes the search (operational failures become isError results).
 func (g *globTool) Call(raw json.RawMessage) (*toolResult, *rpcError) {
 	pattern, path, rpcErr := parseGlobArgs(raw)
 	if rpcErr != nil {
@@ -162,9 +161,8 @@ func parseGlobArgs(raw json.RawMessage) (pattern, path string, rpcErr *rpcError)
 	for k, v := range m {
 		switch k {
 		case "pattern":
-			// Explicit null check: Unmarshal treats JSON null as a no-op
-			// on Go scalars (an unchecked {"pattern": null} would list the
-			// whole tree), but zod rejects null for these fields.
+			// Explicit null check: Unmarshal treats JSON null as a no-op on Go scalars
+			// (an unchecked {"pattern": null} would list the whole tree).
 			if isJSONNull(v) || json.Unmarshal(v, &pattern) != nil {
 				return invalid("%s pattern must be a string", globToolName)
 			}
@@ -209,12 +207,7 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 			searchPath, pat = base, rel
 		}
 	}
-	// rg roots its --glob matcher at the child's RESOLVED cwd but builds
-	// candidate paths from the search-path ARGV, so an unresolved
-	// (symlinked) argv makes every slash-containing glob silently match
-	// nothing (macOS /var -> /private/var, any symlinked project dir).
-	// Hand rg the resolved form; output is rebased back below so results
-	// keep the caller-supplied spelling.
+	// rg roots its --glob matcher at the child's RESOLVED cwd but builds candidate paths from the search-path ARGV.
 	rgSearchPath := resolveSymlinks(searchPath)
 
 	rgPath, err := g.resolveRg()
@@ -222,8 +215,7 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 		return err.Error(), true
 	}
 
-	// The gitignore/hidden defaults are env-overridable exactly like the
-	// builtin.
+	// The gitignore/hidden defaults are env-overridable exactly like the builtin.
 	args := []string{"--files", "--glob", pat}
 	if envTruthyDefault("CLAUDE_CODE_GLOB_NO_IGNORE", "true") {
 		args = append(args, "--no-ignore")
@@ -346,10 +338,8 @@ func sortFilesByMtimeAsc(files []string) {
 }
 
 // Without a metachar the split is Node dirname/basename — which ignore
-// trailing slashes ("/foo/bar/" splits into "/foo" + "bar", NOT
-// "/foo/bar" + "bar" as Go's filepath.Dir/Base would). (The Windows
-// drive-letter special case is omitted: this plugin ships linux/darwin
-// binaries only.)
+// trailing slashes ("/foo/bar/" splits into "/foo" + "bar", NOT "/foo/bar" +
+// "bar" as Go's filepath.Dir/Base would).
 func splitAbsolutePattern(pat string) (base, rel string) {
 	idx := strings.IndexAny(pat, "*?[{")
 	if idx < 0 {
@@ -366,10 +356,8 @@ func splitAbsolutePattern(pat string) (base, rel string) {
 	return base, pat[slash+1:]
 }
 
-// splitNodeDirBase mirrors Node path.posix dirname/basename on the
-// absolute inputs the no-metachar branch sees: trailing separators are
-// ignored, and "/" itself splits into "/" + "" (an empty glob is inert
-// in rg, matching everything — faithful to the builtin).
+// splitNodeDirBase mirrors Node path.posix dirname/basename on the absolute
+// inputs the no-metachar branch sees: trailing separators are ignored.
 func splitNodeDirBase(p string) (dir, base string) {
 	trimmed := strings.TrimRight(p, "/")
 	if trimmed == "" { // p was all slashes

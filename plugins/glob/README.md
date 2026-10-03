@@ -1,6 +1,6 @@
 # glob
 
-Brings back the **Glob** tool that Claude Code removed in 2.1.117, as a plugin. Works exactly like the old builtin.
+Brings back the **Glob** tool that Claude Code removed in 2.1.117, as a plugin. Works exactly like the builtin.
 
 ## Install
 
@@ -13,7 +13,7 @@ Requires [ripgrep](https://github.com/BurntSushi/ripgrep) 13+ on PATH (`brew ins
 
 ## Usage
 
-The model sees a `Glob` tool with two parameters:
+The model sees a `Glob` tool with multiple parameters:
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -27,7 +27,7 @@ One improvement over the builtin: an invalid glob returns ripgrep's actual error
 ## Notes
 
 - On Claude Code older than 2.1.117 the builtin still exists, so the plugin's tool hides itself. Force with `CC_GLOB_PLUGIN=always|never`.
-- Searches time out after 20 seconds (`CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`).
+- Searches time out after several seconds (`CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`).
 
 ## License
 
