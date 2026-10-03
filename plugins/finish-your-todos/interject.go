@@ -12,8 +12,6 @@
 // and PreToolUse fires on every tool call however the message arrived, so the
 // gate re-reads the transcript there and arms on anything not yet accounted
 // for.
-//
-// see docs/missed-assignment-channels.md
 
 package main
 
@@ -27,7 +25,6 @@ import (
 
 // systemEnvelopes open a queued message that the HARNESS injected rather than
 // the user typing it: PR webhooks, background-task completions, reminders.
-// They ride the same queue as a real interjection and must never arm the gate.
 var systemEnvelopes = []string{
 	"<github-webhook-activity>",
 	"<task-notification>",
@@ -38,10 +35,7 @@ var systemEnvelopes = []string{
 }
 
 // midTurnPrefixes are the wrappers the CLI puts on a queued message when it
-// renders one into the running turn. The structured attachment below is the
-// primary source; this is the fallback, kept because this plugin has already
-// been bitten once by scanning for a single shape that later changed
-// underneath it and silently stopped guarding.
+// renders one into the running turn.
 var midTurnPrefixes = []string{
 	"The user sent a new message while you were working:",
 	"The user sent the following message while you were working:",
@@ -53,7 +47,7 @@ type userText struct {
 	Text string
 }
 
-// transcriptEntry is a transcript record reduced to the two shapes that can
+// transcriptEntry is a transcript record reduced to both shapes that can
 // carry a queued user message.
 type transcriptEntry struct {
 	Type       string          `json:"type"`
@@ -181,10 +175,7 @@ func messageText(content json.RawMessage) (string, bool) {
 	return b.String(), true
 }
 
-// seenPath records the last interjection this session has accounted for. It is
-// deliberately NOT the debt file: the debt is cleared every time a task is
-// filed, and reusing it would make every settled interjection arm again on the
-// very next tool call.
+// seenPath records the last interjection this session has accounted for.
 func seenPath(sessionID string) string {
 	return strings.TrimSuffix(debtPath(sessionID), ".json") + ".seen"
 }
@@ -220,9 +211,7 @@ func armFromTranscript(sessionID, transcriptPath string) {
 		return
 	}
 
-	// Everything up to and including the recorded uuid is dealt with. An
-	// unknown mark (first run, or a rotated transcript) means consider them
-	// all: an assignment surfacing late is the lesser failure here.
+	// Everything up to and including the recorded uuid is dealt with.
 	start := 0
 	if mark := readSeen(sessionID); mark != "" {
 		for i, msg := range interjections {
