@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"rgmcp"
 )
 
 const globToolName = "Glob"
@@ -111,45 +113,45 @@ func newGlobTool(logf func(string, ...any)) *globTool {
 			root = "."
 		}
 	}
-	timeout, label := defaultRgTimeout()
+	timeout, label := rgmcp.DefaultRgTimeout()
 	return &globTool{
 		root:             root,
 		maxResults:       globMaxResults,
 		persistThreshold: globPersistThreshold,
 		timeout:          timeout,
 		timeoutLabel:     label,
-		maxOutput:        rgOutputCapBytes,
-		resolveRg:        resolveRipgrep,
+		maxOutput:        rgmcp.RgOutputCapBytes,
+		resolveRg:        rgmcp.ResolveRipgrep,
 		logf:             logf,
 	}
 }
 
 func (g *globTool) Name() string { return globToolName }
 
-func (g *globTool) ListEntry() toolListEntry {
-	return toolListEntry{
+func (g *globTool) ListEntry() rgmcp.ToolListEntry {
+	return rgmcp.ToolListEntry{
 		Name:        globToolName,
 		Description: globDescription,
 		InputSchema: globInputSchemaCompact,
-		Annotations: &toolAnnotations{ReadOnlyHint: true},
+		Annotations: &rgmcp.ToolAnnotations{ReadOnlyHint: true},
 		Meta:        map[string]any{"anthropic/alwaysLoad": true},
 	}
 }
 
 // Call validates the arguments against the schema (JSON-RPC-level failures)
 // and executes the search (operational failures become isError results).
-func (g *globTool) Call(raw json.RawMessage) (*toolResult, *rpcError) {
+func (g *globTool) Call(raw json.RawMessage) (*rgmcp.ToolResult, *rgmcp.RPCError) {
 	pattern, path, rpcErr := parseGlobArgs(raw)
 	if rpcErr != nil {
 		return nil, rpcErr
 	}
 	text, isErr := g.execute(pattern, path)
-	return &toolResult{Text: text, IsError: isErr}, nil
+	return &rgmcp.ToolResult{Text: text, IsError: isErr}, nil
 }
 
-func parseGlobArgs(raw json.RawMessage) (pattern, path string, rpcErr *rpcError) {
-	invalid := func(format string, args ...any) (string, string, *rpcError) {
-		return "", "", &rpcError{Code: codeInvalidParams, Message: fmt.Sprintf(format, args...)}
+func parseGlobArgs(raw json.RawMessage) (pattern, path string, rpcErr *rgmcp.RPCError) {
+	invalid := func(format string, args ...any) (string, string, *rgmcp.RPCError) {
+		return "", "", &rgmcp.RPCError{Code: rgmcp.CodeInvalidParams, Message: fmt.Sprintf(format, args...)}
 	}
 	var m map[string]json.RawMessage
 	if len(raw) > 0 {
@@ -225,8 +227,8 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 	}
 	args = append(args, rgSearchPath)
 
-	runner := &rgRunner{timeout: g.timeout, timeoutLabel: g.timeoutLabel, maxOutput: g.maxOutput}
-	lines, err := runner.run(rgPath, args, g.root)
+	runner := &rgmcp.RgRunner{Timeout: g.timeout, TimeoutLabel: g.timeoutLabel, MaxOutput: g.maxOutput}
+	lines, err := runner.Run(rgPath, args, g.root)
 	if err != nil {
 		return err.Error(), true
 	}
@@ -256,7 +258,7 @@ func (g *globTool) execute(pattern, path string) (string, bool) {
 			text += "\n" + globTruncationLine
 		}
 	}
-	return persistOversize(text, globToolName, g.persistThreshold, g.tempDir, g.logf), false
+	return rgmcp.PersistOversize(text, globToolName, g.persistThreshold, g.tempDir, g.logf), false
 }
 
 // Messages interpolate the RAW path argument and the default root.
@@ -325,7 +327,7 @@ func sortFilesByMtimeAsc(files []string) {
 		}
 		entries[i] = entry{p, mt}
 	}
-	col := newPathCollator()
+	col := rgmcp.NewPathCollator()
 	sort.SliceStable(entries, func(i, j int) bool {
 		if !entries[i].mtime.Equal(entries[j].mtime) {
 			return entries[i].mtime.Before(entries[j].mtime)
