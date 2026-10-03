@@ -2,10 +2,7 @@
 // for an invalid regex/glob/type; the plugins make those failures
 // visible. Exit 2 WITH stdout (e.g. matches found but some tree entries
 // unreadable) still resolves the partial results like the builtin did.
-//
-// This file is tool-agnostic and copied verbatim between the grep and
-// glob sibling plugins.
-package main
+package rgmcp
 
 import (
 	"bytes"
@@ -22,13 +19,13 @@ import (
 	"unicode/utf8"
 )
 
-const rgOutputCapBytes = 20_000_000
+const RgOutputCapBytes = 20_000_000
 
-const ripgrepNotFoundMsg = "ripgrep not found on PATH. Install it (brew install ripgrep / apt install ripgrep / winget install BurntSushi.ripgrep.MSVC) or set RIPGREP_PATH to a ripgrep binary."
+const RipgrepNotFoundMsg = "ripgrep not found on PATH. Install it (brew install ripgrep / apt install ripgrep / winget install BurntSushi.ripgrep.MSVC) or set RIPGREP_PATH to a ripgrep binary."
 
-// resolveRipgrep returns the ripgrep binary to run: the RIPGREP_PATH
+// ResolveRipgrep returns the ripgrep binary to run: the RIPGREP_PATH
 // override when set, else rg from PATH.
-func resolveRipgrep() (string, error) {
+func ResolveRipgrep() (string, error) {
 	if p := os.Getenv("RIPGREP_PATH"); p != "" {
 		if _, err := os.Stat(p); err != nil {
 			return "", fmt.Errorf("RIPGREP_PATH is set to %q but it is not usable: %v", p, err)
@@ -38,12 +35,12 @@ func resolveRipgrep() (string, error) {
 	if p, err := exec.LookPath("rg"); err == nil {
 		return p, nil
 	}
-	return "", errors.New(ripgrepNotFoundMsg)
+	return "", errors.New(RipgrepNotFoundMsg)
 }
 
-// defaultRgTimeout returns the effective spawn timeout and the seconds
+// DefaultRgTimeout returns the effective spawn timeout and the seconds
 // value baked into the timeout error message.
-func defaultRgTimeout() (time.Duration, int) {
+func DefaultRgTimeout() (time.Duration, int) {
 	label := 20
 	if isWSL() {
 		label = 60
@@ -73,16 +70,16 @@ func rgTimeoutError(labelSeconds int) error {
 	return fmt.Errorf("Ripgrep search timed out after %d seconds. The search may have matched files but did not complete in time. Try searching a more specific path or pattern.", labelSeconds)
 }
 
-type rgRunner struct {
-	timeout      time.Duration
-	timeoutLabel int // seconds shown in the timeout error message
-	maxOutput    int // per-stream byte cap
+type RgRunner struct {
+	Timeout      time.Duration
+	TimeoutLabel int // seconds shown in the timeout error message
+	MaxOutput    int // per-stream byte cap
 }
 
-// run executes rgPath with args in dir and applies the shared-runner
+// Run executes rgPath with args in dir and applies the shared-runner
 // result semantics. The returned lines are rg's stdout lines (trimmed,
 // \r-stripped, empties dropped); err carries user-facing failure text.
-func (r *rgRunner) run(rgPath string, args []string, dir string) ([]string, error) {
+func (r *RgRunner) Run(rgPath string, args []string, dir string) ([]string, error) {
 	lines, retryEAGAIN, err := r.runOnce(rgPath, args, dir)
 	if retryEAGAIN {
 		lines, _, err = r.runOnce(rgPath, append([]string{"-j", "1"}, args...), dir)
@@ -90,14 +87,14 @@ func (r *rgRunner) run(rgPath string, args []string, dir string) ([]string, erro
 	return lines, err
 }
 
-func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []string, retryEAGAIN bool, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
+func (r *RgRunner) runOnce(rgPath string, args []string, dir string) (lines []string, retryEAGAIN bool, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, rgPath, args...)
 	cmd.Dir = dir
-	stdout := &cappedBuffer{max: r.maxOutput, onOver: cancel}
-	stderr := &cappedBuffer{max: r.maxOutput}
+	stdout := &cappedBuffer{max: r.MaxOutput, onOver: cancel}
+	stderr := &cappedBuffer{max: r.MaxOutput}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.WaitDelay = time.Second
@@ -113,7 +110,7 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 			return lines[:len(lines)-1], false, nil
 		}
 		if timedOut {
-			return nil, false, rgTimeoutError(r.timeoutLabel)
+			return nil, false, rgTimeoutError(r.TimeoutLabel)
 		}
 		return nil, false, nil
 	}
@@ -128,7 +125,7 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 			if len(lines) > 0 {
 				return lines[:len(lines)-1], false, nil
 			}
-			return nil, false, rgTimeoutError(r.timeoutLabel)
+			return nil, false, rgTimeoutError(r.TimeoutLabel)
 		}
 		if exitErr.ExitCode() == 1 {
 			return nil, false, nil // no matches
@@ -145,7 +142,7 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 	}
 	// Spawn-level failure (binary vanished, permission denied, ...).
 	if errors.Is(runErr, exec.ErrNotFound) || os.IsNotExist(runErr) {
-		return nil, false, errors.New(ripgrepNotFoundMsg)
+		return nil, false, errors.New(RipgrepNotFoundMsg)
 	}
 	return nil, false, runErr
 }
