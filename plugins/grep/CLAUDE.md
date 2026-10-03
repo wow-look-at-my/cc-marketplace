@@ -4,5 +4,5 @@ The grep plugin lives at `plugins/grep/`. The builtin's `--max-columns 500` line
 
 - **Tool core**: `plugins/grep/greptool.go` -- description/schema consts, typed schema structs, argument parsing/coercions, rg argv, path validation
 - **Mode formatting**: `plugins/grep/grepmodes.go` (content/count/filenames + Q46/l46 ports), `plugins/grep/grepfwm.go` (the grouped default mode over rg --json), `plugins/grep/clamp.go` (the shared long-line clamp/window that replaced `--max-columns 500`)
-- **Protocol / gate / runner / persist / collation**: `plugins/grep/server.go`, `gate.go`, `rg.go` (carries the exit-2 stderr deviation, shared verbatim with glob), `persist.go`, `paths.go`, `collate.go`
-- **Tests**: `plugins/grep/*_test.go` -- byte-exact goldens for every output mode, same ripgrep bootstrap as glob. Suite passes against rg 13.0.0, 14.1.0, and 15.1.0 on Linux (known macOS-only environmental failures: symlinked-search-path globs and binary-file line rendering)
+- **Protocol / gate / runner / persist / collation**: the shared `tools/rgmcp` module (its `rg.go` carries the exit-2 stderr deviation), compiled in through a local `replace` in `go.mod`. `main.go` names the gate variable. `plugins/grep/paths.go` stays here
+- **Tests**: `plugins/grep/*_test.go` -- byte-exact goldens for every output mode, same `rgmcp/testkit` ripgrep bootstrap as glob. Suite passes against rg 13.0.0, 14.1.0, and 15.1.0 on Linux (known macOS-only environmental failures: symlinked-search-path globs and binary-file line rendering)

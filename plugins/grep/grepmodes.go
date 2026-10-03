@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"rgmcp"
 )
 
 // JS Array.prototype.slice semantics are preserved via jsSlice so
@@ -208,7 +210,7 @@ func sortPathsByMtimeDesc(paths []string) []string {
 		}
 		entries[i] = entry{p, mt}
 	}
-	col := newPathCollator()
+	col := rgmcp.NewPathCollator()
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].mtime != entries[j].mtime {
 			return entries[i].mtime > entries[j].mtime

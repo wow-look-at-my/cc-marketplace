@@ -6,7 +6,7 @@
 // digits, punctuation classes, accents, non-latin scripts, an astral-plane
 // emoji, and path-shaped strings, and contains no distinct strings that
 // collate equal (ties would make the golden order depend on sort stability).
-package main
+package rgmcp
 
 import (
 	"sort"
@@ -192,7 +192,7 @@ var collateSignGolden = []string{
 func TestCollatorMatchesLocaleCompareSigns(t *testing.T) {
 	require.Equal(t, len(collateNames), len(collateSignGolden))
 
-	col := newPathCollator()
+	col := NewPathCollator()
 	for i, a := range collateNames {
 		row := collateSignGolden[i]
 		require.Equal(t, len(collateNames), len(row))
@@ -219,7 +219,7 @@ func TestCollatorMatchesLocaleCompareSigns(t *testing.T) {
 
 func TestCollatorSortsLikeArraySort(t *testing.T) {
 	got := append([]string(nil), collateNames...)
-	col := newPathCollator()
+	col := NewPathCollator()
 	sort.SliceStable(got, func(i, j int) bool { return col.CompareString(got[i], got[j]) < 0 })
 	assert.Equal(t, collateSortedGolden, got)
 

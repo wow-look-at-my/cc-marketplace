@@ -2,10 +2,16 @@ module grep
 
 go 1.26
 
+// The MCP server and ripgrep runner are shared with the glob plugin, in the
+// repo rather than published: CI builds every plugin from a full checkout.
+replace rgmcp => ../../tools/rgmcp
+
+require rgmcp v0.1.0
+
 require (
 	github.com/stretchr/testify v1.11.1
 	github.com/wow-look-at-my/go-containers v0.0.0 // go-toolchain:auto-branch
-	golang.org/x/text v0.40.0
+	golang.org/x/text v0.40.0 // indirect
 )
 
 require (
