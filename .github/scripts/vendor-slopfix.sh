@@ -36,6 +36,11 @@ lsp_manifest="${plugin_dir}/.lsp.json"
 if [ -f "$lsp_manifest" ]; then
 	named=$(printf '%s\n%s\n' "$named" "$(jq -r '.[] | select(.command | endswith("/slopfix.ape")) | .args[0]' "$lsp_manifest")" | sort -u)
 fi
+for module in "${plugin_dir}"/hooks/*.ts; do
+	[ -f "$module" ] || continue
+	case "$module" in *.test.ts) continue ;; esac
+	named=$(printf '%s\n%s\n' "$named" "$(grep -o "slopfix\.ape\`, '[a-z][a-z-]*'" "$module" | cut -d"'" -f2)" | sort -u)
+done
 if [ -z "$named" ]; then
 	echo "vendor-slopfix: ${manifest} names no slopfix subcommand at all." >&2
 	exit 1
@@ -88,16 +93,9 @@ check_probe() {
 check_probe "yaml/comment-block" ".github/workflows/ci.yml" "$probe_workflow"
 check_probe "ste/contraction" "docs/probe.md" "$probe_markdown"
 
-# The binary carries the plugin's tool.call module, which turns a Bash read
-# into Read calls through read-plan. A binary that maps no reads leaves every
-# cat running as Bash.
-if [ -f "${plugin_dir}/hooks/hooks.json" ]; then
-	if ! written=$("$binary" hook module "${plugin_dir}/hooks" 2>&1); then
-		echo "vendor-slopfix: the fetched slopfix cannot write its hooks module: ${written}" >&2
-		echo "vendor-slopfix: hooks.json names a module this build does not carry. Publish slopfix first." >&2
-		exit 1
-	fi
-	echo "vendor-slopfix: wrote the hooks module: $(printf '%s' "$written" | tr '\n' ' ')"
+# The tool.call module turns a Bash read into Read calls through read-plan.
+# A binary that answers no reads leaves every cat running as Bash.
+if grep -qs "slopfix\.ape\`, 'check', 'read-plan'" "${plugin_dir}"/hooks/*.ts; then
 	answer=$(printf '%s' '{"command":"sed -n 2,3p a.txt","cwd":"/work"}' | "$binary" check read-plan 2>&1) || {
 		echo "vendor-slopfix: the fetched slopfix cannot answer 'check read-plan': ${answer}" >&2
 		exit 1
