@@ -1,4 +1,6 @@
-package main
+// Package testkit holds the test support that rgmcp and the plugins built
+// on it share. It does not import rgmcp, so rgmcp's own tests can use it.
+package testkit
 
 import (
 	"archive/tar"
@@ -23,12 +25,14 @@ const (
 	bootstrapAttempts  = 3
 )
 
-func TestMain(m *testing.M) {
+// RunWithRipgrep is the body of a TestMain: it puts ripgrep on PATH, then
+// runs the tests. It returns the exit code.
+func RunWithRipgrep(m *testing.M) int {
 	if err := ensureRipgrepOnPath(); err != nil {
 		fmt.Fprintf(os.Stderr, "ripgrep bootstrap failed: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
-	os.Exit(m.Run())
+	return m.Run()
 }
 
 func ensureRipgrepOnPath() error {
@@ -53,7 +57,7 @@ func bootstrapCacheDir() (string, error) {
 	if err != nil {
 		base = os.TempDir()
 	}
-	dir := filepath.Join(base, "cc-grep-plugin", "ripgrep-"+bootstrapRgVersion)
+	dir := filepath.Join(base, "cc-rgmcp", "ripgrep-"+bootstrapRgVersion)
 	return dir, os.MkdirAll(dir, 0o755)
 }
 

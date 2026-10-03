@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"rgmcp"
 )
 
 const grepToolName = "Grep"
@@ -148,44 +150,44 @@ func newGrepTool(logf func(string, ...any)) *grepTool {
 			root = "."
 		}
 	}
-	timeout, label := defaultRgTimeout()
+	timeout, label := rgmcp.DefaultRgTimeout()
 	return &grepTool{
 		root:             root,
 		persistThreshold: grepPersistThreshold,
 		timeout:          timeout,
 		timeoutLabel:     label,
-		maxOutput:        rgOutputCapBytes,
-		resolveRg:        resolveRipgrep,
+		maxOutput:        rgmcp.RgOutputCapBytes,
+		resolveRg:        rgmcp.ResolveRipgrep,
 		logf:             logf,
 	}
 }
 
 func (g *grepTool) Name() string { return grepToolName }
 
-func (g *grepTool) ListEntry() toolListEntry {
-	return toolListEntry{
+func (g *grepTool) ListEntry() rgmcp.ToolListEntry {
+	return rgmcp.ToolListEntry{
 		Name:        grepToolName,
 		Description: grepDescription,
 		InputSchema: grepInputSchemaCompact,
-		Annotations: &toolAnnotations{ReadOnlyHint: true},
+		Annotations: &rgmcp.ToolAnnotations{ReadOnlyHint: true},
 		Meta:        map[string]any{"anthropic/alwaysLoad": true},
 	}
 }
 
 // Call validates the arguments against the schema (JSON-RPC-level failures)
 // and executes the search (operational failures become isError results).
-func (g *grepTool) Call(raw json.RawMessage) (*toolResult, *rpcError) {
+func (g *grepTool) Call(raw json.RawMessage) (*rgmcp.ToolResult, *rgmcp.RPCError) {
 	args, rpcErr := parseGrepArgs(raw)
 	if rpcErr != nil {
 		return nil, rpcErr
 	}
 	text, isErr := g.execute(args)
-	return &toolResult{Text: text, IsError: isErr}, nil
+	return &rgmcp.ToolResult{Text: text, IsError: isErr}, nil
 }
 
-func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rpcError) {
-	invalid := func(format string, fa ...any) (*grepArgs, *rpcError) {
-		return nil, &rpcError{Code: codeInvalidParams, Message: fmt.Sprintf(format, fa...)}
+func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rgmcp.RPCError) {
+	invalid := func(format string, fa ...any) (*grepArgs, *rgmcp.RPCError) {
+		return nil, &rgmcp.RPCError{Code: rgmcp.CodeInvalidParams, Message: fmt.Sprintf(format, fa...)}
 	}
 	var m map[string]json.RawMessage
 	if len(raw) > 0 {
@@ -330,8 +332,8 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 	}
 
 	args := append(buildRgArgs(a), a.rgSearchPath)
-	runner := &rgRunner{timeout: g.timeout, timeoutLabel: g.timeoutLabel, maxOutput: g.maxOutput}
-	lines, err := runner.run(rgPath, args, g.root)
+	runner := &rgmcp.RgRunner{Timeout: g.timeout, TimeoutLabel: g.timeoutLabel, MaxOutput: g.maxOutput}
+	lines, err := runner.Run(rgPath, args, g.root)
 	if err != nil {
 		return err.Error(), true
 	}
@@ -347,7 +349,7 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 	default:
 		text = g.formatFilenamesWithMatches(lines, a)
 	}
-	return persistOversize(text, grepToolName, g.persistThreshold, g.tempDir, g.logf), false
+	return rgmcp.PersistOversize(text, grepToolName, g.persistThreshold, g.tempDir, g.logf), false
 }
 
 // The permission deny-rule and claude-internal cache exclusions the
