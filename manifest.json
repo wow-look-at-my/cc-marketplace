@@ -1,0 +1,88 @@
+{
+  "name": "slopfix",
+  "version": "1671",
+  "tag": "slopfix#1671",
+  "pluginJson": {
+    "author": {
+      "name": "wow-look-at-my"
+    },
+    "description": "The org's slop guards in one plugin: the common-checks CI gate as a language server and a write refusal, the counts and tombstones repairs, and the permission-seeking, blame-language and busy-poll guards.",
+    "hooks": {
+      "MessageDisplay": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook",
+              "timeout": 30,
+              "type": "command"
+            }
+          ]
+        }
+      ],
+      "PermissionRequest": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook",
+              "type": "command"
+            }
+          ],
+          "matcher": "*"
+        }
+      ],
+      "PostToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook",
+              "type": "command"
+            }
+          ],
+          "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit"
+        }
+      ],
+      "PreToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook --max-comment-lines ${NO_TOMBSTONES_MAX_COMMENT_LINES:-14}",
+              "type": "command"
+            }
+          ],
+          "matcher": "*"
+        }
+      ],
+      "SessionStart": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook",
+              "type": "command"
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape hook",
+              "type": "command"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": [
+      "lsp",
+      "ci",
+      "github-actions",
+      "lint",
+      "common-checks",
+      "slopfix",
+      "prose"
+    ],
+    "name": "slopfix",
+    "version": "1671"
+  }
+}
