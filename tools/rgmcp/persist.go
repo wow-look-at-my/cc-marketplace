@@ -2,9 +2,7 @@
 // Divergence from the builtin: the file lands under os.TempDir() instead
 // of the session transcript's tool-results dir (an MCP server has neither
 // the transcript dir nor the tool_use_id).
-//
-// Tool-agnostic; a sibling plugin copies this file verbatim.
-package main
+package rgmcp
 
 import (
 	"fmt"
@@ -14,13 +12,13 @@ import (
 )
 
 const (
-	persistedOutputOpen  = "<persisted-output>"
-	persistedOutputClose = "</persisted-output>"
-	persistPreviewChars  = 2000
+	PersistedOutputOpen  = "<persisted-output>"
+	PersistedOutputClose = "</persisted-output>"
+	PersistPreviewChars  = 2000
 )
 
-// utf16Len mirrors JS String.prototype.length (UTF-16 code units).
-func utf16Len(s string) int {
+// UTF16Len mirrors JS String.prototype.length (UTF-16 code units).
+func UTF16Len(s string) int {
 	n := 0
 	for _, r := range s {
 		n++
@@ -51,7 +49,7 @@ func utf16Slice(s string, n int) string {
 	return s
 }
 
-func humanSize(n int) string {
+func HumanSize(n int) string {
 	kb := float64(n) / 1024
 	if kb < 1 {
 		return fmt.Sprintf("%d bytes", n)
@@ -70,12 +68,12 @@ func trimDotZero(f float64) string {
 	return strings.TrimSuffix(strconv.FormatFloat(f, 'f', 1, 64), ".0")
 }
 
-func splitPreview(s string, limit int) (preview string, hasMore bool) {
-	if utf16Len(s) <= limit {
+func SplitPreview(s string, limit int) (preview string, hasMore bool) {
+	if UTF16Len(s) <= limit {
 		return s, false
 	}
 	head := utf16Slice(s, limit)
-	if i := strings.LastIndex(head, "\n"); i >= 0 && float64(utf16Len(head[:i])) > float64(limit)*0.5 {
+	if i := strings.LastIndex(head, "\n"); i >= 0 && float64(UTF16Len(head[:i])) > float64(limit)*0.5 {
 		return head[:i], true
 	}
 	return head, true
@@ -84,8 +82,8 @@ func splitPreview(s string, limit int) (preview string, hasMore bool) {
 // On a write failure the full text is returned unchanged (divergence:
 // the builtin has no such failure path worth mirroring; losing output
 // would be worse).
-func persistOversize(text, filePrefix string, threshold int, tempDir string, logf func(string, ...any)) string {
-	size := utf16Len(text)
+func PersistOversize(text, filePrefix string, threshold int, tempDir string, logf func(string, ...any)) string {
+	size := UTF16Len(text)
 	if size <= threshold {
 		return text
 	}
@@ -104,17 +102,17 @@ func persistOversize(text, filePrefix string, threshold int, tempDir string, log
 		return text
 	}
 
-	preview, hasMore := splitPreview(text, persistPreviewChars)
+	preview, hasMore := SplitPreview(text, PersistPreviewChars)
 	var b strings.Builder
-	b.WriteString(persistedOutputOpen + "\n")
-	fmt.Fprintf(&b, "Output too large (%s). Full output saved to: %s\n\n", humanSize(size), f.Name())
-	fmt.Fprintf(&b, "Preview (first %s):\n", humanSize(persistPreviewChars))
+	b.WriteString(PersistedOutputOpen + "\n")
+	fmt.Fprintf(&b, "Output too large (%s). Full output saved to: %s\n\n", HumanSize(size), f.Name())
+	fmt.Fprintf(&b, "Preview (first %s):\n", HumanSize(PersistPreviewChars))
 	b.WriteString(preview)
 	if hasMore {
 		b.WriteString("\n...\n")
 	} else {
 		b.WriteString("\n")
 	}
-	b.WriteString(persistedOutputClose)
+	b.WriteString(PersistedOutputClose)
 	return b.String()
 }
