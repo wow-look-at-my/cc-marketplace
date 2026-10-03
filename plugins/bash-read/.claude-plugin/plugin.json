@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../.claude-plugin/plugin.schema.json",
+  "name": "bash-read",
+  "description": "Answers a Bash cat, head, tail or sed -n line read with the Read tool, so the model gets Read's numbered lines without a blocked call or a second turn",
+  "author": {
+    "name": "mhaynie"
+  },
+  "keywords": [
+    "bash",
+    "read",
+    "cat",
+    "sed",
+    "rewrite",
+    "tool.call"
+  ],
+  "mh": {
+    "include_in_marketplace": true
+  }
+}
