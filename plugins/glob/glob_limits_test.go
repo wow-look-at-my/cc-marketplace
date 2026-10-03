@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"rgmcp"
 )
 
 func TestRealCapTruncationAndPersistence(t *testing.T) {
@@ -24,7 +26,7 @@ func TestRealCapTruncationAndPersistence(t *testing.T) {
 	got, isErr := runGlob(t, g, "*.txt")
 	require.False(t, isErr)
 
-	require.False(t, !strings.HasPrefix(got, persistedOutputOpen+"\n") || !strings.HasSuffix(got, persistedOutputClose))
+	require.False(t, !strings.HasPrefix(got, rgmcp.PersistedOutputOpen+"\n") || !strings.HasSuffix(got, rgmcp.PersistedOutputClose))
 
 	m := persistedPathRe.FindStringSubmatch(got)
 	require.NotNil(t, m)
@@ -58,7 +60,7 @@ func TestPersistenceThroughToolAtRealThreshold(t *testing.T) {
 	got, isErr := runGlob(t, g, "*.txt")
 	require.False(t, isErr)
 
-	require.True(t, strings.HasPrefix(got, persistedOutputOpen))
+	require.True(t, strings.HasPrefix(got, rgmcp.PersistedOutputOpen))
 
 	assert.NotContains(t, got, globTruncationLine)
 
@@ -77,7 +79,7 @@ func TestInlineJustUnderPersistThreshold(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt", "b.txt")
 	g := testTool(t, root)
-	g.persistThreshold = utf16Len("a.txt\nb.txt") // exactly at threshold: inline
+	g.persistThreshold = rgmcp.UTF16Len("a.txt\nb.txt") // exactly at threshold: inline
 	got, _ := runGlob(t, g, "*.txt")
 	wantText(t, got, "a.txt\nb.txt")
 }
@@ -120,12 +122,12 @@ func TestEAGAINRetryThroughTool(t *testing.T) {
 
 func TestRipgrepMissingThroughTool(t *testing.T) {
 	g := testTool(t, t.TempDir())
-	g.resolveRg = resolveRipgrep
+	g.resolveRg = rgmcp.ResolveRipgrep
 	t.Setenv("PATH", t.TempDir())
 	got, isErr := runGlob(t, g, "*")
 	require.True(t, isErr)
 
-	wantText(t, got, ripgrepNotFoundMsg)
+	wantText(t, got, rgmcp.RipgrepNotFoundMsg)
 }
 
 func TestRelativizePathQuirks(t *testing.T) {

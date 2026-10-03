@@ -1,4 +1,4 @@
-package main
+package rgmcp
 
 import (
 	"github.com/stretchr/testify/assert"

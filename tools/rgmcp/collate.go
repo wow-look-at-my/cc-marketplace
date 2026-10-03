@@ -9,17 +9,14 @@
 // base letter. Closest-effort caveat: exact localeCompare output depends on
 // the user's ICU locale, which the builtin inherited from the environment;
 // this comparator pins the root/en-US behavior.
-//
-// This file is tool-agnostic and copied verbatim between the grep and glob
-// sibling plugins.
-package main
+package rgmcp
 
 import (
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 )
 
-// newPathCollator returns the localeCompare-equivalent collator.
-func newPathCollator() *collate.Collator {
+// NewPathCollator returns the localeCompare-equivalent collator.
+func NewPathCollator() *collate.Collator {
 	return collate.New(language.Und)
 }
