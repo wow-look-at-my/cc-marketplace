@@ -43,9 +43,10 @@ export function words(command: string): string[] | null {
 	return out
 }
 
-// plan maps `cat`, `head`, `tail` and `sed -n` onto Read. Each spelling it
-// cannot map exactly returns null, and the Bash call then runs as written.
-export function plan(command: string): ReadPlan | null {
+// plan maps `cat`, `head`, `tail` and `sed -n` onto one Read for each file.
+// Each spelling it cannot map exactly returns null, and the Bash call then
+// runs as written.
+export function plan(command: string): ReadPlan[] | null {
 	const w = words(command)
 	if (!w || w.length < 2) return null
 	const [name, ...args] = w
@@ -61,32 +62,36 @@ export function plan(command: string): ReadPlan | null {
 	return null
 }
 
-function cat(args: string[]): ReadPlan | null {
+function cat(args: string[]): ReadPlan[] | null {
 	const files = args.filter(a => a !== '-n' && a !== '--number')
-	if (files.length !== 1 || files[0].startsWith('-')) return null
-	return { path: files[0] }
+	if (files.length === 0 || files.some(f => f.startsWith('-'))) return null
+	return files.map(path => ({ path }))
 }
 
-function headTail(tail: boolean, args: string[]): ReadPlan | null {
+function headTail(tail: boolean, args: string[]): ReadPlan[] | null {
 	let count = String(DEFAULT_LINES)
-	let file = ''
+	const files: string[] = []
 	for (let i = 0; i < args.length; i++) {
 		const a = args[i]
 		const m = /^-n(\+?[0-9]+)$/.exec(a) ?? /^--lines=(\+?[0-9]+)$/.exec(a) ?? /^-([0-9]+)$/.exec(a)
-		if ((a === '-n' || a === '--lines') && i + 1 < args.length) count = args[++i]
-		else if (m) count = m[1]
-		else if (a.startsWith('-') || file) return null
-		else file = a
+		if ((a === '-n' || a === '--lines') && i + 1 < args.length && files.length === 0) count = args[++i]
+		else if (m && files.length === 0) count = m[1]
+		else if (a.startsWith('-')) return null
+		else files.push(a)
 	}
-	if (!file || !COUNT.test(count)) return null
+	if (files.length === 0 || !COUNT.test(count)) return null
 	const n = Number(count.replace('+', ''))
 	const fromStart = count.startsWith('+')
-	if (n === 0) return null
-	if (!tail) return fromStart ? null : { path: file, limit: n }
-	return fromStart ? { path: file, offset: n } : { path: file, fromEnd: n }
+	if (n === 0 || (!tail && fromStart)) return null
+	return files.map(path => {
+		if (!tail) return { path, limit: n }
+		return fromStart ? { path, offset: n } : { path, fromEnd: n }
+	})
 }
 
-function sed(args: string[]): ReadPlan | null {
+// sed numbers lines across all its files as one stream, so it maps only
+// when it names a single file.
+function sed(args: string[]): ReadPlan[] | null {
 	let quiet = false
 	const rest: string[] = []
 	for (const a of args) {
@@ -99,7 +104,24 @@ function sed(args: string[]): ReadPlan | null {
 	const a = Number(m[1])
 	const b = m[2] === undefined ? a : Number(m[2])
 	if (a === 0 || b < a) return null
-	return { path: rest[1], offset: a, limit: b - a + 1 }
+	return [{ path: rest[1], offset: a, limit: b - a + 1 }]
+}
+
+// readCall writes a Read call the way the model writes one, for the note.
+export function readCall(path: string, offset?: number, limit?: number): string {
+	const args = [`file_path: ${JSON.stringify(path)}`]
+	if (offset !== undefined) args.push(`offset: ${offset}`)
+	if (limit !== undefined) args.push(`limit: ${limit}`)
+	return `Read(${args.join(', ')})`
+}
+
+// note tells the model what ran in place of its command.
+export function note(command: string, calls: string[]): string {
+	return [
+		`Your Bash command \`${command}\` read a file, so it did not run. The Read tool answered it with:`,
+		...calls.map(c => `- ${c}`),
+		'Use the Read tool to read files. Its offset and limit parameters select lines, which is what head, tail and sed -n were for.',
+	].join('\n')
 }
 
 // absolute joins a relative path onto dir. Read takes absolute paths only.

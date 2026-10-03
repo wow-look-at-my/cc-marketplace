@@ -46,11 +46,55 @@ for (const [command, want] of mapped) {
 		expect(reads).toEqual([{ offset: undefined, limit: undefined, ...want }])
 		expect(ran).toEqual([])
 		expect(out.result).toEqual({ stdout: `READ ${(want as { file_path: string }).file_path}`, stderr: '', interrupted: false })
+		expect(out.context?.length).toBe(1)
+		expect(out.context?.[0]).toContain(`Your Bash command \`${command}\` read a file, so it did not run.`)
+		expect(out.context?.[0]).toContain(`Read(file_path: ${JSON.stringify((want as { file_path: string }).file_path)}`)
 	})
 }
 
+test('cat of several files makes one Read for each file', async ($, on) => {
+	const { reads, ran } = stage(on)
+	const out = await $.tool.call({ tool: 'Bash', command: 'cat a.txt /abs/b.txt' })
+	expect(reads).toEqual([
+		{ file_path: '/work/a.txt', offset: undefined, limit: undefined },
+		{ file_path: '/abs/b.txt', offset: undefined, limit: undefined },
+	])
+	expect(ran).toEqual([])
+	expect(out.result).toEqual({
+		stdout: '==> /work/a.txt <==\nREAD /work/a.txt\n\n==> /abs/b.txt <==\nREAD /abs/b.txt',
+		stderr: '',
+		interrupted: false,
+	})
+	expect(out.context?.[0]).toContain('- Read(file_path: "/work/a.txt")\n- Read(file_path: "/abs/b.txt")')
+})
+
+test('head of several files gives each the same limit', async ($, on) => {
+	const { reads } = stage(on)
+	await $.tool.call({ tool: 'Bash', command: 'head -n 3 a.txt b.txt' })
+	expect(reads).toEqual([
+		{ file_path: '/work/a.txt', offset: undefined, limit: 3 },
+		{ file_path: '/work/b.txt', offset: undefined, limit: 3 },
+	])
+})
+
+test('one failed Read runs the whole command as Bash', async ($, on) => {
+	const ran: string[] = []
+	on('session.cwd', () => ({ value: CWD }))
+	on('tool.call', { tool: 'Read' }, (_$, e) =>
+		e.file_path === '/work/b.txt' ? { deny: 'no' } : ({ result: { type: 'text' }, text: 'READ' } as never),
+	)
+	on('tool.call', { tool: 'Bash' }, (_$, e) => {
+		ran.push(e.command)
+		return { result: { stdout: 'bash ran', stderr: '', interrupted: false } } as never
+	})
+	const out = await $.tool.call({ tool: 'Bash', command: 'cat a.txt b.txt' })
+	expect(ran).toEqual(['cat a.txt b.txt'])
+	expect(out.result).toEqual({ stdout: 'bash ran', stderr: '', interrupted: false })
+})
+
 const untouched = [
-	'cat a.txt b.txt',
+	"sed -n 2p a.txt b.txt",
+	'cat a.txt -A',
 	'cat f.txt | jq .x',
 	'cat f.txt > g.txt',
 	'cd sub && cat f.txt',
