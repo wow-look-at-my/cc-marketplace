@@ -28,8 +28,7 @@ func TestClampLineHeadAnchored(t *testing.T) {
 }
 
 func TestClampLineCenteredOnMatchInMiddle(t *testing.T) {
-	// A match in the middle of a huge line: both ends are cut and the match
-	// stays visible.
+	// A match in the middle of a huge line: both ends are cut and the match stays visible.
 	line := strings.Repeat("a", 5000) + "NEEDLE" + strings.Repeat("b", 5000)
 	got := clampLine(line, 5000) // byte offset of NEEDLE
 	assert.True(t, strings.HasPrefix(got, ellipsis))
@@ -39,9 +38,7 @@ func TestClampLineCenteredOnMatchInMiddle(t *testing.T) {
 }
 
 func TestClampLineMatchNearEnd(t *testing.T) {
-	// A match at the very end: the front is cut (leading ellipsis) and the
-	// tail holding the match is kept, so there is no trailing ellipsis. This
-	// is the "ellipsize the front" case.
+	// A match at the end: the front is cut (leading ellipsis) and the tail holding the match is kept.
 	line := strings.Repeat("a", clampWidth+50) + "Z"
 	got := clampLine(line, clampWidth+50) // byte offset of Z
 	assert.True(t, strings.HasPrefix(got, ellipsis), "the front is cut")
@@ -52,7 +49,7 @@ func TestClampLineMatchNearEnd(t *testing.T) {
 
 func TestRuneIndexOfByte(t *testing.T) {
 	s := "a" + string(rune(0x00e9)) + " b"
-	assert.Equal(t, 0, runeIndexOfByte(s, 0))   // 'a'
+	assert.Equal(t, 0, runeIndexOfByte(s, 0))
 	assert.Equal(t, 1, runeIndexOfByte(s, 1))   // start of the 2-byte rune
 	assert.Equal(t, 2, runeIndexOfByte(s, 3))   // the space, after the 2-byte rune
 	assert.Equal(t, 3, runeIndexOfByte(s, 4))   // 'b'

@@ -42,9 +42,7 @@ type rpcResponse struct {
 }
 
 // mcpTool is the contract between the protocol glue and a tool
-// implementation. Call returns either a tool-level result (operational
-// failures use IsError:true) or an *rpcError for JSON-RPC-level problems
-// (malformed arguments).
+// implementation.
 type mcpTool interface {
 	Name() string
 	ListEntry() toolListEntry
@@ -124,8 +122,7 @@ func newServer(in io.Reader, out io.Writer, logf func(string, ...any), name stri
 		version: "1",
 		tools:   tools,
 		gateEnv: gateEnv,
-		// Before initialize we have no clientInfo; the gate treats an
-		// unknown client as "expose" (env overrides still apply).
+		// Before initialize we have no clientInfo; the gate treats an unknown client as "expose" (env overrides still apply).
 		expose: gateAllows(os.Getenv(gateEnv), "", ""),
 	}
 }
@@ -154,16 +151,14 @@ func (s *server) handleLine(line string) {
 	if err := json.Unmarshal(data, &req); err != nil {
 		code, msg := codeParseError, "Parse error"
 		if json.Valid(data) {
-			// Valid JSON that is not a request object (e.g. a batch
-			// array — MCP dropped JSON-RPC batching).
+			// Valid JSON that is not a request object (e.g. a batch array — MCP dropped JSON-RPC batching).
 			code, msg = codeInvalidRequest, "Invalid Request"
 		}
 		s.reply(&rpcResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: code, Message: msg}})
 		return
 	}
 	if len(req.ID) == 0 {
-		// Notification: tolerate every method, known or unknown
-		// (notifications/initialized, notifications/cancelled, ...).
+		// Notification: tolerate every method, known or unknown (notifications/initialized, notifications/cancelled, ...).
 		return
 	}
 	switch req.Method {

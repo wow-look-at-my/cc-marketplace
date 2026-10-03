@@ -40,8 +40,7 @@ func TestWeirdFilenames(t *testing.T) {
 
 func TestMtimeAscendingOrder(t *testing.T) {
 	root := t.TempDir()
-	// Creation order c, a, b — mtimes assigned in that order, so the
-	// result must be c, a, b (oldest earliest), not alphabetical.
+	// Creation order c, a, b — mtimes assigned in that order.
 	mkFiles(t, root, "c.go", "a.go", "b.go")
 	got, _ := runGlob(t, testTool(t, root), "*.go")
 	wantText(t, got, "c.go\na.go\nb.go")
@@ -108,8 +107,7 @@ func TestSymlinksNotFollowedOrListed(t *testing.T) {
 	must(os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "link-to-dir")))
 	must(os.Symlink(filepath.Join(root, "nope"), filepath.Join(root, "broken-link.txt")))
 	got, _ := runGlob(t, testTool(t, root), "**/*")
-	// rg's walker (no -L) reports only the real file: symlinks to files,
-	// dirs, and broken targets are all absent — builtin parity.
+	// rg's walker (no -L) reports only the real file: symlinks to files, dirs.
 	wantText(t, got, "real/target.txt")
 }
 
@@ -131,10 +129,7 @@ func TestNoMatchesIsNoFilesFound(t *testing.T) {
 }
 
 func TestInvalidGlobSurfacesRgStderr(t *testing.T) {
-	// rg exits 2 with nothing on stdout for an unparseable glob. The
-	// builtin silently resolved "No files found"; this plugin surfaces
-	// rg's stderr as a tool error instead (deliberate deviation shared
-	// with the grep sibling — see rg.go).
+	// rg exits 2 with nothing on stdout for an unparseable glob.
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt")
 	got, isErr := runGlob(t, testTool(t, root), "{unclosed")
@@ -168,12 +163,11 @@ func TestDoubleStarScopedToSubdir(t *testing.T) {
 	wantText(t, got, "src/x.ts\nsrc/a/b/y.ts")
 }
 
-// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix: rg
-// roots its --glob matcher at the child's RESOLVED cwd but builds
-// candidates from the search-path argv, so an unresolved (symlinked)
-// argv made every slash-containing glob match nothing (macOS /var ->
-// /private/var broke every t.TempDir() root this way). The tool must
-// hand rg resolved paths and still display root-relative results.
+// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix: rg roots
+// its --glob matcher at the child's RESOLVED cwd but builds candidates from
+// the search-path argv, so an unresolved (symlinked) argv made every
+// slash-containing glob match nothing (macOS /var -> /private/var broke every
+// t.TempDir() root this way).
 func TestSlashGlobThroughSymlinkedRoot(t *testing.T) {
 	real := filepath.Join(t.TempDir(), "real")
 	mkFiles(t, real, "src/x.ts", "src/a/b/y.ts", "other/z.ts")
@@ -232,15 +226,13 @@ func TestPathIsNotADirectory(t *testing.T) {
 }
 
 func TestPathDidYouMeanSuggestion(t *testing.T) {
-	// EvalSymlinks so the suggester's realpath step cannot diverge on
-	// hosts whose temp dir sits behind a symlink (e.g. macOS /var).
+	// EvalSymlinks so the suggester's realpath step cannot diverge on hosts whose temp dir sits behind a symlink.
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	require.Nil(t, err)
 
 	root := filepath.Join(base, "proj")
 	mkFiles(t, root, "sub/file.txt")
-	// "../sub" resolves to base/sub (missing); re-rooted under root it
-	// exists, so the suggester proposes the absolute re-rooted path.
+	// "../sub" resolves to base/sub (missing).
 	got, isErr := runGlob(t, testTool(t, root), "*", "../sub")
 	require.True(t, isErr)
 
@@ -254,8 +246,7 @@ func TestAbsolutePatternOverridesPath(t *testing.T) {
 	elsewhere := t.TempDir()
 	mkFiles(t, root, "decoy.txt")
 	mkFiles(t, elsewhere, "hit/one.txt", "hit/two.txt")
-	// Absolute pattern wins over the path argument; results outside the
-	// root come back absolute.
+	// Absolute pattern wins over the path argument; results outside the root come back absolute.
 	got, _ := runGlob(t, testTool(t, root), elsewhere+"/**/*.txt", root)
 	wantText(t, got, filepath.Join(elsewhere, "hit/one.txt")+"\n"+filepath.Join(elsewhere, "hit/two.txt"))
 }
@@ -263,9 +254,7 @@ func TestAbsolutePatternOverridesPath(t *testing.T) {
 func TestAbsolutePatternWithoutMetachar(t *testing.T) {
 	root := t.TempDir()
 	mkFiles(t, root, "sub/one.txt", "sub/other.txt")
-	// No metachar: split into dirname + basename. The basename becomes a
-	// bare glob, which (gitignore semantics) matches at any depth below
-	// the base dir.
+	// No metachar: split into dirname + basename.
 	got, _ := runGlob(t, testTool(t, root), filepath.Join(root, "sub", "one.txt"))
 	wantText(t, got, "sub/one.txt")
 }
@@ -285,8 +274,7 @@ func TestAbsolutePatternMetacharInFirstComponent(t *testing.T) {
 }
 
 func TestSplitAbsolutePatternNodeDirnameParity(t *testing.T) {
-	// Node dirname/basename ignore trailing separators; Go's
-	// filepath.Dir("/foo/bar/") would keep "/foo/bar" as the base dir.
+	// Node dirname/basename ignore trailing separators.
 	base, rel := splitAbsolutePattern("/foo/bar/")
 	assert.Equal(t, "/foo", base)
 
@@ -297,8 +285,7 @@ func TestSplitAbsolutePatternNodeDirnameParity(t *testing.T) {
 
 	assert.Equal(t, "bar", rel)
 
-	// Node basename("/") is "": the empty glob is inert in rg, so the
-	// whole tree under "/" matches (faithful to the builtin's a81).
+	// Node basename("/") is "": the empty glob is inert in rg.
 	base, rel = splitAbsolutePattern("/")
 	assert.Equal(t, "/", base)
 
@@ -307,8 +294,7 @@ func TestSplitAbsolutePatternNodeDirnameParity(t *testing.T) {
 }
 
 func TestAbsolutePatternTrailingSlash(t *testing.T) {
-	// "<root>/sub/" must search <root> for glob "sub" (Node dirname
-	// semantics), not <root>/sub for glob "sub".
+	// "<root>/sub/" must search <root> for glob "sub" (Node dirname semantics), not <root>/sub for glob "sub".
 	root := t.TempDir()
 	mkFiles(t, root, "a/sub", "sub/inner.txt")
 	got, isErr := runGlob(t, testTool(t, root), root+"/sub/")
@@ -318,10 +304,7 @@ func TestAbsolutePatternTrailingSlash(t *testing.T) {
 }
 
 func TestMtimeTieOrdersByLocaleCollation(t *testing.T) {
-	// With --sort=modified gone (the sort now happens in Go), equal
-	// mtimes order by the localeCompare-parity collator: primary
-	// strength is case-insensitive, so a.txt sorts before B.txt (byte
-	// order would put B.txt earliest).
+	// With --sort=modified gone (the sort now happens in Go), equal mtimes order by the localeCompare-parity collator.
 	root := t.TempDir()
 	mkFiles(t, root, "B.txt", "a.txt", "sub/C.txt")
 	tie := time.Now().Add(-time.Hour)
@@ -334,8 +317,7 @@ func TestMtimeTieOrdersByLocaleCollation(t *testing.T) {
 }
 
 func TestPathTildeExpansion(t *testing.T) {
-	// Vq parity: "~" and "~/sub" expand to the home directory. Results
-	// outside the root come back absolute.
+	// Vq parity: "~" and "~/sub" expand to the home directory. Results outside the root come back absolute.
 	root := t.TempDir()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -354,8 +336,7 @@ func TestPathTildeExpansion(t *testing.T) {
 }
 
 func TestPathTildeUserNotExpanded(t *testing.T) {
-	// The builtin's Vq only expanded "~" and "~/..."; "~user" resolves
-	// as a literal name against the root.
+	// The builtin's Vq only expanded "~" and "~/..."; "~user" resolves as a literal name against the root.
 	root := t.TempDir()
 	got, isErr := runGlob(t, testTool(t, root), "*", "~nobody")
 	require.True(t, isErr)
@@ -364,8 +345,7 @@ func TestPathTildeUserNotExpanded(t *testing.T) {
 }
 
 func TestPathWhitespaceTrimmedBeforeResolve(t *testing.T) {
-	// Vq trim() parity: " sub " only names a real directory after
-	// trimming, and a whitespace-only path resolves to the root.
+	// Vq trim() parity: " sub " only names a real directory after trimming.
 	root := t.TempDir()
 	mkFiles(t, root, "sub/inner.txt")
 	g := testTool(t, root)
@@ -398,9 +378,7 @@ func TestEmptyPathTreatedAsOmitted(t *testing.T) {
 }
 
 func TestUndefinedAndNullPathTreatedAsOmitted(t *testing.T) {
-	// Models emit the literal strings "undefined"/"null" for "no path";
-	// resolveAgainst maps them to the root instead of erroring on a
-	// nonexistent directory of that name.
+	// Models emit the literal strings "undefined"/"null" for "no path".
 	root := t.TempDir()
 	mkFiles(t, root, "a.txt")
 	g := testTool(t, root)

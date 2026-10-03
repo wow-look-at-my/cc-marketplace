@@ -107,9 +107,8 @@ func (r *rgRunner) runOnce(rgPath string, args []string, dir string) (lines []st
 	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
 
 	if stdout.exceeded() || timedOut {
-		// Killed by us: resolve partial results after dropping the last
-		// (possibly truncated) line; with nothing parsed, a timeout is an
-		// error and an output-cap kill resolves empty.
+		// Killed by us: resolve partial results after dropping the last (possibly
+		// truncated) line.
 		if len(lines) > 0 {
 			return lines[:len(lines)-1], false, nil
 		}
@@ -155,10 +154,7 @@ func stderrIndicatesEAGAIN(s string) bool {
 	return strings.Contains(s, "os error 11") || strings.Contains(s, "Resource temporarily unavailable")
 }
 
-// rgStderrErrLimit caps how much of rg's stderr is surfaced as an error
-// message, so a pathological run (e.g. megabytes of per-file warnings
-// ending in a real error) cannot blow up the MCP result. Errors bypass
-// the persistOversize path, hence the cap here.
+// rgStderrErrLimit caps how much of rg's stderr is surfaced as an error message.
 const rgStderrErrLimit = 4000
 
 const rgStderrTruncNote = "\n[ripgrep error output truncated]"
@@ -187,9 +183,8 @@ func parseRgLines(s string) []string {
 	return out
 }
 
-// cappedBuffer retains at most max bytes and reports (and optionally
-// reacts to) writes past the cap. It never returns a write error so the
-// child is killed via onOver instead of a broken pipe.
+// cappedBuffer retains at most max bytes and reports (and optionally reacts
+// to) writes past the cap.
 type cappedBuffer struct {
 	mu        sync.Mutex
 	buf       bytes.Buffer

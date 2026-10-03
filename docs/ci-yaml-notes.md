@@ -10,11 +10,11 @@ One job per plugin whose contract is with the client, not with its own input.
 
 ## css-duplication-lsp-job
 
-A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires six lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
+A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires several lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
 
 Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
 
-Diagnostics drain into an attachment on the NEXT turn, so the prompt has to force a turn after the edit. Asking for a read-back of the edited file does not. The model already knows what it wrote, and one that answered "no re-read was needed" made this job red. So the prompt asks for a line the model cannot know. That line is a nonce written to `ticket.txt` at run time. The run step fails when the answer omits the nonce, which names the declined read rather than blaming the server.
+Diagnostics drain into an attachment on the NEXT turn. As a result, the prompt has to force a turn after the edit. Asking for a read-back of the edited file does not. The model already knows what it wrote, and one that answered "no re-read was needed" made this job red. So the prompt asks for a line the model cannot know. That line is a nonce written to `ticket.txt` at run time. The run step fails when the answer omits the nonce, which names the declined read rather than blaming the server.
 
 `--model sonnet` is deliberate on both jobs. Each asserts the behavior of a hook or a server, which no model tier changes, and each runs on every push.
 
@@ -47,4 +47,4 @@ A composite action cannot request permissions. It runs with whatever the calling
 
 ## smoke-test-job-rationale
 
-Installs and updates EVERY plugin from the marketplace this run just published, through real Claude Code. Each entry points at an orphan tag this run pushed. A tag that was never pushed, or one holding the wrong tree, fails here rather than for the first person who installs it.
+Installs and updates EVERY plugin from the marketplace this run published, through real Claude Code. Each entry points at an orphan tag this run pushed. A tag that was never pushed, or one holding the wrong tree, fails here rather than for the first person who installs it.
