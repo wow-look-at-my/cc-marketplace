@@ -6,7 +6,7 @@ type ReadPlan = { reads: ReadArgs[] | null; note: string }
 // plan asks slopfix how a Bash command maps onto Read. slopfix owns the
 // mapping and the note. This module only runs the calls.
 async function plan($: Engine, command: string): Promise<ReadPlan> {
-	const run = await $.process.run([`${$.plugin.root}/bin/slopfix.ape`, 'read-plan'], {
+	const run = await $.process.run([`${$.plugin.root}/bin/slopfix.ape`, 'check', 'read-plan'], {
 		stdin: JSON.stringify({ command, cwd: await $.session.cwd() }),
 	})
 	if (run.exitCode !== 0) throw new Error(`slopfix read-plan exited ${run.exitCode}: ${run.stderr.trim()}`)

@@ -95,9 +95,9 @@ check_probe "ste/contraction" "docs/probe.md" "$probe_markdown"
 
 # The tool.call module turns a Bash read into Read calls through read-plan.
 # A binary that answers no reads leaves every cat running as Bash.
-if grep -qs "slopfix\.ape\`, 'read-plan'" "${plugin_dir}"/hooks/*.ts; then
-	answer=$(printf '%s' '{"command":"sed -n 2,3p a.txt","cwd":"/work"}' | "$binary" read-plan 2>&1) || {
-		echo "vendor-slopfix: the fetched slopfix cannot answer 'read-plan': ${answer}" >&2
+if grep -qs "slopfix\.ape\`, 'check', 'read-plan'" "${plugin_dir}"/hooks/*.ts; then
+	answer=$(printf '%s' '{"command":"sed -n 2,3p a.txt","cwd":"/work"}' | "$binary" check read-plan 2>&1) || {
+		echo "vendor-slopfix: the fetched slopfix cannot answer 'check read-plan': ${answer}" >&2
 		exit 1
 	}
 	case "$answer" in

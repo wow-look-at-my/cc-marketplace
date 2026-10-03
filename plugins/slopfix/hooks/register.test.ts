@@ -35,7 +35,7 @@ test('a mapped read runs Read and carries the note', async ($, on) => {
 		'sed -n 2,3p a.txt': { reads: [{ file_path: '/work/a.txt', offset: 2, limit: 2 }], note: NOTE },
 	})
 	const out = await $.tool.call({ tool: 'Bash', command: 'sed -n 2,3p a.txt' })
-	expect((asked[0] as { argv: string[] }).argv.slice(1)).toEqual(['read-plan'])
+	expect((asked[0] as { argv: string[] }).argv.slice(1)).toEqual(['check', 'read-plan'])
 	expect((asked[0] as { argv: string[] }).argv[0]).toContain('/bin/slopfix.ape')
 	expect((asked[0] as { stdin: object }).stdin).toEqual({ command: 'sed -n 2,3p a.txt', cwd: CWD })
 	expect(reads).toEqual([{ file_path: '/work/a.txt', offset: 2, limit: 2 }])
