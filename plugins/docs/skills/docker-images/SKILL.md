@@ -61,7 +61,7 @@ The reverse mistake exists too: baking a database's data directory, a cache, or 
 `FROM` inherits the base's filesystem AND its configuration. That is the point. It is also where a copy-based design's habits break when you convert it:
 
 - Nothing warns you.
-- **`ENV` is inherited, and becomes the container's environment.** A build-time `ENV HOME=/agent` was harmless while the image was only a carrier. The moment it became the image a container RUNS, it redirected every home-directory lookup. Set build-only variables per-`RUN` (`RUN export HOME=/agent && ...`), never as `ENV`.
+- **`ENV` is inherited, and becomes the container's environment.** A build-time `ENV HOME=/agent` was harmless while the image was only a carrier. The moment it became the image a container RUNS, it redirected every home-directory lookup. Set build-only variables per-`RUN` (`RUN export HOME=/agent && ...`), not as `ENV`.
 - **`LABEL`, `WORKDIR`, `EXPOSE`, `USER`, `VOLUME` are inherited too.** Inherited labels are useful: a child carrying the base's version label is checkable evidence it really was built on that base.
 - **`ARG` is not inherited the way you expect** -- and a global `ARG` (before the first `FROM`) is the ONLY kind usable in a `FROM` line. Declared after a `FROM` it belongs to that stage, resolves empty in the next `FROM`, and the build fails on an invalid reference. `/docs:dockerfile` has the full scoping table. I have gotten this wrong with the correct answer already written down, so read it rather than reasoning it out.
 
