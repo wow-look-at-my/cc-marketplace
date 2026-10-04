@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: wow-look-at-my/actions@common-checks#latest
+      - uses: wow-look-at-my/slopfix@master
 
       - uses: ./.github/actions/setup-marketplace-build
 
