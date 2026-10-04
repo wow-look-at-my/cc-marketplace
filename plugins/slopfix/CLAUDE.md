@@ -12,13 +12,6 @@ These replace the plugins. Those are ask-properly, claude-md-budget, cleanup-bas
 
 **There are no `.go` files here, and there must not be.** A manifest that names a subcommand needs no Go. The `plugin-e2e` workflow checks each subcommand the manifest names against slopfix's source.
 
-### The tool.call module: a Bash read becomes Read
-
-A command hook can deny a Bash call or rewrite its `command`. However, it cannot change the tool. A hooks module's `tool.call` hook can answer the call itself. As a result, this plugin needs one. **The module is not in this tree.** It lives in slopfix's `pluginmodule/`, embedded in the binary. `vendor-slopfix.sh` runs `slopfix.ape hook module hooks/` beside the fetch, and both files it writes are gitignored. This directory keeps only `hooks/hooks.json`, which names `register.ts`.
-
-The module asks `slopfix.ape check read-plan` how a Bash read maps onto Read, runs each Read through `$.tool.call`, and returns the text as Bash's result. This is with slopfix's note as `context`. A command that does not map, or a Read that fails, runs as Bash. Core raises PreToolUse beneath every `tool.call` hook, so clean-bash's `file_read` deny never sees a mapped call. slopfix's `docs/commands.md` holds the rest.
-
-- **Tests**: the release workflow runs `claude plugin test` on any plugin with a `hooks/*.test.ts`, so the module's tests run here, after the fetch writes them. Their source lives with the module in slopfix.
 
 ### The language server half
 
@@ -90,7 +83,6 @@ The layer below that IS verified. slopfix's `langserver` tests drive the server 
 
 - **Registration**: `plugins/slopfix/.lsp.json` runs `bin/slopfix.ape lsp`
 - **Hooks**: `plugins/slopfix/.claude-plugin/plugin.json`
-- **Hooks module**: `plugins/slopfix/hooks/hooks.json` names `register.ts`, which the build writes from the binary
 - **Fetching**: `.github/scripts/vendor-slopfix.sh` -- the download, the APE check, the `check --json` probes, and the per-rule `hook` probes the sibling plugins name. It also requires this binary to define every subcommand `plugin.json` and `.lsp.json` name. That is the check the `plugin-e2e` job cannot make. The job asks slopfix's SOURCE at master, and master is not the build being packaged. `laziness` and `blame-language` passed it while the fetched binary defined neither. Every Stop and every message then answered `unknown command`, and those guards ran nowhere. `SLOPFIX_URL` is how a manifest lands ahead of a publish
 
 Adding a rule to slopfix needs no edit here. That is the point of the arrangement. The plugin runs the default set, so a new rule arrives with the next build's fetch.

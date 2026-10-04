@@ -51,7 +51,7 @@ Ask for what a source answer has to carry, or it is not worth the round trip:
 
 ## Searching it well (put this in the agent's brief)
 
-- **Search the directory, never one file.** Run `rg -n pattern "$D" --glob '*.js'`. A search of `cli.js` alone on a chunked branch finds nothing and reads as "the source does not have it". On 2.1.283 `publishDiagnostics` is in multiple chunk files and absent from `cli.js`.
+- **Search the directory, not one file.** Run `rg -n pattern "$D" --glob '*.js'`. A search of `cli.js` alone on a chunked branch finds nothing and reads as "the source does not have it". On 2.1.283 `publishDiagnostics` is in multiple chunk files and absent from `cli.js`.
 - **Follow imports through `module-graph.json`.** An import of `"/$bunfs/root/chunk-abc.js"` is the file `chunks/chunk-abc.js`.
 - **Search for STRINGS, not identifiers.** Top-level names are mangled and differ between builds (`OHh`, `p7t`, `Cxt`).
 - **Beware the long lines** -- and do not mistake them for broken formatting. The files ARE prettified. A formatter simply cannot break a single token. `rg -n pattern` prints the whole matched line, so pipe it (`| cut -c1-200`), prefer `rg -o` with a tight pattern, and keep `-C` small. Then read the interesting region with Read's `offset`/`limit` around the reported line.
