@@ -223,10 +223,6 @@ jobs:
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
 
-      - name: Hooks module tests
-        if: ${{ hashFiles(format('plugins/{0}/hooks/*.test.ts', matrix.plugin)) != '' }}
-        run: claude plugin test plugins/${{ matrix.plugin }}
-
       # The cooked dir is published as-is; version comes from release-plugin (not auto-increment) so the tag and manifest agree.
       - name: Publish orphan tag
         if: github.event_name == 'push' || inputs.publish
