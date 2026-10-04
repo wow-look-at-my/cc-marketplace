@@ -32,7 +32,7 @@ By default, the owner of the checkout you are working in — its `origin` remote
 { "owners": ["wow-look-at-my", "PazerOP"] }
 ```
 
-That is the whole configuration surface. It names owners, never repositories: what each repository is comes from the repository.
+That is the whole configuration surface. It names owners, not repositories: what each repository is comes from the repository.
 
 Archived repositories, forks, and repositories that say nothing about themselves are left out.
 
