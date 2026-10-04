@@ -15,8 +15,10 @@ on:
         type: string
         default: ''
 
-# Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
-concurrency: {group: 'release-${{ github.ref }}'}
+# Master runs overlap. orphan-release moves `<plugin>#latest` only to a higher release number, so the last run to finish cannot move it back.
+concurrency:
+  group: gha_${{ github.repository }}_${{ github.workflow }}_${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   prepare:
