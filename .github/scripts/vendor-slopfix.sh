@@ -93,6 +93,7 @@ check_probe() {
 check_probe "yaml/comment-block" ".github/workflows/ci.yml" "$probe_workflow"
 check_probe "ste/contraction" "docs/probe.md" "$probe_markdown"
 
+<<<<<<< HEAD
 # The tool.call module turns a Bash read into Read calls through read-plan.
 # A binary that answers no reads leaves every cat running as Bash.
 if grep -qs "slopfix\.ape\`, 'check', 'read-plan'" "${plugin_dir}"/hooks/*.ts; then
@@ -111,6 +112,8 @@ if grep -qs "slopfix\.ape\`, 'check', 'read-plan'" "${plugin_dir}"/hooks/*.ts; t
 	echo "vendor-slopfix: read-plan mapped its probe"
 fi
 
+=======
+>>>>>>> origin/master
 # A plugin that drives the PreToolUse contract names the rules it runs, and each
 # gets the same treatment: run it on text built to violate it, and require a
 # verdict. Exit status alone proves only that the subcommand parses.
