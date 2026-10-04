@@ -152,7 +152,7 @@ Different mechanisms, routinely confused:
 - `$$` is a literal `$`. Needed whenever a value contains a shell variable the container must expand: `command: /bin/sh -c 'echo "hello $$HOSTNAME"'`.
 - Interpolation applies to **values, not keys**. For `labels`/`environment`. That means the `- "KEY=value"` list form interpolates a variable in the key position and the `KEY: value` map form does not.
 - Unresolved and undefaulted -> warning + empty string, not an error. Use `:?` when it must be set.
-- Anchors/aliases (`&x` / `*x`) resolve **before** interpolation, so variables cannot name anchors. YAML merge (`<<:`) works on mappings only, never sequences - which is why `environment` must use the `KEY: value` map form when merging fragments.
+- Anchors/aliases (`&x` / `*x`) resolve **before** interpolation, so variables cannot name anchors. YAML merge (`<<:`) works on mappings only, not sequences - which is why `environment` must use the `KEY: value` map form when merging fragments.
 - `x-` prefixed keys are extension fields and are legal anywhere user keys are not expected. The usual pattern is `x-common: &common` at top level.
 
 ## Fields that solve problems I try to solve manually
