@@ -41,8 +41,7 @@ type rpcResponse struct {
 	Error   *RPCError       `json:"error,omitempty"`
 }
 
-// Tool is the contract between the protocol glue and a tool
-// implementation.
+// Tool is the contract between the protocol glue and a tool implementation.
 type Tool interface {
 	Name() string
 	ListEntry() ToolListEntry
