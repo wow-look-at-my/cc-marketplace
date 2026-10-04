@@ -36,11 +36,6 @@ lsp_manifest="${plugin_dir}/.lsp.json"
 if [ -f "$lsp_manifest" ]; then
 	named=$(printf '%s\n%s\n' "$named" "$(jq -r '.[] | select(.command | endswith("/slopfix.ape")) | .args[0]' "$lsp_manifest")" | sort -u)
 fi
-for module in "${plugin_dir}"/hooks/*.ts; do
-	[ -f "$module" ] || continue
-	case "$module" in *.test.ts) continue ;; esac
-	named=$(printf '%s\n%s\n' "$named" "$(grep -o "slopfix\.ape\`, '[a-z][a-z-]*'" "$module" | cut -d"'" -f2)" | sort -u)
-done
 if [ -z "$named" ]; then
 	echo "vendor-slopfix: ${manifest} names no slopfix subcommand at all." >&2
 	exit 1
