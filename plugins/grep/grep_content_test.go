@@ -238,7 +238,7 @@ func TestGlobFilter(t *testing.T) {
 	assert.NotContains(t, got, "u.js")
 }
 
-// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix: rg
+// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix. Rg
 // roots its --glob matcher at the child's RESOLVED cwd but builds
 // candidates from the search-path argv, so an unresolved (symlinked)
 // argv made every slash-containing glob match nothing (macOS /var ->

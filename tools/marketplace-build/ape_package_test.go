@@ -80,7 +80,7 @@ func TestStageBinariesDropsBuildByproducts(t *testing.T) {
 // The REAL layout `go-toolchain matrix --targets cosmo` writes, copied from a
 // live build: the fat APE's own name is a SYMLINK into a per-platform slot copy
 // (buildhost rejects os=cosmo, so the fat build is published under a platform
-// name), and the byproducts include a debug sidecar and an aarch64 ELF. Staging
+// name). The byproducts include a debug sidecar and an aarch64 ELF. Staging
 // this by renaming the link and deleting the slots ships a dangling symlink --
 // which is what the invented single-regular-file fixture above could never
 // catch.
@@ -132,7 +132,7 @@ func TestStageBinariesFailsClosedWithoutAnApe(t *testing.T) {
 	require.Contains(t, err.Error(), "--targets cosmo", "and the fix")
 }
 
-// What CI produces, which neither earlier fixture did: go-toolchain DROPS the
+// What CI produces, which neither earlier fixture did. Go-toolchain DROPS the
 // _cosmo_fat name there ("buildhost rejects os=cosmo uploads; the slot copies
 // carry the APE"), so the only copies of the fat binary left are under
 // per-platform names -- byte-identical to it. Keying on the filename mistook

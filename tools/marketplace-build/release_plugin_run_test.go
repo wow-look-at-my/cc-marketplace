@@ -13,12 +13,12 @@ import (
 )
 
 // release-plugin is the whole publishing pipeline for a single plugin: cook,
-// check the hooks survived, reduce build/ to the APE and its launcher, and
-// write the manifest the marketplace job reads back. Its pieces are
-// unit-tested individually; these drive the command itself, because the ORDER
-// is the part that breaks -- staging before cooking would delete the binaries
-// it copied, and writing the manifest before staging would describe a layout
-// that no longer exists.
+// check the hooks survived, reduce build/ to the APE and its launcher. Write
+// the manifest the marketplace job reads back. Its pieces are unit-tested
+// individually. These drive the command itself, because the ORDER is the part
+// that breaks -- staging before cooking would delete the binaries it copied,
+// and writing the manifest before staging would describe a layout that no
+// longer exists.
 
 // fakeRepo builds a repo root holding a single plugin and points the
 // package's cached repoRoot at it. Returns the plugin's source directory.
@@ -133,7 +133,7 @@ func TestRunReleasePluginWithoutBinaries(t *testing.T) {
 }
 
 // The fail-closed case, end to end: a plugin built with the per-platform matrix
-// must abort the release rather than ship a package that works on some
+// must abort the release rather than ship a package. That package works on some
 // platforms and silently not others.
 func TestRunReleasePluginFailsOnANonApeBuild(t *testing.T) {
 	mockGitDefaults(t)

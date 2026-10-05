@@ -73,10 +73,10 @@ func TestServerHandshakeAdvertisesSyncAndDiagnostics(t *testing.T) {
 // Every response must carry `result` or `error` -- a success response with
 // NEITHER is malformed, and vscode-jsonrpc (what Claude Code uses) rejects it
 // with "The received response has neither a result nor an error property".
-// This is asserted on the RAW JSON on purpose: unmarshalling into a struct
+// This is asserted on the RAW JSON on purpose. Unmarshalling into a struct
 // silently turns a missing key into a unset value, which is exactly why the
-// shutdown bug survived a green test suite and only showed up when a real
-// client tried to stop the server.
+// shutdown bug survived a green test suite. The struct only showed up when a
+// real client tried to stop the server.
 func TestEveryResponseCarriesResultOrError(t *testing.T) {
 	var out bytes.Buffer
 	in := frame(t, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}}) +

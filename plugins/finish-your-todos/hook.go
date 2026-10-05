@@ -5,7 +5,7 @@
 // call in the transcript (each call carries the complete list), and if any item
 // is still "pending" or "in_progress" it blocks the stop (exit 2) with a reason
 // naming the unfinished work. The stop_hook_active flag is honored as a loop
-// guard: once Claude is already continuing because of a prior block, the stop is
+// guard. Once Claude is already continuing because of a prior block, the stop is
 // allowed through so a genuinely stuck session can never hang forever.
 package main
 

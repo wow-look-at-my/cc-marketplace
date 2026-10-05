@@ -1,7 +1,8 @@
 // clamp.go bounds how much of a single matched or context line the grep tool
-// renders. Per decree a matching line is never dropped -- only bounded: a
-// line wider than clampWidth is rendered as a clampWidth-rune window with an
-// ellipsis marking each cut edge, so the match itself always stays visible.
+// renders. Per decree a matching line is never dropped -- only bounded.
+// Consider a line wider than clampWidth. That line is rendered as a
+// clampWidth-rune window with an ellipsis marking each cut edge, so the
+// match itself always stays visible.
 package main
 
 import (

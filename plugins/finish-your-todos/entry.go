@@ -23,7 +23,7 @@ func promptArm(p hookPayload) string {
 		return ""
 	}
 	// An outstanding debt stays as it is: the first unfiled assignment is the
-	// one to name, and overwriting it would lose it behind a follow-up.
+	// one to name. Overwriting it would lose it behind a follow-up.
 	if readDebt(p.SessionID) != nil {
 		return ""
 	}
@@ -39,8 +39,8 @@ func promptArm(p hookPayload) string {
 
 // todoGate handles PreToolUse for every tool. While a session owes a task,
 // every tool except the task tools is DENIED -- a hard permissionDecision
-// rather than injected advice, because the model already receives a system
-// reminder about the task list on most turns and reads past it.
+// rather than injected advice. This is because the model already receives
+// a system reminder about the task list on most turns and reads past it.
 //
 // The debt is settled by TaskCreate (new work) or TaskUpdate (work that maps
 // onto a task already filed). TaskList and TaskGet stay callable while blocked
