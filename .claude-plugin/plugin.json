@@ -1,0 +1,17 @@
+{
+	"author": {
+		"name": "wow-look-at-my-code"
+	},
+	"description": "Delegate implementation to slh workers on a fast model over MCP, with Claude as the planner, coordinator and reviewer. Installs slh from buildhost at first use.",
+	"keywords": [
+		"slh",
+		"subagent",
+		"delegate",
+		"workers",
+		"mcp",
+		"coordinator"
+	],
+	"mcpServers": "./.mcp.json",
+	"name": "slh-workers",
+	"version": "1791"
+}
