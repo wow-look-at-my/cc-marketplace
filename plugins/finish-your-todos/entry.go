@@ -57,11 +57,11 @@ func todoGate(p hookPayload) string {
 	if debt == nil {
 		return ""
 	}
-	if settlingTools[p.ToolName] {
+	if settlingTools.Contains(p.ToolName) {
 		clearDebt(p.SessionID)
 		return ""
 	}
-	if taskTools[p.ToolName] {
+	if taskTools.Contains(p.ToolName) {
 		return ""
 	}
 

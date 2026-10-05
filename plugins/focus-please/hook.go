@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"io"
 	"os"
 	"path/filepath"
@@ -190,21 +191,19 @@ func onStop(in HookInput) result {
 
 // lookupTools are the read-only tools that stay available while the block is
 // armed.
-var lookupTools = map[string]bool{
-	"Read": true,
-	"Grep": true,
-	"Glob": true,
-}
+var lookupTools = set.Of[string]("Read",
+	"Grep",
+	"Glob")
 
 // isLookupTool reports whether a tool is one of the permitted read-only
 // lookups.
 func isLookupTool(name string) bool {
-	if lookupTools[name] {
+	if lookupTools.Contains(name) {
 		return true
 	}
 	if strings.HasPrefix(name, "mcp__") {
 		if i := strings.LastIndex(name, "__"); i > 0 {
-			return lookupTools[name[i+2:]]
+			return lookupTools.Contains(name[i+2:])
 		}
 	}
 	return false

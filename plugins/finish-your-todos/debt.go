@@ -13,6 +13,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -67,14 +68,11 @@ func clearDebt(sessionID string) {
 	_ = os.Remove(debtPath(sessionID))
 }
 
-// taskTools must stay callable while a debt is outstanding, so the settling
-// call can check for duplicates first.
-var taskTools = map[string]bool{
-	"TaskCreate": true, "TaskUpdate": true, "TaskList": true, "TaskGet": true,
-}
+// taskTools stay callable during a debt, so the settling call can check for duplicates.
+var taskTools = set.Of[string]("TaskCreate", "TaskUpdate", "TaskList", "TaskGet")
 
 // settlingTools pay the debt: filing new work, or claiming/retargeting work that already exists.
-var settlingTools = map[string]bool{"TaskCreate": true, "TaskUpdate": true}
+var settlingTools = set.Of[string]("TaskCreate", "TaskUpdate")
 
 // A wh-word opens a question whether the "?" was typed.
 var whOpeners = regexp.MustCompile(`(?i)^\s*(what|why|how|when|where|which|who|whose)\b`)
