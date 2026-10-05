@@ -59,6 +59,12 @@ jobs:
             for (const server of Object.values(servers) as any[]) {
               if (server.command.endsWith("/slopfix.ape")) registered.add(server.args[0]);
             }
+            const hooksDir = `${root}/hooks`;
+            const modules = fs.existsSync(hooksDir) ? fs.readdirSync(hooksDir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")) : [];
+            for (const f of modules) {
+              const body = fs.readFileSync(path.join(hooksDir, f), "utf-8");
+              for (const m of body.matchAll(/slopfix\.ape`, '([a-z][a-z-]*)'/g)) registered.add(m[1]);
+            }
             if (registered.size === 0) core.setFailed("the manifest names no slopfix subcommand at all");
 
             // Every subcommand slopfix registers, read off its source. A script naming one that is not there reaches nothing at run time.
