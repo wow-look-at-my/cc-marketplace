@@ -36,4 +36,6 @@ Each plugin documents itself in its own directory. Add a new plugin's notes at `
 
 @plugins/no-repeat-reply/CLAUDE.md
 
+@plugins/slh-workers/CLAUDE.md
+
 The rules that were their own plugins now live in [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix), and `plugins/slopfix/` is the manifest that reaches them. That covers ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking and enhanced-auto-allow. It also covers link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain.
