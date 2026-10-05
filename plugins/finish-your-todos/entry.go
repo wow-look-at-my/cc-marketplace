@@ -1,9 +1,8 @@
 // The entry-side halves of the plugin: arm on the prompt, collect on the tool.
 //
 // Splitting it this way is forced by the hook surface. UserPromptSubmit cannot
-// refuse a tool call -- all it can do is inject context, which is exactly the
-// kind of advice that has been ignored all along -- so it only records the
-// debt. PreToolUse is where the refusal happens.
+// refuse a tool call. It can only inject context, and the model ignores that
+// kind of advice. So it only records the debt. PreToolUse is where the refusal happens.
 
 package main
 

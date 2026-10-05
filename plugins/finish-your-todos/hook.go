@@ -1,10 +1,10 @@
-// Command finish-your-todos is a Claude Code Stop hook that blocks the assistant
+// Command finish-your-todos is a Claude Code Stop hook. It blocks the assistant
 // from ending its turn while its TodoWrite list still has incomplete items.
 //
-// It reads the Stop hook payload on stdin, finds the most recent TodoWrite tool
-// call in the transcript (each call carries the complete list), and if any item
-// is still "pending" or "in_progress" it blocks the stop (exit 2) with a reason
-// naming the unfinished work. The stop_hook_active flag is honored as a loop
+// It reads the Stop hook payload on stdin. It finds the most recent TodoWrite
+// tool call in the transcript, because each call carries the complete list.
+// If any item is still "pending" or "in_progress", it blocks the stop (exit 2).
+// The reason names the unfinished work. The stop_hook_active flag is honored as a loop
 // guard. Once Claude is already continuing because of a prior block, the stop is
 // allowed through so a genuinely stuck session can never hang forever.
 package main
@@ -68,9 +68,8 @@ type TodoItem struct {
 }
 
 // readTranscript reads the JSONL transcript once, returning each line's content
-// blocks in file order. A line that is not a message, or whose content is a
-// plain string rather than an array of blocks, carries no tool calls and is
-// skipped.
+// blocks in file order. It skips a line that is not a message. It also skips a
+// line whose content is a plain string, because that line carries no tool calls.
 func readTranscript(path string) []transcriptRecord {
 	if path == "" {
 		return nil

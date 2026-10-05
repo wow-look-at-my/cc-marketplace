@@ -1,4 +1,4 @@
-// Command docs-nudge is a PreToolUse hook that pulls this plugin's Docker
+// Command docs-nudge is a PreToolUse hook. It pulls this plugin's Docker
 // skills in when a tool call is about to touch a Dockerfile or a Compose file.
 //
 // The skills already carry trigger-shaped descriptions and still do not get
