@@ -1,0 +1,10 @@
+{
+	"mcpServers": {
+		"slh": {
+			"args": [
+				"${CLAUDE_PLUGIN_ROOT}/bin/slh-mcp"
+			],
+			"command": "sh"
+		}
+	}
+}
