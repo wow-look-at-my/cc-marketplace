@@ -28,9 +28,8 @@ type Debt struct {
 	Refusals int `json:"refusals"`
 }
 
-// debtPath is keyed by a hash of the session id so a session id that is a path
-// fragment, or merely long, cannot escape. Otherwise, overflow the temp
-// directory.
+// debtPath is keyed by a hash of the session id. A session id that is a path
+// fragment, or long, then cannot escape or overflow the temp directory.
 func debtPath(sessionID string) string {
 	sum := sha256.Sum256([]byte(sessionID))
 	return filepath.Join(os.TempDir(), "force-todos", hex.EncodeToString(sum[:])[:16]+".json")
