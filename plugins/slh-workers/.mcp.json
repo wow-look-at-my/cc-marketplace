@@ -1,8 +1,7 @@
 {
   "mcpServers": {
     "slh": {
-      "command": "sh",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/slh-mcp"]
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/slh-mcp"
     }
   }
 }
