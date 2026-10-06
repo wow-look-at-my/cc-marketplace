@@ -1,7 +1,7 @@
 // Shared state + classification for the entry-side halves of this plugin.
 //
 // The problem this exists for: the model is told, by system reminder, on most
-// turns, to keep a task list. It reads the reminder and does not do it -- a
+// turns, to keep a task list. It reads the reminder and does not do it. A
 // whole session went by with separate assignments given and zero tasks filed,
 // because a reminder is text and text is skippable. So the debt is recorded
 // in a file and collected by a PreToolUse gate: no other tool runs until the
@@ -28,7 +28,8 @@ type Debt struct {
 }
 
 // debtPath is keyed by a hash of the session id so a session id that is a path
-// fragment, or merely long, cannot escape or overflow the temp directory.
+// fragment, or merely long, cannot escape. Otherwise, overflow the temp
+// directory.
 func debtPath(sessionID string) string {
 	sum := sha256.Sum256([]byte(sessionID))
 	return filepath.Join(os.TempDir(), "force-todos", hex.EncodeToString(sum[:])[:16]+".json")

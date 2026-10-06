@@ -12,11 +12,11 @@ import (
 
 const cwdNote = "Note: your current working directory is"
 
-// Divergences: no unicode NFC normalization (the builtin NFC-normalizes;
-// stdlib-only here), an unresolvable home directory leaves "~" literal
-// instead of throwing, and the literal strings "undefined" and "null"
-// resolve to root (models emit them for "no path"; the builtin instead
-// begged the model not to in the schema description).
+// Divergences: no unicode NFC normalization (the builtin NFC-normalizes. This
+// also covers stdlib-only here). An unresolvable home directory leaves "~"
+// literal instead of throwing, and the literal strings "undefined" and "null"
+// resolve to root (models emit them for "no path". This also covers the
+// builtin instead begged the model not to in the schema description).
 func resolveAgainst(p, root string) (string, error) {
 	if strings.ContainsRune(p, 0) {
 		return "", errors.New("Path contains null bytes")

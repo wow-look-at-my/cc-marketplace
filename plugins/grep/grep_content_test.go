@@ -238,9 +238,9 @@ func TestGlobFilter(t *testing.T) {
 	assert.NotContains(t, got, "u.js")
 }
 
-// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix: rg
+// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix. Rg
 // roots its --glob matcher at the child's RESOLVED cwd but builds
-// candidates from the search-path argv, so an unresolved (symlinked)
+// candidates from the search-path argv. So an unresolved (symlinked)
 // argv made every slash-containing glob match nothing (macOS /var ->
 // /private/var broke every t.TempDir() root this way). The tool must
 // hand rg resolved paths and still display root-relative results.

@@ -30,8 +30,8 @@ type taskUpdateInput struct {
 // "Task #6 created successfully: Subject here"
 var taskCreatedRE = regexp.MustCompile(`Task #(\d+) created`)
 
-// latestTasks reconstructs the task list from the transcript in file order:
-// a TaskCreate's result supplies the id for the subject its call carried, and
+// latestTasks reconstructs the task list from the transcript in file order. A
+// TaskCreate's result supplies the id for the subject its call carried, and
 // each later TaskUpdate rewrites that task's status.
 func latestTasks(lines []transcriptRecord) []taskState {
 	order := []string{}

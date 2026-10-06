@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Against the slopfix this branch is written for, not the published one: a check that has not shipped yet would otherwise fail here for the whole time between the two merges.
+      # Against the slopfix this branch is written for, not the published one. This is a check that has not shipped yet would otherwise fail here for the whole time between the two merges.
       - name: Check out the slopfix this branch expects
         uses: actions/checkout@v7
         with:

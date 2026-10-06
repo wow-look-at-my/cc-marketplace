@@ -39,7 +39,7 @@ const bootstrapJqVersion = "1.7.1"
 //
 // Letting jqPath stay empty instead turns every tool call into "jq is not
 // installed", which is a valid answer the server gives -- so the suite does
-// not error, it asserts that answer against tests written for a working jq,
+// not error. It asserts that answer against tests written for a working jq,
 // and reports a runner without jq as a bug in this plugin. The runner image
 // is not this suite's contract to depend on; the sibling grep and glob
 // plugins bootstrap a pinned ripgrep for the same reason.

@@ -163,9 +163,9 @@ func TestDoubleStarScopedToSubdir(t *testing.T) {
 	wantText(t, got, "src/x.ts\nsrc/a/b/y.ts")
 }
 
-// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix: rg roots
+// TestSlashGlobThroughSymlinkedRoot pins the symlink-resolution fix. Rg roots
 // its --glob matcher at the child's RESOLVED cwd but builds candidates from
-// the search-path argv, so an unresolved (symlinked) argv made every
+// the search-path argv. So an unresolved (symlinked) argv made every
 // slash-containing glob match nothing (macOS /var -> /private/var broke every
 // t.TempDir() root this way).
 func TestSlashGlobThroughSymlinkedRoot(t *testing.T) {

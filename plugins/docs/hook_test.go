@@ -13,7 +13,7 @@ import (
 )
 
 // run executes the hook as a real process against a payload, with a private
-// temp directory so the once-per-session markers do not leak between tests.
+// temp directory. So the once-per-session markers do not leak between tests.
 func run(t *testing.T, binary, tempDir, stdin string) string {
 	t.Helper()
 

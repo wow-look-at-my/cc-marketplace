@@ -1,5 +1,5 @@
-// Command focus-please is a Claude Code hook that enforces one blunt rule:
-// when the user's prompt contains a question mark, the assistant must answer
+// Command focus-please is a Claude Code hook that enforces one blunt rule.
+// When the user's prompt contains a question mark, the assistant must answer
 // them before it does anything else. It is a mechanical "answer the human
 // first" guard -- the big-guns response to an assistant that runs tools for
 // several minutes while a question goes ignored.
@@ -73,7 +73,7 @@ const contextNote = "Your most recent message from the user contains a question 
 // interjectionNote is appended to contextNote when the message arrived while a turn was still running.
 const interjectionNote = "You were also mid-task when this message arrived: answer it first, then resume the work it interrupted -- replying does not finish your turn."
 
-// denyReason is shown to the model when it tries to act before writing anything. It must make the escape hatch unmistakable -- emit text and retry IN THIS TURN -- because the wording ("...once you end your turn") convinced models the only way through was to stop and wait for the user, which is the opposite of the point.
+// denyReason is shown to the model when it tries to act before writing anything. It must make the escape hatch unmistakable -- emit text and retry IN THIS TURN. This is because the wording ("...once you end your turn") convinced models the only way through was to stop and wait for the user. This is the opposite of the point.
 const denyReason = "Blocked by focus-please: the user's last message contained a question and you have not written any reply yet. Emit your reply as plain text right now, in THIS turn -- one sentence is enough (\"checking X now\") -- and then call this tool again; it will go through, because this block is lifted by your text, not by the end of your turn. Do NOT end your turn to get past this, and do NOT substitute a guess for the check you were about to run. Read, Grep and Glob work meanwhile."
 
 // resumeReason is handed to the model when it tries to end a turn that was interrupted by a user message. It fires at most once per interjection.
@@ -114,7 +114,7 @@ func run(r io.Reader) result {
 // onUserPromptSubmit arms the block when the prompt asks a question and
 // disarms it otherwise (clearing any marker a prior turn left behind). It
 // also records whether this prompt interrupted a turn that had not stopped
-// yet, which is what onStop uses to push the assistant back to work.
+// yet. This is what onStop uses to push the assistant back to work.
 func onUserPromptSubmit(in HookInput) result {
 	// The active marker outlives a turn only until that turn's Stop.
 	interjection := markerExists(in.SessionID, markerActive)
@@ -141,9 +141,9 @@ func onUserPromptSubmit(in HookInput) result {
 }
 
 // onPreToolUse denies acting tools while the block is armed for this session,
-// letting read-only lookups through -- and lifting the block entirely as soon
-// as the assistant has replied, so a reply and the tools that follow it fit
-// in ONE turn.
+// letting read-only lookups through -- and lifting the block entirely as
+// soon. As the assistant has replied, so a reply and the tools that follow it
+// fit in ONE turn.
 func onPreToolUse(in HookInput) result {
 	if !markerExists(in.SessionID, markerPending) {
 		return noop()
@@ -165,7 +165,7 @@ func onPreToolUse(in HookInput) result {
 }
 
 // onStop lifts the question block -- the reply has happened -- and, when the
-// turn was interrupted by a user message, refuses the stop once so the
+// turn was interrupted by a user message, refuses the stop once. So the
 // interrupted work gets picked back up.
 func onStop(in HookInput) result {
 	// However this stop resolves, the assistant has replied, so the block is over.

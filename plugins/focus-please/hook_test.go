@@ -146,7 +146,7 @@ func TestFullTurnCycle(t *testing.T) {
 	require.Equal(t, "{}", allow.stdout)
 }
 
-// TestMidTurnInterjectionRefusesStopOnce is the core of the resume rule: a
+// TestMidTurnInterjectionRefusesStopOnce is the core of the resume rule. A
 // user message that lands while the assistant is still working must not end
 // the turn once answered -- the interrupted work has to continue.
 func TestMidTurnInterjectionRefusesStopOnce(t *testing.T) {

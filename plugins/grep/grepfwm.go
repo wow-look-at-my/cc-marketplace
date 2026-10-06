@@ -1,13 +1,13 @@
-// grepfwm.go implements the filenames_with_matches output mode, this
-// plugin's redesigned default. The builtin's files_with_matches returned
-// bare paths; this mode returns each file's matching lines too, grouped
-// under a per-file header. ripgrep runs with --json so the grouping is
-// unambiguous even for paths containing ":" or content that looks like a
-// path; the events are grouped per file, files are ordered
-// newest-earliest exactly like the filenames mode, lines ascend within a
-// file, and head_limit/offset paginate the flattened stream of
-// match/context LINES across all files (file headers and "--" separators
-// are not counted). A file whose lines are entirely cut by pagination is omitted.
+// grepfwm.go implements the filenames_with_matches output mode, this plugin's
+// redesigned default. The builtin's files_with_matches returned bare paths; this
+// mode returns each file's matching lines too, grouped under a per-file header.
+// ripgrep runs with --json so the grouping is unambiguous even for paths
+// containing ":" or content that looks like a path. The events are grouped per
+// file. The events also are grouped files are ordered newest-earliest exactly
+// like the filenames mode, lines ascend within a file. And head_limit/offset
+// paginate the flattened stream of match/context LINES across all files (file
+// headers and "--" separators are not counted). A file whose lines are entirely
+// cut by pagination is omitted.
 //
 // With "-n": false the indent stays but the N:/N- prefixes are dropped.
 package main

@@ -7,4 +7,4 @@ A `UserPromptSubmit` hook. It matches the prompt against an index of the user's 
 - **Rarity picks the terms, measured across the index.** A word in at most 2% of descriptions identifies its repository. A word in more identifies nothing. This is why there is no list of interesting words to maintain, and why "xsd" finds xml-validator.
 - **The hook never touches the network.** It reads the cache and, when that is due, starts `--refresh` as a separate process. The lock under the cache directory is time-based, so a crashed refresh frees itself.
 - **A stale index still suggests. A missing one says so.** Serving week-old descriptions beats silence. Silence with no explanation is the failure.
-- The hook never exits 2. Exit 2 blocks the user's prompt. A suggestion is not worth that.
+- The hook never exits 2. A later exit blocks the user's prompt. A suggestion is not worth that.
