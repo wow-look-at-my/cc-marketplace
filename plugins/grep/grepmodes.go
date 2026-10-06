@@ -85,11 +85,12 @@ func plural(n int, word string) string {
 	return word + "s"
 }
 
-// formatContent ports the content branch: paginate the raw rg lines,
+// formatContent ports the content branch. Paginate the raw rg lines,
 // relativize the prefix before the earliest colon of each line, clamp any
-// over-long line to clampWidth (clamp.go) so a huge line is bounded rather
-// than dropped, join; empty content becomes "No matches found"; a pagination
-// note is appended when a limit was applied or a positive offset given.
+// over-long line to clampWidth (clamp.go). Do this so a huge line is bounded
+// rather than dropped, join. This also covers empty content becomes "No
+// matches found". This also covers a pagination note is appended when a
+// limit was applied or a positive offset given.
 func (g *grepTool) formatContent(lines []string, a *grepArgs) string {
 	items, appliedLimit := paginate(lines, a.headLimit, a.offset)
 	mapped := make([]string, len(items))
@@ -106,7 +107,7 @@ func (g *grepTool) formatContent(lines []string, a *grepArgs) string {
 	return body
 }
 
-// formatCount ports the count branch: paginate the path:count lines,
+// formatCount ports the count branch. Paginate the path:count lines,
 // relativize the prefix before the LAST colon, sum the parseable counts, and
 // always append the "Found N total occurrences across M files." trailer.
 func (g *grepTool) formatCount(lines []string, a *grepArgs) string {
@@ -135,10 +136,10 @@ func (g *grepTool) formatCount(lines []string, a *grepArgs) string {
 	return body + trailer
 }
 
-// formatFilenames ports the builtin's files_with_matches branch
-// verbatim: stat every path, sort newest-earliest (ties: ascending
-// path compare), paginate the PATHS, relativize, and render "Found N
-// files" over the list. This plugin exposes it under the name "filenames".
+// formatFilenames ports the builtin's files_with_matches branch verbatim.
+// Stat every path, sort newest-earliest (ties: ascending path compare),
+// paginate the PATHS, relativize, and render "Found N files" over the
+// list. This plugin exposes it under the name "filenames".
 func (g *grepTool) formatFilenames(lines []string, a *grepArgs) string {
 	sorted := sortPathsByMtimeDesc(lines)
 	items, appliedLimit := paginate(sorted, a.headLimit, a.offset)

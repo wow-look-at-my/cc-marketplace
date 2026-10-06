@@ -10,13 +10,13 @@ import (
 )
 
 // The matcher is compared against the tool NAME and nothing else -- a hook
-// matcher never sees tool_input, so a Dockerfile or a compose path cannot be
+// matcher never sees tool_input. A Dockerfile or a compose path cannot be
 // selected here and the filtering has to stay in topicFor. What the matcher can
 // do is keep the binary from being spawned on the tools this hook ignores.
 //
 // A matcher of only letters and pipes is not a regex: Claude Code splits it on
 // `|` and compares each name for equality. So a name that drifts out of sync
-// with topicFor does not merely widen the match, it silences that tool
+// with topicFor does not merely widen the match. It silences that tool
 // completely, with nothing to see at run time.
 func TestMatcherListsExactlyTheToolsTheHookReads(t *testing.T) {
 	raw, err := os.ReadFile(".claude-plugin/plugin.json")
@@ -47,8 +47,8 @@ func TestMatcherListsExactlyTheToolsTheHookReads(t *testing.T) {
 	}
 }
 
-// dockerTargets builds an input the given tool would carry for a Docker file,
-// so a tool that reads file_path and one that reads command are both exercised.
+// dockerTargets builds the input that the given tool carries for a Docker
+// file.
 func dockerTargets(tool string) toolInput {
 	if tool == "Bash" {
 		return toolInput{Command: "docker build ."}
