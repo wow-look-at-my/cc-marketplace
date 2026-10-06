@@ -88,7 +88,7 @@ check_probe() {
 check_probe "yaml/comment-block" ".github/workflows/ci.yml" "$probe_workflow"
 check_probe "ste/contraction" "docs/probe.md" "$probe_markdown"
 
-# A plugin that drives the PreToolUse contract names the rules it runs, and each
+# A plugin that drives the PreToolUse contract names the rules it runs. Each
 # gets the same treatment: run it on text built to violate it, and require a
 # verdict. Exit status alone proves only that the subcommand parses.
 for rule in "$@"; do

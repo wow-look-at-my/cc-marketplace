@@ -45,7 +45,7 @@ func writeReleaseManifest(cookedDir, name, version, tag string) error {
 // plugins, each holding the manifest.json release-plugin wrote.
 //
 // Every failure here is FATAL, deliberately..json -- users could no longer
-// install it and every check stayed green, which is the exact shape of
+// install it. Every check stayed green, which is the exact shape of
 // failure a release pipeline must not have.
 func readPackagedPlugins(inputDir string) ([]packagedPlugin, error) {
 	entries, err := os.ReadDir(inputDir)
