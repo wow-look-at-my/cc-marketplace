@@ -28,7 +28,7 @@ func configPaths(home, cwd string) []string {
 }
 
 // readConfig merges the owners named by each config file that exists. A file
-// that is present and malformed is an error: the user wrote it, and silence
+// that is present and malformed is an error. The user wrote it, and silence
 // would leave them with an index that quietly ignores it.
 func readConfig(home, cwd string) ([]string, error) {
 	var owners []string

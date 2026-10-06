@@ -1,11 +1,11 @@
 // Command no-repeat-reply is a Stop hook that breaks a single livelock: a
-// gate re-fires, the assistant answers with the message it sent, and the pair
+// gate re-fires. The assistant answers with the message it sent, and the pair
 // spin until the session dies without producing work.
 //
 // It refuses a single stop per session, and the refusal names the checks to
-// run instead. The bound is a marker file rather than stop_hook_active,
-// because the loop it catches lives entirely inside a stop-hook continuation,
-// which is exactly when that flag is set. See CLAUDE.md.
+// run instead. The bound is a marker file rather than stop_hook_active. This
+// is because the loop it catches lives entirely inside a stop-hook
+// continuation, which is exactly when that flag is set. See CLAUDE.md.
 //
 // Every error path fails OPEN: no marker, no refusal, exit 0.
 package main

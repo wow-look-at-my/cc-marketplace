@@ -1,7 +1,7 @@
 // Shared state + classification for the entry-side halves of this plugin.
 //
 // The problem this exists for: the model is told, by system reminder, on most
-// turns, to keep a task list. It reads the reminder and does not do it -- a
+// turns, to keep a task list. It reads the reminder and does not do it. A
 // whole session went by with separate assignments given and zero tasks filed,
 // because a reminder is text and text is skippable. So the debt is recorded
 // in a file and collected by a PreToolUse gate: no other tool runs until the
@@ -13,6 +13,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,8 +28,8 @@ type Debt struct {
 	Refusals int `json:"refusals"`
 }
 
-// debtPath is keyed by a hash of the session id so a session id that is a path
-// fragment, or merely long, cannot escape or overflow the temp directory.
+// debtPath is keyed by a hash of the session id. A session id that is a path
+// fragment, or long, then cannot escape or overflow the temp directory.
 func debtPath(sessionID string) string {
 	sum := sha256.Sum256([]byte(sessionID))
 	return filepath.Join(os.TempDir(), "force-todos", hex.EncodeToString(sum[:])[:16]+".json")
@@ -66,14 +67,11 @@ func clearDebt(sessionID string) {
 	_ = os.Remove(debtPath(sessionID))
 }
 
-// taskTools must stay callable while a debt is outstanding, so the settling
-// call can check for duplicates first.
-var taskTools = map[string]bool{
-	"TaskCreate": true, "TaskUpdate": true, "TaskList": true, "TaskGet": true,
-}
+// taskTools stay callable during a debt, so the settling call can check for duplicates.
+var taskTools = set.Of[string]("TaskCreate", "TaskUpdate", "TaskList", "TaskGet")
 
 // settlingTools pay the debt: filing new work, or claiming/retargeting work that already exists.
-var settlingTools = map[string]bool{"TaskCreate": true, "TaskUpdate": true}
+var settlingTools = set.Of[string]("TaskCreate", "TaskUpdate")
 
 // A wh-word opens a question whether the "?" was typed.
 var whOpeners = regexp.MustCompile(`(?i)^\s*(what|why|how|when|where|which|who|whose)\b`)
