@@ -1,9 +1,9 @@
-// Command docs-nudge is a PreToolUse hook that pulls this plugin's Docker
+// Command docs-nudge is a PreToolUse hook. It pulls this plugin's Docker
 // skills in when a tool call is about to touch a Dockerfile or a Compose file.
 //
 // The skills already carry trigger-shaped descriptions and still do not get
 // loaded reliably: a description competes for attention with every other
-// description, and it is consulted when the model decides to look for a skill,
+// description. It is consulted when the model decides to look for a skill,
 // which is exactly the decision that gets skipped. This hook fires on the tool
 // call itself, so the reminder arrives at the moment the wrong content is about
 // to be written.
@@ -113,7 +113,7 @@ func message(topics []topic, p payload) string {
 // whether this call is the one that named it.
 //
 // The marker is keyed by a hash of the session id so parallel sessions never
-// silence each other, and it lives in the temp directory because it is worth
+// silence each other. It lives in the temp directory because it is worth
 // nothing once the machine restarts. An unwritable temp directory means the
 // reminder is sent every time rather than never: over-reminding is the lesser
 // failure of both.

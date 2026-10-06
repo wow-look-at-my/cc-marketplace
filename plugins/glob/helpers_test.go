@@ -44,7 +44,7 @@ func testTool(t *testing.T, root string) *globTool {
 }
 
 // mkFiles creates the named files (slash-separated, relative to root)
-// with strictly increasing mtimes in the given order, so the expected
+// with strictly increasing mtimes in the given order. The expected
 // ascending-mtime output order is exactly the argument order.
 func mkFiles(t *testing.T, root string, names ...string) {
 	t.Helper()
