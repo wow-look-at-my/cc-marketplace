@@ -10,7 +10,7 @@ import (
 )
 
 // Record shapes copied from a real Claude Code transcript: each content
-// block is its own record, and a user prompt carries string content while a
+// block is its own record. A user prompt carries string content while a
 // tool result carries an array of tool_result blocks.
 const (
 	recPrompt     = `{"type":"user","message":{"role":"user","content":"is this all committed?"}}`

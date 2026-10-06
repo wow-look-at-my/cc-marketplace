@@ -166,8 +166,8 @@ func atRuleName(prelude string) string {
 }
 
 // ParseRules walks a stylesheet and returns every declaration block with its
-// selector, line and enclosing at-rule context. @keyframes is skipped whole:
-// identical from/to bodies are normal there, not a defect.
+// selector, line and enclosing at-rule context. It skips @keyframes whole.
+// Identical from/to bodies are normal there, not a defect.
 func ParseRules(src string) []Rule {
 	src = stripComments(src)
 	var rules []Rule
