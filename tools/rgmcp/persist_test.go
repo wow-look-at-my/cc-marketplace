@@ -1,12 +1,19 @@
-package main
+package rgmcp
 
 import (
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
+
+	"rgmcp/testkit"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+var (
+	discardLogf     = testkit.DiscardLogf
+	persistedPathRe = testkit.PersistedPathRe
 )
 
 func TestUTF16Len(t *testing.T) {
@@ -24,7 +31,7 @@ func TestUTF16Len(t *testing.T) {
 		{"\U0001F600ok", 4}, // explicit astral escape
 	}
 	for _, tc := range cases {
-		got := utf16Len(tc.in)
+		got := UTF16Len(tc.in)
 		assert.Equal(t, tc.want, got)
 
 	}
@@ -42,8 +49,7 @@ func TestUTF16Slice(t *testing.T) {
 		{"abcdef", 99, "abcdef"},
 		{"日本語", 2, "日本"},
 		{"a😀b", 3, "a😀"},
-		// Cut lands mid-surrogate-pair: the pair is dropped (JS would keep
-		// a lone surrogate, which Go strings cannot represent).
+		// Cut lands mid-surrogate-pair.
 		{"a😀b", 2, "a"},
 		{"😀😀", 2, "😀"},
 	}
@@ -73,7 +79,7 @@ func TestHumanSize(t *testing.T) {
 		{2000000000, "1.9GB"},
 	}
 	for _, tc := range cases {
-		got := humanSize(tc.in)
+		got := HumanSize(tc.in)
 		assert.Equal(t, tc.want, got)
 
 	}
@@ -81,46 +87,44 @@ func TestHumanSize(t *testing.T) {
 
 func TestSplitPreview(t *testing.T) {
 	t.Run("short text passes through", func(t *testing.T) {
-		p, more := splitPreview("hello\nworld", 2000)
+		p, more := SplitPreview("hello\nworld", 2000)
 		assert.False(t, p != "hello\nworld" || more)
 
 	})
 	t.Run("snaps to newline past half", func(t *testing.T) {
 		text := strings.Repeat("a", 1500) + "\n" + strings.Repeat("b", 1000)
-		p, more := splitPreview(text, 2000)
+		p, more := SplitPreview(text, 2000)
 		assert.True(t, more)
 
-		assert.False(t, utf16Len(p) != 1500 || !strings.HasSuffix(p, "a"))
+		assert.False(t, UTF16Len(p) != 1500 || !strings.HasSuffix(p, "a"))
 
 	})
 	t.Run("ignores newline before half", func(t *testing.T) {
 		text := strings.Repeat("a", 500) + "\n" + strings.Repeat("b", 3000)
-		p, more := splitPreview(text, 2000)
+		p, more := SplitPreview(text, 2000)
 		assert.True(t, more)
 
-		assert.Equal(t, 2000, utf16Len(p))
+		assert.Equal(t, 2000, UTF16Len(p))
 
 	})
 	t.Run("no newline at all", func(t *testing.T) {
-		p, _ := splitPreview(strings.Repeat("x", 5000), 2000)
-		assert.Equal(t, 2000, utf16Len(p))
+		p, _ := SplitPreview(strings.Repeat("x", 5000), 2000)
+		assert.Equal(t, 2000, UTF16Len(p))
 
 	})
 }
 
 func TestPersistOversizeUnderThresholdUnchanged(t *testing.T) {
 	text := strings.Repeat("line\n", 10)
-	got := persistOversize(text, "Grep", 50000, t.TempDir(), discardLogf)
+	got := PersistOversize(text, "Glob", 50000, t.TempDir(), discardLogf)
 	assert.Equal(t, text, got)
 
 	// Exactly at the threshold: not persisted (strictly-greater check).
 	exact := strings.Repeat("x", 100)
-	got = persistOversize(exact, "Grep", 100, t.TempDir(), discardLogf)
+	got = PersistOversize(exact, "Glob", 100, t.TempDir(), discardLogf)
 	assert.Equal(t, exact, got)
 
 }
-
-var persistedPathRe = regexp.MustCompile(`Full output saved to: (.+)\n`)
 
 func TestPersistOversizeFormat(t *testing.T) {
 	dir := t.TempDir()
@@ -129,7 +133,7 @@ func TestPersistOversizeFormat(t *testing.T) {
 		lines = append(lines, strings.Repeat("p", 20))
 	}
 	text := strings.Join(lines, "\n")
-	got := persistOversize(text, "Grep", 5000, dir, discardLogf)
+	got := PersistOversize(text, "Glob", 5000, dir, discardLogf)
 
 	m := persistedPathRe.FindStringSubmatch(got)
 	require.NotNil(t, m)
@@ -141,7 +145,7 @@ func TestPersistOversizeFormat(t *testing.T) {
 
 	assert.True(t, strings.HasPrefix(m[1], dir))
 
-	preview, hasMore := splitPreview(text, persistPreviewChars)
+	preview, hasMore := SplitPreview(text, PersistPreviewChars)
 	require.True(t, hasMore)
 
 	want := "<persisted-output>\n" +
@@ -156,13 +160,12 @@ func TestPersistOversizeFormat(t *testing.T) {
 }
 
 func TestPersistOversizeNoEllipsisWhenPreviewComplete(t *testing.T) {
-	// Threshold below the preview size: the whole text fits in the
-	// preview, so the "..." line is omitted (hasMore false).
+	// Threshold below the preview size: the whole text fits in the preview, so the "..." line is omitted (hasMore false).
 	text := strings.Repeat("z", 150)
-	got := persistOversize(text, "Grep", 100, t.TempDir(), discardLogf)
+	got := PersistOversize(text, "Glob", 100, t.TempDir(), discardLogf)
 	assert.NotContains(t, got, "\n...\n")
 
-	assert.True(t, strings.HasSuffix(got, text+"\n"+persistedOutputClose))
+	assert.True(t, strings.HasSuffix(got, text+"\n"+PersistedOutputClose))
 
 }
 
@@ -171,7 +174,7 @@ func TestPersistOversizeWriteFailureFallsBack(t *testing.T) {
 	text := strings.Repeat("q", 200)
 	logged := false
 	logf := func(string, ...any) { logged = true }
-	got := persistOversize(text, "Grep", 100, missing, logf)
+	got := PersistOversize(text, "Glob", 100, missing, logf)
 	assert.Equal(t, text, got)
 
 	assert.True(t, logged)
@@ -180,10 +183,10 @@ func TestPersistOversizeWriteFailureFallsBack(t *testing.T) {
 
 func TestPersistOversizeCountsUTF16Units(t *testing.T) {
 	text := strings.Repeat("😀", 60)
-	got := persistOversize(text, "Grep", 200, t.TempDir(), discardLogf)
+	got := PersistOversize(text, "Glob", 200, t.TempDir(), discardLogf)
 	assert.Equal(t, text, got)
 
-	got = persistOversize(text, "Grep", 100, t.TempDir(), discardLogf)
+	got = PersistOversize(text, "Glob", 100, t.TempDir(), discardLogf)
 	assert.NotEqual(t, text, got)
 
 }

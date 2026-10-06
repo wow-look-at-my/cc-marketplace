@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// run executes the hook as a real process against a payload, with a private
-// temp directory so the once-per-session markers do not leak between tests.
+// run executes the hook as a real process against a payload. It gives each
+// test a private temp directory, so the session markers do not leak.
 func run(t *testing.T, binary, tempDir, stdin string) string {
 	t.Helper()
 
@@ -85,7 +85,7 @@ func TestTheSameSkillIsNamedOncePerSession(t *testing.T) {
 	assert.Empty(t, strings.TrimSpace(second), "the second call says nothing")
 }
 
-// Two skills are tracked apart: naming one must not silence the other.
+// Skills are tracked apart: naming one must not silence the other.
 func TestNamingOneSkillDoesNotSilenceTheOther(t *testing.T) {
 	binary, temp := buildHook(t), t.TempDir()
 

@@ -36,8 +36,7 @@ func TestCountMultipleFiles(t *testing.T) {
 		tf{"b.txt", "needle\n"},
 		tf{"c.txt", "none\n"})
 	got := grepOK(t, testTool(t, root), countArgs(map[string]any{"pattern": "needle"}))
-	// rg's cross-file output order is nondeterministic: assert the lines
-	// and the exact trailer instead of a full golden.
+	// rg's cross-file output order is nondeterministic: assert the lines and the exact trailer instead of a full golden.
 	assert.True(t, containsLine(got, "a.txt:2"), got)
 	assert.True(t, containsLine(got, "b.txt:1"), got)
 	assert.NotContains(t, got, "c.txt")

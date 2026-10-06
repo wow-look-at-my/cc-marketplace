@@ -73,11 +73,7 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to stage plugin binary: %w", err)
 	}
 
-	// Distribution is a git orphan tag, not an npm package: a plugin installs
-	// by `git clone --depth 1 --branch <tag>`, so nothing on the far side needs
-	// node or npm. The immutable per-release tag is what marketplace.json
-	// pins; `#latest` is the human-facing pointer the orphan-release action
-	// also moves.
+	// Distribution is a git orphan tag, not an npm package.
 	tag := fmt.Sprintf("%s#%d", pluginName, newVersion)
 	if err := writeReleaseManifest(tmpDir, pluginName, fmt.Sprintf("%d", newVersion), tag); err != nil {
 		return fmt.Errorf("failed to write release manifest: %w", err)

@@ -1,11 +1,12 @@
 // Package shellwalk holds the shell-reading vocabulary that no-work-loss and
-// enhanced-auto-allow both need: what a word says, which program a spelling
-// actually names, and whether an invocation names a script of its own.
+// enhanced-auto-allow both need. What a word says, which program a spelling
+// names, and whether an invocation names a script of its own.
 //
 // Both plugins keep their own segmentation and their own verdicts -- a single
 // fails closed, the other fails open, deliberately. What they must NOT keep
-// separately is the answer to "which program does this run", because a wrapper
-// or a spelling either plugin misreads is a rule the other still enforces.
+// separately is the answer to "which program does this run". This is because
+// a wrapper or a spelling either plugin misreads is a rule the other still
+// enforces.
 package shellwalk
 
 import (
@@ -15,17 +16,15 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// Word is a single argv element: the text it expands to, and whether that text
-// is the whole story. Static is false when a part could expand to anything --
-// a parameter, a substitution, a glob. A caller granting permission must treat
-// a non-static word as unknown; a caller refusing may still read Text.
+// Word is a single argv element: the text it expands to, and whether that
+// text is the whole story.
 type Word struct {
 	Text   string
 	Static bool
 }
 
 // WordText renders a single syntax word. An unresolvable part contributes
-// nothing to Text and clears Static, so `"py"thon3` still yields "python3" to
+// nothing to Text and clears Static. `"py"thon3` still yields "python3" to
 // inspect while `$X` yields the empty string and says so.
 func WordText(wd *syntax.Word) Word {
 	if wd == nil {

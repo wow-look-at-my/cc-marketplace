@@ -15,8 +15,10 @@ on:
         type: string
         default: ''
 
-# Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
-concurrency: {group: 'release-${{ github.ref }}'}
+# Master runs overlap. orphan-release moves `<plugin>#latest` only to a higher release number, so the last run to finish cannot move it back.
+concurrency:
+  group: gha_${{ github.repository }}_${{ github.workflow }}_${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   prepare:
@@ -40,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: wow-look-at-my/actions@common-checks#latest
+      - uses: wow-look-at-my/slopfix@master
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -91,8 +93,8 @@ jobs:
             const buildPlugins: string[] = [];
             const cachedPlugins: string[] = [];
             const keys: Record<string, string> = {};
-            // shellwalk is compiled into no-work-loss and enhanced-auto-allow through a local replace, so a change there must rebuild them.
-            const tools = ['tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod'];
+            // A plugin compiles a shared module under tools/ through a local replace, so a change there must rebuild it.
+            const tools = ['tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod', 'tools/rgmcp/**/*.go', 'tools/rgmcp/go.mod'];
 
             // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when buildhost publishes a new one.
             const slopfix = steps.slopfix.outputs.version;
@@ -138,8 +140,12 @@ jobs:
             core.setOutput('has_build', String(buildPlugins.length > 0));
 
 
-  # The plugins that embed shellwalk compile it but never run its own suite, and a shared parser nothing tests is where the drift goes next.
-  shellwalk:
+  # A plugin build compiles a shared module but never runs its own suite, and shared code that nothing tests is where the drift goes next.
+  shared-modules:
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [shellwalk, rgmcp]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -160,7 +166,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - uses: wow-look-at-my/go-toolchain@master
         with:
-          working-directory: tools/shellwalk
+          working-directory: tools/${{ matrix.module }}
 
   build:
     needs: prepare
@@ -385,7 +391,7 @@ jobs:
           pattern: packaged-*
           path: /tmp/all-plugin-artifacts
 
-      # A plugin this run did not rebuild still belongs in marketplace.json, so its cooked tree comes back from the cache the build that made it saved.
+      # A plugin that this run did not rebuild still belongs in marketplace.json. Its cooked tree comes back from the cache that its own build saved.
       - name: Restore the cooked trees of plugins this run did not rebuild
         if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
         uses: wow-look-at-my/actions@typescript#latest
@@ -405,8 +411,6 @@ jobs:
             }
 
       - name: Prepare combined input
-        env:
-          ALL_PLUGINS: ${{ needs.prepare.outputs.all_plugins }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/combined-plugins
@@ -417,7 +421,7 @@ jobs:
 
           # see docs/ci-yaml-notes.md#marketplace-json-replacement-and-a-stale-cache-key
           missing=""
-          for plugin in $(echo "$ALL_PLUGINS" | jq -r '.[]'); do
+          for plugin in $(echo "${{ needs.prepare.outputs.all_plugins }}" | jq -r '.[]'); do
             [ -d "/tmp/combined-plugins/$plugin" ] || missing="$missing $plugin"
           done
           if [ -n "$missing" ]; then
@@ -438,7 +442,6 @@ jobs:
       - name: Publish marketplace site to buildhost
         env:
           REF: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           BRANCH="${REF//\//-}"
@@ -462,7 +465,7 @@ jobs:
               -X PUT "${SITE_URL}" \
               -H "Authorization: Bearer ${TOKEN}" \
               -H "Content-Type: application/gzip" \
-              -H "X-Git-Commit: ${SHA}" \
+              -H "X-Git-Commit: ${{ github.sha }}" \
               --data-binary @/tmp/site.tar.gz) || true
             if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 300 ]; then
               echo "Published site to ${SITE_URL}/"

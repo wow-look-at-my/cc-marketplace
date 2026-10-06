@@ -1,7 +1,7 @@
-// This file is tool-agnostic glue. A sibling plugin (e.g. grep) should be
-// able to copy it verbatim and only swap the mcpTool implementation wired
-// up in main.go.
-package main
+// Package rgmcp is the MCP stdio server, version gate, ripgrep runner,
+// output persistence and path collator that the glob and grep plugins share.
+// A plugin supplies only its Tool and the name of its gate variable.
+package rgmcp
 
 import (
 	"bufio"
@@ -13,13 +13,13 @@ import (
 	"strings"
 )
 
-const defaultProtocolVersion = "2025-11-25"
+const DefaultProtocolVersion = "2025-11-25"
 
 const (
-	codeParseError     = -32700
-	codeInvalidRequest = -32600
-	codeMethodNotFound = -32601
-	codeInvalidParams  = -32602
+	CodeParseError     = -32700
+	CodeInvalidRequest = -32600
+	CodeMethodNotFound = -32601
+	CodeInvalidParams  = -32602
 )
 
 type rpcRequest struct {
@@ -29,7 +29,7 @@ type rpcRequest struct {
 	Params  json.RawMessage `json:"params"`
 }
 
-type rpcError struct {
+type RPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
@@ -38,36 +38,33 @@ type rpcResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
 	Result  any             `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
+	Error   *RPCError       `json:"error,omitempty"`
 }
 
-// mcpTool is the contract between the protocol glue and a tool
-// implementation. Call returns either a tool-level result (operational
-// failures use IsError:true) or an *rpcError for JSON-RPC-level problems
-// (malformed arguments).
-type mcpTool interface {
+// Tool is the contract between the protocol glue and a tool implementation.
+type Tool interface {
 	Name() string
-	ListEntry() toolListEntry
-	Call(args json.RawMessage) (*toolResult, *rpcError)
+	ListEntry() ToolListEntry
+	Call(args json.RawMessage) (*ToolResult, *RPCError)
 }
 
-type toolResult struct {
+type ToolResult struct {
 	Text    string
 	IsError bool
 }
 
-type toolAnnotations struct {
+type ToolAnnotations struct {
 	ReadOnlyHint bool `json:"readOnlyHint"`
 }
 
-// toolListEntry is a single element of the tools/list response.
+// ToolListEntry is a single element of the tools/list response.
 // InputSchema is raw JSON so the property order the model sees matches
 // the builtin byte-for-byte (Go maps would alphabetize it).
-type toolListEntry struct {
+type ToolListEntry struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
 	InputSchema json.RawMessage  `json:"inputSchema"`
-	Annotations *toolAnnotations `json:"annotations,omitempty"`
+	Annotations *ToolAnnotations `json:"annotations,omitempty"`
 	Meta        map[string]any   `json:"_meta,omitempty"`
 }
 
@@ -87,7 +84,7 @@ type serverInfo struct {
 }
 
 type toolsListResult struct {
-	Tools []toolListEntry `json:"tools"`
+	Tools []ToolListEntry `json:"tools"`
 }
 
 type callToolResultJSON struct {
@@ -100,14 +97,14 @@ type contentBlock struct {
 	Text string `json:"text"`
 }
 
-type server struct {
+type Server struct {
 	in   io.Reader
 	out  io.Writer
 	logf func(format string, args ...any)
 
 	name    string
 	version string
-	tools   []mcpTool
+	tools   []Tool
 	gateEnv string // env var consulted by the version gate (CC_<NAME>_PLUGIN)
 
 	expose        bool
@@ -115,8 +112,8 @@ type server struct {
 	clientVersion string
 }
 
-func newServer(in io.Reader, out io.Writer, logf func(string, ...any), name string, tools []mcpTool, gateEnv string) *server {
-	return &server{
+func NewServer(in io.Reader, out io.Writer, logf func(string, ...any), name string, tools []Tool, gateEnv string) *Server {
+	return &Server{
 		in:      in,
 		out:     out,
 		logf:    logf,
@@ -124,15 +121,14 @@ func newServer(in io.Reader, out io.Writer, logf func(string, ...any), name stri
 		version: "1",
 		tools:   tools,
 		gateEnv: gateEnv,
-		// Before initialize we have no clientInfo; the gate treats an
-		// unknown client as "expose" (env overrides still apply).
+		// Before initialize we have no clientInfo; the gate treats an unknown client as "expose" (env overrides still apply).
 		expose: gateAllows(os.Getenv(gateEnv), "", ""),
 	}
 }
 
-// run processes requests sequentially until stdin reaches EOF (clean
+// Run processes requests sequentially until stdin reaches EOF (clean
 // shutdown, returns nil) or a read error occurs.
-func (s *server) run() error {
+func (s *Server) Run() error {
 	r := bufio.NewReaderSize(s.in, 64*1024)
 	for {
 		line, err := r.ReadString('\n')
@@ -148,22 +144,20 @@ func (s *server) run() error {
 	}
 }
 
-func (s *server) handleLine(line string) {
+func (s *Server) handleLine(line string) {
 	data := []byte(line)
 	var req rpcRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		code, msg := codeParseError, "Parse error"
+		code, msg := CodeParseError, "Parse error"
 		if json.Valid(data) {
-			// Valid JSON that is not a request object (e.g. a batch
-			// array — MCP dropped JSON-RPC batching).
-			code, msg = codeInvalidRequest, "Invalid Request"
+			// Valid JSON that is not a request object (e.g. a batch array — MCP dropped JSON-RPC batching).
+			code, msg = CodeInvalidRequest, "Invalid Request"
 		}
-		s.reply(&rpcResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: code, Message: msg}})
+		s.reply(&rpcResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &RPCError{Code: code, Message: msg}})
 		return
 	}
 	if len(req.ID) == 0 {
-		// Notification: tolerate every method, known or unknown
-		// (notifications/initialized, notifications/cancelled, ...).
+		// Notification: tolerate every method, known or unknown (notifications/initialized, notifications/cancelled, ...).
 		return
 	}
 	switch req.Method {
@@ -176,11 +170,11 @@ func (s *server) handleLine(line string) {
 	case "tools/call":
 		s.handleToolsCall(&req)
 	default:
-		s.replyError(req.ID, codeMethodNotFound, "Method not found: "+req.Method)
+		s.replyError(req.ID, CodeMethodNotFound, "Method not found: "+req.Method)
 	}
 }
 
-func (s *server) handleInitialize(req *rpcRequest) {
+func (s *Server) handleInitialize(req *rpcRequest) {
 	var params struct {
 		ProtocolVersion string `json:"protocolVersion"`
 		ClientInfo      struct {
@@ -197,7 +191,7 @@ func (s *server) handleInitialize(req *rpcRequest) {
 
 	pv := params.ProtocolVersion
 	if pv == "" {
-		pv = defaultProtocolVersion
+		pv = DefaultProtocolVersion
 	}
 	s.replyResult(req.ID, initializeResult{
 		ProtocolVersion: pv,
@@ -205,8 +199,8 @@ func (s *server) handleInitialize(req *rpcRequest) {
 	})
 }
 
-func (s *server) handleToolsList(req *rpcRequest) {
-	entries := make([]toolListEntry, 0, len(s.tools))
+func (s *Server) handleToolsList(req *rpcRequest) {
+	entries := make([]ToolListEntry, 0, len(s.tools))
 	if s.expose {
 		for _, t := range s.tools {
 			entries = append(entries, t.ListEntry())
@@ -215,16 +209,16 @@ func (s *server) handleToolsList(req *rpcRequest) {
 	s.replyResult(req.ID, toolsListResult{Tools: entries})
 }
 
-func (s *server) handleToolsCall(req *rpcRequest) {
+func (s *Server) handleToolsCall(req *rpcRequest) {
 	var params struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil || params.Name == "" {
-		s.replyError(req.ID, codeInvalidParams, "tools/call params must include a tool name")
+		s.replyError(req.ID, CodeInvalidParams, "tools/call params must include a tool name")
 		return
 	}
-	var target mcpTool
+	var target Tool
 	if s.expose {
 		for _, t := range s.tools {
 			if t.Name() == params.Name {
@@ -234,7 +228,7 @@ func (s *server) handleToolsCall(req *rpcRequest) {
 		}
 	}
 	if target == nil {
-		s.replyError(req.ID, codeInvalidParams, fmt.Sprintf("Unknown tool: %s", params.Name))
+		s.replyError(req.ID, CodeInvalidParams, fmt.Sprintf("Unknown tool: %s", params.Name))
 		return
 	}
 	res, rpcErr := target.Call(params.Arguments)
@@ -248,15 +242,15 @@ func (s *server) handleToolsCall(req *rpcRequest) {
 	})
 }
 
-func (s *server) replyResult(id json.RawMessage, result any) {
+func (s *Server) replyResult(id json.RawMessage, result any) {
 	s.reply(&rpcResponse{JSONRPC: "2.0", ID: id, Result: result})
 }
 
-func (s *server) replyError(id json.RawMessage, code int, msg string) {
-	s.reply(&rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
+func (s *Server) replyError(id json.RawMessage, code int, msg string) {
+	s.reply(&rpcResponse{JSONRPC: "2.0", ID: id, Error: &RPCError{Code: code, Message: msg}})
 }
 
-func (s *server) reply(resp *rpcResponse) {
+func (s *Server) reply(resp *rpcResponse) {
 	b, err := json.Marshal(resp)
 	if err != nil {
 		s.logf("marshal response: %v", err)

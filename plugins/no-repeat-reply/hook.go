@@ -1,10 +1,10 @@
 // Command no-repeat-reply is a Stop hook that breaks a single livelock: a
-// gate re-fires, the assistant answers with the message it just sent, and
-// the pair spin until the session dies without producing work.
+// gate re-fires. The assistant answers with the message it sent, and the pair
+// spin until the session dies without producing work.
 //
 // It refuses a single stop per session, and the refusal names the checks to
-// run instead. The bound is a marker file rather than stop_hook_active,
-// because the loop it catches lives entirely inside a stop-hook
+// run instead. The bound is a marker file rather than stop_hook_active. This
+// is because the loop it catches lives entirely inside a stop-hook
 // continuation, which is exactly when that flag is set. See CLAUDE.md.
 //
 // Every error path fails OPEN: no marker, no refusal, exit 0.
@@ -37,8 +37,7 @@ type result struct {
 
 func allow() result { return result{} }
 
-// minRepeatChars keeps a short acknowledgement ("Done.", "Pushed.") from
-// reading as a stuck reply. A livelock message is a sentence, not a word.
+// minRepeatChars keeps a short acknowledgement ("Done.", "Pushed.") from reading as a stuck reply.
 const minRepeatChars = 24
 
 const refusal = `You just sent the same closing message twice in a row.

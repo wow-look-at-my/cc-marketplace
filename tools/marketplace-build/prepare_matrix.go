@@ -15,11 +15,7 @@ func runPrepareMatrix(cmd *cobra.Command, args []string) error {
 	repoRoot := getRepoRoot()
 	pluginsDir := filepath.Join(repoRoot, "plugins")
 
-	// Find all plugins with mh.include_in_marketplace: true. Without orphan
-	// tags there is no per-plugin "previous version" to diff against, and the
-	// pages registry has to carry every plugin every push (otherwise unchanged
-	// plugins fall out of the freshly-deployed gh-pages snapshot), so include
-	// every marketplace plugin unconditionally.
+	// Find all plugins with mh.include_in_marketplace: true.
 	entries, err := os.ReadDir(pluginsDir)
 	if err != nil {
 		return fmt.Errorf("failed to read plugins directory: %w", err)

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"rgmcp"
 )
 
 // JS Array.prototype.slice semantics are preserved via jsSlice so
@@ -70,9 +72,8 @@ func paginationNote(appliedLimit *float64, offset float64) string {
 	return strings.Join(parts, ", ")
 }
 
-// jsNumString renders a number the way JS Number.prototype.toString does
-// for the values this tool handles: integers without a decimal point,
-// non-integers in their shortest decimal form.
+// jsNumString renders a number the way JS Number.prototype.toString does for
+// the values this tool handles.
 func jsNumString(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
 }
@@ -84,15 +85,12 @@ func plural(n int, word string) string {
 	return word + "s"
 }
 
-// formatContent ports the content branch: paginate the raw rg lines,
+// formatContent ports the content branch. Paginate the raw rg lines,
 // relativize the prefix before the earliest colon of each line, clamp any
-// over-long line to clampWidth (clamp.go) so a huge line is bounded rather
-// than dropped, join; empty content becomes "No matches found"; a
-// pagination note is appended when a limit was applied or a positive
-// offset given. Text mode carries no match column, so the clamp anchors at
-// the start (the path:line: prefix always stays visible and only the tail
-// is cut); the grouped filenames_with_matches mode, which has rg's JSON
-// submatch offsets, centers its window on the match instead.
+// over-long line to clampWidth (clamp.go). Do this so a huge line is bounded
+// rather than dropped, join. This also covers empty content becomes "No
+// matches found". This also covers a pagination note is appended when a
+// limit was applied or a positive offset given.
 func (g *grepTool) formatContent(lines []string, a *grepArgs) string {
 	items, appliedLimit := paginate(lines, a.headLimit, a.offset)
 	mapped := make([]string, len(items))
@@ -109,10 +107,9 @@ func (g *grepTool) formatContent(lines []string, a *grepArgs) string {
 	return body
 }
 
-// formatCount ports the count branch: paginate the path:count lines,
-// relativize the prefix before the LAST colon, sum the parseable counts,
-// and always append the "Found N total occurrences across M files."
-// trailer.
+// formatCount ports the count branch. Paginate the path:count lines,
+// relativize the prefix before the LAST colon, sum the parseable counts, and
+// always append the "Found N total occurrences across M files." trailer.
 func (g *grepTool) formatCount(lines []string, a *grepArgs) string {
 	items, appliedLimit := paginate(lines, a.headLimit, a.offset)
 	mapped := make([]string, len(items))
@@ -139,10 +136,10 @@ func (g *grepTool) formatCount(lines []string, a *grepArgs) string {
 	return body + trailer
 }
 
-// formatFilenames ports the builtin's files_with_matches branch
-// verbatim: stat every path, sort newest-earliest (ties: ascending
-// path compare), paginate the PATHS, relativize, and render "Found N
-// files" over the list. This plugin exposes it under the name "filenames".
+// formatFilenames ports the builtin's files_with_matches branch verbatim.
+// Stat every path, sort newest-earliest (ties: ascending path compare),
+// paginate the PATHS, relativize, and render "Found N files" over the
+// list. This plugin exposes it under the name "filenames".
 func (g *grepTool) formatFilenames(lines []string, a *grepArgs) string {
 	sorted := sortPathsByMtimeDesc(lines)
 	items, appliedLimit := paginate(sorted, a.headLimit, a.offset)
@@ -166,12 +163,8 @@ func (g *grepTool) displayPath(p string, a *grepArgs) string {
 	return relativizePath(rebasePath(p, a.rgSearchPath, a.searchPath), g.root)
 }
 
-// rg emits those absolute lines in resolved-space spelling (a.rgSearchPath
-// is resolved so slash-containing globs match through a symlinked root);
-// rebase back to the caller's spelling so the absolute form comes out the
-// way the caller supplied it, not rg's resolved form. Relative/no-colon
-// lines and absolute lines outside the resolved root pass through unchanged
-// (rebasePath is a no-op for them), so the wart holds in every case.
+// rg emits those absolute lines in resolved-space spelling (a.rgSearchPath is
+// resolved so slash-containing globs match through a symlinked root).
 func (g *grepTool) displayColonPrefix(line string, a *grepArgs, colon int) string {
 	if colon > 0 {
 		return g.displayPath(line[:colon], a) + line[colon:]
@@ -218,7 +211,7 @@ func sortPathsByMtimeDesc(paths []string) []string {
 		}
 		entries[i] = entry{p, mt}
 	}
-	col := newPathCollator()
+	col := rgmcp.NewPathCollator()
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].mtime != entries[j].mtime {
 			return entries[i].mtime > entries[j].mtime

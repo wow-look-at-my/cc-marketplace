@@ -20,9 +20,7 @@ func writeBuildDir(t *testing.T, names ...string) string {
 	return cooked
 }
 
-// apeBytes is a stand-in fat APE: the real prologue plus a per-name payload, so
-// a test can tell which file's bytes were shipped. The magic is what
-// stageBinaries identifies -- fixtures that skip it are not APEs.
+// apeBytes is a stand-in fat APE: the real prologue plus a per-name payload.
 func apeBytes(name string) []byte { return []byte(apeMagic + "payload:" + name) }
 
 // elfBytes is what a plain per-platform (non-cosmo) build leaves behind.
@@ -82,10 +80,9 @@ func TestStageBinariesDropsBuildByproducts(t *testing.T) {
 // The REAL layout `go-toolchain matrix --targets cosmo` writes, copied from a
 // live build: the fat APE's own name is a SYMLINK into a per-platform slot copy
 // (buildhost rejects os=cosmo, so the fat build is published under a platform
-// name), and the byproducts include a debug sidecar and an aarch64 ELF. Staging
-// this by renaming the link and deleting the slots ships a dangling symlink --
-// which is what the invented single-regular-file fixture above could never
-// catch.
+// name). The byproducts include a debug sidecar and an aarch64 ELF. A stage
+// that renames the link and deletes the slots ships a dangling symlink. The
+// single-regular-file fixture above can never catch that.
 func TestStageBinariesFollowsTheSymlinkGoToolchainActuallyWrites(t *testing.T) {
 	cooked := writeBuildDir(t,
 		"glob_linux_amd64",
@@ -134,11 +131,11 @@ func TestStageBinariesFailsClosedWithoutAnApe(t *testing.T) {
 	require.Contains(t, err.Error(), "--targets cosmo", "and the fix")
 }
 
-// What CI actually produces, which neither earlier fixture did: go-toolchain
-// DROPS the _cosmo_fat name there ("buildhost rejects os=cosmo uploads; the
-// slot copies carry the APE"), so the only copies of the fat binary left are
-// under per-platform names -- byte-identical to it. Keying on the filename
-// mistook this for a per-platform matrix build and failed every plugin.
+// What CI produces, which neither earlier fixture did. Go-toolchain DROPS the
+// _cosmo_fat name there, because buildhost rejects os=cosmo uploads. The only
+// copies of the fat binary left have per-platform names. Each copy is
+// byte-identical to it. Keying on the filename mistook
+// this for a per-platform matrix build and failed every plugin.
 func TestStageBinariesShipsTheApeWhenOnlySlotCopiesRemain(t *testing.T) {
 	cooked := writeBuildDir(t)
 	build := filepath.Join(cooked, "build")

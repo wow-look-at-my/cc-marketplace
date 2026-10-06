@@ -1,40 +1,13 @@
 #!/bin/sh
-# Fetch the slopfix binary a plugin runs, and prove it answers before the plugin
-# is allowed to ship.
-#
-# A plugin that names its binary as a bare word and lets PATH find it travels on
-# a separate track from that binary: a plugin calling a subcommand its installed
-# binary predates reports nothing at all, and nothing says so. Swallowing the
-# failure is worse again -- that leaves a guard which installs, reports success
-# and does nothing.
-#
-# So the binary ships INSIDE the plugin, and this script is the gate. A fetch
-# failure, a wrong file, or a binary that cannot answer the contract all fail
-# the build.
-#
-# buildhost still serves the retired `slopfmt` project name, so naming it fetches
-# a binary frozen before the rename instead of failing. The `report` probe below
-# is what refuses one: that subcommand exists only in slopfix.
+# Fetch the slopfix binary a plugin runs, and prove it answers before the plugin is allowed to ship.
 set -eu
 
 plugin_dir=${1:?usage: vendor-slopfix.sh <plugin-dir> [hook-rule...]}
 shift
 
-# An APE runs on every platform this marketplace targets, so one file covers
-# them all and `release-plugin` stages it as the plugin's own binary.
-#
-# SLOPFIX_URL points the fetch elsewhere, for a build against a slopfix that has
-# not published yet. It is also how the red control is driven: the gate is worth
-# nothing until somebody has watched it reject a binary that cannot answer.
+# An APE runs on every platform this marketplace targets.
 url=${SLOPFIX_URL:-"https://dl.pazer.build/slopfix?os=linux&arch=amd64"}
-# NOT build/. `stageBinaries` rewrites build/ into exactly one APE named after
-# the plugin plus its launcher, and deletes every other file there. The plugin
-# builds its own Go hook binary into build/, so a second APE beside it would be
-# dropped silently. bin/ is outside that rewrite, the same way server/ is.
-#
-# A shell can exec an APE: execve answers ENOEXEC, and the prologue is valid sh
-# that re-execs the file properly. Every caller here is already a /bin/sh
-# script, so this needs no launcher of its own.
+# NOT build/.
 build_dir="${plugin_dir}/bin"
 binary="${build_dir}/slopfix.ape"
 
@@ -45,25 +18,14 @@ if ! curl -fL --compressed --no-progress-meter --connect-timeout 30 "$url" -o "$
 fi
 chmod +x "$binary"
 
-# The prologue is what `release-plugin` looks for. A gateway error page saved
-# under this name would otherwise reach stageBinaries as a plausible file.
+# The prologue is what `release-plugin` looks for.
 magic=$(od -An -c -N 8 "$binary" | tr -d ' \n')
 if [ "$magic" != "MZqFpD='" ]; then
 	echo "vendor-slopfix: ${binary} is not an APE (first bytes: ${magic})" >&2
 	exit 1
 fi
 
-# Every subcommand the manifest names has to exist in THIS binary. The e2e job
-# asks the same question of slopfix's SOURCE, which answers for master rather
-# than for the build being packaged here, and the two disagree for the whole
-# window between a slopfix merge and its publish. `laziness` shipped through
-# that window: the manifest named it, master defined it, the fetched binary did
-# not, and every Stop in every session answered `unknown command "laziness"`.
-# So the guard that judges a closing message never ran, and the only sign was
-# one line the reader had to notice.
-#
-# The loop reads the manifest rather than a list kept beside it. A list is the
-# copy that goes stale, which is the failure directly above.
+# Every subcommand the manifest names has to exist in THIS binary.
 manifest="${plugin_dir}/.claude-plugin/plugin.json"
 if [ ! -f "$manifest" ]; then
 	echo "vendor-slopfix: ${manifest} does not exist, so what this plugin calls is unknown." >&2
@@ -88,9 +50,7 @@ for name in $named; do
 done
 
 # The assertion that matters: run the real contract on text whose answer is
-# known, and require the rule to actually fire. Exit status alone proves only
-# that the subcommand parses. A binary that runs and finds nothing in text built
-# to violate a rule is the silent failure this arrangement exists to prevent.
+# known, and require the rule to fire.
 probe_workflow='name: CI
 # one
 # two
@@ -104,15 +64,15 @@ check_probe() {
 	rule=$1
 	path=$2
 	probe=$3
-	if ! answer=$(printf '%s' "$probe" | "$binary" report --path "$path" 2>&1); then
-		echo "vendor-slopfix: the fetched slopfix cannot answer 'report --path ${path}':" >&2
+	if ! answer=$(printf '%s' "$probe" | "$binary" check --json --path "$path" 2>&1); then
+		echo "vendor-slopfix: the fetched slopfix cannot answer 'check --json --path ${path}':" >&2
 		echo "  ${answer}" >&2
 		echo "vendor-slopfix: the plugin calls a subcommand this build of slopfix does not have." >&2
 		echo "vendor-slopfix: publish slopfix first -- a plugin whose checker cannot run must not ship." >&2
 		exit 1
 	fi
 	case "$answer" in
-	*"\"$rule\""*) ;;
+	*"\"id\":\"$rule\""*) ;;
 	*)
 		echo "vendor-slopfix: '${rule}' reported nothing on text that violates it." >&2
 		echo "  path:   ${path}" >&2
@@ -124,13 +84,11 @@ check_probe() {
 	echo "vendor-slopfix: ${rule} fired on its probe"
 }
 
-# One probe per rule family. A workflow rule and a prose rule reach slopfix down
-# different paths, so one probe proves only half of it. Both run for every
-# plugin, because `report` is also what proves this is a post-rename build.
+# One probe per rule family.
 check_probe "yaml/comment-block" ".github/workflows/ci.yml" "$probe_workflow"
 check_probe "ste/contraction" "docs/probe.md" "$probe_markdown"
 
-# A plugin that drives the PreToolUse contract names the rules it runs, and each
+# A plugin that drives the PreToolUse contract names the rules it runs. Each
 # gets the same treatment: run it on text built to violate it, and require a
 # verdict. Exit status alone proves only that the subcommand parses.
 for rule in "$@"; do

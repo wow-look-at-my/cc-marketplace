@@ -1,11 +1,11 @@
-// Command finish-your-todos is a Claude Code Stop hook that blocks the assistant
+// Command finish-your-todos is a Claude Code Stop hook. It blocks the assistant
 // from ending its turn while its TodoWrite list still has incomplete items.
 //
-// It reads the Stop hook payload on stdin, finds the most recent TodoWrite tool
-// call in the transcript (each call carries the complete list), and if any item
-// is still "pending" or "in_progress" it blocks the stop (exit 2) with a reason
-// naming the unfinished work. The stop_hook_active flag is honored as a loop
-// guard: once Claude is already continuing because of a prior block, the stop is
+// It reads the Stop hook payload on stdin. It finds the most recent TodoWrite
+// tool call in the transcript, because each call carries the complete list.
+// If any item is still "pending" or "in_progress", it blocks the stop (exit 2).
+// The reason names the unfinished work. The stop_hook_active flag is honored as a loop
+// guard. Once Claude is already continuing because of a prior block, the stop is
 // allowed through so a genuinely stuck session can never hang forever.
 package main
 
@@ -18,9 +18,8 @@ import (
 	"strings"
 )
 
-// HookInput is the JSON payload Claude Code delivers on stdin for a Stop hook.
-// Fields mirror the CLI's hook schema (session_id/transcript_path/cwd/
-// permission_mode plus the Stop-specific hook_event_name and stop_hook_active).
+// HookInput is the JSON payload Claude Code delivers on stdin for a Stop
+// hook.
 type HookInput struct {
 	HookEventName  string `json:"hook_event_name"`
 	TranscriptPath string `json:"transcript_path"`
@@ -32,8 +31,7 @@ type transcriptLine struct {
 	Message json.RawMessage `json:"message"`
 }
 
-// transcriptMessage is the inner message object. Content is a raw message
-// because it may be a string (plain text) or an array of content blocks.
+// transcriptMessage is the inner message object.
 type transcriptMessage struct {
 	Content json.RawMessage `json:"content"`
 }
@@ -43,8 +41,7 @@ type transcriptMessage struct {
 type contentBlock struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
-	// ID pairs a tool_use with the tool_result that answers it, which is how a
-	// TaskCreate's subject is matched to the id its result reports.
+	// ID pairs a tool_use with the tool_result that answers it.
 	ID        string          `json:"id"`
 	ToolUseID string          `json:"tool_use_id"`
 	Content   json.RawMessage `json:"content"`
@@ -52,8 +49,7 @@ type contentBlock struct {
 }
 
 // transcriptRecord is one transcript line reduced to the content blocks the
-// gate cares about, so the file is read once and both the TodoWrite and the
-// task-tool reconstruction work from the same pass.
+// gate cares about.
 type transcriptRecord struct {
 	Blocks []contentBlock
 }
@@ -64,8 +60,7 @@ type todoWriteInput struct {
 }
 
 // TodoItem matches the TodoWrite schema: content (imperative), status, and
-// activeForm (present continuous). Status is one of pending/in_progress/
-// completed.
+// activeForm (present continuous).
 type TodoItem struct {
 	Content    string `json:"content"`
 	Status     string `json:"status"`
@@ -73,9 +68,8 @@ type TodoItem struct {
 }
 
 // readTranscript reads the JSONL transcript once, returning each line's content
-// blocks in file order. A line that is not a message, or whose content is a
-// plain string rather than an array of blocks, carries no tool calls and is
-// skipped.
+// blocks in file order. It skips a line that is not a message. It also skips a
+// line whose content is a plain string, because that line carries no tool calls.
 func readTranscript(path string) []transcriptRecord {
 	if path == "" {
 		return nil
@@ -174,9 +168,7 @@ func blockReason(inProgress, pending []TodoItem) string {
 	return b.String()
 }
 
-// evaluate decides whether to allow or block the stop. It returns the process
-// exit code (0 = allow stop, 2 = block stop) and, when blocking, the reason
-// written to stderr for Claude to read.
+// evaluate decides whether to allow or block the stop.
 func evaluate(input []byte) (int, string) {
 	var hi HookInput
 	if err := json.Unmarshal(input, &hi); err != nil {
@@ -191,10 +183,7 @@ func evaluate(input []byte) (int, string) {
 		return 0, ""
 	}
 
-	// Both sources, one pass. An environment has one or the other -- TodoWrite
-	// or the task tools -- but reading both means the gate does not silently
-	// stop guarding when the tool surface changes underneath it, which is
-	// exactly what happened when the task tools replaced TodoWrite.
+	// Both sources, one pass.
 	records := readTranscript(hi.TranscriptPath)
 	inProgress, pending := incompleteTodos(latestTodos(records))
 	taskInProgress, taskPending := incompleteTasks(latestTasks(records))
@@ -209,10 +198,6 @@ func evaluate(input []byte) (int, string) {
 // run reads the hook payload from r and returns the exit code, the stderr
 // message (a Stop block reports that way) and the stdout payload (the
 // entry-side hooks answer in JSON).
-//
-// One binary serves all three events, dispatched on hook_event_name: they share
-// the debt marker and the task-tool vocabulary, so splitting them into separate
-// programs is what let half this plugin drift into another language.
 func run(r io.Reader) (code int, stderr, stdout string) {
 	input, _ := io.ReadAll(r)
 	payload := parsePayload(input)

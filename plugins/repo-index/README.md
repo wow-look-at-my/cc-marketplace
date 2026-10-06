@@ -32,7 +32,7 @@ By default, the owner of the checkout you are working in — its `origin` remote
 { "owners": ["wow-look-at-my", "PazerOP"] }
 ```
 
-That is the whole configuration surface. It names owners, never repositories: what each repository is comes from the repository.
+That is the whole configuration surface. It names owners, not repositories: what each repository is comes from the repository.
 
 Archived repositories, forks, and repositories that say nothing about themselves are left out.
 
@@ -52,4 +52,4 @@ Requests go through the `gh` CLI when it is installed. An existing `gh auth logi
 
 ## Limits
 
-At most three repositories are added per prompt. Any beyond that are named on stderr. The cap is never silent.
+A bounded number of repositories are added per prompt. Any beyond that are named on stderr. The cap is never silent.

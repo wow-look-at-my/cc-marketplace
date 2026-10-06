@@ -1,19 +1,14 @@
 // gate.go decides whether the tool is exposed to the connected client.
 //
 // A gated-off server answers tools/list with an empty list, which
-// claude-code fully supports.
-//
-// A sibling plugin copies this file verbatim and changes only gateEnvVar.
-package main
+// claude-code fully supports. Each plugin passes its own escape-hatch
+// variable (CC_<NAME>_PLUGIN=always|never|auto, default auto) to NewServer.
+package rgmcp
 
 import (
 	"strconv"
 	"strings"
 )
-
-// gateEnvVar is the escape hatch: CC_GREP_PLUGIN=always|never|auto
-// (default auto). It is checked before the clientInfo rule.
-const gateEnvVar = "CC_GREP_PLUGIN"
 
 var builtinRemovedIn = semver{2, 1, 117}
 
