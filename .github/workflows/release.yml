@@ -407,7 +407,7 @@ jobs:
               node "$bundle"
           done
 
-      # A plugin this run did not rebuild still belongs in marketplace.json, so its cooked tree comes back from the cache the build that made it saved.
+      # A plugin that this run did not rebuild still belongs in marketplace.json. Its cooked tree comes back from the cache that its own build saved.
       - name: Restore the cooked trees of plugins this run did not rebuild
         if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
         uses: wow-look-at-my/actions@typescript#latest

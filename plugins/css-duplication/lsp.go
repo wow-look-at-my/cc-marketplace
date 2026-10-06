@@ -14,7 +14,7 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// A language server, not a hook: diagnostics arrive in context on their own
+// A language server, not a hook. Diagnostics arrive in context on their own
 // after an edit instead of a message shouted at the end of a tool call. The
 // detector is shared with nothing else to keep both in agreement -- css.go is
 // the implementation.

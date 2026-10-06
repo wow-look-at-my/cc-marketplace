@@ -18,8 +18,8 @@ func readManifest(t *testing.T, dir string) pluginReleaseManifest {
 	return m
 }
 
-// The manifest is what update-marketplace mirrors into marketplace.json, so
-// the cooked plugin.json and .mcp.json have to travel inside it -- otherwise
+// The manifest is what update-marketplace mirrors into marketplace.json. The
+// cooked plugin.json and .mcp.json have to travel inside it -- otherwise
 // that job needs another copy of the tree.
 func TestWriteReleaseManifestCarriesTheCookedManifests(t *testing.T) {
 	cooked := t.TempDir()
@@ -56,7 +56,7 @@ func TestWriteReleaseManifestWithoutOptionalManifests(t *testing.T) {
 }
 
 // An unparseable plugin.json must not take the release facts down with it: the
-// name/version/tag are what readPackagedPlugins insists on, and they are known
+// name/version/tag are what readPackagedPlugins insists on. They are known
 // here without reading anything.
 func TestWriteReleaseManifestSurvivesUnparseableInputs(t *testing.T) {
 	cooked := t.TempDir()

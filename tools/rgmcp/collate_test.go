@@ -4,8 +4,9 @@
 // The generator lives in the session notes; the vectors are frozen here so
 // the test needs no node at run time. The set deliberately mixes case,
 // digits, punctuation classes, accents, non-latin scripts, an astral-plane
-// emoji, and path-shaped strings, and contains no distinct strings that
-// collate equal (ties would make the golden order depend on sort stability).
+// emoji, and path-shaped strings, and contains no distinct strings. Those
+// strings collate equal (ties would make the golden order depend on sort
+// stability).
 package rgmcp
 
 import (
