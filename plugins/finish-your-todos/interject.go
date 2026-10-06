@@ -3,9 +3,9 @@
 // A message sent while a turn is already running is not submitted, it is
 // ENQUEUED. The queue is drained inside the running turn as an attachment. That
 // path dispatches no UserPromptSubmit hook at all. On a bridge/web surface
-// every inbound user message goes through the queue, so anything that lands
-// while the session is busy is invisible to the entry gate -- and a session
-// that is doing work is busy nearly all the time.
+// every inbound user message goes through the queue. Anything that lands while
+// the session is busy is invisible to the entry gate. And a session that is
+// doing work is busy nearly all the time.
 //
 // The transcript is where they do appear, as a `queued_command` attachment
 // carrying the user's raw text. Every hook payload includes transcript_path,
