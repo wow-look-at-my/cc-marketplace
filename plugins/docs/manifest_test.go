@@ -47,8 +47,8 @@ func TestMatcherListsExactlyTheToolsTheHookReads(t *testing.T) {
 	}
 }
 
-// dockerTargets builds an input the given tool would carry for a Docker file, so a tool that reads file_path and one. That reads
-// command are both exercised.
+// dockerTargets builds the input that the given tool carries for a Docker
+// file.
 func dockerTargets(tool string) toolInput {
 	if tool == "Bash" {
 		return toolInput{Command: "docker build ."}

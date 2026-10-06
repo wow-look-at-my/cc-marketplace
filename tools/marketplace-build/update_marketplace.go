@@ -129,9 +129,9 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 	}
 
 	for _, p := range plugins {
-		// A git source, not npm: `claude plugin install` clones the plugin's orphan
-		// tag (`git clone --depth 1 --branch <tag>`). Installing needs git -- which
-		// Claude Code already requires -- and never node or npm.
+		// A git source, not npm. `claude plugin install` clones the plugin's orphan
+		// tag (`git clone --depth 1 --branch <tag>`). An install thus needs git,
+		// which Claude Code already requires. It never needs node or npm.
 		entry := map[string]interface{}{
 			"name":    p.name,
 			"version": p.manifest.Version,

@@ -75,8 +75,8 @@ func TestServerHandshakeAdvertisesSyncAndDiagnostics(t *testing.T) {
 // with "The received response has neither a result nor an error property".
 // This is asserted on the RAW JSON on purpose. Unmarshalling into a struct
 // silently turns a missing key into a unset value, which is exactly why the
-// shutdown bug survived a green test suite. And only showed up when a real
-// client tried to stop the server.
+// shutdown bug survived a green test suite. The bug only showed up when a
+// real client tried to stop the server.
 func TestEveryResponseCarriesResultOrError(t *testing.T) {
 	var out bytes.Buffer
 	in := frame(t, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}}) +

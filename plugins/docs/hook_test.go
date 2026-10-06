@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// run executes the hook as a real process against a payload, with a private
-// temp directory. So the once-per-session markers do not leak between tests.
+// run executes the hook as a real process against a payload. It gives each
+// test a private temp directory, so the session markers do not leak.
 func run(t *testing.T, binary, tempDir, stdin string) string {
 	t.Helper()
 

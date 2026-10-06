@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"io"
 	"os"
 	"path/filepath"
@@ -140,10 +141,9 @@ func onUserPromptSubmit(in HookInput) result {
 	return result{stdout: string(out)}
 }
 
-// onPreToolUse denies acting tools while the block is armed for this session,
-// letting read-only lookups through -- and lifting the block entirely as
-// soon. As the assistant has replied, so a reply and the tools that follow it
-// fit in ONE turn.
+// onPreToolUse denies acting tools while the block is armed for this session.
+// It lets read-only lookups through. It lifts the block as soon as the
+// assistant replies, so a reply and the tools after it fit in ONE turn.
 func onPreToolUse(in HookInput) result {
 	if !markerExists(in.SessionID, markerPending) {
 		return noop()
@@ -164,9 +164,9 @@ func onPreToolUse(in HookInput) result {
 	return result{stdout: string(out)}
 }
 
-// onStop lifts the question block -- the reply has happened -- and, when the
-// turn was interrupted by a user message, refuses the stop once. So the
-// interrupted work gets picked back up.
+// onStop lifts the question block, because the reply has happened. A user
+// message can interrupt the turn. Then onStop refuses the stop once, so the
+// assistant resumes the interrupted work.
 func onStop(in HookInput) result {
 	// However this stop resolves, the assistant has replied, so the block is over.
 	clearMarker(in.SessionID, markerPending)
@@ -191,21 +191,19 @@ func onStop(in HookInput) result {
 
 // lookupTools are the read-only tools that stay available while the block is
 // armed.
-var lookupTools = map[string]bool{
-	"Read": true,
-	"Grep": true,
-	"Glob": true,
-}
+var lookupTools = set.Of[string]("Read",
+	"Grep",
+	"Glob")
 
 // isLookupTool reports whether a tool is one of the permitted read-only
 // lookups.
 func isLookupTool(name string) bool {
-	if lookupTools[name] {
+	if lookupTools.Contains(name) {
 		return true
 	}
 	if strings.HasPrefix(name, "mcp__") {
 		if i := strings.LastIndex(name, "__"); i > 0 {
-			return lookupTools[name[i+2:]]
+			return lookupTools.Contains(name[i+2:])
 		}
 	}
 	return false

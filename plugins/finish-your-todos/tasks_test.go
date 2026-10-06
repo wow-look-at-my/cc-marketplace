@@ -66,8 +66,8 @@ func marshalLine(t *testing.T, role string, content []any) string {
 }
 
 // A filed task nobody finished must block the stop. This is the case the gate
-// was blind to: environments with the task tools have no TodoWrite at all, so
-// scanning only. For TodoWrite allowed every stop.
+// was blind to. Environments with the task tools have no TodoWrite at all. A
+// scan for TodoWrite alone therefore allowed every stop.
 func TestTaskToolsBlockWhenPending(t *testing.T) {
 	path := writeTranscript(t,
 		taskCreateLine(t, "tu_1", "Wire up the deny rules"),

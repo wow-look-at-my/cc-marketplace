@@ -3,10 +3,9 @@
 // mode returns each file's matching lines too, grouped under a per-file header.
 // ripgrep runs with --json so the grouping is unambiguous even for paths
 // containing ":" or content that looks like a path. The events are grouped per
-// file. The events also are grouped files are ordered newest-earliest exactly
-// like the filenames mode, lines ascend within a file. And head_limit/offset
-// paginate the flattened stream of match/context LINES across all files (file
-// headers and "--" separators are not counted). A file whose lines are entirely
+// file. Files sort newest first, exactly like the filenames mode. Lines ascend
+// within a file. head_limit/offset paginate the flat stream of match/context
+// LINES across all files. The count skips file headers and "--" separators. A file whose lines are entirely
 // cut by pagination is omitted.
 //
 // With "-n": false the indent stays but the N:/N- prefixes are dropped.
