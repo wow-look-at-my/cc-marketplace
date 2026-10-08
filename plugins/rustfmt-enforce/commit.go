@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/wow-look-at-my/go-containers/set"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -67,13 +68,13 @@ func checkCommit(dir string) []string {
 	root = strings.TrimSpace(root)
 	staged, _ := git(root, "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR", "--", "*.rs")
 	modified, _ := git(root, "diff", "--name-only", "-z", "--diff-filter=ACMR", "--", "*.rs")
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	var reasons []string
 	for _, name := range strings.Split(staged+modified, "\x00") {
-		if name == "" || seen[name] {
+		if name == "" || seen.Contains(name) {
 			continue
 		}
-		seen[name] = true
+		seen.Add(name)
 		path := filepath.Join(root, name)
 		changed, err := formatFile(path)
 		switch {
