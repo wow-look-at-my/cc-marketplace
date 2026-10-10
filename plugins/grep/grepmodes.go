@@ -59,8 +59,7 @@ func clampIndex(f float64, n int) int {
 }
 
 // paginationNote ports l46: "limit: N" and/or "offset: M" joined with
-// ", " (the offset is only reported when positive, folding the
-// builtin's appliedOffset spread condition into the same rule).
+// ", " (the offset is only reported when positive.
 func paginationNote(appliedLimit *float64, offset float64) string {
 	var parts []string
 	if appliedLimit != nil {
@@ -72,7 +71,6 @@ func paginationNote(appliedLimit *float64, offset float64) string {
 	return strings.Join(parts, ", ")
 }
 
-// jsNumString renders a number the way JS Number.prototype.toString does for
 // the values this tool handles.
 func jsNumString(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
