@@ -42,7 +42,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: wow-look-at-my/actions@no-all-builds-job#latest
       - uses: wow-look-at-my/slopfix@master
+      - uses: wow-look-at-my/actions@no-tests-in-yaml#latest
+      - uses: wow-look-at-my/actions@push-excludes-tags#latest
+      - uses: wow-look-at-my/actions@ste-lint#latest
 
       - uses: ./.github/actions/setup-marketplace-build
 
