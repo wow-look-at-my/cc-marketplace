@@ -1,0 +1,47 @@
+{
+  "name": "rustfmt-enforce",
+  "version": "1870",
+  "tag": "rustfmt-enforce#1870",
+  "pluginJson": {
+    "author": {
+      "name": "mhaynie"
+    },
+    "description": "Runs rustfmt on every .rs file the assistant writes or edits, and refuses a git commit while a staged or modified .rs file is not rustfmt-clean",
+    "hooks": {
+      "PostToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/rustfmt-enforce",
+              "type": "command"
+            }
+          ],
+          "matcher": "Write|Edit|MultiEdit"
+        }
+      ],
+      "PreToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "${CLAUDE_PLUGIN_ROOT}/build/rustfmt-enforce",
+              "type": "command"
+            }
+          ],
+          "matcher": "Bash"
+        }
+      ]
+    },
+    "keywords": [
+      "rust",
+      "rustfmt",
+      "format",
+      "formatter",
+      "hook",
+      "posttooluse",
+      "pretooluse",
+      "commit"
+    ],
+    "name": "rustfmt-enforce",
+    "version": "1870"
+  }
+}
