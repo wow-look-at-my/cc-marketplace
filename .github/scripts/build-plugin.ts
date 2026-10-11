@@ -96,7 +96,6 @@ function isApe(path: string): boolean {
 function hookBinaryExists(rel: string): boolean {
   const abs = join(pluginPath, rel);
   if (existsSync(abs)) return true;
-  // Go-toolchain emits per-platform binaries (e.g. hook_linux_amd64) or one fat build instead.
   const dir = dirname(abs);
   const base = basename(abs);
   if (!existsSync(dir)) return false;
