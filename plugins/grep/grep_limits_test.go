@@ -141,8 +141,6 @@ func TestFilenamesPagination(t *testing.T) {
 	wantText(t, got, "No files found")
 }
 
-// persistedPathRe lives in persist_test.go (shared with its unit tests).
-
 func TestPersistEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	long := strings.Repeat("z", 90)
