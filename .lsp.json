@@ -1,0 +1,13 @@
+{
+	"slopfix": {
+		"args": [
+			"lsp"
+		],
+		"command": "slopfix",
+		"extensionToLanguage": {
+			".md": "markdown",
+			".yaml": "yaml",
+			".yml": "yaml"
+		}
+	}
+}
