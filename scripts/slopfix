@@ -1,0 +1,83 @@
+#!/bin/sh
+# Runs slopfix with this script's arguments. The system slopfix runs when its
+# version is at least the one buildhost publishes. Otherwise the published build
+# is downloaded into the plugin's data directory, and that copy runs.
+set -eu
+
+dir="${CLAUDE_PLUGIN_DATA:-${XDG_CACHE_HOME:-$HOME/.cache}/slopfix-plugin}"
+# slopfix is a fat APE: buildhost serves it under linux/amd64, and the same bytes run everywhere.
+url="${SLOPFIX_URL:-https://dl.pazer.build/slopfix?os=linux&arch=amd64}"
+choice="$dir/current"
+
+# A choice younger than ten minutes is reused, so most hook calls make no network request.
+if [ -f "$choice" ] && [ -z "$(find "$choice" -mmin +10)" ]; then
+	bin=$(cat "$choice")
+	if [ -x "$bin" ]; then
+		exec "$bin" "$@"
+	fi
+fi
+
+mkdir -p "$dir"
+
+# The release number `slopfix version` prints. A build that cannot say prints nothing here.
+version_of() {
+	if out=$("$1" version </dev/null 2>&1); then
+		printf '%s\n' "$out" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) { print $i; exit } }'
+	fi
+}
+
+location=""
+published=""
+if head=$(curl -fsSI --connect-timeout 10 --max-time 20 "$url"); then
+	location=$(printf '%s\n' "$head" | tr -d '\r' | sed -n 's/^[Ll]ocation: *//p')
+	published=$(printf '%s\n' "$location" | sed -n 's/^.*[?&]v=\([0-9][0-9]*\).*$/\1/p')
+fi
+
+system=""
+system_version=""
+if found=$(command -v slopfix) && [ ! "$found" -ef "$0" ]; then
+	system=$found
+	system_version=$(version_of "$system")
+fi
+
+cached=$(ls "$dir" | sed -n 's/^slopfix\.\([0-9][0-9]*\)$/\1/p' | sort -n | tail -n 1)
+
+bin=""
+if [ -z "$published" ]; then
+	echo "slopfix plugin: $url named no published version." >&2
+elif [ -n "$system_version" ] && [ "$system_version" -ge "$published" ]; then
+	bin=$system
+elif [ "$cached" = "$published" ]; then
+	bin="$dir/slopfix.$published"
+else
+	tmp="$dir/download.$$"
+	if curl -fsSL --connect-timeout 10 --retry 3 -o "$tmp" "$location" && chmod +x "$tmp" && "$tmp" --help </dev/null >"$tmp.help" 2>&1; then
+		rm -f "$tmp.help"
+		mv -f "$tmp" "$dir/slopfix.$published"
+		find "$dir" -type f -name 'slopfix.[0-9]*' ! -name "slopfix.$published" -exec rm -f {} +
+		cached=$published
+		bin="$dir/slopfix.$published"
+	else
+		echo "slopfix plugin: could not download slopfix $published from $location." >&2
+		if [ -f "$tmp.help" ]; then
+			cat "$tmp.help" >&2
+		fi
+		rm -f "$tmp" "$tmp.help"
+	fi
+fi
+
+if [ -z "$bin" ]; then
+	if [ -n "$cached" ] && { [ -z "$system_version" ] || [ "$cached" -gt "$system_version" ]; }; then
+		bin="$dir/slopfix.$cached"
+	elif [ -n "$system" ]; then
+		bin=$system
+	else
+		echo "slopfix plugin: no slopfix is installed, and none could be downloaded from $url." >&2
+		exit 1
+	fi
+	echo "slopfix plugin: running $bin, the newest slopfix already here." >&2
+fi
+
+printf '%s\n' "$bin" >"$choice.$$"
+mv -f "$choice.$$" "$choice"
+exec "$bin" "$@"
