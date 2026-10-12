@@ -2,13 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -18,118 +13,8 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// testJqPath is written a single time by TestMain and only read afterwards.
-var testJqPath string
-
-func TestMain(m *testing.M) {
-	path, err := ensureJq()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "jq bootstrap failed: %v\n", err)
-		os.Exit(1)
-	}
-	testJqPath = path
-	os.Exit(m.Run())
-}
-
-// bootstrapJqVersion pins the jq the suite fetches when the machine has none. jq is MIT licensed.
-const bootstrapJqVersion = "1.7.1"
-
-// ensureJq returns a jq to test against, fetching a pinned a single when the
-// machine has none.
-//
-// An empty jqPath turns every tool call into "jq is not installed". The
-// server gives that answer validly, so the suite does not error. It asserts
-// that answer against tests for a working jq. It then reports a runner
-// without jq as a bug in this plugin. The runner image
-// is not this suite's contract to depend on; the sibling grep and glob
-// plugins bootstrap a pinned ripgrep for the same reason.
-func ensureJq() (string, error) {
-	if path, err := exec.LookPath("jq"); err == nil {
-		return path, nil
-	}
-	base, err := os.UserCacheDir()
-	if err != nil {
-		base = os.TempDir()
-	}
-	dir := filepath.Join(base, "cc-jq-plugin", "jq-"+bootstrapJqVersion)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	bin := filepath.Join(dir, "jq")
-	if _, err := os.Stat(bin); err == nil {
-		return bin, nil
-	}
-	asset, err := jqReleaseAsset()
-	if err != nil {
-		return "", err
-	}
-	url := "https://github.com/jqlang/jq/releases/download/jq-" + bootstrapJqVersion + "/" + asset
-	if err := downloadExecutable(url, bin); err != nil {
-		return "", err
-	}
-	if err := checkRuns(bin); err != nil {
-		os.Remove(bin)
-		return "", err
-	}
-	return bin, nil
-}
-
-// checkRuns proves the fetched binary executes before any test depends on it.
-func checkRuns(bin string) error {
-	out, err := exec.Command(bin, "--version").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("fetched jq at %s does not run: %w (output: %s)", bin, err, out)
-	}
-	return nil
-}
-
-// jqReleaseAsset names the single-file binary for this platform. jq ships
-// a single executable per platform rather than an archive, so there is
-// nothing to unpack.
-func jqReleaseAsset() (string, error) {
-	switch runtime.GOOS + "/" + runtime.GOARCH {
-	case "linux/amd64":
-		return "jq-linux-amd64", nil
-	case "linux/arm64":
-		return "jq-linux-arm64", nil
-	case "darwin/amd64":
-		return "jq-macos-amd64", nil
-	case "darwin/arm64":
-		return "jq-macos-arm64", nil
-	}
-	return "", fmt.Errorf("no pinned jq for %s/%s; install jq to run these tests", runtime.GOOS, runtime.GOARCH)
-}
-
-func downloadExecutable(url, dest string) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET %s: %s", url, resp.Status)
-	}
-	// Written beside the destination and renamed, so a download killed part way through never leaves a truncated binary that later runs treat.
-	tmp, err := os.CreateTemp(filepath.Dir(dest), "jq-download-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := io.Copy(tmp, resp.Body); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), 0o755); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), dest)
-}
-
 // contentText joins a tool result's text blocks so an assertion can quote
-// what jq said. Without it a failure reads only "Should be false".
+// what jq actually said. Without it a failure reads only "Should be false".
 func contentText(result *mcp.CallToolResult) string {
 	var parts []string
 	for _, c := range result.Content {
@@ -142,17 +27,14 @@ func contentText(result *mcp.CallToolResult) string {
 
 func connect(t *testing.T) *mcp.ClientSession {
 	t.Helper()
+	return connectWith(t, jqTools{path: jqPath})
+}
 
-	if testJqPath == "" {
-		t.Skip("jq not installed")
-	}
+func connectWith(t *testing.T, tools jqTools) *mcp.ClientSession {
+	t.Helper()
 
-	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "jq",
-		Version: "1",
-	}, nil)
+	server := newServer(tools)
 
-	jqTools{path: testJqPath}.register(server)
 
 	ctx := context.Background()
 	t1, t2 := mcp.NewInMemoryTransports()
@@ -170,7 +52,7 @@ func connect(t *testing.T) *mcp.ClientSession {
 func TestInitialize(t *testing.T) {
 	session := connect(t)
 
-	// The client is already initialized via Connect, so verify we can list tools
+	// The client is already initialized via Connect, so just verify we can list tools
 	result, err := session.ListTools(context.Background(), nil)
 	require.NoError(t, err)
 	assert.True(t, len(result.Tools) >= 2)
@@ -353,19 +235,11 @@ func TestJqFileNotFound(t *testing.T) {
 }
 
 func TestJqNoJqInstalled(t *testing.T) {
-	// A server registered with no jq, so nothing another test reads changes.
-	server := mcp.NewServer(&mcp.Implementation{Name: "jq", Version: "1"}, nil)
-	jqTools{}.register(server)
+	// An empty path reaches only these handlers, so the tests running
+	// beside this one keep the binary they resolved.
+	session := connectWith(t, jqTools{path: ""})
 
 	ctx := context.Background()
-	t1, t2 := mcp.NewInMemoryTransports()
-	server.Connect(ctx, t1, nil)
-	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0.1"}, nil)
-	session, err := client.Connect(ctx, t2, nil)
-	require.NoError(t, err)
-	defer session.Close()
-
-	// Test jq tool
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "jq",
 		Arguments: map[string]any{"filter": ".", "input": "{}"},
