@@ -53,6 +53,9 @@ jobs:
       - name: Script tests
         run: npx tsx --test ".github/scripts/**/*.test.ts"
 
+      - name: No plugin vendors a binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts source
+
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
 
@@ -199,6 +202,9 @@ jobs:
       - name: Cook plugin
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
+
+      - name: The cooked plugin carries no binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts assembled "${{ steps.release.outputs.source_dir }}"
 
       - uses: ./.github/actions/setup-claude-code
 
@@ -410,6 +416,10 @@ jobs:
             echo "::error::no cooked tree for:$missing -- publishing would drop them from marketplace.json"
             exit 1
           fi
+
+      # The whole set marketplace.json will list, cached trees included.
+      - name: No published plugin carries a binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts assembled /tmp/combined-plugins
 
       - name: Update marketplace.json
         id: marketplace
