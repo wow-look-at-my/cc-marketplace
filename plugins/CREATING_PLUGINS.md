@@ -149,7 +149,7 @@ The marketplace builder runs in this order:
 2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
-`docs/justfile` and `slopfix/justfile` are the real ones in this repo.
+`docs/justfile` is the real one in this repo.
 
 ## Step 3: Enable Marketplace Inclusion
 

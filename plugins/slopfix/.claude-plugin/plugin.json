@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "slopfix hook --max-comment-lines ${NO_TOMBSTONES_MAX_COMMENT_LINES:-14}"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/slopfix hook --max-comment-lines ${NO_TOMBSTONES_MAX_COMMENT_LINES:-14}"
           }
         ]
       }
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "slopfix hook"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/slopfix hook"
           }
         ]
       }
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "slopfix hook"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/slopfix hook"
           }
         ]
       }
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "slopfix hook"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/slopfix hook"
           }
         ]
       }
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "slopfix hook"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/slopfix hook"
           }
         ]
       }
@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "slopfix hook",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/slopfix hook",
             "timeout": 30
           }
         ]

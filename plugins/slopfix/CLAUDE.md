@@ -4,9 +4,9 @@ The slopfix plugin lives at `plugins/slopfix/`. It carries **no rule of its own*
 
 ### How a check is wired
 
-A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs the binary directly. **There is no shell script of any kind.** `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
+A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs `scripts/slopfix`, which picks a slopfix binary and execs it with the same arguments. The launcher holds no rule. `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
 
-Every event execs `slopfix.ape hook`. The binary reads the event off the payload and runs each guard that serves it, so the manifest only decides which events reach slopfix. What each guard DOES is slopfix's own documentation. Read `slopfix hook --help`, or that repository. A table here is a copy that drifts.
+Every event execs `scripts/slopfix hook`. The binary reads the event off the payload and runs each guard that serves it, so the manifest only decides which events reach slopfix. What each guard DOES is slopfix's own documentation. Read `slopfix hook --help`, or that repository. A table here is a copy that drifts.
 
 These replace the plugins. Those are `ask-properly`, `claude-md-budget`, `cleanup-bash-cmds`, `common-checks`, `detect-permission-seeking` and `enhanced-auto-allow`. They are also `link-all-refs`, `no-blame-language`, `no-busy-poll`, `no-counts-in-docs`, `no-tombstones`, `no-work-loss`, `recommend-go-toolchain` and `rustfmt-enforce`. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
 
@@ -15,13 +15,13 @@ These replace the plugins. Those are `ask-properly`, `claude-md-budget`, `cleanu
 
 ### The language server half
 
-`.lsp.json` runs `bin/slopfix.ape lsp`. The server publishes, for each open file a build reads. The findings `slopfix check` gives it, on the lines they sit on. The PreToolUse `hook` judges the write itself. The two are one binary, so neither can drift from the other or from CI.
+`.lsp.json` runs `scripts/slopfix lsp`. The server publishes, for each open file a build reads. The findings `slopfix check` gives it, on the lines they sit on. The PreToolUse `hook` judges the write itself. The two are one binary, so neither can drift from the other or from CI.
 
 Scope, ranking, the per-file cap and the diagnostic text are all decided in slopfix's `langserver` package. A file outside every work tree, or under `$HOME/.claude`, gets nothing, because no build reads it. `--max-per-file` sets the cap.
 
 It takes its shape from `css-duplication`. A finding that tracks the file's state disappears when the code is fixed. A hook shouts once per edit, whether or not the finding is still true.
 
-**It differs from every other plugin here in one way. That way decides its whole design. It contains no rules.** Every verdict comes out of [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix). That binary owns every prose and YAML rule the org applies. The build fetches it and the plugin ships it.
+**It differs from every other plugin here in one way. That way decides its whole design. It contains no rules.** Every verdict comes out of [wow-look-at-my/slopfix](https://github.com/wow-look-at-my/slopfix). That binary owns every prose and YAML rule the org applies. The plugin ships no copy of it.
 
 ### common-checks is slopfix's default rule set
 
@@ -31,19 +31,20 @@ Everything that kept a hand-maintained list in step with upstream is deleted. Th
 
 `push-excludes-tags` is the gap. It is a stated one. Its rule is an inline script inside a composite action. Nothing imports it and slopfix does not carry it. No diagnostic here reports it. Never close that by writing the rule in this plugin.
 
-### The plugin SHIPS the binary. It never looks on PATH.
+### The plugin ships no binary. The launcher picks one.
 
-`bin/` carries slopfix itself, fetched by `.github/scripts/vendor-slopfix.sh` at build time. The sibling plugins settled this shape and their CLAUDE.md files record why. A plugin that names its binary as a bare word travels on a separate track from that binary. One calling a subcommand its installed binary predates then reports nothing at all. Swallowing that failure is worse. It leaves a guard that installs, reports success and does nothing.
+A copy inside the plugin goes stale in the user's plugin cache. A fix merged to slopfix master then stays refused by the installed hook until the plugin itself rebuilds and updates. So the build vendors nothing, and the user installs nothing.
 
-**The fetch is a GATE, not a download.** It checks the APE prologue first. Then it runs `check --json` on a workflow and on a document built to violate a rule. Each must come back with a verdict. Exit status alone proves only that the subcommand parses.
+`scripts/slopfix` decides which binary runs:
 
-The verdict doubles as the proof that this is a post-rename build. buildhost still serves the old `slopfmt` project name. A fetch of that name succeeds and hands back a binary frozen before the rename. That build never writes a finding's ID under `"id"`. It cannot pass this gate quietly. `SLOPFIX_URL` points the fetch elsewhere, for a build against a slopfix that has not published.
+- It reads the published release number from the `v=` in buildhost's redirect for `slopfix?os=linux&arch=amd64`. That one fat APE runs on every platform.
+- The slopfix on PATH runs when `slopfix version` prints a release number at least that high.
+- Otherwise it downloads that exact release into `$CLAUDE_PLUGIN_DATA`, else `$XDG_CACHE_HOME/slopfix-plugin`, as `slopfix.<release>`. A download must answer `--help` before it is kept. Older downloads are removed.
+- A system slopfix that prints no release number counts as older. A build from before the `version` subcommand is older by definition.
+- It writes its choice to `current` and reuses it for several minutes, so most hook calls make no network request.
+- When buildhost or the download fails, it runs the newest binary already present and says so on stderr. With none present it exits non-zero and names the URL.
 
-The same script serves `no-counts-in-docs` and `no-tombstones`. Each names the rules it drives through the `hook` contract. Each rule gets the same treatment. The script runs it on text built to violate the rule and requires a verdict.
-
-**The `prepare` job puts buildhost's published slopfix version into the cache key.** Nothing under these plugins' own directories changes when a rule changes in slopfix. Without it a cached build serves a checker that CI no longer runs.
-
-**A slopfix publish ships here without a push to this repository.** slopfix's own CI dispatches `release.yml` with `publish: true` after each master publish. The new version then misses the cache key, so only this plugin rebuilds. The dispatch token is `CC_MARKETPLACE_DISPATCH_TOKEN` in secret-server, which slopfix's workflow reads.
+The launcher writes nothing to stdout, because a hook's stdout is its answer. It never reads stdin, because the hook payload arrives there. `SLOPFIX_URL` points it at another buildhost URL. `.github/scripts/slopfix-launcher.test.ts` drives each branch against a local server.
 
 ### Ranking, and the client's budget
 
@@ -81,8 +82,8 @@ The layer below that IS verified. slopfix's `langserver` tests drive the server 
 
 ### Files
 
-- **Registration**: `plugins/slopfix/.lsp.json` runs `bin/slopfix.ape lsp`
+- **Registration**: `plugins/slopfix/.lsp.json` runs `scripts/slopfix lsp`
 - **Hooks**: `plugins/slopfix/.claude-plugin/plugin.json`
-- **Fetching**: `.github/scripts/vendor-slopfix.sh` -- the download, the APE check, the `check --json` probes, and the per-rule `hook` probes the sibling plugins name. It also requires this binary to define every subcommand `plugin.json` and `.lsp.json` name. That is the check the `plugin-e2e` job cannot make. The job asks slopfix's SOURCE at master, and master is not the build being packaged. `laziness` and `blame-language` passed it while the fetched binary defined neither. Every Stop and every message then answered `unknown command`, and those guards ran nowhere. `SLOPFIX_URL` is how a manifest lands ahead of a publish
+- **Launcher**: `plugins/slopfix/scripts/slopfix`, tested by `.github/scripts/slopfix-launcher.test.ts`
 
-Adding a rule to slopfix needs no edit here. That is the point of the arrangement. The plugin runs the default set, so a new rule arrives with the next build's fetch.
+Adding a rule to slopfix needs no edit here. That is the point of the arrangement. The plugin runs the default set, so a new rule arrives once buildhost publishes it.
