@@ -1,7 +1,7 @@
 {
   "slopfix": {
-    "command": "${CLAUDE_PLUGIN_ROOT}/bin/slopfix.ape",
-    "args": ["lsp"],
+    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch",
+    "args": ["slopfix", "lsp"],
     "extensionToLanguage": {
       ".yml": "yaml",
       ".yaml": "yaml",

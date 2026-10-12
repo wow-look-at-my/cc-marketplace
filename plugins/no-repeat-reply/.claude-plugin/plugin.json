@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/build/no-repeat-reply"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/no-repeat-reply"
           }
         ]
       }
