@@ -1,0 +1,9 @@
+{
+	"mcpServers": {
+		"jq": {
+			"args": [],
+			"command": "./run",
+			"cwd": "${CLAUDE_PLUGIN_ROOT}"
+		}
+	}
+}
