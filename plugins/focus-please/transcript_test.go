@@ -10,7 +10,7 @@ import (
 )
 
 // Record shapes copied from a real Claude Code transcript: each content
-// block is its own record, and a user prompt carries string content while a
+// block is its own record. A user prompt carries string content while a
 // tool result carries an array of tool_result blocks.
 const (
 	recPrompt     = `{"type":"user","message":{"role":"user","content":"is this all committed?"}}`
@@ -26,8 +26,7 @@ const (
 func writeTranscript(t *testing.T, records ...string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "transcript.jsonl")
-	// strings.Builder, not += : the huge-transcript case appends thousands of
-	// records and quadratic string copying makes the test time out.
+	// strings.Builder, not +=: the huge-transcript case appends thousands of records.
 	var body strings.Builder
 	for _, r := range records {
 		body.WriteString(r)
@@ -81,8 +80,8 @@ func TestHasRepliedSince(t *testing.T) {
 		{
 			name: "the PREVIOUS turn's reply does not count for this turn",
 			records: []string{
-				recPrompt, recText, recToolUse, recToolResult, // turn 1, answered
-				recPrompt, recThinking, // turn 2, nothing said yet
+				recPrompt, recText, recToolUse, recToolResult,
+				recPrompt, recThinking,
 			},
 			want: false,
 		},
@@ -110,7 +109,7 @@ func TestHasRepliedSince(t *testing.T) {
 }
 
 // A missing or empty path keeps the block armed (the safe direction: it
-// degrades to the old turn-scoped behavior rather than disabling the guard).
+// degrades to the turn-scoped behavior rather than disabling the guard).
 func TestHasRepliedSinceUnreadable(t *testing.T) {
 	require.False(t, hasRepliedSince(""))
 	require.False(t, hasRepliedSince(filepath.Join(t.TempDir(), "nope.jsonl")))

@@ -18,13 +18,13 @@ You MUST keep code separated into distinct files. This is non-negotiable.
 - Link JS via `<script src="...">` tags (use `defer` or place at end of `<body>`)
 
 ### CSS
-- All styles go in `.css` files, never inline
+- All styles go in `.css` files, not inline
 - Start with a `styles.css` or `main.css` for base/global styles
-- If styles grow beyond roughly 200 lines, split into logical files (e.g., `layout.css`, `components.css`, `animations.css`, `theme.css`)
+- If styles grow beyond many lines, split into logical files (e.g., `layout.css`, `components.css`, `animations.css`, `theme.css`)
 - This is not a hard limit — use judgment, but lean toward splitting early rather than having one massive file
 
 ### JavaScript
-- All logic goes in `.js` files, never in HTML
+- All logic goes in `.js` files, not in HTML
 - Split JS into multiple files by responsibility — this is expected and encouraged:
   - `main.js` or `app.js` — initialization and orchestration
   - Separate files for distinct features (e.g., `chart.js`, `controls.js`, `data.js`, `animations.js`, `utils.js`)
@@ -71,11 +71,11 @@ demo-name/
 - Use semantic HTML elements
 - Ensure it works in modern browsers without a build step
 - No CDN links unless the user specifically asks for a library — prefer vanilla HTML/CSS/JS
-- If the demo genuinely benefits from a library (e.g., Three.js for 3D, Chart.js for charts), ask before adding it or note that the user must grab it
+- If the demo genuinely benefits from a library (e.g., Three.js for 3D, Chart.js for charts), ask before adding it or the user must grab it
 
 ## Output
 
 After creating all files, provide:
 1. A brief summary of what was built
 2. The file tree showing what was created
-3. How to view it (just open index.html / navigate to the directory — remember, server is already running)
+3. How to view it ( open index.html / navigate to the directory — remember, server is already running)

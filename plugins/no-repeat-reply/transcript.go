@@ -13,8 +13,7 @@ import (
 	"strings"
 )
 
-// transcriptTailBytes bounds the read. Only the last few turns decide
-// anything, so a long session's transcript never has to be read whole.
+// transcriptTailBytes bounds the read.
 const transcriptTailBytes = 4 << 20
 
 type transcriptRecord struct {

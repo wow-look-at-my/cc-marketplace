@@ -1,7 +1,6 @@
-// greptool.go implements the Grep tool: description, input schema,
-// argument parsing (with the builtin's zod coercions), ripgrep argv
-// construction, and path validation. See grepmodes.go/grepfwm.go for the
-// per-mode rendering.
+// greptool.go implements the Grep tool: description, input schema, argument
+// parsing (with the builtin's zod coercions), ripgrep argv construction, and
+// path validation. See grepmodes.go/grepfwm.go for the per-mode rendering.
 package main
 
 import (
@@ -14,14 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"rgmcp"
 )
 
 const grepToolName = "Grep"
 
-// Output mode names. The builtin's enum was [content,
-// files_with_matches, count] with files_with_matches (a bare
-// newest-earliest path list) as the default; this plugin deliberately
-// drops that name (no alias) and ships the amended set below.
+// Output mode names.
 const (
 	modeContent              = "content"
 	modeFilenamesWithMatches = "filenames_with_matches"
@@ -29,11 +27,7 @@ const (
 	modeCount                = "count"
 )
 
-// Parameters are documented in the schema, not here. The builtin's
-// brace-escaping caveat is gone: it existed because the builtin
-// swallowed rg parse errors as "No matches found", whereas this plugin
-// surfaces them, so a bad pattern explains itself. The tool is
-// alwaysLoad, so every description byte is paid in every prompt.
+// Parameters are documented in the schema, not here.
 const grepDescription = "A search tool built on ripgrep; patterns use ripgrep's full regex syntax.\n" +
 	"ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command.\n"
 
@@ -44,9 +38,8 @@ type schemaProp struct {
 	Description string   `json:"description"`
 }
 
-// The output modes and their formats are documented solely on
-// output_mode. Struct field order is the property order the model
-// sees.
+// The output modes and their formats are documented solely on output_mode.
+// Struct field order is the property order the model sees.
 type grepSchema struct {
 	Type                 string          `json:"type"`
 	AdditionalProperties bool            `json:"additionalProperties"`
@@ -128,8 +121,7 @@ type grepArgs struct {
 	offset     float64
 	multiline  bool
 
-	// Set by execute, not parsed from input: the search path as supplied
-	// (argv space) and its symlink-resolved form handed to rg.
+	// Set by execute, not parsed from input: the search path as supplied (argv space) and its symlink-resolved form handed.
 	searchPath   string
 	rgSearchPath string
 	explicitFile bool
@@ -158,45 +150,44 @@ func newGrepTool(logf func(string, ...any)) *grepTool {
 			root = "."
 		}
 	}
-	timeout, label := defaultRgTimeout()
+	timeout, label := rgmcp.DefaultRgTimeout()
 	return &grepTool{
 		root:             root,
 		persistThreshold: grepPersistThreshold,
 		timeout:          timeout,
 		timeoutLabel:     label,
-		maxOutput:        rgOutputCapBytes,
-		resolveRg:        resolveRipgrep,
+		maxOutput:        rgmcp.RgOutputCapBytes,
+		resolveRg:        rgmcp.ResolveRipgrep,
 		logf:             logf,
 	}
 }
 
 func (g *grepTool) Name() string { return grepToolName }
 
-func (g *grepTool) ListEntry() toolListEntry {
-	return toolListEntry{
+func (g *grepTool) ListEntry() rgmcp.ToolListEntry {
+	return rgmcp.ToolListEntry{
 		Name:        grepToolName,
 		Description: grepDescription,
 		InputSchema: grepInputSchemaCompact,
-		Annotations: &toolAnnotations{ReadOnlyHint: true},
+		Annotations: &rgmcp.ToolAnnotations{ReadOnlyHint: true},
 		Meta:        map[string]any{"anthropic/alwaysLoad": true},
 	}
 }
 
-// Call validates the arguments against the schema (JSON-RPC-level
-// failures) and executes the search (operational failures become
-// isError results).
-func (g *grepTool) Call(raw json.RawMessage) (*toolResult, *rpcError) {
+// Call validates the arguments against the schema (JSON-RPC-level failures)
+// and executes the search (operational failures become isError results).
+func (g *grepTool) Call(raw json.RawMessage) (*rgmcp.ToolResult, *rgmcp.RPCError) {
 	args, rpcErr := parseGrepArgs(raw)
 	if rpcErr != nil {
 		return nil, rpcErr
 	}
 	text, isErr := g.execute(args)
-	return &toolResult{Text: text, IsError: isErr}, nil
+	return &rgmcp.ToolResult{Text: text, IsError: isErr}, nil
 }
 
-func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rpcError) {
-	invalid := func(format string, fa ...any) (*grepArgs, *rpcError) {
-		return nil, &rpcError{Code: codeInvalidParams, Message: fmt.Sprintf(format, fa...)}
+func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rgmcp.RPCError) {
+	invalid := func(format string, fa ...any) (*grepArgs, *rgmcp.RPCError) {
+		return nil, &rgmcp.RPCError{Code: rgmcp.CodeInvalidParams, Message: fmt.Sprintf(format, fa...)}
 	}
 	var m map[string]json.RawMessage
 	if len(raw) > 0 {
@@ -326,12 +317,7 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 		}
 		searchPath = resolved
 	}
-	// rg roots its --glob matcher at the child's RESOLVED cwd but builds
-	// candidate paths from the search-path ARGV, so an unresolved
-	// (symlinked) argv makes every slash-containing glob silently match
-	// nothing (macOS /var -> /private/var, any symlinked project dir).
-	// Hand rg the resolved form; the formatters rebase output paths back
-	// so results keep the caller-supplied spelling.
+	// rg roots its --glob matcher at the child's RESOLVED cwd but builds candidate paths from the search-path ARGV.
 	a.searchPath = searchPath
 	a.rgSearchPath = resolveSymlinks(searchPath)
 	if a.path != "" {
@@ -346,8 +332,8 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 	}
 
 	args := append(buildRgArgs(a), a.rgSearchPath)
-	runner := &rgRunner{timeout: g.timeout, timeoutLabel: g.timeoutLabel, maxOutput: g.maxOutput}
-	lines, err := runner.run(rgPath, args, g.root)
+	runner := &rgmcp.RgRunner{Timeout: g.timeout, TimeoutLabel: g.timeoutLabel, MaxOutput: g.maxOutput}
+	lines, err := runner.Run(rgPath, args, g.root)
 	if err != nil {
 		return err.Error(), true
 	}
@@ -363,7 +349,7 @@ func (g *grepTool) execute(a *grepArgs) (string, bool) {
 	default:
 		text = g.formatFilenamesWithMatches(lines, a)
 	}
-	return persistOversize(text, grepToolName, g.persistThreshold, g.tempDir, g.logf), false
+	return rgmcp.PersistOversize(text, grepToolName, g.persistThreshold, g.tempDir, g.logf), false
 }
 
 // The permission deny-rule and claude-internal cache exclusions the

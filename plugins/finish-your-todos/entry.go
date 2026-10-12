@@ -1,9 +1,8 @@
 // The entry-side halves of the plugin: arm on the prompt, collect on the tool.
 //
 // Splitting it this way is forced by the hook surface. UserPromptSubmit cannot
-// refuse a tool call -- all it can do is inject context, which is exactly the
-// kind of advice that has been ignored all along -- so it only records the
-// debt. PreToolUse is where the refusal happens.
+// refuse a tool call. It can only inject context, and the model ignores that
+// kind of advice. So it only records the debt. PreToolUse is where the refusal happens.
 
 package main
 
@@ -23,7 +22,7 @@ func promptArm(p hookPayload) string {
 		return ""
 	}
 	// An outstanding debt stays as it is: the first unfiled assignment is the
-	// one to name, and overwriting it would lose it behind a follow-up.
+	// one to name. Overwriting it would lose it behind a follow-up.
 	if readDebt(p.SessionID) != nil {
 		return ""
 	}
@@ -39,8 +38,8 @@ func promptArm(p hookPayload) string {
 
 // todoGate handles PreToolUse for every tool. While a session owes a task,
 // every tool except the task tools is DENIED -- a hard permissionDecision
-// rather than injected advice, because the model already receives a system
-// reminder about the task list on most turns and reads past it.
+// rather than injected advice. This is because the model already receives
+// a system reminder about the task list on most turns and reads past it.
 //
 // The debt is settled by TaskCreate (new work) or TaskUpdate (work that maps
 // onto a task already filed). TaskList and TaskGet stay callable while blocked
@@ -51,23 +50,18 @@ func todoGate(p hookPayload) string {
 	if p.SessionID == "" {
 		return ""
 	}
-	// A message sent mid-turn is enqueued and folded into the running turn as
-	// an attachment, and that path dispatches no UserPromptSubmit at all -- so
-	// promptArm never saw it. On a web surface every inbound message goes
-	// through that queue whenever the session is busy, which is most of the
-	// time. PreToolUse is the only event that fires regardless of how the
-	// message arrived, so the catch-up happens here.
+	// A message sent mid-turn is enqueued and folded into the running turn as an attachment, and that path dispatches no UserPromptSubmit at all.
 	armFromTranscript(p.SessionID, p.TranscriptPath)
 
 	debt := readDebt(p.SessionID)
 	if debt == nil {
 		return ""
 	}
-	if settlingTools[p.ToolName] {
+	if settlingTools.Contains(p.ToolName) {
 		clearDebt(p.SessionID)
 		return ""
 	}
-	if taskTools[p.ToolName] {
+	if taskTools.Contains(p.ToolName) {
 		return ""
 	}
 

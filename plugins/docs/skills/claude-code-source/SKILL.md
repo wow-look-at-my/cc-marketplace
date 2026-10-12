@@ -6,7 +6,7 @@ description: Read before answering any question about how Claude Code itself beh
 
 Notes to self. The docs describe the product. The shipped bundle **is** the product. When the two disagree the source wins, and when the docs are silent the source is the only answer that exists. `PazerOP/claude-docs-gaps` keeps a prettified copy of the shipped bundle on **one branch per released version**, which is what makes this practical.
 
-Two rules. The second one is the whole point of this skill.
+Rules. The second one is the whole point of this skill.
 
 ## 1. Get the right version's branch into /tmp
 
@@ -51,7 +51,7 @@ Ask for what a source answer has to carry, or it is not worth the round trip:
 
 ## Searching it well (put this in the agent's brief)
 
-- **Search the directory, never one file.** Run `rg -n pattern "$D" --glob '*.js'`. A search of `cli.js` alone on a chunked branch finds nothing and reads as "the source does not have it". On 2.1.283 `publishDiagnostics` is in two chunk files and absent from `cli.js`.
+- **Search the directory, not one file.** Run `rg -n pattern "$D" --glob '*.js'`. A search of `cli.js` alone on a chunked branch finds nothing and reads as "the source does not have it". On 2.1.283 `publishDiagnostics` is in multiple chunk files and absent from `cli.js`.
 - **Follow imports through `module-graph.json`.** An import of `"/$bunfs/root/chunk-abc.js"` is the file `chunks/chunk-abc.js`.
 - **Search for STRINGS, not identifiers.** Top-level names are mangled and differ between builds (`OHh`, `p7t`, `Cxt`).
 - **Beware the long lines** -- and do not mistake them for broken formatting. The files ARE prettified. A formatter simply cannot break a single token. `rg -n pattern` prints the whole matched line, so pipe it (`| cut -c1-200`), prefer `rg -o` with a tight pattern, and keep `-C` small. Then read the interesting region with Read's `offset`/`limit` around the reported line.
@@ -61,4 +61,4 @@ Ask for what a source answer has to carry, or it is not worth the round trip:
 
 ## What this is good for
 
-Anything the docs leave vague or unstated: exact plugin manifest schemas, hook event payloads and exit-code semantics. How diagnostics or attachments are injected, and what caps apply to them. Settings keys and their defaults, and which LSP methods the client actually calls. Tool descriptions and gating, telemetry names, and what a specific error message means.
+Anything the docs leave vague or unstated: exact plugin manifest schemas, hook event payloads and exit-code semantics. How diagnostics or attachments are injected, and what caps apply to them. Settings keys and their defaults, and which LSP methods the client calls. Tool descriptions and gating, telemetry names, and what a specific error message means.

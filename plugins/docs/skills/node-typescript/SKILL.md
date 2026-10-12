@@ -8,7 +8,7 @@ Notes to self. Checked against `nodejs.org/api/typescript.html` and executed on 
 
 ## The wrong instinct this replaces
 
-Then I *justify* it — "an extensionless specifier can't resolve a `.ts`, so it must be JavaScript" — which is a true fact about resolution turned into a false conclusion about the language.
+Then I *justify* it — "an extensionless specifier cannot resolve a `.ts`, so it must be JavaScript" — which is a true fact about resolution turned into a false conclusion about the language.
 
 **Node has run TypeScript by stripping types since v22.18.0 / v23.6.0, on by default. It is stable as of v24.12.0 / v25.2.0.** No flag, no loader, no build step. Check `node --version` before concluding anything about what a file has to be.
 
@@ -42,7 +42,7 @@ Two more that follow from it, and both have bitten:
 
 If you control `tsconfig.json`. The documented answer is `allowImportingTsExtensions` so `import { x } from './mod.ts'` type-checks.
 
-When the compiler options are fixed by a host that will not let you add either. You are not. Split the two resolutions, because they have different rules:
+When the compiler options are fixed by a host that will not let you add either. You are not. Split the resolutions, because they have different rules:
 
 ```ts
 const { thing } = require("/abs/path/mod.ts") as typeof import("/abs/path/mod");
@@ -84,4 +84,4 @@ Set `erasableSyntaxOnly: true` in tsconfig so tsc rejects these at author time i
 
 ## Decision, short form
 
-Before writing a `.js` file or adding a build step to ship TypeScript: is this Node ≥ 22.18? Is the syntax erasable? Then write `.ts`, import it with its extension, and stop. A checked-in compiled artifact or a hand-written `.d.ts` needs a reason that survives those two questions — "Node can't run TypeScript" is not one.
+Before writing a `.js` file or adding a build step to ship TypeScript: is this Node ≥ 22.18? Is the syntax erasable? Then write `.ts`, import it with its extension, and stop. A checked-in compiled artifact or a hand-written `.d.ts` needs a reason that survives those questions — "Node cannot run TypeScript" is not one.

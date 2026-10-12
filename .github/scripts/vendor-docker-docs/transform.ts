@@ -1,6 +1,5 @@
-// The pure half of the vendoring: everything that turns one upstream Hugo page
-// into the file written beside a skill. No network and no filesystem, so it is
-// testable without either.
+// The pure half of the vendoring: everything that turns one upstream Hugo
+// page into the file written beside a skill.
 
 export interface Upstream {
   repo: string;
@@ -95,8 +94,7 @@ export function stripFrontmatter(source: string): { title: string; body: string 
 
   const rest = source.slice(FENCE.length);
   const end = rest.indexOf(`\n${FENCE}`);
-  // An unterminated block is a horizontal rule, not frontmatter. Treating it as
-  // frontmatter would swallow everything up to the next rule.
+  // An unterminated block is a horizontal rule, not frontmatter.
   if (end < 0) return { title: "", body: source };
 
   const block = rest.slice(0, end);
@@ -114,13 +112,8 @@ export function stripFrontmatter(source: string): { title: string; body: string 
 
 const INCLUDE = /\{\{%\s*include\s+"([^"]+)"\s*%\}\}/g;
 
-/**
- * Inlines every Hugo include. The partial's own frontmatter is dropped: it is
- * spliced into a page that already has an H1, so keeping its title makes two.
- *
- * A partial may include another, so this recurses. Depth is bounded because a
- * cycle would otherwise hang.
- */
+/** Inlines every Hugo include. A partial may include another, so this
+ * recurses. Depth is bounded because a cycle would otherwise hang. */
 export async function resolveIncludes(
   body: string,
   fetchPath: (path: string) => Promise<string>,
@@ -150,18 +143,12 @@ export async function resolveIncludes(
 const SUMMARY_BAR = /\{\{<\s*summary-bar\s+feature_name="([^"]*)"\s*>\}\}/g;
 const ANY_SHORTCODE = /\{\{[<%][^}]*[>%]\}\}/;
 
-/**
- * Removes the Hugo shortcodes that survive include resolution.
+/** Removes the Hugo shortcodes that survive include resolution.
  *
  * A summary-bar renders a badge saying which product version first shipped the
  * feature. The version itself lives in a Hugo data file this script does not
- * read, so the badge becomes a line naming the feature: dropping it silently
- * would delete the only signal that the option is version-gated at all.
- *
- * Any OTHER shortcode throws. Upstream adding one is exactly the change that
- * must not pass through unnoticed, either as literal Hugo syntax in the output
- * or as a silent deletion.
- */
+ * read, so the badge becomes a line naming the feature. Dropping it silently
+ * would delete the only signal that the option is version-gated at all. */
 export function stripShortcodes(body: string): string {
   const out = body.replace(
     SUMMARY_BAR,
@@ -176,15 +163,7 @@ export function stripShortcodes(body: string): string {
   return out;
 }
 
-/**
- * Rewrites Hugo's root-relative links to absolute docs.docker.com URLs. Vendored
- * out of the site, `](/reference/cli/docker/)` resolves against whatever host
- * reads the file, which is never the right one.
- *
- * An anchor, an absolute URL and a same-directory relative link are all left
- * alone: the first two already work, and the third points at a sibling file
- * vendored next to it.
- */
+/** Rewrites Hugo's root-relative links to absolute docs.docker.com URLs. */
 export function absolutizeLinks(body: string): string {
   return body.replace(/\]\((\/[^)]*)\)/g, (_m, path: string) => `](${DOCS_DOCKER_URL}${path})`);
 }

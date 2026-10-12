@@ -1,5 +1,4 @@
-// Orchestration: resolve one commit per upstream, render every page, write the
-// bundle, and drop a file the plan no longer produces.
+// Orchestration: resolve one commit per upstream, render every page, write the bundle.
 
 import { mkdir, readdir, rm, writeFile } from "fs/promises";
 import { join } from "path";
@@ -16,8 +15,7 @@ export interface Reporter {
  * happened without reading stdout.
  */
 export async function vendor(root: string, client: Client, log: Reporter = () => {}): Promise<void> {
-  // One commit per upstream, resolved once, so every file in a run comes from
-  // the same tree.
+  // One commit per upstream, resolved once, so every file in a run comes from the same tree.
   const commits = new Map<string, string>();
   for (const bundle of bundles) {
     for (const page of bundle.pages) {

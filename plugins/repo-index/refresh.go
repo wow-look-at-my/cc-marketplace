@@ -64,8 +64,7 @@ func spawnRefresh(home, cwd string) error {
 	}
 	cmd := exec.Command(self, "--refresh")
 	cmd.Dir = cwd
-	// The child keeps running after this process exits. Its report goes to a
-	// file, because the hook's own stderr closes with the prompt.
+	// The child keeps running after this process exits.
 	log, err := os.OpenFile(refreshLog(home), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err == nil {
 		cmd.Stderr = log

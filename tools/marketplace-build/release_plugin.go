@@ -59,6 +59,7 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	meta := releaseMetadata{
 		SourceCommit: sourceCommit,
 		SourceURL:    srcURL,
+		Branch:       os.Getenv("GITHUB_REF_NAME"),
 		BuiltAt:      time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := cookPluginForRelease(pluginPath, tmpDir, newVersion, meta); err != nil {
@@ -69,15 +70,7 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("hook validation failed: %w", err)
 	}
 
-	if err := stageBinaries(tmpDir, pluginName); err != nil {
-		return fmt.Errorf("failed to stage plugin binary: %w", err)
-	}
-
-	// Distribution is a git orphan tag, not an npm package: a plugin installs
-	// by `git clone --depth 1 --branch <tag>`, so nothing on the far side needs
-	// node or npm. The immutable per-release tag is what marketplace.json
-	// pins; `#latest` is the human-facing pointer the orphan-release action
-	// also moves.
+	// Distribution is a git orphan tag, not an npm package.
 	tag := fmt.Sprintf("%s#%d", pluginName, newVersion)
 	if err := writeReleaseManifest(tmpDir, pluginName, fmt.Sprintf("%d", newVersion), tag); err != nil {
 		return fmt.Errorf("failed to write release manifest: %w", err)
@@ -93,9 +86,12 @@ func runReleasePlugin(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// Branch is read by scripts/launch, which runs the binary buildhost published
+// from the same branch.
 type releaseMetadata struct {
 	SourceCommit string `json:"sourceCommit"`
 	SourceURL    string `json:"sourceUrl"`
+	Branch       string `json:"branch"`
 	BuiltAt      string `json:"builtAt"`
 }
 
@@ -129,11 +125,16 @@ func cookPluginForRelease(srcDir, dstDir string, version int, meta releaseMetada
 
 		dstPath := filepath.Join(dstDir, relPath)
 
+		// build/ is go-toolchain's output. It is published to buildhost, and scripts/launch downloads it from there.
+		if info.IsDir() && relPath == "build" {
+			return filepath.SkipDir
+		}
+
 		if info.IsDir() {
 			return os.MkdirAll(dstPath, info.Mode())
 		}
 
-		// Skip .template. files and Go source files (binaries are in build/)
+		// Skip .template. files and Go source files
 		if containsTemplate(info.Name()) || isGoSource(info.Name()) {
 			return nil
 		}

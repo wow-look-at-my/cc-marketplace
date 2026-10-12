@@ -159,10 +159,7 @@ func TestFwmMtimeTieBreaksByPathAscending(t *testing.T) {
 }
 
 func TestFwmMtimeTieUsesLocaleOrder(t *testing.T) {
-	// The builtin's tie-break was localeCompare, which compares
-	// case-insensitively at primary strength: a.txt sorts before B.txt.
-	// Go byte order would put B.txt earliest — the collator port (see
-	// collate.go) pins the builtin's order.
+	// The builtin's tie-break was localeCompare, which compares case-insensitively at primary strength.
 	root := t.TempDir()
 	mkTree(t, root,
 		tf{"B.txt", "needle\n"},
@@ -184,8 +181,7 @@ func TestFwmMultilinePattern(t *testing.T) {
 	g := testTool(t, root)
 	got := grepOK(t, g, map[string]any{"pattern": "A.two"})
 	wantText(t, got, "No files found")
-	// The spanning match expands to consecutively numbered match lines
-	// (no separator: the numbers are contiguous).
+	// The spanning match expands to consecutively numbered match lines (no separator: the numbers are contiguous).
 	got = grepOK(t, g, map[string]any{"pattern": "A.two", "multiline": true})
 	wantText(t, got, "Found 1 file\nml.txt:\n  1:one A\n  2:two B")
 }
@@ -232,8 +228,7 @@ func TestFwmSingleFilePathKeepsHeader(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, tf{"solo.txt", "one needle\ntwo\nneedle three\n"})
 	got := grepOK(t, testTool(t, root), map[string]any{"pattern": "needle", "path": "solo.txt"})
-	// Unlike content mode (which drops the prefix for single files), the
-	// JSON events always carry the path, so the header is present.
+	// Unlike content mode (which drops the prefix for single files), the JSON events always carry the path.
 	wantText(t, got, "Found 1 file\nsolo.txt:\n  1:one needle\n  3:needle three")
 }
 
@@ -245,9 +240,7 @@ func TestFwmExplicitBinaryFileRendersRawLines(t *testing.T) {
 	g := testTool(t, root)
 	got := grepOK(t, g, map[string]any{"pattern": "needle"})
 	wantText(t, got, "No files found")
-	// Explicit file target: the JSON events carry the real matched line
-	// (content mode would print rg's "binary file matches" note instead;
-	// documented divergence).
+	// Explicit file target: the JSON events carry the real matched line.
 	got = grepOK(t, g, map[string]any{"pattern": "needle", "path": "blob.bin"})
 	wantText(t, got, "Found 1 file\nblob.bin:\n  1:bin\x00ary needle here")
 }

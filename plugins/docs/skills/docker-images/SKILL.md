@@ -8,7 +8,7 @@ Notes to self. `/docs:dockerfile` covers writing the file. This covers deciding 
 
 ## The failure this exists to prevent
 
-A host ran agent sessions in containers. There was one big runtime image (terminal, tmux, git, toolchains) and six CLI agents. The design I defended:
+A host ran agent sessions in containers. There was one big runtime image (terminal, tmux, git, toolchains) and CLI agents. The design I defended:
 
 - build one "payload" image per agent, each `FROM ubuntu`, containing only that agent's binaries under `/agent`.
 - `docker run` each payload image once, purely to `cp -a /agent/.` into a named volume.
@@ -37,7 +37,7 @@ An image is an ordered stack of layers. Each layer has a SHA256 content identifi
 Consequences worth holding onto:
 
 - **A child image's cost is its own layers.** `FROM big-base` then one `RUN` transfers and stores that one layer for anyone who has the base.
-- **Sharing is by digest, not by name.** Two images share a layer when the layer is byte-identical, whatever the tags say. Rebuilding a base non-reproducibly gives a new digest, and every child that referenced it stops sharing.
+- **Sharing is by digest, not by name.** Images share a layer when the layer is byte-identical, whatever the tags say. Rebuilding a base non-reproducibly gives a new digest, and every child that referenced it stops sharing.
 - **"Layering saves no bytes here" can be TRUE and still not be the argument.** It was true in the case above. It was also irrelevant. The win is that the daemon does the distribution, versioning and identity, and you delete the code that was doing it by hand.
 - **Layer count is not the metric.** Squashing to save a layer trades away sharing and cache hits.
 
@@ -61,7 +61,7 @@ The reverse mistake exists too: baking a database's data directory, a cache, or 
 `FROM` inherits the base's filesystem AND its configuration. That is the point. It is also where a copy-based design's habits break when you convert it:
 
 - Nothing warns you.
-- **`ENV` is inherited, and becomes the container's environment.** A build-time `ENV HOME=/agent` was harmless while the image was only a carrier. The moment it became the image a container RUNS, it redirected every home-directory lookup. Set build-only variables per-`RUN` (`RUN export HOME=/agent && ...`), never as `ENV`.
+- **`ENV` is inherited, and becomes the container's environment.** A build-time `ENV HOME=/agent` was harmless while the image was only a carrier. The moment it became the image a container RUNS, it redirected every home-directory lookup. Set build-only variables per-`RUN` (`RUN export HOME=/agent && ...`), not as `ENV`.
 - **`LABEL`, `WORKDIR`, `EXPOSE`, `USER`, `VOLUME` are inherited too.** Inherited labels are useful: a child carrying the base's version label is checkable evidence it really was built on that base.
 - **`ARG` is not inherited the way you expect** -- and a global `ARG` (before the first `FROM`) is the ONLY kind usable in a `FROM` line. Declared after a `FROM` it belongs to that stage, resolves empty in the next `FROM`, and the build fails on an invalid reference. `/docs:dockerfile` has the full scoping table. I have gotten this wrong with the correct answer already written down, so read it rather than reasoning it out.
 
@@ -80,12 +80,12 @@ Built with `--build-arg BASE_IMAGE=registry.example.com/myapp-runtime:<sha>`.
 
 ## CI: build order follows FROM
 
-This is where the design change actually shows up in a pipeline. It is easy to get wrong because a matrix looks so tidy:
+This is where the design change shows up in a pipeline. It is easy to get wrong because a matrix looks so tidy:
 
 - **A base and its children cannot build in parallel.** The children need the base to exist first. That means separate jobs with `needs:`, not one matrix.
 - **The child's builder pulls the base from the REGISTRY**. The base has to be pushed, not merely built, before the child starts.
 - Fix the action.
-- **A stale base is a real failure mode.** If children are rebuilt without the base, they silently keep the old runtime.
+- **A stale base is a real failure mode.** If children are rebuilt without the base, they silently keep the runtime.
 
 ## Multi-stage: the toolchain never ships
 

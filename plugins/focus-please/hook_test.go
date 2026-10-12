@@ -90,8 +90,7 @@ func TestPreToolUseAllowsLookupsWhileArmed(t *testing.T) {
 	setMarker("s1", markerPending)
 	for _, tool := range []string{
 		"Read", "Grep", "Glob",
-		// This marketplace's own plugins restore the disabled builtins as
-		// MCP tools; they must count as lookups too.
+		// This marketplace's own plugins restore the disabled builtins as MCP tools; they must count as lookups too.
 		"mcp__plugin_grep_grep__Grep",
 		"mcp__plugin_glob_glob__Glob",
 	} {
@@ -147,12 +146,12 @@ func TestFullTurnCycle(t *testing.T) {
 	require.Equal(t, "{}", allow.stdout)
 }
 
-// TestMidTurnInterjectionRefusesStopOnce is the core of the resume rule: a
+// TestMidTurnInterjectionRefusesStopOnce is the core of the resume rule. A
 // user message that lands while the assistant is still working must not end
 // the turn once answered -- the interrupted work has to continue.
 func TestMidTurnInterjectionRefusesStopOnce(t *testing.T) {
 	withTemp(t)
-	// Turn 1 begins; the assistant starts working (no Stop yet).
+	// Turn begins; the assistant starts working (no Stop yet).
 	fire(t, ups("s1", "please refactor the parser"))
 	require.False(t, markerExists("s1", markerResume))
 

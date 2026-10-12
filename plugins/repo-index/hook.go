@@ -143,9 +143,7 @@ func run(r io.Reader, e env) int {
 // silence. An absent a single suggests nothing, and says so.
 func (e env) serveIndex(cwd string) []Repo {
 	cached := readCache(e.home)
-	// A nil client keeps this path off the network entirely: the owner comes
-	// from config or the checkout's own remote, and the refresh resolves the
-	// rest in its own process.
+	// A nil client keeps this path off the network entirely.
 	owners, err := discoverOwners(e.home, cwd, nil)
 	if err != nil {
 		fmt.Fprintf(e.stderr, "repo-index: %v\n", err)

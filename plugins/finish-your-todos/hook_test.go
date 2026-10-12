@@ -147,8 +147,7 @@ func TestInterveningToolCallsDoNotClobberTodos(t *testing.T) {
 }
 
 func TestStopHookActiveLoopGuard(t *testing.T) {
-	// Even with incomplete todos, an already-active stop hook must allow the stop
-	// so a stuck session cannot hang forever.
+	// Even with incomplete todos, an already-active stop hook must allow the stop so a stuck session cannot hang forever.
 	path := writeTranscript(t, todoWriteLine(t, todo("Never-ending task", "in_progress")))
 	code, msg := evalStop(t, path, true)
 	assert.Equal(t, 0, code)

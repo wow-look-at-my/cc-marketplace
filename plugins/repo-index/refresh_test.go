@@ -106,8 +106,7 @@ func TestSpawnRefreshStartsThisBinaryAndReturns(t *testing.T) {
 	require.NoError(t, spawnRefresh(home, t.TempDir()))
 	assert.Equal(t, filepath.Join(cacheDir(home), "refresh.log"), refreshLog(home))
 
-	// The report names every repository the refresh saw, so the log it lands
-	// in is as private as the index itself.
+	// The report names every repository the refresh saw, so the log it lands in is as private as the index itself.
 	info, err := os.Stat(refreshLog(home))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())

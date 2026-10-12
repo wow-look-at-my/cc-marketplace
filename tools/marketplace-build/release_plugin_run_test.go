@@ -13,12 +13,8 @@ import (
 )
 
 // release-plugin is the whole publishing pipeline for a single plugin: cook,
-// check the hooks survived, reduce build/ to the APE and its launcher, and
-// write the manifest the marketplace job reads back. Its pieces are
-// unit-tested individually; these drive the command itself, because the ORDER
-// is the part that breaks -- staging before cooking would delete the binaries
-// it just copied, and writing the manifest before staging would describe a
-// layout that no longer exists.
+// check the hooks survived, write the manifest the marketplace job reads back.
+// Its pieces are unit-tested individually. These drive the command itself.
 
 // fakeRepo builds a repo root holding a single plugin and points the
 // package's cached repoRoot at it. Returns the plugin's source directory.
@@ -40,8 +36,7 @@ func fakeRepo(t *testing.T, name string, files map[string]string) string {
 	repoRoot = root
 	t.Cleanup(func() { repoRoot = orig })
 
-	// The cooked tree goes to os.MkdirTemp and is deliberately never cleaned up
-	// (the workflow uploads it), so keep it inside the test's own temp dir.
+	// The cooked tree goes to os.MkdirTemp and is deliberately never cleaned up (the workflow uploads it).
 	t.Setenv("TMPDIR", t.TempDir())
 	return src
 }
@@ -74,15 +69,20 @@ func releaseOutput(t *testing.T, name string) (map[string]string, error) {
 func TestRunReleasePluginProducesAnInstallableTree(t *testing.T) {
 	mockGitDefaults(t)
 	t.Setenv("GITHUB_RUN_NUMBER", "42")
-	fakeRepo(t, "glob", map[string]string{
+	t.Setenv("GITHUB_REF_NAME", "some/branch")
+	src := fakeRepo(t, "glob", map[string]string{
 		".claude-plugin/plugin.json": `{"name":"glob","version":"0.0.0","hooks":{"PreToolUse":[{"matcher":"Glob"}]}}`,
-		".mcp.json":                  `{"mcpServers":{"glob":{"command":"./build/glob"}}}`,
+		".mcp.json":                  `{"mcpServers":{"glob":{"command":"${CLAUDE_PLUGIN_ROOT}/scripts/launch","args":["cc-marketplace/glob"]}}}`,
 		"README.md":                  "# glob",
 		"README.template.md":         "# {{ template }}",
 		"main.go":                    "package main",
-		"build/glob" + apeSuffix:     apeMagic + "fat",
-		"build/glob_linux_amd64":     apeMagic + "fat",
+		"build/glob":                 "MZqFpD='fat",
 	})
+	// scripts/launch is a link to the launcher outside the plugin, as in the repo.
+	launcher := filepath.Join(filepath.Dir(filepath.Dir(src)), "launch")
+	require.NoError(t, os.WriteFile(launcher, []byte("#!/bin/sh\nexec true\n"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(src, "scripts"), 0o755))
+	require.NoError(t, os.Symlink(launcher, filepath.Join(src, "scripts", "launch")))
 
 	out, err := releaseOutput(t, "glob")
 	require.NoError(t, err)
@@ -92,15 +92,21 @@ func TestRunReleasePluginProducesAnInstallableTree(t *testing.T) {
 	cooked := out["source_dir"]
 	require.NotEmpty(t, cooked, "the workflow uploads this directory as the artifact")
 
-	// build/ is reduced to the APE and the launcher every manifest names.
-	entries, err := os.ReadDir(filepath.Join(cooked, "build"))
+	require.NoDirExists(t, filepath.Join(cooked, "build"), "go-toolchain's output goes to buildhost and is never packaged")
+
+	info, err := os.Lstat(filepath.Join(cooked, "scripts", "launch"))
 	require.NoError(t, err)
-	var names []string
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	require.ElementsMatch(t, []string{"glob.ape", "glob"}, names,
-		"staging must run AFTER cooking copied build/, or it would delete what it just staged")
+	require.True(t, info.Mode().IsRegular(), "the installed plugin has no repo for a link to point into")
+	require.NotZero(t, info.Mode()&0o111, "every manifest execs scripts/launch")
+	body, err := os.ReadFile(filepath.Join(cooked, "scripts", "launch"))
+	require.NoError(t, err)
+	require.Equal(t, "#!/bin/sh\nexec true\n", string(body))
+
+	var meta releaseMetadata
+	metaJSON, err := os.ReadFile(filepath.Join(cooked, "mh.plugin.json"))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(metaJSON, &meta))
+	require.Equal(t, "some/branch", meta.Branch, "scripts/launch runs the build from this branch")
 
 	// The manifest describes the tree as it now stands.
 	m := readManifest(t, cooked)
@@ -131,22 +137,6 @@ func TestRunReleasePluginWithoutBinaries(t *testing.T) {
 	require.Equal(t, "css-cascade#9", out["tag"])
 	require.FileExists(t, filepath.Join(out["source_dir"], "skills", "cascade", "SKILL.md"))
 	require.NoDirExists(t, filepath.Join(out["source_dir"], "build"))
-}
-
-// The fail-closed case, end to end: a plugin built with the per-platform matrix
-// must abort the release rather than ship a package that works on some
-// platforms and silently not others.
-func TestRunReleasePluginFailsOnANonApeBuild(t *testing.T) {
-	mockGitDefaults(t)
-	fakeRepo(t, "glob", map[string]string{
-		".claude-plugin/plugin.json": `{"name":"glob","version":"0.0.0"}`,
-		// An ELF, not an APE: the per-platform matrix build this fails closed on.
-		"build/glob_linux_amd64": "\x7fELFnative",
-	})
-
-	_, err := releaseOutput(t, "glob")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "stage plugin binary")
 }
 
 func TestRunReleasePluginRejectsAnUnknownPlugin(t *testing.T) {

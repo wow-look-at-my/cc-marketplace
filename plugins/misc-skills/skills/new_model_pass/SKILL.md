@@ -12,7 +12,7 @@ This code has already been read, reviewed, and edited by earlier models. Assume 
 
 ## 1. Map it before you change anything
 
-Read the build files, the entry points, the test layout, `CLAUDE.md` and `docs/`. Learn what the thing is supposed to do before judging what it does. Then read the actual source -- whole files, not the hits from a grep. A defect that lives in the relationship between two files is invisible to a search for a pattern.
+Read the build files, the entry points, the test layout, `CLAUDE.md` and `docs/`. Learn what the thing is supposed to do before judging what it does. Then read the actual source -- whole files, not the hits from a grep. A defect that lives in the relationship between multiple files is invisible to a search for a pattern.
 
 Cover everything in scope. Never let partial coverage read as complete.
 
@@ -26,8 +26,8 @@ Rank effort toward defects that only show up when you are holding several files 
 - **Silent failure.** Swallowed errors, defaulted-away missing config. A fallback nobody is told fired, a truncation with no log, a catch that continues into code that needed the thing that failed. A green run that did nothing is the worst defect class in any repo.
 - **Tests that assert the easy half.** A test that will still pass with the bug present. Reproduce it: break the code deliberately and see whether the suite notices.
 - **Stale knowledge.** APIs, language features, tool flags, and library idioms that moved after the last pass was written.
-- **Duplication with drift.** The same logic in three places, two of which have been fixed. Hoist it, or at minimum fix the stragglers.
-- **Dead code and dead branches.** A guard for a state the system is never in, a flag nothing sets, an exported function nobody calls.
+- **Duplication with drift.** The same logic in multiple places, two of which have been fixed. Hoist it, or at minimum fix the stragglers.
+- **Dead code and dead branches.** A guard for a state the system is never in. A flag nothing sets, an exported function nobody calls.
 - **Performance that matters.** Quadratic behavior on input that grows, work repeated inside a loop, a query per row. Ignore micro-optimizations nobody can measure.
 - **Docs and comments that lie.** Every claim in them is checked or it goes. A comment naming a function or a number that no longer exists is a defect, not a cosmetic issue.
 
@@ -43,11 +43,11 @@ Defer only what genuinely needs a human decision. Then name it exactly, say what
 
 Hardening here means the code fails loudly, handles its real inputs correctly, and does not corrupt state when something goes wrong.
 
-If you find a real exploitable bug in something that actually faces untrusted input, fix it and say so. Do not go looking for a threat model the project does not have.
+If you find a real exploitable bug in something that faces untrusted input, fix it and say so. Do not go looking for a threat model the project does not have.
 
 ## 5. Do not churn
 
-The failure mode of this skill is a huge diff of taste changes that buries three real fixes. Every change needs a reason the owner will agree with out loud.
+The failure mode of this skill is a huge diff of taste changes that buries multiple real fixes. Every change needs a reason the owner will agree with out loud.
 
 - No reformatting, no renaming for style, no reordering, no reshuffling files.
 - No rewriting working code into your preferred idiom.
@@ -71,4 +71,4 @@ The report is the deliverable of the pass, because it is what gets compared agai
 - **Checked and fine** -- the areas you read carefully and found genuinely healthy. This is not filler. Without it, silence about a subsystem is ambiguous between "clean" and "never opened".
 - **Not covered** -- anything in scope you did not get to.
 
-Rank the fixed list by how much of the codebase you had to hold at once to see the problem. That ordering is the actual answer to "what can this model find that the last one could not".
+Rank the fixed list by how much of the codebase you had to hold at once to see the problem. That ordering is the actual answer to "what can this model find that the last one can not".

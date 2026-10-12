@@ -1,8 +1,8 @@
-// clamp.go bounds how much of a single matched or context line the grep
-// tool renders. Per decree a matching line is never dropped -- only
-// bounded: a line wider than clampWidth is rendered as a clampWidth-rune
-// window with an ellipsis marking each cut edge, so the match itself
-// always stays visible.
+// clamp.go bounds how much of a single matched or context line the grep tool
+// renders. Per decree a matching line is never dropped -- only bounded.
+// Consider a line wider than clampWidth. That line is rendered as a
+// clampWidth-rune window with an ellipsis marking each cut edge, so the
+// match itself always stays visible.
 package main
 
 import (
@@ -29,9 +29,7 @@ func clampLine(text string, matchByte int) string {
 	runes := []rune(text)
 	n := len(runes)
 
-	// Each ellipsis costs a rune of the budget. A centered window can cut
-	// both edges, so it reserves for both. An anchored window cuts the tail
-	// only, so it reserves for that edge.
+	// Each ellipsis costs a rune of the budget. A centered window can cut both edges, so it reserves for both.
 	center := matchByte >= 0
 	budget := clampWidth - 1
 	if center {

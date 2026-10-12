@@ -10,10 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// writeUserTranscript builds a JSONL transcript of queued_command attachments,
-// which is the shape a mid-turn message really lands in -- verified against a
-// live transcript, where the text sits in the attachment's `prompt` field and
-// `commandMode` separates a typed message from a harness-injected one.
+// writeUserTranscript builds a JSONL transcript of queued_command
+// attachments.
 func writeUserTranscript(t *testing.T, msgs []userText) string {
 	t.Helper()
 	return writeAttachments(t, msgs, "prompt")
@@ -42,9 +40,7 @@ func writeAttachments(t *testing.T, msgs []userText, mode string) string {
 }
 
 // wrapped renders the FALLBACK shape: a user message carrying the CLI's
-// rendered wrapper. Kept covered because the structured attachment is the
-// primary path and this plugin has already been bitten once by scanning for a
-// single shape that later moved.
+// rendered wrapper.
 func wrapped(body string) string {
 	return "The user sent a new message while you were working:\n" + body +
 		"\n\nThis is how Claude Code surfaces messages the user sends mid-turn."
@@ -97,8 +93,8 @@ func TestMidTurnInterjectionArmsTheGate(t *testing.T) {
 		"the refusal quotes the user's own words, not the wrapper")
 }
 
-// The high-water mark must advance, or one interjection re-arms on every tool
-// call for the rest of the session and the gate becomes unusable.
+// The high-water mark must advance. Otherwise, one interjection re-arms on
+// every tool call for the rest of the session and the gate becomes unusable.
 func TestInterjectionArmsAtMostOnce(t *testing.T) {
 	session := "sess-once-" + t.Name()
 	t.Cleanup(func() { clearDebt(session); os.Remove(seenPath(session)) })
@@ -149,10 +145,9 @@ func TestRenderedWrapperStillArms(t *testing.T) {
 		"the CLI's trailing explanation is not part of what the user asked for")
 }
 
-// Webhooks, background-task completions and reminders ride the SAME queue as a
-// typed interjection. Arming on those would refuse every tool call over a PR
-// notification nobody asked for -- the fastest way to get the whole plugin
-// switched off.
+// Webhooks, background-task completions and reminders ride the SAME queue as
+// a typed interjection. Arming on those would refuse every tool call over a
+// PR notification.
 func TestSystemEnvelopesDoNotArm(t *testing.T) {
 	for _, envelope := range []string{
 		"<github-webhook-activity>\nThe PR has been merged. Update the docs and push.",
@@ -171,8 +166,8 @@ func TestSystemEnvelopesDoNotArm(t *testing.T) {
 	}
 }
 
-// commandMode marks what the queue entry actually was. Only a typed prompt is
-// a candidate assignment.
+// commandMode marks what the queue entry was. Only a typed prompt is a
+// candidate assignment.
 func TestNonPromptCommandModeDoesNotArm(t *testing.T) {
 	session := "sess-mode-" + t.Name()
 	t.Cleanup(func() { clearDebt(session); os.Remove(seenPath(session)) })

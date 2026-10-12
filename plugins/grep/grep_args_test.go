@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"rgmcp"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +15,7 @@ func parseErr(t *testing.T, args string) string {
 	t.Helper()
 	_, rpcErr := parseGrepArgs(json.RawMessage(args))
 	require.NotNil(t, rpcErr, "expected an invalid-params error for %s", args)
-	assert.Equal(t, codeInvalidParams, rpcErr.Code)
+	assert.Equal(t, rgmcp.CodeInvalidParams, rpcErr.Code)
 	return rpcErr.Message
 }
 
@@ -40,8 +42,7 @@ func TestParseArgsDefaults(t *testing.T) {
 }
 
 func TestParseArgsNumericStringCoercion(t *testing.T) {
-	// zod-preprocess parity: numeric strings matching /^-?\d+(\.\d+)?$/
-	// coerce; anything else is a type error.
+	// zod-preprocess parity: numeric strings matching /^-?\d+(\.\d+)?$/ coerce; anything else is a type error.
 	a := parseOK(t, `{"pattern":"x","-C":"2","head_limit":"10","offset":"-1","-B":"1.5"}`)
 	require.NotNil(t, a.dashC)
 	assert.Equal(t, 2.0, *a.dashC)
@@ -95,8 +96,7 @@ func TestParseArgsRequiredAndStrictness(t *testing.T) {
 	parseErr(t, `{"pattern":"x","glob":7}`)
 	msg = parseErr(t, `{"pattern":"x","bogus":1}`)
 	assert.Contains(t, msg, `"bogus"`)
-	// The builtin's "type" parameter was removed (ambiguous name); it is
-	// now just another unknown argument.
+	// The builtin's "type" parameter.
 	msg = parseErr(t, `{"pattern":"x","type":"js"}`)
 	assert.Contains(t, msg, `"type"`)
 }
@@ -107,8 +107,7 @@ func TestBuildRgArgsOrder(t *testing.T) {
 		"--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg",
 		"--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl",
 	}
-	// Content mode, everything set: multiline, -i, -n, context
-	// precedence, dash pattern via -e, tokenized globs.
+	// Content mode, everything set: multiline, -i, -n, context precedence, dash pattern via -e, tokenized globs.
 	a := parseOK(t, `{"pattern":"-dash","output_mode":"content","multiline":true,"-i":true,"context":2,"-C":1,"-B":9,"-A":9,"glob":"*.go,*.ts *.{a,b}"}`)
 	want := append(append([]string{}, base...),
 		"-U", "--multiline-dotall", "-i", "-n", "-C", "2",
@@ -131,8 +130,7 @@ func TestBuildRgArgsOrder(t *testing.T) {
 	want = append(append([]string{}, base...), "--json", "-B", "1", "-A", "2", "p")
 	assert.Equal(t, want, buildRgArgs(a))
 
-	// Explicit files in fwm mode force text so binary lines are stable
-	// across ripgrep's platform-specific binary scanners.
+	// Explicit files in fwm mode force text so binary lines are stable across ripgrep's platform-specific binary scanners.
 	a.explicitFile = true
 	want = append(append([]string{}, base...), "--json", "--text", "-B", "1", "-A", "2", "p")
 	assert.Equal(t, want, buildRgArgs(a))

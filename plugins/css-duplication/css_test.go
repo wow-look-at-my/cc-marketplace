@@ -46,9 +46,7 @@ func TestFindsTheRepeatedLinkBlock(t *testing.T) {
 		".site-footer #server-version a",
 	}, sels, "every selector carrying the identical body is named")
 
-	// a.gh-slug carries an EXTRA declaration, so it is a different body and
-	// must not be swept into the group -- the report has to be precise about
-	// which rules are actually identical.
+	// a.gh-slug carries an EXTRA declaration, so it is a different body and must not be swept into the group.
 	require.NotContains(t, sels, "a.gh-slug")
 
 	// Single-declaration hover bodies: copies, well past the threshold.

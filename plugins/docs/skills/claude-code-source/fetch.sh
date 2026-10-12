@@ -1,6 +1,5 @@
 #!/bin/sh
-# Puts the prettified Claude Code source for one version at
-# /tmp/claude-docs-gaps-<version> and prints that path as the last line.
+# Puts the prettified Claude Code source for one version at /tmp/claude-docs-gaps-<version> and prints that path.
 set -eu
 
 repo=https://github.com/PazerOP/claude-docs-gaps

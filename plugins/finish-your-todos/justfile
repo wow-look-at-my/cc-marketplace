@@ -2,7 +2,7 @@
 help:
 	@just --list
 
-# All three hooks are one Go binary, built and tested by go-toolchain.
+# All hooks are one Go binary, built and tested by go-toolchain.
 build:
 
 test: build

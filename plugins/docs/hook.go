@@ -1,9 +1,9 @@
-// Command docs-nudge is a PreToolUse hook that pulls this plugin's Docker
+// Command docs-nudge is a PreToolUse hook. It pulls this plugin's Docker
 // skills in when a tool call is about to touch a Dockerfile or a Compose file.
 //
 // The skills already carry trigger-shaped descriptions and still do not get
 // loaded reliably: a description competes for attention with every other
-// description, and it is consulted when the model decides to look for a skill,
+// description. It is consulted when the model decides to look for a skill,
 // which is exactly the decision that gets skipped. This hook fires on the tool
 // call itself, so the reminder arrives at the moment the wrong content is about
 // to be written.
@@ -45,8 +45,7 @@ type output struct {
 }
 
 func main() {
-	// Every failure path stays silent and allows the call. This hook adds a
-	// reminder; it must never be the reason a session cannot do its work.
+	// Every failure path stays silent and allows the call.
 	defer func() { _ = recover() }()
 
 	var p payload
@@ -73,9 +72,7 @@ func decide(p payload) (output, bool) {
 		return output{}, false
 	}
 
-	// A reminder repeated on every edit is nagging, and a reader learns to
-	// skim past it. Each skill is named once per session; after that the model
-	// has either loaded it or decided not to.
+	// A reminder repeated on every edit is nagging, and a reader learns to skim past it.
 	var fresh []topic
 	for _, t := range topics {
 		if claim(p.SessionID, t.Skill) {
@@ -116,14 +113,13 @@ func message(topics []topic, p payload) string {
 // whether this call is the one that named it.
 //
 // The marker is keyed by a hash of the session id so parallel sessions never
-// silence each other, and it lives in the temp directory because it is worth
+// silence each other. It lives in the temp directory because it is worth
 // nothing once the machine restarts. An unwritable temp directory means the
 // reminder is sent every time rather than never: over-reminding is the lesser
-// failure of the two.
+// failure of both.
 func claim(sessionID, skill string) bool {
 	// With no session to key on, every session would share one marker and all
-	// but the first would go silent. Speak instead: a repeat is visible, and a
-	// hook that has quietly stopped working is not.
+	// but the first would go silent.
 	if sessionID == "" {
 		return true
 	}

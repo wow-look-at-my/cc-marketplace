@@ -51,8 +51,7 @@ func runUpdateMarketplace(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get repo info: %w", err)
 	}
-	// Plugins are cloned from this repo's own orphan tags, so the entries carry
-	// owner/repo rather than a registry URL.
+	// Plugins are cloned from this repo's own orphan tags, so the entries carry owner/repo rather than a registry URL.
 	pluginRepo := fmt.Sprintf("%s/%s", owner, repo)
 	plugins := buildPluginsArray(packagedPlugins, marketplace, pluginRepo, owner)
 	marketplace["plugins"] = plugins
@@ -130,14 +129,9 @@ func buildPluginsArray(plugins []packagedPlugin, existingMarketplace map[string]
 	}
 
 	for _, p := range plugins {
-		// A git source, not npm: `claude plugin install` clones the plugin's
-		// orphan tag (`git clone --depth 1 --branch <tag>`), so installing needs
-		// git -- which Claude Code already requires -- and never node or npm.
-		// The ref is the IMMUTABLE per-release tag rather than `#latest`, so a
-		// given marketplace.json always resolves to the same tree; the moving
-		// `#latest` pointer exists for humans.
-		//
-		// `url` with an explicit https:// URL, NOT `github` with owner/repo.
+		// A git source, not npm. `claude plugin install` clones the plugin's orphan
+		// tag (`git clone --depth 1 --branch <tag>`). An install thus needs git,
+		// which Claude Code already requires. It never needs node or npm.
 		entry := map[string]interface{}{
 			"name":    p.name,
 			"version": p.manifest.Version,

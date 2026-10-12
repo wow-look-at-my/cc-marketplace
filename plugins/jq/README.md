@@ -60,7 +60,7 @@ jq_read(file: "config.json")
 
 - Output is returned as tool results only -- this server cannot write to files
 - Output is capped at 1MB to prevent context blowout
-- Execution timeout is 30 seconds
+- Execution timeout is many seconds
 - No shell involved -- jq is invoked directly with no injection risk
 
 ## License

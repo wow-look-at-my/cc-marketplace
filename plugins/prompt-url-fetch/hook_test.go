@@ -199,7 +199,6 @@ func TestFetchURLTruncation(t *testing.T) {
 }
 
 func TestFetchURLSkipWhenNearLimit(t *testing.T) {
-	// Content larger than remaining space (1500 chars when only 500 remain)
 	largeContent := strings.Repeat("x", 1500)
 	client := &mockClient{
 		headFunc: func(url string) (*http.Response, error) {
@@ -210,7 +209,7 @@ func TestFetchURLSkipWhenNearLimit(t *testing.T) {
 		},
 	}
 
-	totalChars := maxChars - 500 // only 500 chars remaining
+	totalChars := maxChars - 500 // chars remaining
 	result := fetchURL("https://example.com", client, &totalChars)
 	assert.Contains(t, result, "[Skipped: exceeded")
 }

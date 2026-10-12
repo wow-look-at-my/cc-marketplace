@@ -1,13 +1,12 @@
-// grepfwm.go implements the filenames_with_matches output mode, this
-// plugin's redesigned default. The builtin's files_with_matches returned
-// bare paths; this mode returns each file's matching lines too, grouped
-// under a per-file header. ripgrep runs with --json so the grouping is
-// unambiguous even for paths containing ":" or content that looks like a
-// path; the events are grouped per file, files are ordered
-// newest-earliest exactly like the filenames mode, lines ascend within a
-// file, and head_limit/offset paginate the flattened stream of
-// match/context LINES across all files (file headers and "--" separators
-// are not counted). A file whose lines are entirely cut by pagination is omitted.
+// grepfwm.go implements the filenames_with_matches output mode, this plugin's
+// redesigned default. The builtin's files_with_matches returned bare paths; this
+// mode returns each file's matching lines too, grouped under a per-file header.
+// ripgrep runs with --json so the grouping is unambiguous even for paths
+// containing ":" or content that looks like a path. The events are grouped per
+// file. Files sort newest first, exactly like the filenames mode. Lines ascend
+// within a file. head_limit/offset paginate the flat stream of match/context
+// LINES across all files. The count skips file headers and "--" separators. A file whose lines are entirely
+// cut by pagination is omitted.
 //
 // With "-n": false the indent stays but the N:/N- prefixes are dropped.
 package main
@@ -24,8 +23,7 @@ type fwmLine struct {
 	num   int64
 	text  string
 	match bool
-	// It steers the clamp window (clamp.go) so a match stays visible
-	// even far into a very long line.
+	// It steers the clamp window (clamp.go) so a match stays visible even far into a long line.
 	matchCol int
 }
 
@@ -58,9 +56,7 @@ type rgJSONEvent struct {
 		Path       rgJSONText `json:"path"`
 		Lines      rgJSONText `json:"lines"`
 		LineNumber *int64     `json:"line_number"`
-		// Submatches carries each match's byte offsets within Lines.text;
-		// only match events populate it. the earliest entry's Start
-		// steers the clamp window for an over-long matching line.
+		// Submatches carries each match's byte offsets within Lines.text.
 		Submatches []struct {
 			Start int64 `json:"start"`
 		} `json:"submatches"`
@@ -132,11 +128,10 @@ func expandEventLines(text string, firstNum int64, match bool, matchByte int) []
 	return out
 }
 
-// formatFilenamesWithMatches renders the amended default mode; see the
-// file comment for the shape and pagination rules. The "Found N files"
-// header and "No files found" empty text match the builtin's
-// files_with_matches formatting, with N counting the files actually
-// rendered after pagination.
+// formatFilenamesWithMatches renders the amended default mode; see the file
+// comment for the shape and pagination rules. The "Found N files" header and
+// "No files found" empty text match the builtin's files_with_matches
+// formatting, with N counting the files rendered after pagination.
 func (g *grepTool) formatFilenamesWithMatches(rawLines []string, a *grepArgs) string {
 	groups := parseFwmEvents(rawLines)
 	paths := make([]string, len(groups))
@@ -187,9 +182,7 @@ func (g *grepTool) formatFilenamesWithMatches(rawLines []string, a *grepArgs) st
 }
 
 // contextSeparatorsEnabled reports whether ripgrep's printer would be in
-// context mode for the given flags: the effective flag (context beats -C
-// beats -B/-A, the same precedence the argv uses) must carry a width
-// greater than empty.
+// context mode for the given flags.
 func contextSeparatorsEnabled(a *grepArgs) bool {
 	switch {
 	case a.context != nil:

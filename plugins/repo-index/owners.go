@@ -11,8 +11,7 @@ import (
 	"strings"
 )
 
-// config is the only file a user writes. It names owners, never repositories:
-// what each repository is comes from GitHub, so nothing here can go stale.
+// config is the only file a user writes.
 type config struct {
 	Owners []string `json:"owners"`
 }
@@ -29,7 +28,7 @@ func configPaths(home, cwd string) []string {
 }
 
 // readConfig merges the owners named by each config file that exists. A file
-// that is present and malformed is an error: the user wrote it, and silence
+// that is present and malformed is an error. The user wrote it, and silence
 // would leave them with an index that quietly ignores it.
 func readConfig(home, cwd string) ([]string, error) {
 	var owners []string

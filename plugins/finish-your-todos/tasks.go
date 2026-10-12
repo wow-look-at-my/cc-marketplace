@@ -1,17 +1,6 @@
 package main
 
 // Task-tool support for the Stop gate.
-//
-// The original hook read TodoWrite calls, where each call carries the whole
-// list, so the last one wins. The task tools work differently: TaskCreate files
-// one task and returns its id in the RESULT, TaskUpdate changes one task's
-// status by id. State therefore has to be reconstructed across the transcript
-// rather than read off the last call.
-//
-// This is not a nice-to-have. Environments that expose TaskCreate/TaskUpdate
-// have no TodoWrite at all, so on them the Stop gate was scanning for a tool
-// that is never called and allowing every stop -- a guard that had quietly
-// stopped guarding.
 
 import (
 	"encoding/json"
@@ -26,9 +15,7 @@ type taskState struct {
 	Status  string
 }
 
-// taskCreateInput is the input of a TaskCreate call. The id is not here -- it
-// comes back in the result -- but the subject is, which is what a block message
-// needs to name the work.
+// taskCreateInput is the input of a TaskCreate call.
 type taskCreateInput struct {
 	Subject string `json:"subject"`
 }
@@ -43,14 +30,13 @@ type taskUpdateInput struct {
 // "Task #6 created successfully: Subject here"
 var taskCreatedRE = regexp.MustCompile(`Task #(\d+) created`)
 
-// latestTasks reconstructs the task list from the transcript in file order:
-// a TaskCreate's result supplies the id for the subject its call carried, and
+// latestTasks reconstructs the task list from the transcript in file order. A
+// TaskCreate's result supplies the id for the subject its call carried, and
 // each later TaskUpdate rewrites that task's status.
 func latestTasks(lines []transcriptRecord) []taskState {
 	order := []string{}
 	byID := map[string]*taskState{}
-	// tool_use_id -> subject, for TaskCreate calls whose result has not been
-	// seen yet.
+	// tool_use_id -> subject, for TaskCreate calls whose result has not been seen yet.
 	pending := map[string]string{}
 
 	for _, rec := range lines {

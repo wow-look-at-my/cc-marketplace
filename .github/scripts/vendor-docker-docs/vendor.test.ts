@@ -65,8 +65,6 @@ test("resolveIncludes inlines the partial", async () => {
   assert.equal(out, "Intro.\n\nA service is an abstract definition.\n\nOutro.\n");
 });
 
-// The partial's own title is dropped: it is spliced into a page that already
-// has an H1, so keeping it would produce two.
 test("resolveIncludes drops the partial's frontmatter", async () => {
   const out = await resolveIncludes('{{% include "compose/x.md" %}}\n', async () =>
     "---\ntitle: Partial\n---\nBody.\n",
@@ -104,8 +102,7 @@ test("stripShortcodes keeps the version-gate signal", () => {
   assert.ok(!out.includes("{{<"));
 });
 
-// An upstream shortcode nobody taught this script about must stop the run,
-// rather than leaking Hugo syntax into the reference or vanishing untraced.
+// An upstream shortcode nobody taught this script about must stop the run.
 test("stripShortcodes rejects an unknown shortcode", () => {
   assert.throws(() => stripShortcodes("{{< grid >}}\n"), /grid/);
 });
@@ -184,8 +181,7 @@ class FakeClient implements Client {
 
   async get(repo: string, commit: string, path: string): Promise<string> {
     const body = this.files.get(path);
-    // Every page in the real plan resolves; an unlisted path is a page the
-    // fixture forgot, so say which one rather than returning empty.
+    // Every page in the real plan resolves.
     if (body === undefined) throw new Error(`fake client has no ${path} (${repo}@${commit})`);
     return body;
   }
