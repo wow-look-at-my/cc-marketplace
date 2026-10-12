@@ -34,8 +34,3 @@ build/
 # every build. Same rule as above: the build never reads the committed copy, so
 # a copy in the tree only goes stale and gets linted as prose this repo wrote.
 plugins/docs/skills/*/reference/
-
-# The bundled server and its launcher. Not build/, because release-plugin
-# rewrites that directory into one fat APE and its launcher, and the slopfix
-# this plugin fetches is what has to be there.
-plugins/common-checks/server/

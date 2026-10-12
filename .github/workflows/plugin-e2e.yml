@@ -38,7 +38,7 @@ jobs:
           repository: wow-look-at-my/slopfix
           path: .slopfix-src
 
-      # A manifest typo, caught on the branch that makes it. Source is not the artifact, so vendor-slopfix.sh asks the fetched binary the same question.
+      # A manifest typo, caught on the branch that makes it.
       - name: Every hook names a subcommand slopfix defines
         uses: wow-look-at-my/actions@typescript#latest
         with:
@@ -50,14 +50,14 @@ jobs:
             for (const entries of Object.values(manifest.hooks) as any[]) {
               for (const entry of entries) {
                 for (const h of entry.hooks) {
-                  const m = /slopfix\.ape\s+([a-z][a-z-]*)/.exec(h.command);
+                  const m = /^slopfix\s+([a-z][a-z-]*)/.exec(h.command);
                   if (m) registered.add(m[1]);
                 }
               }
             }
             const servers = JSON.parse(fs.readFileSync(`${root}/.lsp.json`, "utf-8"));
             for (const server of Object.values(servers) as any[]) {
-              if (server.command.endsWith("/slopfix.ape")) registered.add(server.args[0]);
+              if (server.command === "slopfix") registered.add(server.args[0]);
             }
             if (registered.size === 0) core.setFailed("the manifest names no slopfix subcommand at all");
 
