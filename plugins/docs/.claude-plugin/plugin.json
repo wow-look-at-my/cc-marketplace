@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/build/docs"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/docs"
           }
         ]
       }
