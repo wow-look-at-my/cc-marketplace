@@ -3,7 +3,7 @@
 # Runs the project's binary with the remaining arguments. The command of that
 # name on PATH runs when its `version` is at least the release buildhost
 # publishes. Otherwise that release is downloaded into the plugin's data
-# directory, and the download runs. Every plugin carries this same file.
+# directory, and the download runs. Each plugin's scripts/launch links here.
 set -eu
 
 project=${1:?usage: launch <buildhost-project> [args...]}

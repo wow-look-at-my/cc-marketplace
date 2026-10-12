@@ -12,7 +12,7 @@ One job per plugin whose contract is with the client, not with its own input.
 
 A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires several lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
 
-Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
+Driving the cooked tree is what makes this job test the package that ships. Its `.lsp.json` runs `scripts/launch cc-marketplace/css-duplication`. The cooked `mh.plugin.json` names this run's branch, so the launcher downloads the server the `build` job just published to buildhost from that branch.
 
 Diagnostics drain into an attachment on the NEXT turn. As a result, the prompt has to force a turn after the edit. Asking for a read-back of the edited file does not. The model already knows what it wrote, and one that answered "no re-read was needed" made this job red. So the prompt asks for a line the model cannot know. That line is a nonce written to `ticket.txt` at run time. The run step fails when the answer omits the nonce, which names the declined read rather than blaming the server.
 
@@ -39,7 +39,7 @@ A composite action cannot request permissions. It runs with whatever the calling
 
 ## release-build-binary-format-and-action-pin
 
-`targets: cosmo` is not a size optimization. The fat APE is the only native output the pinned action still emits, since the host-native build path was removed from `v1`. One file covers Linux, macOS and Windows, and `stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the shipping layout.
+`targets: cosmo` is not a size optimization. The fat APE is the only native output the pinned action still emits, since the host-native build path was removed from `v1`. One file covers Linux, macOS and Windows. go-toolchain publishes it to buildhost as `cc-marketplace/<name>`, where `scripts/launch` fetches it. The cooked plugin never carries it.
 
 ## marketplace-json-replacement-and-a-stale-cache-key
 

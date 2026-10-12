@@ -4,9 +4,9 @@ The slopfix plugin lives at `plugins/slopfix/`. It carries **no rule of its own*
 
 ### How a check is wired
 
-A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs `scripts/slopfix`, which picks a slopfix binary and execs it with the same arguments. The launcher holds no rule. `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
+A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted. It runs `scripts/launch slopfix`, which picks a slopfix binary and execs it with the remaining arguments. The launcher holds no rule. `--only` takes a comma-separated list, so every write check runs in one process rather than one process each.
 
-Every event execs `scripts/slopfix hook`. The binary reads the event off the payload and runs each guard that serves it, so the manifest only decides which events reach slopfix. What each guard DOES is slopfix's own documentation. Read `slopfix hook --help`, or that repository. A table here is a copy that drifts.
+Every event execs `scripts/launch slopfix hook`. The binary reads the event off the payload and runs each guard that serves it, so the manifest only decides which events reach slopfix. What each guard DOES is slopfix's own documentation. Read `slopfix hook --help`, or that repository. A table here is a copy that drifts.
 
 These replace the plugins. Those are `ask-properly`, `claude-md-budget`, `cleanup-bash-cmds`, `common-checks`, `detect-permission-seeking` and `enhanced-auto-allow`. They are also `link-all-refs`, `no-blame-language`, `no-busy-poll`, `no-counts-in-docs`, `no-tombstones`, `no-work-loss`, `recommend-go-toolchain` and `rustfmt-enforce`. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
 
@@ -15,7 +15,7 @@ These replace the plugins. Those are `ask-properly`, `claude-md-budget`, `cleanu
 
 ### The language server half
 
-`.lsp.json` runs `scripts/slopfix lsp`. The server publishes, for each open file a build reads. The findings `slopfix check` gives it, on the lines they sit on. The PreToolUse `hook` judges the write itself. The two are one binary, so neither can drift from the other or from CI.
+`.lsp.json` runs `scripts/launch slopfix lsp`. The server publishes, for each open file a build reads. The findings `slopfix check` gives it, on the lines they sit on. The PreToolUse `hook` judges the write itself. The two are one binary, so neither can drift from the other or from CI.
 
 Scope, ranking, the per-file cap and the diagnostic text are all decided in slopfix's `langserver` package. A file outside every work tree, or under `$HOME/.claude`, gets nothing, because no build reads it. `--max-per-file` sets the cap.
 
@@ -35,16 +35,7 @@ Everything that kept a hand-maintained list in step with upstream is deleted. Th
 
 A copy inside the plugin goes stale in the user's plugin cache. A fix merged to slopfix master then stays refused by the installed hook until the plugin itself rebuilds and updates. So the build vendors nothing, and the user installs nothing.
 
-`scripts/slopfix` decides which binary runs:
-
-- It reads the published release number from the `v=` in buildhost's redirect for `slopfix?os=linux&arch=amd64`. That one fat APE runs on every platform.
-- The slopfix on PATH runs when `slopfix version` prints a release number at least that high.
-- Otherwise it downloads that exact release into `$CLAUDE_PLUGIN_DATA`, else `$XDG_CACHE_HOME/slopfix-plugin`, as `slopfix.<release>`. A download must answer `--help` before it is kept. Older downloads are removed.
-- A system slopfix that prints no release number counts as older. A build from before the `version` subcommand is older by definition.
-- It writes its choice to `current` and reuses it for several minutes, so most hook calls make no network request.
-- When buildhost or the download fails, it runs the newest binary already present and says so on stderr. With none present it exits non-zero and names the URL.
-
-The launcher writes nothing to stdout, because a hook's stdout is its answer. It never reads stdin, because the hook payload arrives there. `SLOPFIX_URL` points it at another buildhost URL. `.github/scripts/slopfix-launcher.test.ts` drives each branch against a local server.
+`scripts/launch slopfix` runs the slopfix on PATH when its `version` is at least the release buildhost publishes. Otherwise it downloads that release and runs the download. A slopfix that prints no release number counts as older. [CREATING_PLUGINS.md](../CREATING_PLUGINS.md#a-plugin-ships-no-binary) describes the launcher every plugin shares.
 
 ### Ranking, and the client's budget
 
@@ -82,8 +73,8 @@ The layer below that IS verified. slopfix's `langserver` tests drive the server 
 
 ### Files
 
-- **Registration**: `plugins/slopfix/.lsp.json` runs `scripts/slopfix lsp`
+- **Registration**: `plugins/slopfix/.lsp.json` runs `scripts/launch slopfix lsp`
 - **Hooks**: `plugins/slopfix/.claude-plugin/plugin.json`
-- **Launcher**: `plugins/slopfix/scripts/slopfix`, tested by `.github/scripts/slopfix-launcher.test.ts`
+- **Launcher**: `plugins/slopfix/scripts/launch`, a link to `tools/plugin-launch/launch`
 
 Adding a rule to slopfix needs no edit here. That is the point of the arrangement. The plugin runs the default set, so a new rule arrives once buildhost publishes it.
