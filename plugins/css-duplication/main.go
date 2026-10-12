@@ -1,9 +1,9 @@
 // css-duplication: a language server that reports the same declaration block
 // written under more than a single selector.
 //
-// A language server rather than a hook on purpose: diagnostics land in context
+// A language server rather than a hook on purpose. Diagnostics land in context
 // by themselves after an edit, anchored to the offending selector, and clear
-// themselves when the block is hoisted -- no message shouted at the end of a
+// themselves when the block is hoisted. No message shouted at the end of a
 // tool call, nothing to dismiss, no separate call to make.
 package main
 

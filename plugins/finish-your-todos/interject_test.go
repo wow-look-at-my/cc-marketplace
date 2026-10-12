@@ -93,8 +93,8 @@ func TestMidTurnInterjectionArmsTheGate(t *testing.T) {
 		"the refusal quotes the user's own words, not the wrapper")
 }
 
-// The high-water mark must advance, or one interjection re-arms on every tool
-// call for the rest of the session and the gate becomes unusable.
+// The high-water mark must advance. Otherwise, one interjection re-arms on
+// every tool call for the rest of the session and the gate becomes unusable.
 func TestInterjectionArmsAtMostOnce(t *testing.T) {
 	session := "sess-once-" + t.Name()
 	t.Cleanup(func() { clearDebt(session); os.Remove(seenPath(session)) })

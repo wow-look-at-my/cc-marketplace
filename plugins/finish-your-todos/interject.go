@@ -1,15 +1,15 @@
 // Catching assignments that never reach UserPromptSubmit.
 //
 // A message sent while a turn is already running is not submitted, it is
-// ENQUEUED, and the queue is drained inside the running turn as an attachment.
-// That path dispatches no UserPromptSubmit hook at all. On a bridge/web surface
-// every inbound user message goes through the queue, so anything that lands
-// while the session is busy is invisible to the entry gate -- and a session
-// that is doing work is busy nearly all the time.
+// ENQUEUED. The queue is drained inside the running turn as an attachment. That
+// path dispatches no UserPromptSubmit hook at all. On a bridge/web surface
+// every inbound user message goes through the queue. The entry gate cannot see
+// a message that lands while the session is busy. A session at work is busy
+// nearly all the time.
 //
 // The transcript is where they do appear, as a `queued_command` attachment
 // carrying the user's raw text. Every hook payload includes transcript_path,
-// and PreToolUse fires on every tool call however the message arrived, so the
+// and PreToolUse fires on every tool call however the message arrived. The
 // gate re-reads the transcript there and arms on anything not yet accounted
 // for.
 
@@ -94,7 +94,7 @@ func readInterjections(path string) []userText {
 			continue
 		}
 		switch {
-		// The authoritative shape: the queue records the user's raw text with
+		// The authoritative shape. The queue records the user's raw text with
 		// no wrapper to strip, and commandMode separates a typed message from
 		// a harness-injected one.
 		case entry.Type == "attachment" && entry.Attachment.Type == "queued_command":

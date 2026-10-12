@@ -111,7 +111,7 @@ if grep -qs "slopfix\.ape\`, 'check', 'read-plan'" "${plugin_dir}"/hooks/*.ts; t
 	echo "vendor-slopfix: read-plan mapped its probe"
 fi
 
-# A plugin that drives the PreToolUse contract names the rules it runs, and each
+# A plugin that drives the PreToolUse contract names the rules it runs. Each
 # gets the same treatment: run it on text built to violate it, and require a
 # verdict. Exit status alone proves only that the subcommand parses.
 for rule in "$@"; do

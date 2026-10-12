@@ -147,7 +147,7 @@ const ANY_SHORTCODE = /\{\{[<%][^}]*[>%]\}\}/;
  *
  * A summary-bar renders a badge saying which product version first shipped the
  * feature. The version itself lives in a Hugo data file this script does not
- * read, so the badge becomes a line naming the feature: dropping it silently
+ * read, so the badge becomes a line naming the feature. Dropping it silently
  * would delete the only signal that the option is version-gated at all. */
 export function stripShortcodes(body: string): string {
   const out = body.replace(

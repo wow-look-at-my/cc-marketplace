@@ -88,9 +88,9 @@ func TestQuestionWithImperativeArms(t *testing.T) {
 }
 
 // Bare commands and settings-shaped arguments stay out. `/goal do the thing`
-// sits on the settings side of that line rather than the assignment side: a
-// few words with no imperative reads like a parameter, and the argument rule
-// errs toward silence for short command input.
+// sits on the settings side of that line rather than the assignment side.
+// This covers a few words with no imperative reads like a parameter, and the
+// argument rule errs toward silence for short command input.
 func TestAcksAndSettingsCommandsDoNotArm(t *testing.T) {
 	for _, p := range []string{"ok", "thanks!", "lgtm", "go ahead", "  ", "/compact", "/goal do the thing", "/effort high"} {
 		t.Run(p, func(t *testing.T) {
