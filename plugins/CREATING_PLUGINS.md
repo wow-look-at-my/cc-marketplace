@@ -145,11 +145,11 @@ prebuild:
 
 The marketplace builder runs in this order:
 
-1. **go-toolchain** (CI runs `wow-look-at-my/go-toolchain@master` action if any `.go` files are found — builds cross-platform binaries for linux/darwin × amd64/arm64)
+1. **go-toolchain** (CI runs `wow-look-at-my/go-toolchain@master` action if any `.go` files are found. It builds one fat APE and publishes it to buildhost as `cc-marketplace/<name>`. The plugin itself never carries it.)
 2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
-`docs/justfile` and `slopfix/justfile` are the real ones in this repo.
+`docs/justfile` is the real one in this repo.
 
 ## Step 3: Enable Marketplace Inclusion
 
@@ -174,6 +174,27 @@ When you push to any branch, CI will:
 A manual `workflow_dispatch` of `release.yml` builds without publishing unless `publish` is set.
 
 **You do not need to manually edit marketplace.json** - CI handles it automatically.
+
+## A plugin ships no binary
+
+A binary inside a plugin goes stale in each user's plugin cache. A fix published to buildhost then never reaches a user until the plugin itself updates. So a plugin carries manifests, skills and scripts, and nothing executable in compiled form.
+
+A plugin that runs a program names `scripts/launch` and the program's buildhost project:
+
+```json
+{ "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/my-plugin hook" }
+```
+
+For an MCP or LSP server, the command is `${CLAUDE_PLUGIN_ROOT}/scripts/launch` and the project is the first entry of `args`.
+
+`scripts/launch` is a link to `tools/plugin-launch/launch`, and the release copies the file in its place. Create it with `ln -s ../../../tools/plugin-launch/launch plugins/my-plugin/scripts/launch`. The launcher:
+
+- Runs the command of the project's name on PATH when its `version` prints a release number at least the published one.
+- Otherwise downloads that release into `$CLAUDE_PLUGIN_DATA` and runs the download. A released plugin asks for the build from the branch it was released from.
+- Reuses its choice for a few minutes, so most calls make no network request.
+- With buildhost unreachable, runs the newest copy already present, and says so on stderr.
+
+`.github/scripts/no-vendored-binaries/` fails CI when a plugin will ship a binary. It finds an executable under `plugins/`, committed or in the cooked release. It finds a manifest path under `${CLAUDE_PLUGIN_ROOT}` that git does not track. It finds a workflow, script or justfile that downloads into `plugins/`. Fix the plugin. The guard has no exemption.
 
 ## Build & Release Process
 
