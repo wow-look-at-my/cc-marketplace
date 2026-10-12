@@ -11,7 +11,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/prompt-url-fetch"
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/prompt-url-fetch"
 					}
 				]
 			}
