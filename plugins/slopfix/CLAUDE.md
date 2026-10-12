@@ -8,7 +8,7 @@ A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted
 
 Every event execs `slopfix.ape hook`. The binary reads the event off the payload and runs each guard that serves it, so the manifest only decides which events reach slopfix. What each guard DOES is slopfix's own documentation. Read `slopfix hook --help`, or that repository. A table here is a copy that drifts.
 
-These replace the plugins. Those are ask-properly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking and enhanced-auto-allow. They are also link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
+These replace the plugins. Those are ask-correctly, claude-md-budget, cleanup-bash-cmds, common-checks, detect-permission-seeking and enhanced-auto-allow. They are also link-all-refs, no-blame-language, no-busy-poll, no-counts-in-docs, no-tombstones, no-work-loss and recommend-go-toolchain. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
 
 **There are no `.go` files here, and there must not be.** A manifest that names a subcommand needs no Go. The `plugin-e2e` workflow checks each subcommand the manifest names against slopfix's source.
 
