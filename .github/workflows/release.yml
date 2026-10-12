@@ -403,6 +403,8 @@ jobs:
             // @actions/cache exports no require entry. A file path skips that check, and node24 can require an ES module.
             const cache = require(`${process.env.GITHUB_WORKSPACE}/node_modules/@actions/cache/lib/cache.js`);
             const keys: Record<string, string> = JSON.parse(process.env.KEYS!);
+            // A run that rebuilt no plugin downloaded no artifact, so nothing created this directory.
+            fs.mkdirSync('/tmp/all-plugin-artifacts', { recursive: true });
             for (const plugin of JSON.parse(process.env.CACHED!) as string[]) {
               const path = `/tmp/packaged-${plugin}`;
               const hit = await cache.restoreCache([path], keys[plugin]);
