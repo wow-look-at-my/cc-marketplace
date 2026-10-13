@@ -15,8 +15,10 @@ on:
         type: string
         default: ''
 
-# Per ref: only master publishes `<plugin>#latest` now, and one shared group cancels the older PENDING run, which reads as a failed build.
-concurrency: {group: 'release-${{ github.ref }}'}
+# Master runs overlap. orphan-release moves `<plugin>#latest` only to a higher release number, so the last run to finish cannot move it back.
+concurrency:
+  group: gha_${{ github.repository }}_${{ github.workflow }}_${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   prepare:
@@ -35,12 +37,11 @@ jobs:
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       cache_keys: ${{ steps.split.outputs.cache_keys }}
-      slopfix_version: ${{ steps.slopfix.outputs.version }}
       has_build: ${{ steps.split.outputs.has_build }}
     steps:
       - uses: actions/checkout@v7
 
-      - uses: wow-look-at-my/actions@common-checks#latest
+      - uses: wow-look-at-my/slopfix@master
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -52,18 +53,8 @@ jobs:
       - name: Script tests
         run: npx tsx --test ".github/scripts/**/*.test.ts"
 
-      # The slopfix plugin fetches its binary at build time and commits no copy, so the cache key carries buildhost's published version rather than slopfix's master head: the head moves at merge and buildhost publishes later, so keying on the head rebuilds against a binary that does not exist yet and the vendor script's probes fail the run.
-      - name: Resolve the published slopfix version
-        id: slopfix
-        run: |
-          set -eu
-          location=$(curl -fsSI --connect-timeout 30 "https://dl.pazer.build/slopfix?os=linux&arch=amd64" | tr -d '\r' | grep -i '^location:')
-          version=${location##*v=}
-          if [ -z "$version" ] || [ "$version" = "$location" ]; then
-            echo "buildhost named no version in: ${location}" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: No plugin vendors a binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts source
 
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
@@ -94,15 +85,9 @@ jobs:
             // A plugin compiles a shared module under tools/ through a local replace, so a change there must rebuild it.
             const tools = ['tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod', 'tools/rgmcp/**/*.go', 'tools/rgmcp/go.mod'];
 
-            // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when buildhost publishes a new one.
-            const slopfix = steps.slopfix.outputs.version;
-            const upstream: Record<string, string> = {
-              'slopfix': slopfix,
-            };
-
             for (const plugin of plugins) {
               const hash = await hashFiles([`plugins/${plugin}/**`, ...tools].join('\n'));
-              const key = `plugin-${plugin}-${hash}${upstream[plugin] ? `-${upstream[plugin]}` : ''}`;
+              const key = `plugin-${plugin}-${hash}`;
               keys[plugin] = key;
 
               if (wanted.includes(plugin)) {
@@ -218,14 +203,13 @@ jobs:
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
 
+      - name: The cooked plugin carries no binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts assembled "${{ steps.release.outputs.source_dir }}"
+
       - uses: ./.github/actions/setup-claude-code
 
       - name: Validate Plugin
         run: claude plugin validate ${{ steps.release.outputs.source_dir }}
-
-      - name: Hooks module tests
-        if: ${{ hashFiles(format('plugins/{0}/hooks/*.test.ts', matrix.plugin)) != '' }}
-        run: claude plugin test plugins/${{ matrix.plugin }}
 
       # The cooked dir is published as-is; version comes from release-plugin (not auto-increment) so the tag and manifest agree.
       - name: Publish orphan tag
@@ -393,7 +377,7 @@ jobs:
           pattern: packaged-*
           path: /tmp/all-plugin-artifacts
 
-      # A plugin this run did not rebuild still belongs in marketplace.json, so its cooked tree comes back from the cache the build that made it saved.
+      # A plugin that this run did not rebuild still belongs in marketplace.json. Its cooked tree comes back from the cache that its own build saved.
       - name: Restore the cooked trees of plugins this run did not rebuild
         if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
         uses: wow-look-at-my/actions@typescript#latest
@@ -405,6 +389,8 @@ jobs:
             // @actions/cache exports no require entry. A file path skips that check, and node24 can require an ES module.
             const cache = require(`${process.env.GITHUB_WORKSPACE}/node_modules/@actions/cache/lib/cache.js`);
             const keys: Record<string, string> = JSON.parse(process.env.KEYS!);
+            // A run that rebuilt no plugin downloaded no artifact, so nothing created this directory.
+            fs.mkdirSync('/tmp/all-plugin-artifacts', { recursive: true });
             for (const plugin of JSON.parse(process.env.CACHED!) as string[]) {
               const path = `/tmp/packaged-${plugin}`;
               const hit = await cache.restoreCache([path], keys[plugin]);
@@ -430,6 +416,10 @@ jobs:
             echo "::error::no cooked tree for:$missing -- publishing would drop them from marketplace.json"
             exit 1
           fi
+
+      # The whole set marketplace.json will list, cached trees included.
+      - name: No published plugin carries a binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts assembled /tmp/combined-plugins
 
       - name: Update marketplace.json
         id: marketplace

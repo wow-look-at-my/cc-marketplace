@@ -5,6 +5,10 @@ on:
     # Every branch, no tag: the plugin/*/v* tags the release workflow pushes must not start this one.
     branches: ["**"]
 
+concurrency:
+  group: gha_${{ github.repository }}_${{ github.workflow }}_${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 permissions:
   id-token: write
   contents: read
@@ -17,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Against the slopfix this branch is written for, not the published one: a check that has not shipped yet would otherwise fail here for the whole time between the two merges.
+      # This step uses the slopfix that this branch expects, not the published one. Otherwise a check that has not shipped fails here until both merges land.
       - name: Check out the slopfix this branch expects
         uses: actions/checkout@v7
         with:
@@ -34,7 +38,7 @@ jobs:
           repository: wow-look-at-my/slopfix
           path: .slopfix-src
 
-      # A manifest typo, caught on the branch that makes it. Source is not the artifact, so vendor-slopfix.sh asks the fetched binary the same question.
+      # A manifest typo, caught on the branch that makes it.
       - name: Every hook names a subcommand slopfix defines
         uses: wow-look-at-my/actions@typescript#latest
         with:
@@ -46,14 +50,14 @@ jobs:
             for (const entries of Object.values(manifest.hooks) as any[]) {
               for (const entry of entries) {
                 for (const h of entry.hooks) {
-                  const m = /slopfix\.ape\s+([a-z][a-z-]*)/.exec(h.command);
+                  const m = /\/scripts\/launch\s+slopfix\s+([a-z][a-z-]*)/.exec(h.command);
                   if (m) registered.add(m[1]);
                 }
               }
             }
             const servers = JSON.parse(fs.readFileSync(`${root}/.lsp.json`, "utf-8"));
             for (const server of Object.values(servers) as any[]) {
-              if (server.command.endsWith("/slopfix.ape")) registered.add(server.args[0]);
+              if (server.command.endsWith("/scripts/launch") && server.args[0] === "slopfix") registered.add(server.args[1]);
             }
             if (registered.size === 0) core.setFailed("the manifest names no slopfix subcommand at all");
 

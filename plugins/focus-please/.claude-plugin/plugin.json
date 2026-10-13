@@ -12,7 +12,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please"
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/focus-please"
 					}
 				]
 			}
@@ -23,7 +23,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please"
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/focus-please"
 					}
 				]
 			}
@@ -33,7 +33,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/focus-please"
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/focus-please"
 					}
 				]
 			}

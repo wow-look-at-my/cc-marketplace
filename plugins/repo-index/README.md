@@ -32,7 +32,7 @@ By default, the owner of the checkout you are working in — its `origin` remote
 { "owners": ["wow-look-at-my", "PazerOP"] }
 ```
 
-That is the whole configuration surface. It names owners, never repositories: what each repository is comes from the repository.
+That is the whole configuration surface. It names owners, not repositories: what each repository is comes from the repository.
 
 Archived repositories, forks, and repositories that say nothing about themselves are left out.
 
@@ -40,10 +40,10 @@ Archived repositories, forks, and repositories that say nothing about themselves
 
 The index rebuilds itself once a day, in a separate process, so a prompt never waits on the network. A stale index still suggests. Only a missing one stays quiet. It says so on stderr along with where its report lands.
 
-To rebuild it now, run the hook binary directly:
+To rebuild it now, run the hook binary through the plugin's launcher:
 
 ```
-"$(claude plugin root repo-index)"/build/repo-index --refresh
+"$(claude plugin root repo-index)"/scripts/launch cc-marketplace/repo-index --refresh
 ```
 
 It prints what it indexed and everything it dropped.

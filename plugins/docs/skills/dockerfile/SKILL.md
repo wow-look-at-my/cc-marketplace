@@ -154,7 +154,7 @@ Need shell features (globs, pipes, `&&`) at runtime? Write an entrypoint script 
 
 - **`ENV key=value`, `ARG key=value`.** The space-separated legacy form (`ENV key value`) is deprecated and flagged by `LegacyKeyValueFormat`. Multi-line values go in quotes: `ENV DEPS="\` + continuation lines + `"`.
 - An `ARG` declared **before the first `FROM` is global scope only** - usable in `FROM` lines, invisible inside stages. To use it in a stage, re-declare bare `ARG VERSION` inside that stage.
-- An `ARG` declared in a stage is inherited by stages built `FROM` it, never by unrelated stages.
+- An `ARG` declared in a stage is inherited by stages built `FROM` it, not by unrelated stages.
 - `ENV` beats `ARG` of the same name for the rest of the stage.
 - `ARG` values are **not secret**: visible in `docker history` and in max-mode provenance attestations (attached by default with the Buildx GitHub Action on public repos). Use `RUN --mount=type=secret`.
 - `ENV` persists into the final image *and* into the layer it was set on - a later `RUN unset X` does not scrub it. Set-use-unset within one `RUN` instead, or use `ARG`.

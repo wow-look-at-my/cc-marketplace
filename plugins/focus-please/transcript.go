@@ -1,11 +1,12 @@
 // transcript.go answers the question the PreToolUse gate needs: has the
 // assistant already replied to the user in this turn? Without it the block
-// could only be lifted by the Stop event, which made the guard turn-scoped: a
+// could only be lifted by the Stop event, which made the guard turn-scoped. A
 // question whose answer requires a tool ("is this all committed?" -> `git
-// status`) could not be answered at all, because the model had to end its
-// turn to regain tools, and ending the turn hands control back to the user.
-// The model then either guessed or stalled for a filler message. With this
-// check the block is text-scoped instead: reply, then act, in the same turn.
+// status`) could not be answered at all. This is because the model had to end
+// its turn to regain tools, and ending the turn hands control back to the
+// user. The model then either guessed or stalled for a filler message. With
+// this check the block is text-scoped instead: reply, then act, in the same
+// turn.
 package main
 
 import (
