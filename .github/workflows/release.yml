@@ -37,7 +37,6 @@ jobs:
       build_plugins: ${{ steps.split.outputs.build_plugins }}
       cached_plugins: ${{ steps.split.outputs.cached_plugins }}
       cache_keys: ${{ steps.split.outputs.cache_keys }}
-      slopfix_version: ${{ steps.slopfix.outputs.version }}
       has_build: ${{ steps.split.outputs.has_build }}
     steps:
       - uses: actions/checkout@v7
@@ -54,18 +53,8 @@ jobs:
       - name: Script tests
         run: npx tsx --test ".github/scripts/**/*.test.ts"
 
-      # The slopfix plugin fetches its binary at build time and commits no copy, so the cache key carries buildhost's published version rather than slopfix's master head: the head moves at merge and buildhost publishes later, so keying on the head rebuilds against a binary that does not exist yet and the vendor script's probes fail the run.
-      - name: Resolve the published slopfix version
-        id: slopfix
-        run: |
-          set -eu
-          location=$(curl -fsSI --connect-timeout 30 "https://dl.pazer.build/slopfix?os=linux&arch=amd64" | tr -d '\r' | grep -i '^location:')
-          version=${location##*v=}
-          if [ -z "$version" ] || [ "$version" = "$location" ]; then
-            echo "buildhost named no version in: ${location}" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: No plugin vendors a binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts source
 
       - id: matrix
         run: marketplace-build prepare-matrix >> $GITHUB_OUTPUT
@@ -94,16 +83,10 @@ jobs:
             // A plugin compiles a shared module under tools/ through a local replace, so a change there must rebuild it.
             const tools = ['tools/marketplace-build/**/*.go', 'tools/marketplace-build/go.mod', 'tools/shellwalk/**/*.go', 'tools/shellwalk/go.mod', 'tools/rgmcp/**/*.go', 'tools/rgmcp/go.mod'];
 
-            // These fetch slopfix at build time and commit no copy of it, so nothing under their own directories changes when buildhost publishes a new one.
-            const slopfix = steps.slopfix.outputs.version;
-            const upstream: Record<string, string> = {
-              'slopfix': slopfix,
-            };
-
             // one lookup per plugin, all in flight at once: each is an independent API round trip, and serially they cost this job a second per plugin for nothing
             const cachedFlags = await Promise.all(plugins.map(async (plugin) => {
               const hash = await hashFiles([`plugins/${plugin}/**`, ...tools].join('\n'));
-              const key = `plugin-${plugin}-${hash}${upstream[plugin] ? `-${upstream[plugin]}` : ''}`;
+              const key = `plugin-${plugin}-${hash}`;
               keys[plugin] = key;
 
               // a named plugin rebuilds no matter what the cache says, so it costs no lookup
@@ -218,6 +201,9 @@ jobs:
       - name: Cook plugin
         id: release
         run: marketplace-build release-plugin ${{ matrix.plugin }} >> $GITHUB_OUTPUT
+
+      - name: The cooked plugin carries no binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts assembled "${{ steps.release.outputs.source_dir }}"
 
       - uses: ./.github/actions/setup-claude-code
 
@@ -446,6 +432,10 @@ jobs:
             echo "::error::no cooked tree for:$missing -- publishing would drop them from marketplace.json"
             exit 1
           fi
+
+      # The whole set marketplace.json will list, cached trees included.
+      - name: No published plugin carries a binary
+        run: npx tsx .github/scripts/no-vendored-binaries/main.ts assembled /tmp/combined-plugins
 
       - name: Update marketplace.json
         id: marketplace

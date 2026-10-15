@@ -23,7 +23,7 @@ do not gate publishing, exactly as they did as a separate workflow.
 
 A job in `release.yml`. It restores the plugin the `build` job cooked, from that job's cache key, and never builds its own. Every go-toolchain build publishes a release, so a second build here published a second release of the plugin on every push. It then runs `claude --debug lsp --debug-file` over a stylesheet that already carries a duplicated declaration block. The assertion step requires several lines in that log (config loaded, process started, handshake finished, diagnostics published, registered, delivered) and refuses two (a failed stop, a crash).
 
-Cooking is load-bearing. `marketplace-build release-plugin` stages a `#!/bin/sh` launcher at `build/<name>`, the path `.lsp.json` names, with the fat APE beside it. Claude Code `execve()`s that path directly. An APE is neither ELF nor a `#!` script. Driving the cooked tree is also what makes this job test the package that ships.
+Driving the cooked tree is what makes this job test the package that ships. Its `.lsp.json` runs `scripts/launch cc-marketplace/css-duplication`. The cooked `mh.plugin.json` names this run's branch, so the launcher downloads the server the `build` job just published to buildhost from that branch.
 
 Diagnostics drain into an attachment on the NEXT turn. As a result, the prompt has to force a turn after the edit. Asking for a read-back of the edited file does not. The model already knows what it wrote, and one that answered "no re-read was needed" made this job red. So the prompt asks for a line the model cannot know. That line is a nonce written to `ticket.txt` at run time. The run step fails when the answer omits the nonce, which names the declined read rather than blaming the server.
 
@@ -54,9 +54,9 @@ A composite action cannot request permissions. It runs with whatever the calling
 output the action still emits, since the host-native build path was removed
 from go-toolchain. The ref is `@lkgb`, that repository's last-known-good-build
 tag: the `v1` branch every workflow used to name no longer exists there, and
-`@master` would move under every run. One file covers Linux, macOS and Windows, and
-`stageBinaries` (`tools/marketplace-build/ape_package.go`) turns it into the
-shipping layout — the APE plus the launcher every manifest already points at.
+`@master` would move under every run. One file covers Linux, macOS and Windows.
+go-toolchain publishes it to buildhost as `cc-marketplace/<name>`, where
+`scripts/launch` fetches it. The cooked plugin never carries it.
 
 `autorelease: 'false'` on the e2e LSP build, because plugins publish as git orphan tags, not to buildhost. Leaving it on will demand `deployments`/`artifact-metadata` write for an upload nothing consumes. The release build leaves it on — the grants above exist for that upload.
 
@@ -81,7 +81,6 @@ and fail with `exports is not defined in ES module scope`.
 Do not replace the loop with a fixed set of download steps. The plugin list is
 whatever `prepare-matrix` finds, and a hard-coded list silently drops a plugin
 added later — the exact failure the section below describes.
-
 
 
 ## marketplace-json-replacement-and-a-stale-cache-key
