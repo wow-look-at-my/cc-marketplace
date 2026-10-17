@@ -1,6 +1,7 @@
 {
   "css-duplication": {
-    "command": "${CLAUDE_PLUGIN_ROOT}/build/css-duplication",
+    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch",
+    "args": ["cc-marketplace/css-duplication"],
     "extensionToLanguage": {
       ".css": "css"
     }
