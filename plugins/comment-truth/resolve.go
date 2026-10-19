@@ -8,8 +8,6 @@ import (
 )
 
 // The mechanical verdicts: everything decidable by looking, decided for free.
-// Whatever these settle never reaches the model, which is most of why the
-// expensive stage stays small.
 
 // Finding is one thing wrong with one comment.
 type Finding struct {
@@ -129,17 +127,14 @@ func (r *Repo) checkMechanically(blocks []Block) (findings []Finding, needJudgme
 	return findings, needJudgment
 }
 
-// resolve reports whether a cited name exists. A path is checked as a path; a
+// resolve reports whether a cited name exists. A path is checked as a path. A
 // symbol is looked for anywhere in tracked content, which is deliberately a
-// weak test -- it answers "does this exist at all", the question that catches a
+// weak test. It answers "does this exist at all", the question that catches a
 // name left behind by a deletion, without pretending to be a type checker.
 func (r *Repo) resolve(name, from string) (string, bool) {
 	if looksLikePath(name) {
 		// A partial path ("assets/timeline.js") is relative to somewhere on the
-		// citing file's way up to the root, so try each ancestor. Existence and
-		// IGNORED-ness both resolve it: a build output is a real file the repo
-		// deliberately does not track, and whether it happens to be built right
-		// now must not change the answer.
+		// citing file's way up to the root, so try each ancestor.
 		for _, rel := range r.candidates(name, from) {
 			if _, err := os.Stat(filepath.Join(r.Root, rel)); err == nil {
 				return rel, true
@@ -150,15 +145,12 @@ func (r *Repo) resolve(name, from string) (string, bool) {
 		}
 		// A comment often cites a file by NAME rather than by path
 		// ("timeline-wire.test.ts decodes them"), and that name is not wrong
-		// just because the file lives somewhere else. Fall back to the
-		// basename anywhere in the repo before calling it missing.
+		// because the file lives somewhere else.
 		if hit := r.findByBase(filepath.Base(name)); hit != "" {
 			return hit, true
 		}
-		// A build output is a real file the repo deliberately does not track,
-		// and naming one is correct. Ask git whether the path is IGNORED
-		// rather than whether it happens to exist right now, so the answer
-		// does not depend on whether anyone has run the build.
+		// A build output is a real file the repo deliberately does not track, and
+		// naming one is correct.
 		if r.ignored(name) || r.ignoredByBase(filepath.Base(name)) {
 			return "", true
 		}
@@ -223,7 +215,7 @@ func (r *Repo) ignored(name string) bool {
 }
 
 // ignoredByBase looks for an ignored file with this base name anywhere in the
-// working tree, which is how a build output cited by partial path ("the
+// working tree. This is how a build output cited by partial path ("the
 // assets/timeline.js the embed names") resolves.
 func (r *Repo) ignoredByBase(base string) bool {
 	out, err := r.git("ls-files", "--others", "--ignored", "--exclude-standard", "--", "*/"+base, base)

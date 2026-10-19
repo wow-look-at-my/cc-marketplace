@@ -4,7 +4,7 @@ description: Read before designing how software gets INTO a container - choosing
 
 # Docker images: what layers actually are, and what that means for design
 
-Notes to self. `/docs:dockerfile` covers writing the file. This covers deciding what the images must BE. Written after getting it wrong in a real codebase and being corrected by the person who owned it.
+Notes to self. `/docs:dockerfile` covers writing the file. This covers deciding what the images must BE. The person who owned it corrected Written after getting it incorrect in a real codebase and.
 
 ## The failure this exists to prevent
 
@@ -27,7 +27,7 @@ Splitting those two apart is the smell.
 
 ## Layers, and why the sharing argument is not about your bytes
 
-An image is an ordered stack of layers. Each layer has a SHA256 content identifier, and identical layers are one object on disk:
+An image is an ordered stack of layers. Each layer has a SHA256 content identifier, and same layers are one object on disk:
 
 > "Shared image layers are only stored once in `/var/lib/docker/`"
 > "Docker already has all the layers from the first image, so it doesn't need to
@@ -52,7 +52,7 @@ Ask what the bytes ARE, not how they are shaped.
 | Config for one deployment | Env vars, secrets, or a mounted file. |
 | A build tool needed to produce the program files | A builder stage that never ships. |
 
-Reaching for a volume to deliver read-only program files is the wrong direction every time. It is the pattern above, and it always re-implements some of: pull, versioning, garbage collection, integrity, and "is this the version I expect?".
+Reaching for a volume to deliver read-only program files is the incorrect direction every time. It is the pattern above, and it always re-implements some of: pull, versioning, garbage collection, integrity, and "is this the version I expect?".
 
 The reverse mistake exists too: baking a database's data directory, a cache, or per-deployment credentials into an image. Anything a running container mutates belongs in a volume, because a layer is copy-on-write per container and vanishes with it.
 
@@ -63,7 +63,7 @@ The reverse mistake exists too: baking a database's data directory, a cache, or 
 - Nothing warns you.
 - **`ENV` is inherited, and becomes the container's environment.** A build-time `ENV HOME=/agent` was harmless while the image was only a carrier. The moment it became the image a container RUNS, it redirected every home-directory lookup. Set build-only variables per-`RUN` (`RUN export HOME=/agent && ...`), not as `ENV`.
 - **`LABEL`, `WORKDIR`, `EXPOSE`, `USER`, `VOLUME` are inherited too.** Inherited labels are useful: a child carrying the base's version label is checkable evidence it really was built on that base.
-- **`ARG` is not inherited the way you expect** -- and a global `ARG` (before the first `FROM`) is the ONLY kind usable in a `FROM` line. Declared after a `FROM` it belongs to that stage, resolves empty in the next `FROM`, and the build fails on an invalid reference. `/docs:dockerfile` has the full scoping table. I have gotten this wrong with the correct answer already written down, so read it rather than reasoning it out.
+- **`ARG` is not inherited the way you expect** -- and a global `ARG` (before the first `FROM`) is the ONLY kind usable in a `FROM` line. Declared after a `FROM` it belongs to that stage, resolves empty in the next `FROM`, and the build fails on an invalid reference. `/docs:dockerfile` has the full scoping table. I got this incorrect with the correct answer already written down, so read it rather than reasoning it out.
 
 ## Parameterizing the base
 
@@ -80,7 +80,7 @@ Built with `--build-arg BASE_IMAGE=registry.example.com/myapp-runtime:<sha>`.
 
 ## CI: build order follows FROM
 
-This is where the design change shows up in a pipeline. It is easy to get wrong because a matrix looks so tidy:
+This is where the design change shows up in a pipeline. It is easy to get incorrect because a matrix looks so tidy:
 
 - **A base and its children cannot build in parallel.** The children need the base to exist first. That means separate jobs with `needs:`, not one matrix.
 - **The child's builder pulls the base from the REGISTRY**. The base has to be pushed, not merely built, before the child starts.
@@ -127,4 +127,4 @@ That is how the 831 MiB outlier above was found -- after it had already shipped.
 
 ## Keep this file growing
 
-The correction is worth more written down than remembered. Verify against docs.docker.com, the OCI image-spec, or the observed behavior of a real daemon before writing it. A confidently wrong note in this plugin is worse than no note, because it loads automatically.
+The correction is worth more written down than remembered. Verify against docs.docker.com, the OCI image-spec, or the observed behavior of a real daemon before writing it. A confidently incorrect note in this plugin is worse than no note, because it loads automatically.

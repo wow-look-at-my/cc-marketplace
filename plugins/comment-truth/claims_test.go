@@ -7,8 +7,8 @@ import (
 )
 
 // The cases are the real ones. Every "must be reported" is a comment somebody
-// actually shipped; every "must NOT be reported" is a shape that would produce
-// a false alarm, which is the failure that gets a check switched off.
+// shipped. Every "must NOT be reported" is a shape that would produce a false
+// alarm, which is the failure that gets a check switched off.
 
 func TestQuantityAgreement(t *testing.T) {
 	// The document this hook was written after: the measurements a comment
@@ -21,7 +21,6 @@ func TestQuantityAgreement(t *testing.T) {
 		claim string
 		agree bool
 	}{
-		// The actual defect: the doc says 7.5, the comment said ~10.
 		{"recalled figure that is simply wrong", "~10 B/event", false},
 		{"the other recalled figure", "~283 B/event", false},
 
@@ -32,7 +31,6 @@ func TestQuantityAgreement(t *testing.T) {
 		{"a duration from the table", "63.2 ms", true},
 		{"rounded duration", "63 ms", true},
 
-		// Precision is a promise: claiming two decimals means two must agree.
 		{"over-precise against a rounded source", "23.9 B/event", false},
 
 		// A scaled restatement of the same measurement.
@@ -103,8 +101,8 @@ func TestHedgeDetection(t *testing.T) {
 		assert.NotEqual(t, 0, len(c.Hedges))
 
 	}
-	// "should" is normative here, not unsure -- flagging it would punish
-	// correct contract documentation.
+	// "should" is normative here, not unsure -- it would punish correct contract
+	// documentation.
 	notReported := []string{
 		"callers should drain the manager before closing the DB",
 		"every response-cache table should be pruned on write",
@@ -152,8 +150,8 @@ func TestExcerptStaysOneLine(t *testing.T) {
 }
 
 // A filename shown as an EXAMPLE is a specimen, not a claim that the file is
-// here. Reporting those is how a tool ends up flagging its own documentation --
-// which this one did, before the quoting rule existed.
+// here. Reporting those is how a tool ends up its own documentation -- which
+// this did, before the quoting rule existed.
 func TestQuotedExamplesAreNotCitations(t *testing.T) {
 	c := Analyze(Block{Text: `A partial path ("assets/timeline.js") is relative to the citing file. ` +
 		"The real citation is `internal/api/timeline.go`."})

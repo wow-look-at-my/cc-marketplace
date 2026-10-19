@@ -6,12 +6,12 @@ The failure it catches is one specific bad habit: giving every element its own c
 
 ## What it reports
 
-A finding is a set of rules with an identical (normalized) body in the same at-rule context:
+A finding is a set of rules with an same (normalized) body in the same at-rule context:
 
 - **two or more copies** of a body with two or more declarations, or
 - **three or more copies** of a single-declaration body.
 
-Findings are ranked by copies × declarations. The strongest one comes first. Not reported, because it is normal: duplication across different `@media` / `@supports` contexts, `@keyframes` `from`/`to`, and vendor-prefixed pairs.
+Copies × declarations rank findings. The strongest one comes first. Not reported, because it is normal: duplication across different `@media` / `@supports` contexts, `@keyframes` `from`/`to`, and vendor-prefixed pairs.
 
 Preprocessor sources (`.scss`, `.less`) are deliberately ignored — nesting changes what a repeated body means.
 
@@ -31,4 +31,4 @@ Things worth knowing before installing:
 /plugin install css-duplication
 ```
 
-The reasoning it is trying to install — specificity, inheritance, cascade layers, and how to hoist a duplicate safely — lives in the `docs` plugin's `/docs:css-cascade` skill.
+The reasoning it tries to install — specificity, inheritance, cascade layers, and how to hoist a duplicate safely — lives in the `docs` plugin's `/docs:css-cascade` skill.

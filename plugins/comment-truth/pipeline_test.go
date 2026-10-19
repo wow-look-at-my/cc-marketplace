@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The non-Go reader has no parser to lean on, so the cases it must get right --
-// a marker inside a string, a span comment, coalescing -- are pinned here.
+// The non-Go reader has no parser to lean on, so the cases. It must get right
+// -- a marker inside a string, a span comment, coalescing -- are pinned here.
 
 func TestLineBlocksAcrossLanguages(t *testing.T) {
 	tests := []struct {
@@ -93,7 +93,7 @@ func TestBlockCarriesTheCodeItAnnotates(t *testing.T) {
 }
 
 // A file mid-edit does not parse, and a checker that goes quiet exactly when
-// the code is in flux is worth very little.
+// the code is in flux is worth little.
 func TestUnparseableGoFallsBackRatherThanSkipping(t *testing.T) {
 	src := "package p\n\n// This probably breaks.\nfunc Encode( {\n"
 	blocks := blocksIn("a.go", []byte(src), allLines(src))
@@ -134,9 +134,7 @@ func TestParseVerdict(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 
-	// An index outside the batch is dropped rather than mapped to the wrong
-	// comment -- reporting a finding against innocent code is worse than
-	// losing it.
+	// An index outside the batch is dropped rather than mapped to the wrong comment.
 	got, err = parseVerdict(`{"findings":[{"index":99,"problem":"p"},{"index":-1,"problem":"q"}]}`, blocks)
 	require.NoError(t, err)
 	assert.Empty(t, got)

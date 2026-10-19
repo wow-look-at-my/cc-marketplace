@@ -32,7 +32,7 @@ runs:
           echo "exists=true" >> "$GITHUB_OUTPUT"
         fi
 
-    - uses: wow-look-at-my/go-toolchain@master
+    - uses: wow-look-at-my/go-toolchain@lkgb
       if: steps.binary.outputs.exists != 'true'
       with:
         working-directory: "tools/marketplace-build"

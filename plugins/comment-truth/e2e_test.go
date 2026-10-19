@@ -52,7 +52,7 @@ func findingsFor(t *testing.T, dir string) []Finding {
 }
 
 // The defect this hook exists for: a figure recalled from a document in the
-// same repo, wrong, in a comment that cites that very document.
+// same repo, wrong, in a comment that cites that document.
 func TestCatchesFigureThatContradictsItsOwnCitedDoc(t *testing.T) {
 	dir := repoFixture(t)
 	write(t, dir, "wire.go", `package p
@@ -107,7 +107,7 @@ func TestCatchesHedge(t *testing.T) {
 
 }
 
-// SCOPE is the efficiency claim, so it gets a test: a pre-existing bad comment
+// SCOPE is the efficiency claim. It gets a test: a pre-existing bad comment
 // that this session did not touch must cost nothing and report nothing.
 func TestUntouchedCommentsAreNotChecked(t *testing.T) {
 	dir := repoFixture(t)

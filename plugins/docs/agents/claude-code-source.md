@@ -16,12 +16,12 @@ The preloaded `claude-code-source` skill is the method: how to get the tree and 
 
 ## Report
 
-Your final text is the deliverable and the only thing the caller sees. It must carry:
+Your last text is the deliverable and the only thing the caller sees. It must carry:
 
 - **Every claim carries its file, its line number and a verbatim quote.** Keep each quote short. Quote what carries the answer, not a large region.
 - The concrete shapes: JSON/config field names, accepted enum values, defaults.
 - Anything that **contradicts the public docs**, called out explicitly.
 - **Inferences labelled as inferences.** Distinguish what the source shows from what you concluded.
-- **"The source does not show this" wherever that is the truth.** A clear negative is a useful answer. A confident wrong answer is worse than nothing here, because the caller cannot cheaply check it — that is the whole reason they delegated.
+- **"The source does not show this" wherever that is the truth.** A clear negative is a useful answer. A confident incorrect answer is worse than nothing here, because the caller cannot cheaply check it — that is the whole reason they delegated.
 
 Do not paste large regions of the bundle into your report. Do not write into any repository. `/tmp` is yours.

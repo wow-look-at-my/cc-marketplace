@@ -11,31 +11,15 @@ import (
 	"time"
 )
 
-// THE JUDGMENT STAGE, and the reason it is affordable.
-//
-// The model is never given the repository and never asked to go looking. Every
-// piece of evidence a verdict could need is resolved MECHANICALLY first -- the
-// code the comment sits on, the definitions of the names it cites, the lines of
-// the document it points at -- and shipped with the comment in one request.
-//
-// That inverts the usual cost. An agent turned loose on "is this comment true"
-// spends its budget searching; here the searching is grep, which is free, and
-// the model only does the part that actually needs reading comprehension:
-// is this claim supported by what it is looking at, is it scoped to what was
-// measured, and is it even about the thing it sits on.
-//
-// One request per Stop, every remaining block batched into it. No key
-// configured means this stage is skipped and the mechanical findings still
-// block -- the check degrades to less, never to nothing.
+// THE JUDGMENT STAGE, and the reason it is affordable. The model is never
+// given the repository and never asked to go looking.
 
 const (
 	envURL   = "COMMENT_TRUTH_API_URL"
 	envKey   = "COMMENT_TRUTH_API_KEY"
 	envModel = "COMMENT_TRUTH_MODEL"
 
-	// Evidence is capped so one enormous file cannot turn a cheap check into an
-	// expensive one. A definition that does not fit in this much context was
-	// not going to be judged well anyway.
+	// Evidence is capped so one enormous file cannot turn a cheap check into an expensive one.
 	maxEvidenceBytes = 4000
 	maxBlocks        = 25
 	requestTimeout   = 90 * time.Second
@@ -213,9 +197,9 @@ func (rv *Reviewer) Review(ctx context.Context, repo *Repo, blocks []Block) ([]F
 }
 
 // parseVerdict maps the model's answer back onto the blocks it judged. An
-// answer that does not parse is an error, never a silent pass -- a checker that
-// goes quiet when its backend misbehaves reports green for work it never
-// checked.
+// answer that does not parse is an error, never a silent pass -- a checker.
+// That checker goes quiet when its backend misbehaves reports green for work it
+// never checked.
 func parseVerdict(content string, blocks []Block) ([]Finding, error) {
 	content = strings.TrimSpace(content)
 	if i := strings.Index(content, "{"); i > 0 {

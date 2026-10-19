@@ -8,38 +8,24 @@ import (
 	"strings"
 )
 
-// TRIAGE. Most comments assert nothing a checker could be right or wrong about
-// ("// bump the counter"). Sorting the few that DO claim something, by what
-// kind of claim it is, decides what each one costs: two kinds are settled
-// mechanically for free, and only the rest are worth a model's attention.
-//
-// The kinds are not invented -- each is a defect this hook exists because
-// somebody shipped.
+// TRIAGE. Most comments assert nothing a checker could be right or wrong about ("// bump the counter").
 
 type ClaimKind string
 
 const (
 	// A name the comment cites: a symbol, a test, a file. Settled by looking.
 	ClaimReference ClaimKind = "reference"
-	// A measurement. Settled against the doc the comment itself cites; needs a
-	// model only when it cites nothing.
+	// A measurement. Settled against the doc the comment itself cites; needs a model only when it cites nothing.
 	ClaimQuantity ClaimKind = "quantity"
-	// "always", "never", "every", "only" -- the claims most likely to be
-	// almost-true, and never checkable without reading the code.
+	// "always", "never", "every", "only" -- the claims most likely to be almost-true, and never checkable without reading the code.
 	ClaimUniversal ClaimKind = "universal"
-	// "because", "which is why" -- an invented cause survives review because
-	// nobody can disprove a story.
+	// "because", "which is why" -- an invented cause survives review because nobody can disprove a story.
 	ClaimCausal ClaimKind = "causal"
 	// A hedge. Settled immediately: an unverified claim with an escape hatch.
 	ClaimHedge ClaimKind = "hedge"
-	// A comment out of all proportion to what it annotates -- a manual wearing
-	// a comment's clothes. Length alone is never the defect; a long comment on
-	// something that needs it is correct. Nineteen lines on a string constant
-	// is not.
+	// A comment out of all proportion to what it annotates -- a manual wearing a comment's clothes.
 	ClaimBloat ClaimKind = "bloat"
-	// A changelog bolted onto code that still exists: dates, PR numbers, and
-	// the past tense ("used to", "no longer", "was removed"). Git already
-	// stores the past; a comment carries current truth only.
+	// A changelog bolted onto code that still exists.
 	ClaimTombstone ClaimKind = "tombstone"
 )
 
@@ -56,8 +42,8 @@ type Claims struct {
 	Tombstones []string
 }
 
-// NeedsJudgment reports whether anything is left that mechanical checks cannot
-// settle. This is the gate in front of the only expensive stage.
+// NeedsJudgment reports whether anything is left that mechanical checks
+// cannot settle.
 func (c Claims) NeedsJudgment() bool {
 	return len(c.Universal) > 0 || len(c.Causal) > 0 ||
 		(len(c.Quantities) > 0 && len(c.Docs) == 0)
@@ -68,22 +54,16 @@ func (c Claims) NeedsJudgment() bool {
 type Quantity struct {
 	Raw   string
 	Value float64
-	// Decimals is the precision the comment chose, which sets how exactly a
-	// source has to agree with it.
+	// Decimals is the precision the comment chose, which sets how exactly a source has to agree with it.
 	Decimals int
 	Unit     string
 }
 
 var (
-	// A figure with a unit or a multiplier. A bare integer is deliberately NOT
-	// a quantity claim: "step 1", "v2" and "the 3 cases" are not measurements,
-	// and treating them as such is how a checker becomes noise.
+	// A figure with a unit or a multiplier.
 	quantityRe = regexp.MustCompile(`(?i)([~≈<>]?\s*)(\d+(?:\.\d+)?)\s*(x\b|%|ms\b|µs\b|us\b|ns\b|s\b|m\b|h\b|d\b|[kmgt]?i?b(?:/\w+)?\b|bytes?(?:/\w+)?\b|fps\b|hz\b|lines?\b|frames?\b|allocs?\b)`)
 
-	// Backticked names, test/benchmark identifiers, and paths with a known
-	// source extension. Deliberately narrow: an unqualified CamelCase word in
-	// prose is not reliably a symbol, and guessing produces false alarms that
-	// teach people to ignore the check.
+	// Backticked names, test/benchmark identifiers, and paths with a known source extension.
 	backtickRe = regexp.MustCompile("`([A-Za-z_][\\w./-]*(?:\\(\\))?)`")
 	testNameRe = regexp.MustCompile(`\b((?:Test|Benchmark|Fuzz|Example)[A-Z]\w+)\b`)
 	pathRe     = regexp.MustCompile(`\b([\w][\w./-]*\.(?:go|ts|tsx|js|mjs|jsx|md|ya?ml|json|sql|wgsl|glsl|sh|py|rs|toml))\b`)
@@ -101,8 +81,7 @@ var (
 		`\b(?:has|have) been (?:removed|deleted|renamed|reverted)\b|` +
 		`\bnever requested\b|\bas of (?:v?\d|20\d\d)\b|\bthis (?:used to|was) \b)`)
 
-	// Epistemic hedges only. "should" alone is excluded: "callers should drain"
-	// is a normative statement about the contract, not an unsure one.
+	// Epistemic hedges only. "should" alone is excluded: "callers should drain" is a normative statement about the contract, not an unsure one.
 	hedgeRe = regexp.MustCompile(`(?i)\b(probably|presumably|i believe|i think|seems to|appears to|as far as i know|afaik|not sure|might be wrong|maybe|possibly)\b`)
 )
 
@@ -128,10 +107,6 @@ func Analyze(b Block) Claims {
 	}
 	// Paths are read from prose only after the things that merely LOOK like
 	// citations are removed: URLs, absolute paths, and double-quoted spans.
-	// The quoting rule is the convention this relies on -- a backticked or
-	// bare name is a citation and gets checked, a "quoted" one is an example
-	// being shown, and checking specimens is how a tool starts reporting the
-	// documentation of itself.
 	for _, m := range pathRe.FindAllStringSubmatch(citations(text), -1) {
 		addRef(m[1])
 		if isDoc(m[1]) {
@@ -167,9 +142,6 @@ var urlRe = regexp.MustCompile(`(?i)\b(?:https?://|www\.)\S+`)
 var absPathRe = regexp.MustCompile(`(^|\s)/\S+`)
 
 // quotedRe matches a double- or single-quoted span: an example, not a citation.
-// Comment prose WRAPS, so a quoted example routinely spans lines and the span
-// must too; the length bound keeps an unbalanced quote from swallowing the rest
-// of the comment.
 var quotedRe = regexp.MustCompile(`(?s)"[^"]{0,200}"|'[^']{0,200}'`)
 
 // citations strips everything path-shaped that is not a claim about this
@@ -180,9 +152,7 @@ func citations(text string) string {
 	return quotedRe.ReplaceAllString(text, " ")
 }
 
-// patternRe spots a placeholder rather than a name: a glob, an angle-bracket
-// slot, or a version template like vX.Y.Z. Naming the SHAPE of a thing is not
-// a claim that a thing with that literal name exists.
+// patternRe spots a placeholder rather than a name: a glob, an angle-bracket slot, or a version template like vX.Y.Z.
 var patternRe = regexp.MustCompile(`[*<>{}]|\b[A-Z](?:\.[A-Z])+\b|\bv[A-Z]\b`)
 
 func isPattern(s string) bool { return patternRe.MatchString(s) }
@@ -214,34 +184,18 @@ func appendUnique(list []string, s string) []string {
 	return append(list, s)
 }
 
-// numberRe finds every figure in a source document, so a comment's number can
-// be checked against what the document actually measured.
+// numberRe finds every figure in a source document.
 var numberRe = regexp.MustCompile(`\d+(?:\.\d+)?`)
 
-// agreesWith reports whether a document contains a figure the comment's number
-// could honestly be a rounding of.
-//
-// TWO things make this precise enough to be worth running.
-//
-// The comparison is scoped to figures carrying the SAME UNIT. Matching a bare
-// number against the whole document is far too permissive: a claim of "~10
-// B/event" is satisfied by any stray 10 -- a version, a percentage, a count --
-// and the check passes a figure that is simply wrong. Against the byte figures
-// only, it fails, which is the answer.
-//
-// And the tolerance is the comment's OWN precision. A comment saying "~24
-// B/event" over a document measuring 23.8 is CORRECT; demanding a literal match
-// would make the check unusable and it would be switched off. So a document
-// figure is rounded to however many decimals the comment chose: "~24" accepts
-// 23.8, "~10" rejects 7.5. Writing a number to no decimal places is choosing
-// how exactly the source has to agree.
+// agreesWith reports whether a document contains a figure the comment's
+// number could honestly be a rounding of. Things make this precise enough to
+// be worth running. The comparison is scoped to figures carrying the SAME
+// UNIT.
 func (q Quantity) agreesWith(doc string) bool {
 	for _, cand := range figuresInUnit(doc, q.Unit) {
 		if q.matches(cand) {
 			return true
 		}
-		// The same measurement restated at another scale: a document's 749 KB
-		// quoted as 0.749 MB.
 		for _, scale := range []float64{1000, 1024, 0.001, 1.0 / 1024} {
 			if q.matches(cand * scale) {
 				return true
@@ -252,10 +206,7 @@ func (q Quantity) agreesWith(doc string) bool {
 }
 
 // matches accepts a source figure the comment could honestly be reporting:
-// rounded to the comment's precision, or TRUNCATED to it. Writing 23.8 as "~23"
-// is as ordinary as writing it "~24", and a checker that accepts only one of
-// them is picking a house style rather than finding errors. Neither reading
-// rescues a wrong number: 7.5 is "~7" or "~8", never "~10".
+// rounded to the comment's precision, or TRUNCATED to it.
 func (q Quantity) matches(cand float64) bool {
 	p := math.Pow(10, float64(q.Decimals))
 	want := roundTo(q.Value, q.Decimals)
@@ -263,8 +214,8 @@ func (q Quantity) matches(cand float64) bool {
 }
 
 // figuresInUnit pulls every figure a document states in the same unit family as
-// the claim, so "B/event" is checked against bytes and not against a stray
-// integer somewhere else on the page.
+// the claim. "B/event" is checked against bytes and not against a stray integer
+// somewhere else on the page.
 func figuresInUnit(doc, unit string) []float64 {
 	family := unitFamily(unit)
 	var out []float64
@@ -280,8 +231,8 @@ func figuresInUnit(doc, unit string) []float64 {
 }
 
 // unitFamily collapses spellings that measure the same thing, so a comment in
-// "B/event" is checked against a document written in "B", and a duration in
-// "ms" is not checked against a count of frames.
+// "B/event" is checked against a document written in "B". A duration in "ms"
+// is not checked against a count of frames.
 func unitFamily(unit string) string {
 	u := strings.TrimSpace(strings.ToLower(unit))
 	if i := strings.Index(u, "/"); i >= 0 {

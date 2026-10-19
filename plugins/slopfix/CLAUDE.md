@@ -27,7 +27,9 @@ It takes its shape from `css-duplication`. A finding that tracks the file's stat
 
 That sentence is the whole architecture. It is the owner's ruling. The org's `common-checks` action is a name every repository already calls. Its steps forward to slopfix. Running slopfix with no `--only` IS common-checks. This plugin runs exactly that.
 
-Everything that kept a hand-maintained list in step with upstream is deleted. That was a `checks.json` manifest parser. It was also a vendored copy of each check's TypeScript modules. It was also an `ADAPTED` coverage list, and the build-time drift assertions holding them against each other. All of it guarded one failure: this plugin's list of checks falling out of step with the gate's. A plugin that runs the binary's default set cannot fall out of step. There is nothing left to assert. Do not reintroduce any of it.
+Everything that kept a hand-maintained list in step with upstream is deleted. That was a `checks.json` manifest parser. It was also a vendored copy of each check's TypeScript modules. It was also an `ADAPTED` coverage list, and the build-time drift assertions holding them against each other. All of it guarded one failure: this plugin's list of checks falling out of step with the gate's. A plugin that runs the binary's default set cannot fall out of step.
+
+There is nothing left to assert.
 
 `push-excludes-tags` is the gap. It is a stated one. Its rule is an inline script inside a composite action. Nothing imports it and slopfix does not carry it. No diagnostic here reports it. Never close that by writing the rule in this plugin.
 

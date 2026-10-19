@@ -11,24 +11,8 @@ import (
 	"strings"
 )
 
-// comment-truth: a Stop hook that asks whether the comments this session wrote
-// are TRUE.
-//
-// Comments are the one artifact nothing verifies. Compilers ignore them, tests
-// ignore them, CI ignores them -- the reader is the only check, and by then the
-// author is not there to correct it. So a wrong comment is read as authority
-// and believed for years, which makes it worse than no comment at all.
-//
-// Three passes, cheapest first, each one narrowing what the next has to look
-// at (scope.go, resolve.go, review.go carry the detail):
-//
-//	1. SCOPE   -- only comments this session's diff added or changed.
-//	2. CHECK   -- names must resolve; a figure must agree with the document the
-//	              comment itself cites; a hedge is an unverified claim. Free.
-//	3. JUDGE   -- what is left goes to an external model WITH the evidence
-//	              already resolved, in one bounded request.
-//
-// Exit 2 blocks the stop and the findings go to the model as work to do.
+// comment-truth: a Stop hook that asks whether the comments this session
+// wrote are TRUE.
 
 type hookInput struct {
 	HookEventName  string `json:"hook_event_name"`
@@ -51,8 +35,8 @@ func run(stdin io.Reader, stderr io.Writer) int {
 		// Garbage on stdin is not this hook's problem to report.
 		return 0
 	}
-	// Already blocking once is enough: a hook that re-blocks on its own block
-	// is an infinite loop, and the findings are already in front of the model.
+	// Already blocking once is enough: a hook that re-blocks on its own block is
+	// an infinite loop.
 	if in.StopHookActive {
 		return 0
 	}
@@ -70,8 +54,8 @@ func run(stdin io.Reader, stderr io.Writer) int {
 	return 2
 }
 
-// check runs the three passes over every repository root under dir. A
-// multi-repo session has several checkouts; each is scoped to its own diff.
+// check runs the passes over every repository root under dir. A multi-repo
+// session has several checkouts; each is scoped to its own diff.
 func check(dir string) []Finding {
 	var all []Finding
 	for _, root := range repoRoots(dir) {

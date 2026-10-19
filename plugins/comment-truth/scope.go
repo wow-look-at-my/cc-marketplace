@@ -9,14 +9,7 @@ import (
 )
 
 // SCOPE is the whole efficiency story. A repository holds thousands of
-// comments; a session writes a handful. Everything downstream -- the name
-// resolution, the doc reads, the model call -- runs only over comment lines
-// this session ADDED or CHANGED, so cost tracks the size of the change and not
-// the size of the repo.
-//
-// The diff is taken against the merge-base with the default branch rather than
-// HEAD, so a session that has already committed is still checked. A session
-// that wrote no comments does no work at all.
+// comments; a session writes a handful.
 
 // Block is one comment, with what it is attached to.
 type Block struct {
@@ -27,8 +20,7 @@ type Block struct {
 	Text string
 	// Raw keeps the source lines for reporting.
 	Raw []string
-	// Code is the few lines that follow the block -- the thing the comment is
-	// ABOUT. Evidence for "is this comment even about what it sits on".
+	// Code is the few lines that follow the block -- the thing the comment is ABOUT.
 	Code string
 }
 
@@ -39,10 +31,7 @@ func (r *Repo) changedFiles() []string {
 	if err != nil {
 		return nil
 	}
-	// Uncommitted work counts too: a Stop hook fires before a commit as often
-	// as after one. UNTRACKED files count as well -- a file the session just
-	// created is in no diff at all, and skipping it would leave exactly the
-	// newest code unchecked.
+	// Uncommitted work counts too: a Stop hook fires before a commit as often as after one.
 	dirty, _ := r.git("diff", "--name-only", "--diff-filter=d", "HEAD")
 	staged, _ := r.git("diff", "--name-only", "--cached", "--diff-filter=d")
 	untracked, _ := r.git("ls-files", "--others", "--exclude-standard")
@@ -101,8 +90,6 @@ func (r *Repo) addedLines(file string) map[int]bool {
 					line++
 				}
 			case strings.HasPrefix(l, "-"), strings.HasPrefix(l, "\\"):
-				// Removals and "\ No newline" do not advance the new-file
-				// cursor.
 			}
 		}
 	}

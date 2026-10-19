@@ -25,9 +25,11 @@ Never paste the fetch as inline shell. Claude Code substitutes skill arguments i
 
 **When it exits 1 with "cannot read"**. The repository is not attached to the session. Only the MAIN session can fix that, with `add_repo(owner="PazerOP", repo="claude-docs-gaps", access="read")`. A subagent must stop at once and report exactly that. Every other route gives a proxy 403 or a real 404. Trying tokens, `gh api`, proxy.pazer.ai or the tarball URL wastes the whole run.
 
-**The source is the whole of `$D`, not `cli.js`.** From 2.1.242 the shipped binary splits its JavaScript into chunks. On those branches `cli.js` is a small import stub and the code lives in `$D/chunks/*.js`. `$D/module-graph.json` maps each `/$bunfs/root/<name>` import to its file. Search `cli.js` and `chunks/` together, every time. Branches 2.1.241 and older have no `chunks/`. There the whole bundle is in `cli.js`. The branch's own `CLAUDE.md` describes its layout. Read it first.
+**The source is the whole of `$D`, not `cli.js`.** From 2.1.242 the shipped binary splits its JavaScript into chunks. On those branches `cli.js` is a small import stub and the code lives in `$D/chunks/*.js`. `$D/module-graph.json` maps each `/$bunfs/root/<name>` import to its file. Search `cli.js` and `chunks/` together, every time. Branches 2.1.241 and older have no `chunks/`.
 
-- **`master` IS ALMOST NEVER THE RIGHT BRANCH.** It holds the extraction tooling, not the product of the version you are running. Same for the `claude/*`, `doc-js-extraction-*` and `analysis-framework` branches. Reaching for `master` is the default mistake. Name the version explicitly.
+There the whole bundle is in `cli.js`. The branch's own `CLAUDE.md` describes its layout. Read it first.
+
+- **`master` IS THE RIGHT BRANCH (NEVER) (ALMOST).** It holds the extraction tooling, not the product of the version you runs. Same for the `claude/*`, `doc-js-extraction-*` and `analysis-framework` branches. Reaching for `master` is the default mistake. Name the version explicitly.
 - Use the version you are **actually running** unless the question is about a different one ("when did X change?", "does the user's older build have Y?"). Version-specific questions need fetches and a comparison. `git ls-remote --heads https://github.com/PazerOP/claude-docs-gaps '2.*'` lists every version.
 - **Cheap first stop before any search**: the `docs/` directory the tarball extracted (`$D/docs`, when the branch has one), and the `docs-aggregate` branch's `INDEX.md`, hold prior investigations. If someone already wrote up the subsystem, read that instead of re-deriving it — then confirm the specific claim you care about in the source.
 
@@ -35,7 +37,7 @@ Never paste the fetch as inline shell. Claude Code substitutes skill arguments i
 
 **This is not a preference. It never comes back out.
 
-- **Prefer `subagent_type: "claude-code-source"`** (the `Agent` tool's `subagent_type` param) when it is offered. That registered agent already pins `model: sonnet` and preloads this skill, so there is nothing left to get wrong -- just ask it your question.
+- **Prefer `subagent_type: "claude-code-source"`** (the `Agent` tool's `subagent_type` param) when it is offered. That registered agent already pins `model: sonnet` and preloads this skill, so there is nothing left to get incorrect -- just ask it your question.
 - **Only if that agent type is not available this session** (the plugin installed after the `claude` process's hook/agent registry was already resolved.
 - Either way. The subagent reads the file. **you read its report**. That is the entire arrangement — its context absorbs the searching, yours receives the findings.
 - Never Read a file under `/tmp/claude-docs-gaps-*` directly. Never run `rg` on it inline "just to check one thing". Spawn the agent. The one-line exception is a bare match COUNT (`rg -c pattern dir`), which returns a number rather than source.
@@ -55,7 +57,7 @@ Ask for what a source answer has to carry, or it is not worth the round trip:
 - **Follow imports through `module-graph.json`.** An import of `"/$bunfs/root/chunk-abc.js"` is the file `chunks/chunk-abc.js`.
 - **Search for STRINGS, not identifiers.** Top-level names are mangled and differ between builds (`OHh`, `p7t`, `Cxt`).
 - **Beware the long lines** -- and do not mistake them for broken formatting. The files ARE prettified. A formatter simply cannot break a single token. `rg -n pattern` prints the whole matched line, so pipe it (`| cut -c1-200`), prefer `rg -o` with a tight pattern, and keep `-C` small. Then read the interesting region with Read's `offset`/`limit` around the reported line.
-- Zod-shaped schemas read as `v.object({...})` / `v.strictObject({...})` with `.describe(...)` on each field. That is where config contracts live. The `describe` text is often better than the published docs.
+- Zod-shaped schemas read as `v.object({...})` / `v.strictObject({...})` with `.describe(...)` on each field. That is where config contracts live. The `describe` text is frequently better than the published docs.
 - Feature gates show up as small guard calls near a subsystem's init. Env-var names and flag strings nearby tell you how a feature is turned off.
 - Cross-check a claim in a SECOND place (the schema plus its consumer) before reporting it as fact. A schema that accepts a field proves nothing about the code path honoring it — 2.1.220 accepts `transport: "socket"` for LSP servers and spawns stdio regardless.
 

@@ -8,7 +8,7 @@ import (
 )
 
 // Length is a defect only against what the comment annotates. Both directions
-// matter: a manual on a constant is the failure, and trimming a long comment
+// matter. A manual on a constant is the failure, and trimming a long comment
 // that earns its place is the same failure in reverse.
 func TestBloatIsProportionNotLength(t *testing.T) {
 	long := "This explains a great deal about the surrounding system, at length,\n" +
@@ -57,9 +57,8 @@ func TestTombstoneMarkers(t *testing.T) {
 		assert.NotEmpty(t, c.Tombstones, "%q should read as a changelog", text)
 	}
 
-	// The past tense counts too: each of these has a subject that is absent
-	// from the file, which is what makes it a changelog rather than an
-	// explanation.
+	// The past tense counts too: each of these has a subject that is absent from
+	// the file. This is what makes it a changelog rather than an explanation.
 	for _, text := range []string{
 		"The former WEBHOOK_RUNNER_GSM_URL knob was removed.",
 		"this used to re-apply the caller deadline",
@@ -71,11 +70,8 @@ func TestTombstoneMarkers(t *testing.T) {
 		assert.NotEmpty(t, c.Tombstones, "%q narrates the change", text)
 	}
 
-	// Naming one of these phrases as an EXAMPLE is not using it. Without this
-	// the rule reports any comment that documents the rule -- including this
-	// tool's own source, which is the one file whose subject matter IS these
-	// phrases. That is a property of writing about tombstones, not a reason to
-	// stop detecting them.
+	// Naming one of these phrases as an EXAMPLE is not using it. Without this the rule reports any comment that documents the rule -- including this tool's own source. This is the file whose subject matter IS these phrases. That is a property of writing
+	// about tombstones, not a reason to stop detecting them.
 	for _, text := range []string{
 		`the past tense ("used to", "no longer", "was removed")`,
 		`flags a comment saying "formerly" or "previously"`,

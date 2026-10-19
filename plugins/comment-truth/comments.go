@@ -8,14 +8,7 @@ import (
 	"strings"
 )
 
-// Extracting comments is where a checker earns or loses its accuracy. A string
-// literal holding "// not a comment" must not be checked, and a comment must be
-// paired with the code it annotates -- "is this comment about the thing it sits
-// on" is one of the questions being asked.
-//
-// Go files go through the real parser, which gets both right by construction.
-// Everything else is line-based with a string-literal skipper: good enough to
-// find the prose, and honest about being a heuristic.
+// Extracting comments is where a checker earns or loses its accuracy.
 
 const codeContextLines = 6
 
@@ -79,9 +72,7 @@ func goBlocks(path string, src []byte) []Block {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, src, parser.ParseComments)
 	if err != nil {
-		// A file mid-edit does not parse. Fall back rather than skip: a
-		// checker that goes quiet exactly when the code is in flux is worth
-		// very little.
+		// A file mid-edit does not parse.
 		return lineBlocks(path, src)
 	}
 	var out []Block
@@ -160,8 +151,8 @@ func lineBlocks(path string, src []byte) []Block {
 	return filterOut(out, isDirective)
 }
 
-// commentStart returns the index where a line comment begins, or -1. It walks
-// the line tracking quote state so a marker inside a string is not a comment.
+// It walks the line tracking quote state so a marker inside a string is not a
+// comment.
 func commentStart(line string) int {
 	var quote byte
 	for i := 0; i < len(line); i++ {

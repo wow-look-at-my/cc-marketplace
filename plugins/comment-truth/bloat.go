@@ -6,26 +6,14 @@ import (
 )
 
 // LENGTH is checked as PROPORTION, never as a number on its own.
-//
-// A long comment on something that needs it is correct, and truncating one
-// that carries real information is the same defect in the other direction. The
-// failure worth catching is the manual wearing a comment's clothes: nineteen
-// lines and a hundred and ninety words explaining a string constant -- which
-// nobody reading that constant next year needs, and which is re-read on every
-// pass through the file forever.
-//
-// So the test is the comment against the THING IT ANNOTATES. A page of prose
-// over a subtle function is fine. The same page over `const X = "..."` is a
-// document that has not been written yet.
 
 const (
-	// Where a comment stops being an explanation and becomes a document. The
-	// case this is drawn from ran to 19 lines and 189 words on one constant.
+	// Where a comment stops being an explanation and becomes a document.
 	bloatLines = 8
 	bloatWords = 90
 )
 
-// trivialDeclRe matches the declarations that cannot justify a long comment: a
+// trivialDeclRe matches the declarations that cannot justify a long comment. A
 // constant, a variable, a struct field, a simple assignment -- anything whose
 // whole meaning is on one line.
 var trivialDeclRe = regexp.MustCompile(
@@ -45,8 +33,7 @@ func bloated(b Block) (string, bool) {
 
 	first := firstCodeLine(b.Code)
 	if first == "" || !trivialDeclRe.MatchString(first) {
-		// Attached to something substantial -- a function, a type, a whole
-		// file. Length there is a judgement call, not a defect.
+		// Attached to something substantial -- a function, a type, a whole file.
 		return "", false
 	}
 	// A declaration that spans lines is not the trivial case.
