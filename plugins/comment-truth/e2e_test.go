@@ -150,33 +150,25 @@ func TestCleanSessionIsSilent(t *testing.T) {
 
 }
 
-// hookInput builds the payload a Stop hook is handed, with the event name and
-// whatever else the test needs in it.
-func hookInput(t *testing.T, extra map[string]any) string {
-	t.Helper()
-	payload := map[string]any{"hook_event_name": "Stop"}
-	for key, value := range extra {
-		payload[key] = value
-	}
-	encoded, err := json.Marshal(payload)
-	require.NoError(t, err)
-	return string(encoded)
-}
-
 // The hook contract: exit 2 blocks, exit 0 allows, and an already-blocking stop
 // never blocks again (that would be an infinite loop).
 func TestHookContract(t *testing.T) {
 	dir := repoFixture(t)
 	write(t, dir, "wire.go", "package p\n\n// This probably keeps the lock held.\nfunc Encode() {}\n")
 
+	stop, err := json.Marshal(hookInput{HookEventName: "Stop", CWD: dir})
+	require.NoError(t, err)
 	var stderr bytes.Buffer
-	code := run(strings.NewReader(hookInput(t, map[string]any{"cwd": dir})), &stderr)
+	code := run(strings.NewReader(string(stop)), &stderr)
 	assert.Equal(t, 2, code)
 
 	assert.Contains(t, stderr.String(), "STOP:")
 
+	// A session that this hook is already holding must not be blocked again.
+	active, err := json.Marshal(hookInput{HookEventName: "Stop", StopHookActive: true, CWD: dir})
+	require.NoError(t, err)
 	stderr.Reset()
-	code = run(strings.NewReader(hookInput(t, map[string]any{"stop_hook_active": true, "cwd": dir})), &stderr)
+	code = run(strings.NewReader(string(active)), &stderr)
 	assert.False(t, code != 0 || stderr.Len() != 0)
 
 	stderr.Reset()
