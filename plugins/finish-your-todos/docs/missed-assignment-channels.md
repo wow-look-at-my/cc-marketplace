@@ -18,7 +18,7 @@ Two of those rows caused real losses.
 
 ## Gap 1: mid-turn messages fire nothing at all
 
-A message sent while a turn is running is not submitted. It is **enqueued**. The queue is drained inside the running turn and each entry becomes a `queued_command` attachment. No `UserPromptSubmit` is dispatched anywhere on that path.
+A message sent while a turn runs is not submitted. It is **enqueued**. The queue is drained inside the running turn and each entry becomes a `queued_command` attachment. No `UserPromptSubmit` is dispatched anywhere on that path.
 
 This is not rare. On a bridge/web surface *every* inbound user message goes through the queue, so any message that arrives while the session is busy.
 
@@ -51,7 +51,7 @@ Verified against a live transcript.
 
 ### System envelopes ride the same queue
 
-Webhook events, background-task completions and reminders are queued exactly like a typed message. They are filtered by envelope prefix (`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …) *and* by `commandMode`.
+Webhook events, background-task completions and reminders are queued exactly like a typed message. Envelope prefix filters they (`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …) *and* by `commandMode`.
 
 ### Arming at most once
 
@@ -61,7 +61,7 @@ A high-water mark (the last interjection's uuid) is stored beside the debt, in i
 
 The hook only ever sees the raw `/name args` — the expansion is invisible to it. The classifier skipped anything starting with `/` as "the CLI's own control surface", which is true of the command word and false of its arguments. Every assignment handed over as `/goal fix the thing` was dropped.
 
-Command arguments get a **stricter** rule than prose, because they are just as often parameters. Prose that is not a question is almost always an instruction. `/effort high` and `/loop 5m /babysit-prs` are not. So arguments arm when they contain an imperative, or when they read as a sentence rather than a setting (a few words or more). A question still needs an imperative to arm.
+Command arguments get a **stricter** rule than prose, because they are just as frequently parameters. Prose that is not a question is almost always an instruction. `/effort high` and `/loop 5m /babysit-prs` are not. So arguments arm when they contain an imperative, or when they read as a sentence rather than a setting (a few words or more). A question still needs an imperative to arm.
 
 | input | arms | why |
 |---|---|---|
@@ -78,4 +78,4 @@ Command arguments get a **stricter** rule than prose, because they are just as o
 
 - A local command returning text (`/effort high`) fires nothing, so no hook can see it. Not a loss. Those are settings, not assignments.
 - Subagent prompts fire `SubagentStart`, not this event. Out of scope — a subagent's work is the parent's task.
-- A scheduled prompt folded mid-turn is caught by the transcript pass like any other queued entry. One drained at idle goes through `UserPromptSubmit` normally.
+- The transcript pass like any other queued entry catches a scheduled prompt folded mid-turn. One drained at idle goes through `UserPromptSubmit` normally.

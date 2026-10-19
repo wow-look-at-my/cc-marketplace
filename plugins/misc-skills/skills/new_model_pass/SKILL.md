@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Scope is `$ARGUMENTS`. Empty means the whole repository.
 
-This code has already been read, reviewed, and edited by earlier models. Assume the easy findings are gone. That is what you are here for. It is also the measurement: the value of this pass is the findings a weaker pass cannot have produced.
+Earlier models read this code has already. Assume the easy findings are gone. That is what you are here for. It is also the measurement: the value of this pass is the findings a weaker pass cannot produced.
 
 ## 1. Map it before you change anything
 
@@ -18,15 +18,15 @@ Cover everything in scope. Never let partial coverage read as complete.
 
 ## 2. Hunt where context is required
 
-Rank effort toward defects that only show up when you are holding several files at once. In rough order of what tends to be left behind:
+Rank effort toward defects that only show up when you holds several files at once. In rough order of what tends to be left behind:
 
 - **Contract mismatches.** A producer and a consumer that disagree about a field, a unit, a nil case, an ordering guarantee, an error value. Each side reads fine alone.
 - **Invariants stated in one place and broken in another.** A comment, a doc, or a validator says X holds. Some other path constructs a value where it does not.
-- **Wrong edge-case behavior.** Empty input, one element, duplicate keys, unicode, timezone and DST, integer overflow, concurrent access, retry that is not idempotent, cancellation mid-write.
+- **Incorrect edge-case behavior.** Empty input, one element, duplicate keys, unicode, timezone and DST, integer overflow, concurrent access, retry that is not idempotent, cancellation mid-write.
 - **Silent failure.** Swallowed errors, defaulted-away missing config. A fallback nobody is told fired, a truncation with no log, a catch that continues into code that needed the thing that failed. A green run that did nothing is the worst defect class in any repo.
 - **Tests that assert the easy half.** A test that will still pass with the bug present. Reproduce it: break the code deliberately and see whether the suite notices.
 - **Stale knowledge.** APIs, language features, tool flags, and library idioms that moved after the last pass was written.
-- **Duplication with drift.** The same logic in multiple places, two of which have been fixed. Hoist it, or at minimum fix the stragglers.
+- **Duplication with drift.** The same logic in multiple places, two of which was fixed. Hoist it, or at minimum fix the stragglers.
 - **Dead code and dead branches.** A guard for a state the system is never in. A flag nothing sets, an exported function nobody calls.
 - **Performance that matters.** Quadratic behavior on input that grows, work repeated inside a loop, a query per row. Ignore micro-optimizations nobody can measure.
 - **Docs and comments that lie.** Every claim in them is checked or it goes. A comment naming a function or a number that no longer exists is a defect, not a cosmetic issue.
@@ -41,19 +41,19 @@ Defer only what genuinely needs a human decision. Then name it exactly, say what
 
 ## 4. This is not a security audit
 
-Hardening here means the code fails loudly, handles its real inputs correctly, and does not corrupt state when something goes wrong.
+Hardening here means the code fails loudly, handles its real inputs correctly, and does not corrupt state when something goes incorrect.
 
 If you find a real exploitable bug in something that faces untrusted input, fix it and say so. Do not go looking for a threat model the project does not have.
 
 ## 5. Do not churn
 
-The failure mode of this skill is a huge diff of taste changes that buries multiple real fixes. Every change needs a reason the owner will agree with out loud.
+The failure mode of this skill is a large diff of taste changes that buries multiple real fixes. Every change needs a reason the owner will agree with out loud.
 
 - No reformatting, no renaming for style, no reordering, no reshuffling files.
 - No rewriting working code into your preferred idiom.
 - No new abstraction with one caller.
 - No new dependency where a few lines of the standard library do it.
-- Match the surrounding code's conventions, including the ones you will not have chosen.
+- Match the surrounding code's conventions, including the ones you will not chose.
 - Dependency and toolchain upgrades are in scope when they fix something or unlock something you then use. A version bump for its own sake is not.
 
 ## 6. Verify
@@ -66,7 +66,7 @@ Commit in coherent pieces, one concern per commit, with messages that say why.
 
 The report is the deliverable of the pass, because it is what gets compared against the last model's. Write it as:
 
-- **Fixed** -- each defect, where it was, why it was wrong, how you verified.
+- **Fixed** -- each defect, where it was, why it was incorrect, how you verified.
 - **Found and left** -- what it is, where, what the fix will be, why it needs a decision.
 - **Checked and fine** -- the areas you read carefully and found genuinely healthy. This is not filler. Without it, silence about a subsystem is ambiguous between "clean" and "never opened".
 - **Not covered** -- anything in scope you did not get to.

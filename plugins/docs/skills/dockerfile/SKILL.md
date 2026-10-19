@@ -10,7 +10,7 @@ Notes to self. Every line here was checked against the current Dockerfile refere
 
 `reference/dockerfile.md` in this skill's folder is the **complete upstream Dockerfile reference**, verbatim, pinned to a commit named in its header (`reference/NOTICE.md` records the source and the Apache-2.0 license).
 
-The rest of this file is only the short list of things I get wrong. It is not a substitute for the reference. It does not cover every instruction or flag.
+The rest of this file is only the short list of things I get incorrect. It is not a substitute for the reference. It does not cover every instruction or flag.
 
 Recalling one of those from training data is exactly how the errors below got written in the first place:
 
@@ -30,9 +30,9 @@ Second directive worth knowing: `# check=error=true` turns build-check warnings 
 
 ## ADD - the one I get wrong every time
 
-The reflex is `RUN curl -O ...tar.gz && tar xzf ... && rm ...tar.gz`. Then, when told to use `ADD`, the follow-up mistake is insisting "ADD does not unpack tarballs." Both are wrong. What the reference actually says:
+The reflex is `RUN curl -O ...tar.gz && tar xzf ... && rm ...tar.gz`. Then, when told to use `ADD`, the follow-up mistake insists "ADD does not unpack tarballs." Both are incorrect. What the reference actually says:
 
-- **A local tar archive is extracted by default.** Recognized formats: gzip, bzip2, xz, or uncompressed. It behaves like `tar -x` and unions with whatever is already at the destination.
+- **Default extracts a local tar archive.** Recognized formats: gzip, bzip2, xz, or uncompressed. It behaves like `tar -x` and unions with whatever is already at the destination.
 - Format is detected **from the file contents, not the filename**. An empty file named `foo.tar.gz` is just copied, with no decompression error.
 - **A remote tar (`<src>` is a URL) is NOT extracted by default.** This is the real asymmetry, and the origin of the confused half-memory. To extract it, pass `--unpack=true` (Dockerfile v1.17+).
 
@@ -44,7 +44,7 @@ ADD --unpack=false my-archive.tar.gz .                           # local, keep p
 ADD local.tar.gz /opt/thing/                                     # local, extracted (default)
 ```
 
-The docs explicitly prefer `ADD` over hand-rolled `wget`/`curl` + `tar`. It produces a more precise build cache. It also supports checksum validation, which curl-and-untar does not.
+The docs explicitly prefer `ADD` over hand-rolled `wget`/`curl` + `tar`. It produces a more accurate build cache. It also supports checksum validation, which curl-and-untar does not.
 
 Other `ADD` facts I under-use:
 
@@ -74,7 +74,7 @@ Quote the delimiter (`<<-"EOT"`) to stop build-time variable expansion. Use `<<-
 
 ## ADD vs COPY, decided
 
-- Copying between stages or from the context into the final image: `COPY`.
+- Copying between stages or from the context into the last image: `COPY`.
 - Downloading a remote artifact, or cloning a Git repo: `ADD` (with `--checksum`).
 - Needing a context file only for the duration of one `RUN`: **neither** - bind-mount it:
 
@@ -138,7 +138,7 @@ Pipes: `/bin/sh -c` only checks the exit code of the last stage, so `RUN a | b` 
 
 Use **exec form (JSON array, double quotes only)** for both. Shell form wraps the command in `/bin/sh -c`. The process is not PID 1, gets no `SIGTERM` from `docker stop`, and takes ~10s plus a SIGKILL to die. The `JSONArgsRecommended` build check flags this.
 
-Shell-form `ENTRYPOINT` **ignores `CMD` and any `docker run` arguments entirely.** The interaction table:
+Shell-form `ENTRYPOINT` **ignores `CMD` and any `docker run` arguments fully.** The interaction table:
 
 |  | No ENTRYPOINT | `ENTRYPOINT exec_entry p1` (shell) | `ENTRYPOINT ["exec_entry","p1"]` |
 |---|---|---|---|
@@ -152,12 +152,12 @@ Need shell features (globs, pipes, `&&`) at runtime? Write an entrypoint script 
 
 ## ARG and ENV
 
-- **`ENV key=value`, `ARG key=value`.** The space-separated legacy form (`ENV key value`) is deprecated and flagged by `LegacyKeyValueFormat`. Multi-line values go in quotes: `ENV DEPS="\` + continuation lines + `"`.
+- **`ENV key=value`, `ARG key=value`.** `LegacyKeyValueFormat` deprecates the space-separated legacy form (`ENV key value`). Multi-line values go in quotes: `ENV DEPS="\` + continuation lines + `"`.
 - An `ARG` declared **before the first `FROM` is global scope only** - usable in `FROM` lines, invisible inside stages. To use it in a stage, re-declare bare `ARG VERSION` inside that stage.
-- An `ARG` declared in a stage is inherited by stages built `FROM` it, not by unrelated stages.
+- Stages built `FROM` it inherits an `ARG` declared in a stage, not by unrelated stages.
 - `ENV` beats `ARG` of the same name for the rest of the stage.
 - `ARG` values are **not secret**: visible in `docker history` and in max-mode provenance attestations (attached by default with the Buildx GitHub Action on public repos). Use `RUN --mount=type=secret`.
-- `ENV` persists into the final image *and* into the layer it was set on - a later `RUN unset X` does not scrub it. Set-use-unset within one `RUN` instead, or use `ARG`.
+- `ENV` persists into the last image *and* into the layer it was set on - a later `RUN unset X` does not scrub it. Set-use-unset within one `RUN` instead, or use `ARG`.
 - Automatic platform args exist in global scope and need re-declaring per stage: `TARGETPLATFORM`, `TARGETOS`, `TARGETARCH`, `TARGETVARIANT`, `BUILDPLATFORM`, `BUILDOS`, `BUILDARCH`, `BUILDVARIANT`.
 - Proxy args (`HTTP_PROXY`, `NO_PROXY`, `ALL_PROXY`, lower-case variants, ...) are predefined, excluded from `docker history`, and cache-exempt unless explicitly re-declared with `ARG`.
 - Bash-style modifiers work in the builder: `${VAR:-default}`, `${VAR-default}`, `${VAR:+alt}`, `${VAR+alt}`. Pattern operators (`${var#pat}`, `${var/a/b}`) are **pre-release only** (`docker/dockerfile-upstream:master`) - do not reach for them.
@@ -172,7 +172,7 @@ Need shell features (globs, pipes, `&&`) at runtime? Write an entrypoint script 
 - `USER`: give an explicit UID/GID if it matters (allocation order is not stable across rebuilds). `useradd --no-log-init` avoids the sparse-file disk-exhaustion bug for large UIDs. Avoid `sudo`. Use `gosu` if root-then-drop is needed.
 - `HEALTHCHECK` options: `--interval` (30s), `--timeout` (30s), `--start-period` (0s), `--start-interval` (5s, needs Engine 25.0+), `--retries` (3). One per Dockerfile. `HEALTHCHECK NONE` disables an inherited one. Exit 0 healthy, 1 unhealthy, 2 reserved.
 - `STOPSIGNAL` affects `docker stop` only, not Ctrl+C (which sends SIGINT directly).
-- `LABEL`: combining labels into one instruction stopped mattering after Docker 1.10. Use double quotes - single quotes suppress interpolation. Labels from a stage that is only referenced via `COPY --from`/`RUN --mount=from=` are **not** inherited. Only the final `FROM` chain contributes.
+- `LABEL`: combining labels into one instruction stopped mattering after Docker 1.10. Use double quotes - single quotes suppress interpolation. Labels from a stage that is only referenced via `COPY --from`/`RUN --mount=from=` are **not** inherited. Only the last `FROM` chain contributes.
 - `ONBUILD` cannot chain (`ONBUILD ONBUILD`) and cannot trigger `FROM`/`MAINTAINER`. Since v1.11 it may carry `COPY --from`/`RUN --mount=from=`.
 - `SHELL` must be JSON form. Linux default `["/bin/sh","-c"]`, Windows `["cmd","/S","/C"]`.
 - Windows: `# escape=\`` ` as the first line, because `\` is the path separator.

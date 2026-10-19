@@ -4,7 +4,7 @@ Points you at the repository that already does the job, before you build a secon
 
 A `UserPromptSubmit` hook matches your prompt against an index of your repositories. Each one that matches is added to the prompt as a link and a line of description. Each repository appears at most once per session.
 
-Nothing in it is typed by a person. Nothing in it can quietly stop being true: rename a repository, retag it, rewrite its description, and the next refresh follows.
+A person typs nothing in it. Nothing in it can quietly stop being true: rename a repository, retag it, rewrite its description, and the next refresh follows.
 
 ## Example
 
@@ -23,7 +23,7 @@ Ask again in the same session and nothing is added. Ask in a new session and it 
 
 ## Which repositories
 
-By default, the owner of the checkout you are working in — its `origin` remote — and, failing that, your own GitHub account. Name owners explicitly in either file to override that:
+By default, the owner of the checkout you works in — its `origin` remote — and, failing that, your own GitHub account. Name owners explicitly in either file to override that:
 
 - `~/.claude/repo-index.json` — every session
 - `<project>/.claude/repo-index.json` — that project only

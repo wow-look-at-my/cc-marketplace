@@ -132,7 +132,7 @@ The server fields are listed in [PLUGIN_REFERENCE.md](./PLUGIN_REFERENCE.md#mcp-
 
 ### Build Script (`justfile`)
 
-If your plugin needs custom steps before or after the build, create a `justfile` with only the recipes you need. Only include `prebuild` and/or `postbuild` if they do real work — do not add a justfile at all if neither is needed.
+If your plugin needs custom steps before or after the build, create a `justfile` with only the recipes you need. Only include `prebuild` and/or `postbuild` if they do real work — do not add a justfile at all. This happens if neither is needed.
 
 ```just
 [private]
@@ -229,7 +229,7 @@ For local development before pushing:
 
 3. Test your commands/agents/skills
 
-4. Make changes and reinstall to test updates
+4. Make changes and install to test updates
 
 ### After Pushing
 
