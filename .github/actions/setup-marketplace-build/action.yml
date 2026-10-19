@@ -13,7 +13,11 @@ runs:
 
     - name: Install script dependencies
       shell: bash
-      run: npm ci
+      # esbuild's postinstall executes the binary npm is still writing out, and the two race. The exec fails ETXTBSY when npm has not closed that file yet. Installing with scripts off drops the race. esbuild's bin/esbuild is a JS shim that resolves the platform binary itself. The version check below still proves esbuild installed as a command that runs.
+      run: |
+        set -euo pipefail
+        npm ci --ignore-scripts
+        npx esbuild --version
 
     - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # https://github.com/extractions/setup-just/releases/tag/v4
 
