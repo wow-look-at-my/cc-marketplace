@@ -75,7 +75,7 @@ jobs:
             const plugins: string[] = JSON.parse(steps.matrix.outputs.plugins);
             const repo = process.env.GITHUB_REPOSITORY;
             const ref = process.env.CACHE_REF;
-            const wanted = (String(inputs.plugins)).split(/\s+/).filter(Boolean);
+            const wanted = (String(inputs.plugins ?? '')).split(/\s+/).filter(Boolean);
             const unknown = wanted.filter((p) => !plugins.includes(p));
             if (unknown.length > 0) throw new Error(`no marketplace plugin is named: ${unknown.join(' ')}`);
 
