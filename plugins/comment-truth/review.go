@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // THE JUDGMENT STAGE, and the reason it is affordable. The model is never
@@ -100,12 +102,12 @@ func (r *Repo) definitionOf(name string) string {
 // figures, rather than shipping the whole document.
 func relevantLines(doc string, c Claims) string {
 	lines := strings.Split(doc, "\n")
-	want := map[int]bool{}
+	want := set.New[int]()
 	for i, l := range lines {
 		for _, q := range c.Quantities {
 			for _, n := range numberRe.FindAllString(l, -1) {
 				if strings.HasPrefix(n, strings.SplitN(q.Raw, " ", 2)[0]) || strings.Contains(l, q.Unit) {
-					want[i] = true
+					want.Add(i)
 				}
 				_ = n
 			}
@@ -113,7 +115,7 @@ func relevantLines(doc string, c Claims) string {
 	}
 	var out []string
 	for i := range lines {
-		if want[i] {
+		if want.Contains(i) {
 			out = append(out, strings.TrimSpace(lines[i]))
 		}
 		if len(out) >= 25 {

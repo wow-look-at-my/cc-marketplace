@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // The mechanical verdicts: everything decidable by looking, decided for free.
@@ -187,14 +189,14 @@ func (r *Repo) findByBase(base string) string {
 // candidates lists where a cited path could live: at the repo root, and under
 // every directory between the citing file and the root.
 func (r *Repo) candidates(name, from string) []string {
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	var out []string
 	add := func(p string) {
 		p = filepath.Clean(p)
-		if p == "" || p == "." || seen[p] {
+		if p == "" || p == "." || seen.Contains(p) {
 			return
 		}
-		seen[p] = true
+		seen.Add(p)
 		out = append(out, p)
 	}
 	add(name)

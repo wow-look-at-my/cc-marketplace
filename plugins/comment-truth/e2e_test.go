@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -149,6 +150,19 @@ func TestCleanSessionIsSilent(t *testing.T) {
 
 }
 
+// hookInput builds the payload a Stop hook is handed, with the event name and
+// whatever else the test needs in it.
+func hookInput(t *testing.T, extra map[string]any) string {
+	t.Helper()
+	payload := map[string]any{"hook_event_name": "Stop"}
+	for key, value := range extra {
+		payload[key] = value
+	}
+	encoded, err := json.Marshal(payload)
+	require.NoError(t, err)
+	return string(encoded)
+}
+
 // The hook contract: exit 2 blocks, exit 0 allows, and an already-blocking stop
 // never blocks again (that would be an infinite loop).
 func TestHookContract(t *testing.T) {
@@ -156,13 +170,13 @@ func TestHookContract(t *testing.T) {
 	write(t, dir, "wire.go", "package p\n\n// This probably keeps the lock held.\nfunc Encode() {}\n")
 
 	var stderr bytes.Buffer
-	code := run(strings.NewReader(`{"hook_event_name":"Stop","cwd":"`+dir+`"}`), &stderr)
+	code := run(strings.NewReader(hookInput(t, map[string]any{"cwd": dir})), &stderr)
 	assert.Equal(t, 2, code)
 
 	assert.Contains(t, stderr.String(), "STOP:")
 
 	stderr.Reset()
-	code = run(strings.NewReader(`{"hook_event_name":"Stop","stop_hook_active":true,"cwd":"`+dir+`"}`), &stderr)
+	code = run(strings.NewReader(hookInput(t, map[string]any{"stop_hook_active": true, "cwd": dir})), &stderr)
 	assert.False(t, code != 0 || stderr.Len() != 0)
 
 	stderr.Reset()

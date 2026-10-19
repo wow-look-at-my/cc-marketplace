@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // SCOPE is the whole efficiency story. A repository holds thousands of
@@ -36,15 +38,15 @@ func (r *Repo) changedFiles() []string {
 	staged, _ := r.git("diff", "--name-only", "--cached", "--diff-filter=d")
 	untracked, _ := r.git("ls-files", "--others", "--exclude-standard")
 
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	var files []string
 	for _, chunk := range []string{out, dirty, staged, untracked} {
 		for _, f := range strings.Split(chunk, "\n") {
 			f = strings.TrimSpace(f)
-			if f == "" || seen[f] || !commentable(f) {
+			if f == "" || seen.Contains(f) || !commentable(f) {
 				continue
 			}
-			seen[f] = true
+			seen.Add(f)
 			files = append(files, f)
 		}
 	}

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // TRIAGE. Most comments assert nothing a checker could be right or wrong about ("// bump the counter").
@@ -90,13 +92,13 @@ func Analyze(b Block) Claims {
 	var c Claims
 	text := b.Text
 
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	addRef := func(s string) {
 		s = strings.TrimSuffix(s, "()")
-		if s == "" || seen[s] || isPattern(s) {
+		if s == "" || seen.Contains(s) || isPattern(s) {
 			return
 		}
-		seen[s] = true
+		seen.Add(s)
 		c.References = append(c.References, s)
 	}
 	for _, m := range backtickRe.FindAllStringSubmatch(text, -1) {
@@ -162,14 +164,14 @@ func isDoc(path string) bool {
 }
 
 func uniqueMatches(re *regexp.Regexp, text string) []string {
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	var out []string
 	for _, m := range re.FindAllString(text, -1) {
 		k := strings.ToLower(m)
-		if seen[k] {
+		if seen.Contains(k) {
 			continue
 		}
-		seen[k] = true
+		seen.Add(k)
 		out = append(out, m)
 	}
 	return out
