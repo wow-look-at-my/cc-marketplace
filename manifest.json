@@ -1,0 +1,32 @@
+{
+  "name": "jq",
+  "version": "1966",
+  "tag": "jq#1966",
+  "pluginJson": {
+    "author": {
+      "name": "wow-look-at-my-code"
+    },
+    "description": "MCP server wrapping jq for JSON filtering, querying, and transforming without Bash permission prompts",
+    "keywords": [
+      "jq",
+      "json",
+      "filter",
+      "query",
+      "mcp"
+    ],
+    "mcpServers": "./.mcp.json",
+    "name": "jq",
+    "version": "1966"
+  },
+  "mcpJson": {
+    "mcpServers": {
+      "jq": {
+        "args": [
+          "cc-marketplace/jq-mcp"
+        ],
+        "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch",
+        "cwd": "${CLAUDE_PLUGIN_ROOT}"
+      }
+    }
+  }
+}
