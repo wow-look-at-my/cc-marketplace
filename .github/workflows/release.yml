@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     # see docs/ci-yaml-notes.md#composite-action-caller-permissions
     permissions:
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: wow-look-at-my/slopfix@master
+      - uses: wow-look-at-my/slopfix@lkgb
 
       - uses: ./.github/actions/setup-marketplace-build
 
@@ -67,15 +67,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NODE_PATH: ${{ github.workspace }}/node_modules
           CACHE_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/heads/{0}', github.ref_name) }}
-          WANTED: ${{ inputs.plugins }}
         with:
           steps: ${{ toJSON(steps) }}
+          inputs: ${{ toJSON(inputs) }}
           script: |
             const { hashFiles } = require('@actions/glob');
             const plugins: string[] = JSON.parse(steps.matrix.outputs.plugins);
             const repo = process.env.GITHUB_REPOSITORY;
             const ref = process.env.CACHE_REF;
-            const wanted = (process.env.WANTED ?? '').split(/\s+/).filter(Boolean);
+            const wanted = (String(inputs.plugins)).split(/\s+/).filter(Boolean);
             const unknown = wanted.filter((p) => !plugins.includes(p));
             if (unknown.length > 0) throw new Error(`no marketplace plugin is named: ${unknown.join(' ')}`);
 
@@ -129,7 +129,7 @@ jobs:
       fail-fast: false
       matrix:
         module: [shellwalk, rgmcp]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       id-token: write
@@ -147,14 +147,14 @@ jobs:
           set -euo pipefail
           go install golang.org/x/tools/cmd/stringer@v0.49.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - uses: wow-look-at-my/go-toolchain@master
+      - uses: wow-look-at-my/go-toolchain@lkgb
         with:
           working-directory: tools/${{ matrix.module }}
 
   build:
     needs: prepare
     if: needs.prepare.outputs.has_build == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       id-token: write
@@ -183,7 +183,7 @@ jobs:
       # see docs/ci-yaml-notes.md#release-build-binary-format-and-action-pin
       - name: Build Go plugin
         if: ${{ hashFiles(format('plugins/{0}/**/*.go', matrix.plugin)) != '' }}
-        uses: wow-look-at-my/go-toolchain@master
+        uses: wow-look-at-my/go-toolchain@lkgb
         with:
           working-directory: plugins/${{ matrix.plugin }}
           targets: cosmo
@@ -245,9 +245,10 @@ jobs:
     needs: [prepare, build]
     # build is skipped when no plugin changed. The cooked tree is still in the cache then.
     if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.build.result != 'failure' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
+      id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v7
@@ -356,7 +357,7 @@ jobs:
       needs.prepare.outputs.all_plugins != '[]' &&
       needs.prepare.outputs.all_plugins != '' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
     # Same reason as prepare: setup-marketplace-build can run go-toolchain here.
     permissions:
@@ -381,17 +382,15 @@ jobs:
       - name: Restore the cooked trees of plugins this run did not rebuild
         if: needs.prepare.outputs.cached_plugins != '[]' && needs.prepare.outputs.cached_plugins != ''
         uses: wow-look-at-my/actions@typescript#latest
-        env:
-          CACHED: ${{ needs.prepare.outputs.cached_plugins }}
-          KEYS: ${{ needs.prepare.outputs.cache_keys }}
         with:
+          needs: ${{ toJSON(needs) }}
           script: |
             // @actions/cache exports no require entry. A file path skips that check, and node24 can require an ES module.
             const cache = require(`${process.env.GITHUB_WORKSPACE}/node_modules/@actions/cache/lib/cache.js`);
-            const keys: Record<string, string> = JSON.parse(process.env.KEYS!);
+            const keys: Record<string, string> = JSON.parse(String(needs.prepare.outputs.cache_keys ?? "")!);
             // A run that rebuilt no plugin downloaded no artifact, so nothing created this directory.
             fs.mkdirSync('/tmp/all-plugin-artifacts', { recursive: true });
-            for (const plugin of JSON.parse(process.env.CACHED!) as string[]) {
+            for (const plugin of JSON.parse(String(needs.prepare.outputs.cached_plugins ?? "")!) as string[]) {
               const path = `/tmp/packaged-${plugin}`;
               const hit = await cache.restoreCache([path], keys[plugin]);
               if (!hit) throw new Error(`${plugin}: no cached tree under ${keys[plugin]}, and publishing without it drops it from marketplace.json`);
@@ -479,7 +478,7 @@ jobs:
   smoke-test:
     needs: [publish-marketplace]
     if: ${{ (github.event_name == 'push' || inputs.publish) && needs.publish-marketplace.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

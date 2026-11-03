@@ -4,7 +4,7 @@ description: Read before writing or editing any CSS -- stylesheet, styled-compon
 
 # CSS: use the cascade instead of repeating yourself
 
-Notes to self. The wrong instinct is not a knowledge gap about syntax. It is reaching for "which selector do I add a rule for?" when the question is "what must this ELEMENT look like, and what here is genuinely an exception?".
+Notes to self. The incorrect instinct is not a knowledge gap about syntax. It reaches for "which selector do I add a rule for?" when the question is "what must this ELEMENT look like, and what here is genuinely an exception?".
 
 ## The failure this exists to stop
 
@@ -50,9 +50,9 @@ The universal selector `*` and all combinators (`>`, `+`, `~`, descendant space)
 Consequences worth internalizing:
 
 - What it changes is the elements that had NO rule (that is the point), so scan for bare instances of that element before hoisting.
-- `:is()`, `:not()` and `:has()` add no weight themselves, but take **the weight of their most specific argument**: `p:not(#fakeId)` is 1-0-1. So `:not(.btn)` quietly costs a class column -- often the reason a rule needs a bigger hammer next to it.
+- `:is()`, `:not()` and `:has()` add no weight themselves, but take **the weight of their most specific argument**: `p:not(#fakeId)` is 1-0-1. So `:not(.btn)` quietly costs a class column -- frequently the reason a rule needs a bigger hammer next to it.
 - `:where()` "always has its specificity replaced with zero, 0-0-0". This is the tool for a base rule that must be trivially overridable: `:where(a) { ... }` is beaten by literally any `a` rule anywhere, in any order. Use it for defaults a consumer is expected to override. Use a plain type selector for the page's own baseline.
-- `!important` "reverses the order of stylesheets" -- it is not a specificity bump, and reaching for it means the rule is in the wrong place. Fix the structure instead. An `!important` added to win an argument is the next session's mystery.
+- `!important` "reverses the order of stylesheets" -- it is not a specificity bump, and reaching for it means the rule is in the incorrect place. Fix the structure instead. An `!important` added to win an argument is the next session's mystery.
 
 ## Cascade layers, when a codebase already uses them (MDN `@layer`)
 
@@ -62,7 +62,7 @@ Consequences worth internalizing:
 
 ## Hoisting duplicates safely (the actual edit)
 
-1. Collect the identical blocks and their selectors.
+1. Collect the same blocks and their selectors.
 2. Write the shared block on the element (or the nearest common ancestor).
 3. Delete the copies. Keep only rules with a real delta.
 4. **Check what else that selector now catches** -- the elements. That is where a base rule shows up as an unwanted change. It is the thing to verify visually or in a screenshot.
@@ -70,6 +70,6 @@ Consequences worth internalizing:
 
 ## The opposite failure -- do not overcorrect
 
-If most instances need an override. The base is wrong -- narrow it, scope it to a container, or drop it. Same for `:root` custom properties named after one component, and for utility classes that exist in one place.
+If most instances need an override. The base is incorrect -- narrow it, scope it to a container, or drop it. Same for `:root` custom properties named after one component, and for utility classes that exist in one place.
 
-Duplication that is NOT a defect: identical blocks in different `@media` contexts, `from`/`to` in `@keyframes`, vendor-prefixed pairs. The rule is about the same block repeated in the SAME context.
+Duplication that is NOT a defect: same blocks in different `@media` contexts, `from`/`to` in `@keyframes`, vendor-prefixed pairs. The rule is about the same block repeated in the SAME context.

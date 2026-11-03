@@ -75,7 +75,7 @@ demo-name/
 
 ## Output
 
-After creating all files, provide:
+After creating all files, give:
 1. A brief summary of what was built
 2. The file tree showing what was created
 3. How to view it ( open index.html / navigate to the directory — remember, server is already running)

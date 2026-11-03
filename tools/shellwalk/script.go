@@ -1,3 +1,5 @@
+// script.go holds the script code.
+
 package shellwalk
 
 import (

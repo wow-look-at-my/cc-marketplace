@@ -11,7 +11,7 @@ The tools are on the `slh` server of this plugin: `start_task`, `wait_task`, `li
 ## The loop
 
 1. **Plan first.** Read enough of the code to split the work into units. Each unit is a change one worker can finish and verify alone.
-2. **Write each brief as a complete task.** Name the goal, the files and functions, the constraints of the repository, the exact build and test command, and what the report must say. A worker that has to guess a convention gets it wrong. Paste the rule into the brief.
+2. **Write each brief as a complete task.** Name the goal, the files and functions, the constraints of the repository, the exact build and test command, and what the report must say. A worker that has to guess a convention gets it incorrect. Paste the rule into the brief.
 3. **Start the independent units in one message.** `start_task` returns at once, so parallel units run in parallel. Give parallel units disjoint files. Workers that edit one file overwrite each other.
 4. **Wait with `wait_task`.** A running task comes back as "running". Call it again. Do not do the worker's job while you wait.
 5. **Review the work, not the report.** The report is the worker's claim. Read the diff. Run the build and the tests yourself. A green claim over a red build is the common failure.

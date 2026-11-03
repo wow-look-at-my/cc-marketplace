@@ -1,3 +1,5 @@
+// build-plugin.ts holds the build plugin code.
+
 import { execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";

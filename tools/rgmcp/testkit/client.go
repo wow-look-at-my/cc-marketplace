@@ -1,3 +1,5 @@
+// client.go holds the client code.
+
 package testkit
 
 import (

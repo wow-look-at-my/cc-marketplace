@@ -1,3 +1,5 @@
+// release_plugin.go holds the release plugin code.
+
 package main
 
 import (

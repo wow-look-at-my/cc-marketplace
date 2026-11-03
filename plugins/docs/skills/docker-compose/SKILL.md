@@ -8,9 +8,9 @@ Notes to self. Checked against the current Compose Specification pages on docs.d
 
 ## The reference is vendored here - read it, do not recall it
 
-This skill's `reference/` folder holds the **complete upstream Compose file reference**, verbatim, pinned to a commit named in each file's header (`reference/NOTICE.md` records the source and the Apache-2.0 license).
+This skill's `reference/` folder holds the **complete reference of the upstream Compose file**, verbatim, pinned to a commit named in each file's header (`reference/NOTICE.md` records the source and the Apache-2.0 license).
 
-The rest of this file is only the short list of things I get wrong. It does not enumerate the service fields, and Compose has far more of them than I remember.
+The rest of this file is only the short list of things I get incorrect. It does not enumerate the service fields, and Compose has far more of them than I remember.
 
 **Grep the reference before stating any specific fact** - whether a field exists, what it accepts, what it defaults to, how fields interact. Guessing a Compose field name from training data produces something plausible that Compose rejects:
 
@@ -52,12 +52,12 @@ The loop to never run again: edit `compose.yaml`, run `docker compose restart`, 
 
 **After editing `compose.yaml`. So plain `up -d` is usually enough, and it only touches services that actually changed.
 
-- `--force-recreate` recreates even when config and image are unchanged. Use it when recreation must happen regardless (or when unsure - it is never *wrong*, only broader).
+- `--force-recreate` recreates even when config and image are unchanged. Use it when recreation must happen regardless (or when unsure - it is never *incorrect*, only broader).
 - `--no-deps` restricts the blast radius to the named service.
 - Changed the Dockerfile rather than the Compose file? Rebuild first: `docker compose build web && docker compose up --no-deps -d web`. `up` alone will not rebuild an image whose source changed.
 - `--no-recreate` is the opposite request - keep existing containers, ignore changes.
 
-Legitimate uses for `restart` are narrow. One is bouncing a process that has wedged. The other is re-reading a config file the app itself loads from a mounted volume. Neither involves having edited `compose.yaml`. If the compose file changed, `restart` is the wrong verb.
+Legitimate uses for `restart` are narrow. One bouncs a process that wedged. The other re-reads a config file the app itself loads from a mounted volume. Neither involves having edited `compose.yaml`. If the compose file changed, `restart` is the incorrect verb.
 
 ## `depends_on` does not do what it looks like it does
 
@@ -149,7 +149,7 @@ Different mechanisms, routinely confused:
 ## Variables
 
 - `${VAR}`, `${VAR:-default}`, `${VAR-default}`, `${VAR:?err}`, `${VAR?err}`, `${VAR:+alt}`, `${VAR+alt}`, and nesting (`${A:-${B:-x}}`). Nothing else - `${VAR/foo/bar}` is not supported.
-- `$$` is a literal `$`. Needed whenever a value contains a shell variable the container must expand: `command: /bin/sh -c 'echo "hello $$HOSTNAME"'`.
+- `$$` is a literal `$`. Needed when a value contains a shell variable the container must expand: `command: /bin/sh -c 'echo "hello $$HOSTNAME"'`.
 - Interpolation applies to **values, not keys**. For `labels`/`environment`. That means the `- "KEY=value"` list form interpolates a variable in the key position and the `KEY: value` map form does not.
 - Unresolved and undefaulted -> warning + empty string, not an error. Use `:?` when it must be set.
 - Anchors/aliases (`&x` / `*x`) resolve **before** interpolation, so variables cannot name anchors. YAML merge (`<<:`) works on mappings only, not sequences - which is why `environment` must use the `KEY: value` map form when merging fragments.
@@ -166,7 +166,7 @@ Different mechanisms, routinely confused:
 - **`restart`**: `no` (default - **quote it**, bare `no` is YAML false), `always`, `on-failure[:max-retries]`, `unless-stopped`.
 - **`profiles`**: services without a profile always run. A service named explicitly on the CLI activates its own profile. `links`/`extends`/`service:x` references do *not* auto-enable a profiled service - they error.
 - **`gpus: all`** (or a list of `{driver, count}`) instead of the old `deploy.resources.reservations.devices` incantation.
-- **`models:`** top level + `models:` per service - Docker Model Runner integration. Compose injects `<MODEL_KEY>_URL` (uppercased, `-`->`_`) or the names given by `endpoint_var`/`model_var`.
+- **`models:`** top level + `models:` per service - integration of the Docker Model Runner. Compose injects `<MODEL_KEY>_URL` (uppercased, `-`->`_`) or the names given by `endpoint_var`/`model_var`.
 - **`provider:`** - hands a service's lifecycle to an external binary (`{type:, options:}`). Dependents get `<SERVICE>_<VAR>` env vars back.
 - **`use_api_socket: true`** mounts the engine socket + credentials for containers that need to push/pull.
 - **`attach: false`** stops Compose collecting that service's logs.

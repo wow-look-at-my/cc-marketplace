@@ -1,3 +1,5 @@
+// globtool.go holds the globtool code.
+
 package main
 
 import (
