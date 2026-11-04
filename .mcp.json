@@ -1,0 +1,11 @@
+{
+	"mcpServers": {
+		"grep": {
+			"alwaysLoad": true,
+			"args": [
+				"cc-marketplace/grep"
+			],
+			"command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch"
+		}
+	}
+}
