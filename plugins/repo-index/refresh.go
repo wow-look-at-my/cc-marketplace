@@ -1,3 +1,5 @@
+// refresh.go holds the refresh code.
+
 package main
 
 import (

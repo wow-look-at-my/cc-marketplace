@@ -1,0 +1,7 @@
+{
+		"name": "test",
+		"hooks": {
+			"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo"}]}],
+			"PostToolUse": [{"hooks": [{"type": "command", "command": "echo"}]}]
+		}
+	}

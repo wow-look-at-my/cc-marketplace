@@ -4,7 +4,7 @@ Rationale the workflow files point at, kept here so a `.yml` stays readable. Eac
 
 ## plugin-e2e-workflow-rationale
 
-`plugin-e2e.yml` drives a real `claude` process with a plugin loaded. The Go and bash unit suites assert what a hook or a server DOES with a given input. They cannot assert that Claude Code registers it, spawns it, and uses its answer. Every defect this workflow has caught lived in that gap: a malformed JSON-RPC response only vscode-jsonrpc rejects.
+`plugin-e2e.yml` drives a real `claude` process with a plugin loaded. The Go and bash unit suites assert what a hook or a server DOES with a given input. They cannot assert that Claude Code registers it, spawns it, and uses its answer. Every defect this workflow caught lived in that gap: a malformed JSON-RPC response only vscode-jsonrpc rejects.
 
 One job per plugin whose contract is with the client, not with its own input.
 
@@ -14,7 +14,9 @@ A job in `release.yml`. It restores the plugin the `build` job cooked, from that
 
 Driving the cooked tree is what makes this job test the package that ships. Its `.lsp.json` runs `scripts/launch cc-marketplace/css-duplication`. The cooked `mh.plugin.json` names this run's branch, so the launcher downloads the server the `build` job just published to buildhost from that branch.
 
-Diagnostics drain into an attachment on the NEXT turn. As a result, the prompt has to force a turn after the edit. Asking for a read-back of the edited file does not. The model already knows what it wrote, and one that answered "no re-read was needed" made this job red. So the prompt asks for a line the model cannot know. That line is a nonce written to `ticket.txt` at run time. The run step fails when the answer omits the nonce, which names the declined read rather than blaming the server.
+Diagnostics drain into an attachment on the NEXT turn. As a result, the prompt has to force a turn after the edit. Asking for a read-back of the edited file does not. The model already knows what it wrote, and one that answered "no re-read was needed" made this job red. So the prompt asks for a line the model cannot know. That line is a nonce written to `ticket.txt` at run time.
+
+The run step fails when the answer omits the nonce, which names the declined read rather than blaming the server.
 
 `--model sonnet` is deliberate on both jobs. Each asserts the behavior of a hook or a server, which no model tier changes, and each runs on every push.
 
@@ -35,7 +37,7 @@ A composite action cannot request permissions. It runs with whatever the calling
 
 ## marketplace-build-cache-miss
 
-`setup-marketplace-build` builds only when its cache misses, so a warm entry hides a break in that path for months. The install step is the backstop: it fails naming the missing file rather than letting a later step discover it.
+`setup-marketplace-build` builds only when its cache misses, so a warm entry hides a break in that path for months. The install step is the backstop: it fails naming the missing file rather than letting a later step find it.
 
 ## release-build-binary-format-and-action-pin
 
@@ -47,4 +49,4 @@ A composite action cannot request permissions. It runs with whatever the calling
 
 ## smoke-test-job-rationale
 
-Installs and updates EVERY plugin from the marketplace this run published, through real Claude Code. Each entry points at an orphan tag this run pushed. A tag that was never pushed, or one holding the wrong tree, fails here rather than for the first person who installs it.
+Installs and updates EVERY plugin from the marketplace this run published, through real Claude Code. Each entry points at an orphan tag this run pushed. A tag that was never pushed, or one holding the incorrect tree, fails here rather than for the first person who installs it.

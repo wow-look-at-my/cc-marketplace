@@ -1,3 +1,5 @@
+// git.go holds the git code.
+
 package main
 
 import (

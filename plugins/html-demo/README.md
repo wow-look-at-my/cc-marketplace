@@ -1,6 +1,6 @@
 # HTML Demo Plugin
 
-Create organized, well-structured HTML demo pages with properly separated CSS and JS files.
+Create organized, well-structured HTML demo pages with correctly separated CSS and JS files.
 
 ## Installation
 
@@ -16,7 +16,7 @@ claude plugin install html-demo
 
 ### Skills
 
-- `html-demo` - Creates an interactive HTML demo page for any concept, with code properly organized into separate HTML, CSS, and JS files.
+- `html-demo` - Creates an interactive HTML demo page for any concept, with code correctly organized into separate HTML, CSS, and JS files.
 
 ## Usage
 

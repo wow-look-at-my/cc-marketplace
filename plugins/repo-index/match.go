@@ -1,3 +1,5 @@
+// match.go holds the match code.
+
 package main
 
 import (

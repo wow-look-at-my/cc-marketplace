@@ -1,3 +1,5 @@
+// main.go holds the main code.
+
 package main
 
 import (

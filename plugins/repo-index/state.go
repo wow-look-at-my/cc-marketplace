@@ -1,3 +1,5 @@
+// state.go holds the state code.
+
 package main
 
 import (

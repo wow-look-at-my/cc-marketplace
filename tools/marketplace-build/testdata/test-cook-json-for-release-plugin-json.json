@@ -1,0 +1,8 @@
+{
+		"$schema": "../../schema.json",
+		"name": "my-plugin",
+		"description": "test",
+		"mh": {
+			"include_in_marketplace": true
+		}
+	}
