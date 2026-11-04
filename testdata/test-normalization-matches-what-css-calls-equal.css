@@ -1,0 +1,7 @@
+
+.a { COLOR:   var(--accent);text-decoration:none }
+.b {
+  color: var(--accent);
+  text-decoration: none;
+}
+.c { color: var(--ACCENT); text-decoration: none; }
