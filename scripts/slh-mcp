@@ -1,0 +1,41 @@
+#!/bin/sh
+# Runs `slh mcp`. The slh binary comes from buildhost, never from this plugin.
+# The first run downloads it. Later runs refresh a copy older than a day.
+set -eu
+
+dir="${CLAUDE_PLUGIN_DATA:-${XDG_CACHE_HOME:-$HOME/.cache}/slh-workers}"
+bin="$dir/slh"
+# slh is a fat APE: buildhost serves the same bytes for every os and arch.
+url="${SLH_WORKERS_URL:-https://dl.pazer.build/simple-llm-harness/slh?os=linux&arch=amd64}"
+
+stale=yes
+if [ -x "$bin" ] && [ -z "$(find "$bin" -mmin +1440 2>/dev/null)" ]; then
+	stale=no
+fi
+
+if [ "$stale" = yes ]; then
+	mkdir -p "$dir"
+	tmp="$bin.download.$$"
+	set -- -fsSL --retry 3 -o "$tmp"
+	if [ -n "${BUILDHOST_READ_TOKEN:-}" ]; then
+		set -- "$@" -H "Authorization: Bearer $BUILDHOST_READ_TOKEN"
+	fi
+	if curl "$@" "$url" && chmod +x "$tmp" && "$tmp" --version >/dev/null 2>&1; then
+		mv -f "$tmp" "$bin"
+	else
+		rm -f "$tmp"
+		if [ ! -x "$bin" ]; then
+			echo "slh-workers: cannot download slh from $url." >&2
+			if [ -z "${BUILDHOST_READ_TOKEN:-}" ]; then
+				echo "slh-workers: BUILDHOST_READ_TOKEN is not set, and that project needs a buildhost read token." >&2
+			fi
+			exit 1
+		fi
+		echo "slh-workers: the refresh from $url failed. Running the older copy at $bin." >&2
+	fi
+fi
+
+if [ -n "${SLH_WORKERS_CONFIG:-}" ]; then
+	exec "$bin" --config "$SLH_WORKERS_CONFIG" mcp
+fi
+exec "$bin" mcp
