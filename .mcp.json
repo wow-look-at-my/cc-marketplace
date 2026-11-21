@@ -1,0 +1,11 @@
+{
+	"mcpServers": {
+		"jq": {
+			"args": [
+				"cc-marketplace/jq-mcp"
+			],
+			"command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch",
+			"cwd": "${CLAUDE_PLUGIN_ROOT}"
+		}
+	}
+}
