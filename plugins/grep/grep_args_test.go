@@ -70,6 +70,11 @@ func TestParseArgsBoolStringCoercion(t *testing.T) {
 	parseErr(t, `{"pattern":"x","-n":1}`)
 	parseErr(t, `{"pattern":"x","-i":"yes"}`)
 	parseErr(t, `{"pattern":"x","multiline":null}`)
+
+	assert.False(t, parseOK(t, `{"pattern":"x"}`).onlyMatch)
+	assert.True(t, parseOK(t, `{"pattern":"x","-o":true}`).onlyMatch)
+	assert.True(t, parseOK(t, `{"pattern":"x","-o":"true"}`).onlyMatch)
+	parseErr(t, `{"pattern":"x","-o":1}`)
 }
 
 func TestParseArgsOutputModeEnum(t *testing.T) {
@@ -133,6 +138,20 @@ func TestBuildRgArgsOrder(t *testing.T) {
 	// Explicit files in fwm mode force text so binary lines are stable across ripgrep's platform-specific binary scanners.
 	a.explicitFile = true
 	want = append(append([]string{}, base...), "--json", "--text", "-B", "1", "-A", "2", "p")
+	assert.Equal(t, want, buildRgArgs(a))
+
+	// -o goes to rg in content and count modes only: rg --json ignores it, and -l has no lines.
+	a = parseOK(t, `{"pattern":"p","output_mode":"content","-o":true}`)
+	want = append(append([]string{}, base...), "-o", "-n", "p")
+	assert.Equal(t, want, buildRgArgs(a))
+	a = parseOK(t, `{"pattern":"p","output_mode":"count","-o":"true"}`)
+	want = append(append([]string{}, base...), "-c", "-H", "-o", "p")
+	assert.Equal(t, want, buildRgArgs(a))
+	a = parseOK(t, `{"pattern":"p","-o":true}`)
+	want = append(append([]string{}, base...), "--json", "p")
+	assert.Equal(t, want, buildRgArgs(a))
+	a = parseOK(t, `{"pattern":"p","output_mode":"filenames","-o":true}`)
+	want = append(append([]string{}, base...), "-l", "p")
 	assert.Equal(t, want, buildRgArgs(a))
 
 	// content without -n; -C fallback when context absent.

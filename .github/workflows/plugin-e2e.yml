@@ -16,7 +16,7 @@ permissions:
 jobs:
   # The Bash cleaner's rule moved to slopfix, so this drives the manifest against the real binary, which no unit test covers.
   slopfix-clean-bash:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7

@@ -381,7 +381,7 @@ func TestParseFwmEventsUnits(t *testing.T) {
 		`{"type":"summary","data":{}}`,
 		`{"type":"match","data":{"path":{"text":"/r/nope"},"lines":{"text":"x\n"}}}`, // no line_number: skipped
 		`{truncated garbage`, // unparseable: skipped
-	})
+	}, false)
 	require.Len(t, groups, 2)
 	assert.Equal(t, "/r/a", groups[0].path)
 	require.Len(t, groups[0].lines, 2)

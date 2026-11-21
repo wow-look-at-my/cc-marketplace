@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"strings"
 	"testing"
@@ -95,13 +97,7 @@ func TestLegitimateDuplicationIsNotReported(t *testing.T) {
 }
 
 func TestNormalizationMatchesWhatCSSCallsEqual(t *testing.T) {
-	src := `
-.a { COLOR:   var(--accent);text-decoration:none }
-.b {
-  color: var(--accent);
-  text-decoration: none;
-}
-.c { color: var(--ACCENT); text-decoration: none; }`
+	src := testNormalizationMatchesWhatCSSCallsEqualCss
 	groups := FindDuplicates(ParseRules(src))
 	require.Len(t, groups, 1, "case and whitespace differences are the same declaration")
 	require.Len(t, groups[0].Rules, 2, "but a custom-property NAME is case-sensitive, so .c differs")
@@ -140,3 +136,6 @@ func TestLineNumbersSurviveCommentsAndNesting(t *testing.T) {
 	require.Equal(t, 4, rules[0].Line)
 	require.Equal(t, 6, rules[1].Line)
 }
+
+//go:embed testdata/test-normalization-matches-what-css-calls-equal.css
+var testNormalizationMatchesWhatCSSCallsEqualCss string
