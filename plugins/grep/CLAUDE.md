@@ -1,6 +1,8 @@
 ## Grep Plugin
 
-The grep plugin lives at `plugins/grep/`. The builtin's `--max-columns 500` line omission is dropped so a matching line is never lost. Context precedence `context` > `-C` > `-B`/`-A`. `-e` for dash-leading patterns. `-o` passes to rg in `content`/`count`. `rg --json` ignores it, so `filenames_with_matches` cuts the submatches itself.
+The grep plugin lives at `plugins/grep/`. The builtin's `--max-columns 500` line omission is dropped so a matching line is never lost. Context precedence `context` > `-C` > `-B`/`-A`. `-e` for dash-leading patterns. `-o` is accepted. However, it kept out of the schema and README, so a model that sends it gets normal results and is not invited to use it.
+
+It passes to rg in `content`/`count`. `rg --json` ignores it, so `filenames_with_matches` cuts the submatches itself.
 
 Zod-style input coercions. Vq path preprocessing -- whitespace trim, `~`/`~/x` home expansion, null-byte rejection, plus the same `"undefined"`/`"null"`-resolve-to-root amendment as glob. Q46/l46 pagination with the exact result strings. Newest-first mtime sort with the builtin's localeCompare tie-break ported in `collate.go` via x/text ICU root collation. Output modes documented solely on the `output_mode` property), the builtin's ambiguous `type` parameter is REMOVED (unknown-argument error. `glob` covers filtering), and `output_mode` is exactly `content` | `filenames_with_matches` | `filenames` | `count` -- the old `files_with_matches` name is gone, no alias.
 

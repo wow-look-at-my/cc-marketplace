@@ -23,7 +23,6 @@ The model sees a `Grep` tool:
 | `-A` / `-B` / `-C` / `context` | No | Context lines around matches |
 | `-n` | No | Line numbers (default on) |
 | `-i` | No | Case-insensitive |
-| `-o` | No | Show only the matched text, one match per line. In `count` mode, count matches instead of lines |
 | `head_limit` / `offset` | No | Pagination (default 250 lines) |
 | `multiline` | No | Let patterns span lines |
 
@@ -51,7 +50,6 @@ The builtin's default only returned bare filenames, which forced a second search
 - `path` may be a file or a directory. It is whitespace-trimmed and accepts `~` / `~/sub` (expanded to the home directory) like the builtin's path resolution. Missing paths return `Path does not exist: ... Note: your current working directory is ...` with a did-you-mean suggestion when a re-rooted candidate exists.
 - `filenames_with_matches` and `filenames` order files newest-first. Equal mtimes tie-break by the builtin's localeCompare (ported via ICU root collation — case-insensitive at primary strength, so `a.txt` sorts before `B.txt`).
 - Context precedence: `context` beats `-C` beats `-B`/`-A`. `-n` defaults to true. Patterns starting with `-` are passed via `-e`.
-- `-o` prints each match as its own line, as `rg -o` does. Context lines stay whole. A multiline match splits into numbered lines.
 - Searches time out after several seconds (60 on WSL), overridable via `CLAUDE_CODE_GLOB_TIMEOUT_SECONDS` (the builtin's env var — it governed both Grep and Glob). Output is capped at 20MB per stream. A timeout or cap kill with partial output returns the complete lines seen so far.
 - Results many characters (UTF-16 units, matching the builtin's maxResultSizeChars) are written to a temp file and replaced by a `<persisted-output>` block with a ~2KB preview.
 
