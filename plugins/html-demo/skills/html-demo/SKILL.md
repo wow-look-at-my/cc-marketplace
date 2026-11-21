@@ -20,14 +20,14 @@ You MUST keep code separated into distinct files. This is non-negotiable.
 ### CSS
 - All styles go in `.css` files, not inline
 - Start with a `styles.css` or `main.css` for base/global styles
-- If styles grow beyond many lines, split into logical files (e.g., `layout.css`, `components.css`, `animations.css`, `theme.css`)
+- If styles grow beyond many lines, split into logical files
 - This is not a hard limit — use judgment, but lean toward splitting early rather than having one massive file
 
 ### JavaScript
 - All logic goes in `.js` files, not in HTML
 - Split JS into multiple files by responsibility — this is expected and encouraged:
   - `main.js` or `app.js` — initialization and orchestration
-  - Separate files for distinct features (e.g., `chart.js`, `controls.js`, `data.js`, `animations.js`, `utils.js`)
+  - Separate files for distinct features
 - Keep each JS file focused on one concern
 - Use simple script tags (no bundler needed) — files can reference globals or use a simple namespace pattern
 
@@ -62,7 +62,7 @@ demo-name/
 
 ## Server Warning
 
-**DO NOT start a web server.** Do not run `python -m http.server`, `npx serve`, `live-server`, or any other server command. The user already has a server running to serve these files. Just create the files and tell the user where they are.
+**DO NOT start a web server.** The user already has a server running to serve these files. create the files and tell the user where they are.
 
 ## Quality Guidelines
 
@@ -75,7 +75,7 @@ demo-name/
 
 ## Output
 
-After creating all files, provide:
+After creating all files, give:
 1. A brief summary of what was built
 2. The file tree showing what was created
 3. How to view it ( open index.html / navigate to the directory — remember, server is already running)

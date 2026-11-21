@@ -1,3 +1,5 @@
+// lsp.go holds Server.
+
 package main
 
 import (

@@ -1,3 +1,5 @@
+// state.go holds statePath.
+
 package main
 
 import (

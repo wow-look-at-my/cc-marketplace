@@ -34,3 +34,7 @@ build/
 # every build. Same rule as above: the build never reads the committed copy, so
 # a copy in the tree only goes stale and gets linted as prose this repo wrote.
 plugins/docs/skills/*/reference/
+
+# comment-truth plugin build outputs
+plugins/comment-truth/comment-truth
+plugins/comment-truth/build/

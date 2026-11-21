@@ -1,3 +1,5 @@
+// css.go holds Rule.
+
 package main
 
 import (

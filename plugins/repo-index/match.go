@@ -1,3 +1,5 @@
+// match.go holds maxSuggestions.
+
 package main
 
 import (

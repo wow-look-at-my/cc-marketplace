@@ -1,3 +1,5 @@
+// client.go holds DiscardLogf.
+
 package testkit
 
 import (

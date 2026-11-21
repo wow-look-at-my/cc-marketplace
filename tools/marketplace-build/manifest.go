@@ -1,3 +1,5 @@
+// manifest.go holds pluginReleaseManifest.
+
 package main
 
 import (

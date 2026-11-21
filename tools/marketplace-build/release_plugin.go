@@ -1,3 +1,5 @@
+// release_plugin.go holds releaseMetadata.
+
 package main
 
 import (

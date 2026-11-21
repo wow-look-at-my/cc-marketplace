@@ -1,3 +1,5 @@
+// cache.go holds ttl.
+
 package main
 
 import (

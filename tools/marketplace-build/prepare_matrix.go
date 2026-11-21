@@ -1,3 +1,5 @@
+// prepare_matrix.go holds isIncludedInMarketplace.
+
 package main
 
 import (

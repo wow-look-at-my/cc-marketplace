@@ -6,7 +6,7 @@ Lets Claude plan, coordinate and review while [slh](https://github.com/wow-look-
 claude plugin install slh-workers
 ```
 
-The plugin adds the MCP server `slh` with `start_task`, `wait_task`, `list_tasks` and `cancel_task`, plus the `delegate` skill that teaches the coordinator loop.
+The plugin adds the MCP server `slh` skill that teaches the coordinator loop.
 
 ## Setup
 

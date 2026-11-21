@@ -10,9 +10,9 @@ Notes to self. Checked against `nodejs.org/api/typescript.html` and executed on 
 
 Then I *justify* it — "an extensionless specifier cannot resolve a `.ts`, so it must be JavaScript" — which is a true fact about resolution turned into a false conclusion about the language.
 
-**Node has run TypeScript by stripping types since v22.18.0 / v23.6.0, on by default. It is stable as of v24.12.0 / v25.2.0.** No flag, no loader, no build step. Check `node --version` before concluding anything about what a file has to be.
+**Node ran TypeScript by stripping types since v22.18.0 / v23.6.0, on by default. It is stable as of v24.12.0 / v25.2.0.** No flag, no loader, no build step. Check `node --version` before concluding anything about what a file has to be.
 
-Real cost of getting this wrong: an 81-line hand-written `.d.ts` shipped beside a `.js` module. It duplicated types that nothing verified against the implementation. It was deleted the moment the file became `.ts`.
+Real cost of getting this incorrect: an 81-line hand-written `.d.ts` shipped beside a `.js` module. It duplicated types that nothing verified against the implementation. It was deleted the moment the file became `.ts`.
 
 ## Type stripping in one paragraph
 
@@ -33,7 +33,7 @@ The rule that made me conclude "it has to be `.js`":
 
 Verified: `require('/abs/mod.ts')` → works. `require('/abs/mod')` → `Cannot find module`. Node never adds `.ts` to the extension search list.
 
-Two more that follow from it, and both have bitten:
+Two more that follow from it, and both bit:
 
 - **A `.js` specifier does not resolve to a `.ts` file.** `import './mod.js'` when only `mod.ts` exists is `ERR_MODULE_NOT_FOUND`. That is the TypeScript-compiler convention, not Node's — it applies when you *emit*, not when Node runs the source.
 - **Type stripping does not transform module syntax.** A `.cts` file is CommonJS: ESM `export const` in it is a plain `SyntaxError: Unexpected token 'export'`. `.mts` is ESM. `.ts` follows the nearest `package.json` `"type"` as always.
@@ -42,13 +42,13 @@ Two more that follow from it, and both have bitten:
 
 If you control `tsconfig.json`. The documented answer is `allowImportingTsExtensions` so `import { x } from './mod.ts'` type-checks.
 
-When the compiler options are fixed by a host that will not let you add either. You are not. Split the resolutions, because they have different rules:
+When a host that will not let you add either fixes the compiler options. You are not. Split the resolutions, because they have different rules:
 
 ```ts
 const { thing } = require("/abs/path/mod.ts") as typeof import("/abs/path/mod");
 ```
 
-`require` takes the explicit `.ts`, which is what Node demands. The `typeof import(...)` cast is a **type position**, where tsc resolves `mod.ts` from an extensionless specifier and applies no extension rule. One line, fully typed from the real source, no `.d.ts`, no build step. Verified under both `moduleResolution: node10` and `nodenext`, including the negative control: a wrong argument still errors (`TS2353`). This is real type-checking and not an `any` in disguise.
+`require` takes the explicit `.ts`, which is what Node demands. The `typeof import(...)` cast is a **type position**, where tsc resolves `mod.ts` from an extensionless specifier and applies no extension rule. One line, fully typed from the real source, no `.d.ts`, no build step. Verified under both `moduleResolution: node10` and `nodenext`, including the negative control: a incorrect argument still errors (`TS2353`). This is real type-checking and not an `any` in disguise.
 
 ## What is rejected, and how it fails
 

@@ -1,3 +1,5 @@
+// owners.go holds config.
+
 package main
 
 import (

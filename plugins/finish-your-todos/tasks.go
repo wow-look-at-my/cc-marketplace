@@ -1,3 +1,5 @@
+// tasks.go holds taskState.
+
 package main
 
 // Task-tool support for the Stop gate.

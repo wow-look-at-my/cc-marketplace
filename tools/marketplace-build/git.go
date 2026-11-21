@@ -1,3 +1,5 @@
+// git.go holds GetCurrentBranch.
+
 package main
 
 import (

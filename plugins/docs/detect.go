@@ -1,3 +1,5 @@
+// detect.go holds topic.
+
 package main
 
 import (

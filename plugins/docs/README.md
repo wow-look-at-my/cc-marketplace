@@ -1,6 +1,6 @@
 # docs
 
-Corrective reference notes for topics where Claude's training data is reliably stale or wrong. Each skill is a set of notes the model writes for itself, checked against the upstream documentation, and loads before touching the relevant file type.
+Corrective reference notes for topics where Claude's training data is reliably stale or incorrect. Each skill is a set of notes the model writes for itself, checked against the upstream documentation, and loads before touching the relevant file type.
 
 ## Skills
 
@@ -43,7 +43,7 @@ Add `skills/<topic>/SKILL.md` with a `description` in the front matter. Write th
 
 Do not set a `name`. The directory name already determines the command (`skills/dockerfile/` → `/docs:dockerfile`). Adding `name` additionally registers the bare `/dockerfile` as an alias, which pollutes the root slash namespace.
 
-Write the body as notes to yourself, not documentation for a human. State what is true, name the specific wrong instinct it replaces, and cite the behavior rather than the vibe. Verify every claim against upstream docs before writing it down.
+Write the body as notes to yourself, not documentation for a human. State what is true, name the specific incorrect instinct it replaces, and cite the behavior rather than the vibe. Verify every claim against upstream docs before writing it down.
 
 ## Installation
 
