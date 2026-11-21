@@ -1,0 +1,6 @@
+# The index carries private repository names and descriptions. It lives under
+# the cache directory, never here, but a stray copy must never be committed or
+# packaged into the published plugin.
+index.json
+refresh.log
+refresh.lock
