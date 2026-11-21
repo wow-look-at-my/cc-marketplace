@@ -51,7 +51,7 @@ The builtin's default only returned bare filenames, which forced a second search
 - `filenames_with_matches` and `filenames` order files newest-first. Equal mtimes tie-break by the builtin's localeCompare (ported via ICU root collation — case-insensitive at primary strength, so `a.txt` sorts before `B.txt`).
 - Context precedence: `context` beats `-C` beats `-B`/`-A`. `-n` defaults to true. Patterns starting with `-` are passed via `-e`.
 - Searches time out after several seconds (60 on WSL), overridable via `CLAUDE_CODE_GLOB_TIMEOUT_SECONDS` (the builtin's env var — it governed both Grep and Glob). Output is capped at 20MB per stream. A timeout or cap kill with partial output returns the complete lines seen so far.
-- Results many characters (UTF-16 units, matching the builtin's maxResultSizeChars) are written to a temp file and replaced by a `<persisted-output>` block with a ~2KB preview.
+- A `<persisted-output>` block with a ~2KB preview writes results many characters (UTF-16 units, matching the builtin's maxResultSizeChars).
 
 Differences from the builtin:
 

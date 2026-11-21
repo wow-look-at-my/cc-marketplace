@@ -1,3 +1,5 @@
+// lsp.go holds the lsp code.
+
 package main
 
 import (

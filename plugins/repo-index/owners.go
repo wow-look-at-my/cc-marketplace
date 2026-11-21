@@ -1,3 +1,5 @@
+// owners.go holds the owners code.
+
 package main
 
 import (

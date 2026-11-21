@@ -1,3 +1,5 @@
+// detect.go holds the detect code.
+
 package main
 
 import (

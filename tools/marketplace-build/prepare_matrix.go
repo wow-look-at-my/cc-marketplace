@@ -1,3 +1,5 @@
+// prepare_matrix.go holds the prepare matrix code.
+
 package main
 
 import (

@@ -1,3 +1,5 @@
+// css.go holds the css code.
+
 package main
 
 import (

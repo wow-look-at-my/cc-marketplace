@@ -1,3 +1,5 @@
+// test-plugin.ts holds the test plugin code.
+
 import { execSync } from "child_process";
 import { existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
