@@ -1,3 +1,5 @@
+// scope.go holds Block.
+
 package main
 
 import (

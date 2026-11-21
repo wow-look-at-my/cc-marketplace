@@ -1,3 +1,5 @@
+// comments.go holds blocksIn.
+
 package main
 
 import (

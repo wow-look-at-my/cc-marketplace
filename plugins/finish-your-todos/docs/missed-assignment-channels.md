@@ -51,7 +51,7 @@ Verified against a live transcript.
 
 ### System envelopes ride the same queue
 
-Webhook events, background-task completions and reminders are queued exactly like a typed message. Envelope prefix filters they (`<github-webhook-activity>`, `<task-notification>`, `<system-reminder>`, …) *and* by `commandMode`.
+Webhook events, background-task completions and reminders are queued exactly like a typed message. Envelope prefix filters they *and* by `commandMode`.
 
 ### Arming at most once
 

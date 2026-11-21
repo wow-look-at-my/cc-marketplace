@@ -147,7 +147,6 @@ Located in `agents/` directory. Each `.md` file defines a subagent.
 | `description` | Yes | string | When Claude must use this agent |
 | `tools` | No | string\|array | Available tools (inherits all if omitted) |
 | `disallowedTools` | No | string\|array | Tools to remove from available set |
-| `model` | No | string | `sonnet`, `opus`, `haiku`, or `inherit` |
 | `permissionMode` | No | string | See Permission Modes below |
 | `skills` | No | array | Skills to preload at startup |
 

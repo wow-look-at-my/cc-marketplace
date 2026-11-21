@@ -10,7 +10,7 @@ Passes, cheapest first, each narrowing what the next has to look at.
 
 **1. Scope — free.** Only comments this session's diff added or changed, across committed, staged, unstaged and untracked files. A repository holds thousands of comments. A session writes a handful. Cost tracks the size of the change, not the size of the repo, and a session that wrote no comments does no work.
 
-**2. Mechanical verdicts — free.** Of the comments that survive, most claim nothing checkable (`// bump the counter`). What kind of claim they make sorts the rest, and kinds are settled by looking:
+**2. Mechanical verdicts — free.** Of the comments that survive, most claim nothing checkable (`// bump the counter`). What kind of claim they make sorts the rest, and looking settles kinds:
 
 | claim | reported when |
 |---|---|

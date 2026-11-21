@@ -1,3 +1,5 @@
+// globtool.go holds globDescription.
+
 package main
 
 import (

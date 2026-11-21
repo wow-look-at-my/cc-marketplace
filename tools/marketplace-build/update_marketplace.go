@@ -1,3 +1,5 @@
+// update_marketplace.go holds buildPluginsArray.
+
 package main
 
 import (

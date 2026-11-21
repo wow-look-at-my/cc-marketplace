@@ -1,3 +1,5 @@
+// script.go holds StdinMarkers.
+
 package shellwalk
 
 import (

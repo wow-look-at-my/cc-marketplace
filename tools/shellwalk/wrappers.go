@@ -1,3 +1,5 @@
+// wrappers.go holds StripWrappers.
+
 package shellwalk
 
 import (

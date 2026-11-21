@@ -1,3 +1,5 @@
+// resolve.go holds Finding.
+
 package main
 
 import (

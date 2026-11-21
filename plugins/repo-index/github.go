@@ -1,3 +1,5 @@
+// github.go holds apiBase.
+
 package main
 
 import (

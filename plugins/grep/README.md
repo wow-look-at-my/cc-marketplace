@@ -20,7 +20,6 @@ The model sees a `Grep` tool:
 | `pattern` | Yes | ripgrep regex to search for |
 | `path` | No | File or directory to search. Defaults to the project directory |
 | `glob` | No | Filter files, e.g. `*.go` or `*.{ts,tsx}` |
-| `output_mode` | No | `filenames_with_matches` (default), `content`, `filenames`, `count` |
 | `-A` / `-B` / `-C` / `context` | No | Context lines around matches |
 | `-n` | No | Line numbers (default on) |
 | `-i` | No | Case-insensitive |

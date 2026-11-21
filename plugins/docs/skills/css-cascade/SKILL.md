@@ -8,7 +8,7 @@ Notes to self. The incorrect instinct is not a knowledge gap about syntax. It re
 
 ## The failure this exists to stop
 
-Real file (webhook-runner's dashboard.css). No `a` rule anywhere. Instead, the same block a bounded number of different selectors -- `#setup-section a:not(.btn)`, `.crumbs a`, `a.gh-slug`, `a.kv-jump`, `.attention-banner a`:
+Real file (webhook-runner's dashboard.css). No `a` rule anywhere.
 
 ```css
 <selector>       { color: var(--accent); text-decoration: none; }
@@ -28,7 +28,7 @@ a:hover { text-decoration: underline; }
 
 ## Order of attack when something needs styling
 
-1. **Will this be right for every one of these elements on the page?** Put it on the type selector (`a`, `table`, `code`, `input`). No class, no rule per instance.
+1. **Will this be right for every one of these elements on the page?** Put it on the type selector. No class, no rule per instance.
 2. **Is it right for everything inside one container?** Put it on the container and let it inherit, or scope it (`.panel a`).
 3. **Is it genuinely one thing behaving differently?** NOW write the specific rule, and put only the DELTA in it.
 4. **Is the same value appearing twice?** That is a custom property (`--accent` in `:root`), not literals that will drift.
@@ -37,7 +37,7 @@ Before adding a declaration to an existing stylesheet, grep it: `grep -n 'text-d
 
 ## Inheritance -- the half of the cascade that gets ignored
 
-Verified against MDN (`CSS_cascade/Inheritance`). Inherited by default: `color`, `font-family`/`font-size`/`font-weight`/`font-style`, `line-height`, `letter-spacing`, `text-align`, `text-transform`, `visibility`. NOT inherited: `background`, `border`, `margin`, `padding`, `width`/`height`, `display`.
+Verified against MDN (`CSS_cascade/Inheritance`). Inherited by default. NOT inherited.
 
 - So `color` and the font stack belong on a container, once -- never repeated onto each descendant.
 - `color: inherit` is the OPT-OUT. It works on non-inherited properties too ("Works on both inherited and non-inherited properties"). This is how a link that must read as body text stops being accent-colored, without removing the base rule everything else relies on.
@@ -45,12 +45,12 @@ Verified against MDN (`CSS_cascade/Inheritance`). Inherited by default: `color`,
 
 ## Specificity, exactly (MDN `CSS_cascade/Specificity`)
 
-The universal selector `*` and all combinators (`>`, `+`, `~`, descendant space) add **nothing**. Inline `style` effectively outranks any selector. Only `!important` beats it.
+The universal selector `*` and all combinators add **nothing**. Inline `style` effectively outranks any selector. Only `!important` beats it.
 
 Consequences worth internalizing:
 
 - What it changes is the elements that had NO rule (that is the point), so scan for bare instances of that element before hoisting.
-- `:is()`, `:not()` and `:has()` add no weight themselves, but take **the weight of their most specific argument**: `p:not(#fakeId)` is 1-0-1. So `:not(.btn)` quietly costs a class column -- frequently the reason a rule needs a bigger hammer next to it.
+- So `:not(.btn)` quietly costs a class column -- frequently the reason a rule needs a bigger hammer next to it.
 - `:where()` "always has its specificity replaced with zero, 0-0-0". This is the tool for a base rule that must be trivially overridable: `:where(a) { ... }` is beaten by literally any `a` rule anywhere, in any order. Use it for defaults a consumer is expected to override. Use a plain type selector for the page's own baseline.
 - `!important` "reverses the order of stylesheets" -- it is not a specificity bump, and reaching for it means the rule is in the incorrect place. Fix the structure instead. An `!important` added to win an argument is the next session's mystery.
 

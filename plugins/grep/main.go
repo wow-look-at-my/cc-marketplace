@@ -1,3 +1,5 @@
+// main.go holds gateEnvVar.
+
 package main
 
 import (

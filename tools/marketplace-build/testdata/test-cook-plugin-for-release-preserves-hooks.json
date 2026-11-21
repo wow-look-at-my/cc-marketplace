@@ -1,0 +1,11 @@
+{
+		"$schema": "../../schema.json",
+		"name": "cleanup-bash-cmds",
+		"hooks": {
+			"PreToolUse": [{
+				"matcher": "Bash",
+				"hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/build/hook"}]
+			}]
+		},
+		"mh": {"include_in_marketplace": true}
+	}

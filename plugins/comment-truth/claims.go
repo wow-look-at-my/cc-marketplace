@@ -1,3 +1,5 @@
+// claims.go holds Claims.
+
 package main
 
 import (

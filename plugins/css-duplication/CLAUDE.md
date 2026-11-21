@@ -4,9 +4,9 @@ The css-duplication plugin lives at `plugins/css-duplication/`. The **`docs` plu
 
 **LSP, not a hook. That was a deliberate replacement.** The first version was a PostToolUse hook that exited 2 with a report. It. A hook shouts once per edit whether the finding is still true, cannot anchor to a line. Diagnostics arrive on their own, sit on the exact selector, and *disappear when the block is hoisted*.
 
-`.lsp.json` is the whole registration (a plugin's `.lsp.json` is auto-loaded. The manifest's `lspServers` key will do the same). Its command is `scripts/launch cc-marketplace/css-duplication`, which runs the server build buildhost published from the plugin's branch. It works because plugin LSP configs substitute `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_PROJECT_DIR`/`${user_config.KEY}` into `command`, `args`, `env` and `workspaceFolder`.
+`.lsp.json` is the whole registration (a plugin's `.lsp.json` is auto-loaded. The manifest's `lspServers` key will do the same). Its command is `scripts/launch cc-marketplace/css-duplication`, which runs the server build buildhost published from the plugin's branch. It works because plugin LSP configs substitute `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_PROJECT_DIR`/`${user_config.KEY}`.
 
-Everything below was established by reading the shipped `cli.js` for the running version, per `/docs:claude-code-source` -- the public docs do not state any of it:
+Reading the shipped `cli.js` for the running version established everything below, per `/docs:claude-code-source` -- the public docs do not state any of it:
 
 - **Push only.** Claude Code registers a `textDocument/publishDiagnostics` handler and never calls `textDocument/diagnostic`. Pull diagnostics have zero occurrences in the bundle. The server implements the pull path anyway (it is several lines and makes it a correct server for other editors), but nothing in Claude Code exercises it.
 - **`relatedInformation` is dropped.** The client announces support, then normalizes each diagnostic down to message/severity/range/source/code. Hence `groupMessage`. The message itself names the sibling selectors, because the structured links never reach the model. They are still emitted for real editors.

@@ -1,3 +1,5 @@
+// bloat.go holds trivialDeclRe.
+
 package main
 
 import (
