@@ -98,7 +98,8 @@ func parseFwmEvents(lines []string, onlyMatch bool) []*fwmGroup {
 					continue
 				}
 				first := *ev.Data.LineNumber + int64(strings.Count(text[:s], "\n"))
-				grp.lines = append(grp.lines, expandEventLines(text[s:e], first, true, 0)...)
+				// The match starts each line, so the clamp keeps the head without a centered window.
+				grp.lines = append(grp.lines, expandEventLines(text[s:e], first, true, -1)...)
 			}
 			continue
 		}

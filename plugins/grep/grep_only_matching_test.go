@@ -68,8 +68,8 @@ func TestParseFwmEventsOnlyMatch(t *testing.T) {
 	}, true)
 	require.Len(t, groups, 1)
 	assert.Equal(t, []fwmLine{
-		{num: 7, text: "b", match: true, matchCol: 0},
-		{num: 8, text: "c", match: true, matchCol: 0},
-		{num: 8, text: "foo", match: true, matchCol: 0},
+		{num: 7, text: "b", match: true, matchCol: -1},
+		{num: 8, text: "c", match: true, matchCol: -1},
+		{num: 8, text: "foo", match: true, matchCol: -1},
 	}, groups[0].lines)
 }
