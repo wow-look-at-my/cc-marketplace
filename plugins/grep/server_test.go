@@ -57,6 +57,8 @@ func TestToolsListEntryShape(t *testing.T) {
 	assert.Equal(t, true, meta["anthropic/alwaysLoad"])
 	schema, _ := tool["inputSchema"].(map[string]any)
 	assert.Equal(t, false, schema["additionalProperties"])
+	props, _ := schema["properties"].(map[string]any)
+	assert.NotContains(t, props, "-o", "-o is accepted silently and must not be advertised")
 	req, _ := schema["required"].([]any)
 	require.Len(t, req, 1)
 	assert.Equal(t, "pattern", req[0])

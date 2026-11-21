@@ -20,7 +20,6 @@ The model sees a `Grep` tool:
 | `pattern` | Yes | ripgrep regex to search for |
 | `path` | No | File or directory to search. Defaults to the project directory |
 | `glob` | No | Filter files, e.g. `*.go` or `*.{ts,tsx}` |
-| `output_mode` | No | `filenames_with_matches` (default), `content`, `filenames`, `count` |
 | `-A` / `-B` / `-C` / `context` | No | Context lines around matches |
 | `-n` | No | Line numbers (default on) |
 | `-i` | No | Case-insensitive |
@@ -42,7 +41,7 @@ The builtin's default only returned bare filenames, which forced a second search
 
 - Match lines render `N:text`, context lines `N-text`, and an indented `--` separates non-contiguous chunks within a file (only when a context flag with nonzero width is in effect, mirroring ripgrep's own printer). With `"-n": false` the two-space indent stays but the `N:`/`N-` prefixes are dropped.
 - Parsing rule: after the `Found N files` header, every line starting with multiple spaces belongs to the current file. Any other line is the next file's header (strip the one trailing `:`).
-- `head_limit`/`offset` paginate the flattened stream of match/context lines across all files (headers and `--` separators are not counted). A file whose lines are entirely cut is omitted. Default `head_limit` is many lines. `0` means unlimited.
+- `head_limit`/`offset` paginate the flattened stream of match/context lines across all files (headers and `--` separators are not counted). A file whose lines are fully cut is omitted. Default `head_limit` is many lines. `0` means unlimited.
 - A matching line is never dropped. The builtin's `--max-columns 500` cap replaced any longer line with `[Omitted long matching line]`. This plugin instead shows the line, bounded to many characters. A line wider than that renders as a 4096-rune window with an ellipsis (`…`) marking each cut edge.
 
 `.gitignore` is respected (the opposite of the glob plugin). Searches time out after several seconds (`CLAUDE_CODE_GLOB_TIMEOUT_SECONDS`).
