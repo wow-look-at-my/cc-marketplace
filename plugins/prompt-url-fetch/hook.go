@@ -1,4 +1,8 @@
+// hook.go holds HTTPClient.
+
 package main
+
+import _ "embed"
 
 import (
 	"encoding/json"
@@ -83,7 +87,7 @@ func fetchAllURLs(urls []string, client HTTPClient) string {
 
 	for _, url := range urls {
 		content := fetchURL(url, client, &totalChars)
-		context.WriteString(fmt.Sprintf("\n---\n**Fetched from %s:**\n```\n%s\n```\n", url, content))
+		context.WriteString(fmt.Sprintf(fetchAllURLsMd, url, content))
 	}
 
 	return context.String()
@@ -161,3 +165,6 @@ func normalizeURL(url string) string {
 
 	return url
 }
+
+//go:embed fetch-all-ur-ls.md
+var fetchAllURLsMd string
