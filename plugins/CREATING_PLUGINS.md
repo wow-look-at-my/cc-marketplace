@@ -145,7 +145,7 @@ prebuild:
 
 The marketplace builder runs in this order:
 
-1. **go-toolchain** (CI runs `wow-look-at-my/go-toolchain@master` action if any `.go` files are found. It builds one fat APE and publishes it to buildhost as `cc-marketplace/<name>`. The plugin itself never carries it.)
+1. **go-toolchain** (CI runs the `wow-look-at-my/go-toolchain@lkgb` action if any `.go` files are found. It builds one fat APE and publishes it to buildhost as `cc-marketplace/<name>`. The plugin itself never carries it.)
 2. `just prebuild` (if recipe exists in justfile)
 3. `just postbuild` (if recipe exists in justfile)
 
