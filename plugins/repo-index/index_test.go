@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"strings"
 	"testing"
@@ -44,7 +46,7 @@ func TestArchivedAndForkedRepositoriesAreDropped(t *testing.T) {
 
 func TestAReadmeDescribesARepositoryGitHubDoesNot(t *testing.T) {
 	readme := func(string) string {
-		return "# widget-press\n\n[![build](img)](url)\n\nStamps widgets into shape.\n\nMore detail here."
+		return testAReadmeDescribesARepositoryGitHubDoesNotMd
 	}
 	got, stats := buildIndex([]repo{repoFixture("widget-press", "")}, readme, 5)
 
@@ -125,7 +127,7 @@ func TestSummarizeSkipsHeadingsBadgesAndComments(t *testing.T) {
 		"badge":    {"![b](u)\n\nThe prose.", "The prose."},
 		"comment":  {"<!-- hidden -->\nThe prose.", "The prose."},
 		"quote":    {"> a note\n\nThe prose.", "The prose."},
-		"fence":    {"```sh\nrun\n```\n\nThe prose.", "The prose."},
+		"fence":    {testSummarizeSkipsHeadingsBadgesAndCommentsMd, "The prose."},
 		"link":     {"A [linked](http://x) word.", "A linked word."},
 		"markup":   {"Some `code` and *stress*.", "Some code and stress."},
 		"wrapped":  {"One line\nand its rest.\n\nLater.", "One line and its rest."},
@@ -138,3 +140,9 @@ func TestSummarizeSkipsHeadingsBadgesAndComments(t *testing.T) {
 		})
 	}
 }
+
+//go:embed testdata/test-a-readme-describes-a-repository-git-hub-does-not.md
+var testAReadmeDescribesARepositoryGitHubDoesNotMd string
+
+//go:embed testdata/test-summarize-skips-headings-badges-and-comments.md
+var testSummarizeSkipsHeadingsBadgesAndCommentsMd string
