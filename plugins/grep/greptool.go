@@ -58,6 +58,7 @@ type grepSchemaProps struct {
 	Context    schemaProp `json:"context"`
 	DashN      schemaProp `json:"-n"`
 	DashI      schemaProp `json:"-i"`
+	DashO      schemaProp `json:"-o"`
 	HeadLimit  schemaProp `json:"head_limit"`
 	Offset     schemaProp `json:"offset"`
 	Multiline  schemaProp `json:"multiline"`
@@ -81,6 +82,7 @@ var grepInputSchemaCompact = mustMarshalJSON(grepSchema{
 		Context:   schemaProp{Type: "number", Description: "Lines to show before and after each match (rg -C). content and filenames_with_matches modes only."},
 		DashN:     schemaProp{Type: "boolean", Description: "Show line numbers (rg -n). content and filenames_with_matches modes only. Defaults to true."},
 		DashI:     schemaProp{Type: "boolean", Description: "Case insensitive search (rg -i)"},
+		DashO:     schemaProp{Type: "boolean", Description: "Print only the matched parts of each matching line, one per output line (rg -o). content and filenames_with_matches modes show each match; count mode counts matches instead of lines. Default: false."},
 		HeadLimit: schemaProp{Type: "number", Description: "Limit output to the first N lines/entries. Defaults to 250; 0 = unlimited. Applies to all output modes."},
 		Offset:    schemaProp{Type: "number", Description: "Skip the first N lines/entries before applying head_limit. Defaults to 0."},
 		Multiline: schemaProp{Type: "boolean", Description: "Patterns match single lines only unless this is set; then . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false."},
@@ -117,6 +119,7 @@ type grepArgs struct {
 	context    *float64
 	lineNums   bool // -n, default true
 	ignoreCase bool // -i
+	onlyMatch  bool // -o
 	headLimit  *float64
 	offset     float64
 	multiline  bool
@@ -238,7 +241,7 @@ func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rgmcp.RPCError) {
 			default: // offset
 				a.offset = n
 			}
-		case "-n", "-i", "multiline":
+		case "-n", "-i", "-o", "multiline":
 			b, ok := coerceBool(v)
 			if !ok {
 				return invalid("%s %s must be a boolean", grepToolName, k)
@@ -248,6 +251,8 @@ func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rgmcp.RPCError) {
 				a.lineNums = b
 			case "-i":
 				a.ignoreCase = b
+			case "-o":
+				a.onlyMatch = b
 			default: // multiline
 				a.multiline = b
 			}
@@ -376,6 +381,10 @@ func buildRgArgs(a *grepArgs) []string {
 		if a.explicitFile {
 			args = append(args, "--text")
 		}
+	}
+	// rg --json ignores -o, so filenames_with_matches cuts the submatches itself (grepfwm.go).
+	if a.onlyMatch && (a.mode == modeContent || a.mode == modeCount) {
+		args = append(args, "-o")
 	}
 	if a.lineNums && a.mode == modeContent {
 		args = append(args, "-n")

@@ -59,14 +59,16 @@ type rgJSONEvent struct {
 		// Submatches carries each match's byte offsets within Lines.text.
 		Submatches []struct {
 			Start int64 `json:"start"`
+			End   int64 `json:"end"`
 		} `json:"submatches"`
 	} `json:"data"`
 }
 
 // parseFwmEvents groups rg --json match/context events per file in rg
 // emission order. Unparseable lines (e.g. a final line truncated by the
-// output cap or a timeout kill) are skipped.
-func parseFwmEvents(lines []string) []*fwmGroup {
+// output cap or a timeout kill) are skipped. With onlyMatch, a match event
+// becomes its submatches, as rg -o prints them.
+func parseFwmEvents(lines []string, onlyMatch bool) []*fwmGroup {
 	var groups []*fwmGroup
 	byPath := map[string]*fwmGroup{}
 	for _, raw := range lines {
@@ -88,11 +90,23 @@ func parseFwmEvents(lines []string) []*fwmGroup {
 			byPath[path] = grp
 			groups = append(groups, grp)
 		}
+		text := ev.Data.Lines.value()
+		if isMatch && onlyMatch {
+			for _, sm := range ev.Data.Submatches {
+				s, e := int(sm.Start), int(sm.End)
+				if s < 0 || e > len(text) || s >= e {
+					continue
+				}
+				first := *ev.Data.LineNumber + int64(strings.Count(text[:s], "\n"))
+				grp.lines = append(grp.lines, expandEventLines(text[s:e], first, true, 0)...)
+			}
+			continue
+		}
 		matchByte := -1
 		if isMatch && len(ev.Data.Submatches) > 0 {
 			matchByte = int(ev.Data.Submatches[0].Start)
 		}
-		grp.lines = append(grp.lines, expandEventLines(ev.Data.Lines.value(), *ev.Data.LineNumber, isMatch, matchByte)...)
+		grp.lines = append(grp.lines, expandEventLines(text, *ev.Data.LineNumber, isMatch, matchByte)...)
 	}
 	return groups
 }
@@ -133,7 +147,7 @@ func expandEventLines(text string, firstNum int64, match bool, matchByte int) []
 // "No files found" empty text match the builtin's files_with_matches
 // formatting, with N counting the files rendered after pagination.
 func (g *grepTool) formatFilenamesWithMatches(rawLines []string, a *grepArgs) string {
-	groups := parseFwmEvents(rawLines)
+	groups := parseFwmEvents(rawLines, a.onlyMatch)
 	paths := make([]string, len(groups))
 	byPath := make(map[string]*fwmGroup, len(groups))
 	for i, grp := range groups {
