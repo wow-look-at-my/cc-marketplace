@@ -1,0 +1,105 @@
+#!/bin/sh
+# Usage: launch <buildhost-project> [args...]
+# Runs the project's binary with the remaining arguments. The command of that
+# name on PATH runs when its `version` is at least the release buildhost
+# publishes. Otherwise that release is downloaded into the plugin's data
+# directory, and the download runs. Each plugin's scripts/launch links here.
+set -eu
+
+project=${1:?usage: launch <buildhost-project> [args...]}
+shift
+name=${project##*/}
+
+root=$(CDPATH='' cd "$(dirname "$0")/.." && pwd)
+dir="${CLAUDE_PLUGIN_DATA:-${XDG_CACHE_HOME:-$HOME/.cache}/cc-marketplace/$name}"
+choice="$dir/$name.current"
+
+# A choice younger than ten minutes is reused, so most calls make no network request.
+if [ -f "$choice" ] && [ -z "$(find "$choice" -mmin +10)" ]; then
+	bin=$(cat "$choice")
+	if [ -x "$bin" ]; then
+		exec "$bin" "$@"
+	fi
+fi
+
+mkdir -p "$dir"
+
+# Each project is one fat APE, served under linux/amd64, whose bytes run everywhere.
+url="${CC_PLUGIN_LAUNCH_BASE:-https://dl.pazer.build}/$project?os=linux&arch=amd64"
+
+# A released plugin records the branch it was built from, and runs that branch's build.
+branch=""
+if [ -f "$root/mh.plugin.json" ]; then
+	branch=$(sed -n 's/^.*"branch": *"\([^"]*\)".*$/\1/p' "$root/mh.plugin.json")
+fi
+
+# Prints the Location of buildhost's redirect for one URL, or nothing.
+redirect() {
+	if head=$(curl -fsSI --connect-timeout 10 --max-time 20 "$1"); then
+		printf '%s\n' "$head" | tr -d '\r' | sed -n 's/^[Ll]ocation: *//p'
+	fi
+}
+
+location=""
+if [ -n "$branch" ]; then
+	location=$(redirect "$url&branch=$branch")
+	if [ -z "$location" ]; then
+		echo "launch: $project has no build from branch $branch. Using its default branch's build." >&2
+	fi
+fi
+if [ -z "$location" ]; then
+	location=$(redirect "$url")
+fi
+published=$(printf '%s\n' "$location" | sed -n 's/^.*[?&]v=\([0-9][0-9]*\).*$/\1/p')
+
+# The release number `<name> version` prints. A build that cannot say prints nothing here.
+version_of() {
+	if out=$("$1" version </dev/null 2>&1); then
+		printf '%s\n' "$out" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) { print $i; exit } }'
+	fi
+}
+
+system=""
+system_version=""
+if found=$(command -v "$name") && [ ! "$found" -ef "$0" ]; then
+	system=$found
+	system_version=$(version_of "$system")
+fi
+
+cached=$(ls "$dir" | sed -n "s/^$name\\.\\([0-9][0-9]*\\)\$/\\1/p" | sort -n | tail -n 1)
+
+bin=""
+if [ -z "$published" ]; then
+	echo "launch: $url named no published release." >&2
+elif [ -n "$system_version" ] && [ "$system_version" -ge "$published" ]; then
+	bin=$system
+elif [ "$cached" = "$published" ]; then
+	bin="$dir/$name.$published"
+else
+	tmp="$dir/download.$$"
+	if curl -fsSL --connect-timeout 10 --retry 3 -o "$tmp" "$location" && chmod +x "$tmp"; then
+		mv -f "$tmp" "$dir/$name.$published"
+		find "$dir" -type f -name "$name.[0-9]*" ! -name "$name.$published" -exec rm -f {} +
+		cached=$published
+		bin="$dir/$name.$published"
+	else
+		rm -f "$tmp"
+		echo "launch: could not download $project release $published from $location." >&2
+	fi
+fi
+
+if [ -z "$bin" ]; then
+	if [ -n "$cached" ] && { [ -z "$system_version" ] || [ "$cached" -gt "$system_version" ]; }; then
+		bin="$dir/$name.$cached"
+	elif [ -n "$system" ]; then
+		bin=$system
+	else
+		echo "launch: no $name is installed, and none could be downloaded from $url." >&2
+		exit 1
+	fi
+	echo "launch: running $bin, the newest $name already here." >&2
+fi
+
+printf '%s\n' "$bin" >"$choice.$$"
+mv -f "$choice.$$" "$choice"
+exec "$bin" "$@"
