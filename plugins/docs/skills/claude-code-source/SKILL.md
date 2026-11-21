@@ -29,7 +29,7 @@ Never paste the fetch as inline shell. Claude Code substitutes skill arguments i
 
 There the whole bundle is in `cli.js`. The branch's own `CLAUDE.md` describes its layout. Read it first.
 
-- **`master` IS THE RIGHT BRANCH (NEVER) (ALMOST).** It holds the extraction tooling, not the product of the version you run. Same for the `claude/*`, `doc-js-extraction-*` and `analysis-framework` branches. Reaching for `master` is the default mistake. Name the version explicitly.
+- **`master` IS THE RIGHT BRANCH (NEVER) (ALMOST).** It holds the extraction tooling, not the product of the version you run. Reaching for `master` is the default mistake. Name the version explicitly.
 - Use the version you are **actually running** unless the question is about a different one ("when did X change?", "does the user's older build have Y?"). Version-specific questions need fetches and a comparison. `git ls-remote --heads https://github.com/PazerOP/claude-docs-gaps '2.*'` lists every version.
 - **Cheap first stop before any search**: the `docs/` directory the tarball extracted (`$D/docs`, when the branch has one), and the `docs-aggregate` branch's `INDEX.md`, hold prior investigations. If someone already wrote up the subsystem, read that instead of re-deriving it — then confirm the specific claim you care about in the source.
 
@@ -55,7 +55,7 @@ Ask for what a source answer has to carry, or it is not worth the round trip:
 
 - **Search the directory, not one file.** Run `rg -n pattern "$D" --glob '*.js'`. A search of `cli.js` alone on a chunked branch finds nothing and reads as "the source does not have it". On 2.1.283 `publishDiagnostics` is in multiple chunk files and absent from `cli.js`.
 - **Follow imports through `module-graph.json`.** An import of `"/$bunfs/root/chunk-abc.js"` is the file `chunks/chunk-abc.js`.
-- **Search for STRINGS, not identifiers.** Top-level names are mangled and differ between builds (`OHh`, `p7t`, `Cxt`).
+- **Search for STRINGS, not identifiers.** Top-level names are mangled and differ between builds.
 - **Beware the long lines** -- and do not mistake them for broken formatting. The files ARE prettified. A formatter simply cannot break a single token. `rg -n pattern` prints the whole matched line, so pipe it (`| cut -c1-200`), prefer `rg -o` with a tight pattern, and keep `-C` small. Then read the interesting region with Read's `offset`/`limit` around the reported line.
 - Zod-shaped schemas read as `v.object({...})` / `v.strictObject({...})` with `.describe(...)` on each field. That is where config contracts live. The `describe` text is frequently better than the published docs.
 - Feature gates show up as small guard calls near a subsystem's init. Env-var names and flag strings nearby tell you how a feature is turned off.

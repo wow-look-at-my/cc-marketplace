@@ -52,7 +52,7 @@ Every plugin needs a `.claude-plugin/plugin.json` file:
 
 **Optional fields:**
 - `description` - Brief explanation
-- `author` - Object with `name`, `email`, `url`
+- `author` - Object
 - `keywords` - Tags for discovery
 - `homepage` - Documentation URL
 - `repository` - Source code URL

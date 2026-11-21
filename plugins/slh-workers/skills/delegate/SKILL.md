@@ -6,7 +6,7 @@ description: Read before you write code yourself for a task that has an implemen
 
 You are the planner, the coordinator and the reviewer. The workers type the code. A worker is an slh coding agent on a model much faster than you. It has full read, write and shell access in the directory you give it. It sees nothing of your conversation.
 
-The tools are on the `slh` server of this plugin: `start_task`, `wait_task`, `list_tasks`, `cancel_task`. They defer behind ToolSearch, so load them with `select:mcp__plugin_slh-workers_slh__start_task,mcp__plugin_slh-workers_slh__wait_task,mcp__plugin_slh-workers_slh__list_tasks,mcp__plugin_slh-workers_slh__cancel_task`.
+The tools are on the `slh` server of this plugin. They defer behind ToolSearch, so load them with `select:mcp__plugin_slh-workers_slh__start_task,mcp__plugin_slh-workers_slh__wait_task,mcp__plugin_slh-workers_slh__list_tasks,mcp__plugin_slh-workers_slh__cancel_task`.
 
 ## The loop
 

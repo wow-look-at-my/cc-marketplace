@@ -1,3 +1,5 @@
+// hook.go holds HTTPClient.
+
 package main
 
 import _ "embed"

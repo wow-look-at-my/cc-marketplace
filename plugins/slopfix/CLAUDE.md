@@ -8,7 +8,7 @@ A manifest `command` is a shell command with `${CLAUDE_PLUGIN_ROOT}` substituted
 
 Every event execs `scripts/launch slopfix hook`. The binary reads the event off the payload and runs each guard that serves it, so the manifest only decides which events reach slopfix. What each guard DOES is slopfix's own documentation. Read `slopfix hook --help`, or that repository. A table here is a copy that drifts.
 
-These replace the plugins. Those are `ask-properly`, `claude-md-budget`, `cleanup-bash-cmds`, `common-checks`, `detect-permission-seeking` and `enhanced-auto-allow`. They are also `link-all-refs`, `no-blame-language`, `no-busy-poll`, `no-counts-in-docs`, `no-tombstones`, `no-work-loss`, `recommend-go-toolchain` and `rustfmt-enforce`. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
+These replace the plugins. Each of those directories is gone. A rule with homes drifts. The second copy is the one nobody updates.
 
 **There are no `.go` files here, and there must not be.** A manifest that names a subcommand needs no Go. The `plugin-e2e` workflow checks each subcommand the manifest names against slopfix's source.
 
@@ -53,7 +53,7 @@ The heuristic findings are not published at all. ste-lint's warn buckets are pas
 
 Claude Code cannot accept a fix from a language server. In 2.1.241 there is no `codeAction` client capability. `textDocument/codeAction` has zero occurrences in the whole bundle, and so does `workspace/applyEdit`. There is no formatting or `willSaveWaitUntil` path either.
 
-The diagnostic is the only channel. It is narrow. Only message, severity, line and character, code and source survive into the model's context. The client announces support for `relatedInformation`, `tagSupport` and `codeDescriptionSupport`, then discards all three in the mapper.
+The diagnostic is the only channel. It is narrow. Only message, severity, line and character, code and source survive into the model's context. The client announces support, then discards all three in the mapper.
 
 So a rule whose repair is one word says that word in the message. A contraction names its expansion. A banned modal names the approved word, and keeps a leading capital so the replacement drops straight in. A semicolon and a comma splice each name the punctuation to write.
 
@@ -67,7 +67,7 @@ These facts were read out of the shipped bundle, per `/docs:claude-code-source`.
 - **`command` and `extensionToLanguage` are both required**, and every extension must start with a dot. An entry missing either is dropped with an error rather than started. `diagnostics` defaults to true. That default is what pushes `publishDiagnostics` into the agent's context after an edit. This plugin leaves it alone.
 - **Three gates stop a server before it starts.** The plugin must be enabled. A `--plugin-dir` plugin counts as enabled unless somebody disables it. Safe mode disables `lspServers` outright. Bare mode and simple mode disable it unless a caller explicitly requests it. There is no print-mode gate in 2.1.241.
 - A session without one gets no findings, silently. This plugin cannot detect that.
-- **One server per extension, and the first registered wins**, with a warning that names the loser. This plugin claims `.yml`, `.yaml` and `.md`. That is a wide claim. Another plugin that wants full YAML or markdown diagnostics cannot run beside it. That is a real tradeoff, not a gap to fix here.
+- **One server per extension, and the first registered wins**, with a warning that names the loser. That is a wide claim. Another plugin that wants full YAML or markdown diagnostics cannot run beside it. That is a real tradeoff, not a gap to fix here.
 
 **Live verification did not complete. The control was a plugin whose entire LSP command appends one line to a file. It never ran either, on a real `Edit` to a file with its registered extension. The diagnostics log carried `load_plugin_hooks_completed` and no LSP event of any kind.
 
