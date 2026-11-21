@@ -117,6 +117,7 @@ type grepArgs struct {
 	context    *float64
 	lineNums   bool // -n, default true
 	ignoreCase bool // -i
+	onlyMatch  bool // -o
 	headLimit  *float64
 	offset     float64
 	multiline  bool
@@ -238,7 +239,8 @@ func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rgmcp.RPCError) {
 			default: // offset
 				a.offset = n
 			}
-		case "-n", "-i", "multiline":
+		// -o is accepted but left out of the schema, so the model is not invited to use it.
+		case "-n", "-i", "-o", "multiline":
 			b, ok := coerceBool(v)
 			if !ok {
 				return invalid("%s %s must be a boolean", grepToolName, k)
@@ -248,6 +250,8 @@ func parseGrepArgs(raw json.RawMessage) (*grepArgs, *rgmcp.RPCError) {
 				a.lineNums = b
 			case "-i":
 				a.ignoreCase = b
+			case "-o":
+				a.onlyMatch = b
 			default: // multiline
 				a.multiline = b
 			}
@@ -376,6 +380,10 @@ func buildRgArgs(a *grepArgs) []string {
 		if a.explicitFile {
 			args = append(args, "--text")
 		}
+	}
+	// rg --json ignores -o, so filenames_with_matches cuts the submatches itself (grepfwm.go).
+	if a.onlyMatch && (a.mode == modeContent || a.mode == modeCount) {
+		args = append(args, "-o")
 	}
 	if a.lineNums && a.mode == modeContent {
 		args = append(args, "-n")
