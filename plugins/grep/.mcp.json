@@ -1,7 +1,8 @@
 {
   "mcpServers": {
     "grep": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/build/grep",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch",
+      "args": ["cc-marketplace/grep"],
       "alwaysLoad": true
     }
   }

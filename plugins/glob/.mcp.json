@@ -1,7 +1,8 @@
 {
   "mcpServers": {
     "glob": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/build/glob",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch",
+      "args": ["cc-marketplace/glob"],
       "alwaysLoad": true
     }
   }

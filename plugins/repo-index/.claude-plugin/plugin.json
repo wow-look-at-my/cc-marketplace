@@ -12,7 +12,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/build/repo-index"
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/repo-index"
 					}
 				]
 			}

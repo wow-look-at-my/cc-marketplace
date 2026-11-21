@@ -40,10 +40,10 @@ Archived repositories, forks, and repositories that say nothing about themselves
 
 The index rebuilds itself once a day, in a separate process, so a prompt never waits on the network. A stale index still suggests. Only a missing one stays quiet. It says so on stderr along with where its report lands.
 
-To rebuild it now, run the hook binary directly:
+To rebuild it now, run the hook binary through the plugin's launcher:
 
 ```
-"$(claude plugin root repo-index)"/build/repo-index --refresh
+"$(claude plugin root repo-index)"/scripts/launch cc-marketplace/repo-index --refresh
 ```
 
 It prints what it indexed and everything it dropped.

@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/finish-your-todos",
             "timeout": 10
           }
         ]
@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/finish-your-todos",
             "timeout": 10
           }
         ]
@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/build/finish-your-todos"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/launch cc-marketplace/finish-your-todos"
           }
         ]
       }
